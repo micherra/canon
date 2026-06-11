@@ -237,3 +237,46 @@ describe("loadLoopsFromDir — real loops/ directory (_probe-self-paced smoke te
     expect(parseResult.ok).toBe(false);
   });
 });
+
+// ── Phase C: session-watch smoke test (loops-phase-c-06) ─────────────────────
+describe("loadLoopsFromDir — real loops/ directory (session-watch smoke test)", () => {
+  it("session-watch loads into valid[] with mode:self-paced and lifecycle_hook:session-start", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const sw = result.valid.find((d) => d.id === "session-watch");
+    expect(sw).toBeDefined();
+    if (sw) {
+      expect(sw.mode).toBe("self-paced");
+      expect(sw.guardrails.mutates_build).toBe(false);
+      expect(sw.status).toBe("active");
+      expect(sw.trigger?.lifecycle_hook).toBe("session-start");
+      // Tier-gated posture
+      expect(sw.trigger?.firing_posture.autonomous).toBe("auto");
+      expect(sw.trigger?.firing_posture["light-touch"]).toBe("auto");
+      expect(sw.trigger?.firing_posture.supervised).toBe("opt-in");
+    }
+  });
+
+  it("session-watch does NOT appear in invalid[]", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const invalidEntry = result.invalid.find((e) => e.file.includes("session-watch"));
+    expect(invalidEntry).toBeUndefined();
+  });
+
+  it("session-watch with Write in observe.tools would be rejected (DR-005 guard active)", async () => {
+    // Proves the definition is genuinely guard-passing, not guard-bypassing
+    const { parseLoopDefinition } = await import("../loop-schema.ts");
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const sw = result.valid.find((d) => d.id === "session-watch");
+    if (!sw) return; // prerequisite: session-watch loaded
+
+    const mutated = {
+      ...sw,
+      observe: {
+        ...sw.observe,
+        tools: ["Write"], // mutation tool injection — must be rejected
+      },
+    };
+    const parseResult = parseLoopDefinition(mutated, {});
+    expect(parseResult.ok).toBe(false);
+  });
+});

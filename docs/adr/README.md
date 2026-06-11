@@ -47,3 +47,4 @@ Use `docs/adr/TEMPLATE.md` as the starting point for every new ADR. Copy it, fil
 | # | Title | Status | Date | Build |
 |---|-------|--------|------|-------|
 | [0001](0001-adr-template-placement.md) | ADR template lives at docs/adr/TEMPLATE.md and coexists with templates/design-decision.md | accepted | 2026-06-09 | close-the-adr-gap-the-architect-currently-writes-rich-design-decision |
+| [0002](0002-loop-first-tick-baseline-semantics.md) | Loop first-tick is baseline-capture-only — transition rules never fire against an empty prior | accepted | 2026-06-11 | loop-framework-phase-c-self-paced-mode-schedulewakeup-adapter-session |
