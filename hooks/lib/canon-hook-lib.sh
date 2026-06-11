@@ -850,18 +850,24 @@ canon_extract_command() {
 # ---------------------------------------------------------------------------
 # canon_git_C_path <raw_segment>
 # ---------------------------------------------------------------------------
-# Extracts the path value from a git -C <path> global option in a raw git
-# command segment. Uses canon_tokenize so quoted paths with spaces are treated
-# as a single token. Prints the path on stdout; prints nothing when -C is
-# absent or its value cannot be determined.
+# Extracts the EFFECTIVE path that git will use for a sequence of -C options
+# in a raw git command segment. Uses canon_tokenize so quoted paths with
+# spaces are treated as a single token. Prints the effective path on stdout;
+# prints nothing when -C is absent or its value cannot be determined.
+#
+# Git applies multiple -C options in sequence:
+#   - An absolute path REPLACES the accumulated path.
+#   - A relative path is resolved relative to the accumulated path (composed).
 #
 # Handles:
-#   "git -C /some/path push origin HEAD"   → "/some/path"
-#   "git -C 'my dir' push origin HEAD"     → "my dir"
-#   "git push origin main"                 → ""  (no -C)
+#   "git -C /some/path push origin HEAD"           → "/some/path"
+#   "git -C 'my dir' push origin HEAD"             → "my dir"
+#   "git -C /tmp/a -C /tmp/b push origin HEAD"     → "/tmp/b"   (last absolute wins)
+#   "git -C /tmp/a -C sub push origin HEAD"        → "/tmp/a/sub" (relative composes)
+#   "git push origin main"                         → ""  (no -C)
 #
-# Only the FIRST -C option is returned (git uses the last, but for safety
-# we surface the first and let the [[ -d ]] gate in callers validate it).
+# Returns the effective directory exactly as computed; callers should validate
+# with [[ -d ]] before use.
 canon_git_C_path() {
   local segment="$1"
 
@@ -889,17 +895,32 @@ canon_git_C_path() {
   done
   if [[ $git_idx -lt 0 ]]; then return 0; fi
 
-  # Walk tokens after "git"; the same value-consuming global list as
-  # canon_git_subcommand applies. Stop at the subcommand (first bare token).
+  # Walk tokens after "git"; collect ALL -C values and compute the effective
+  # directory the same way git does:
+  #   - absolute path → replace accumulated
+  #   - relative path → join onto accumulated (accumulated/relative)
+  # Stop at the subcommand (first bare non-'-' token).
   local expect_value=0
   local expect_C_value=0
+  local effective_dir=""
+  local found_C=0
   for (( i=git_idx+1; i<tok_count; i++ )); do
     local tok="${tok_arr[$i]}"
 
     if [[ "$expect_C_value" -eq 1 ]]; then
-      # This token is the -C path value; print and return.
-      printf '%s' "$tok"
-      return 0
+      expect_C_value=0
+      found_C=1
+      # Compose: absolute path replaces; relative path appends to accumulated.
+      if [[ "$tok" == /* ]]; then
+        effective_dir="$tok"
+      else
+        if [[ -n "$effective_dir" ]]; then
+          effective_dir="${effective_dir}/${tok}"
+        else
+          effective_dir="$tok"
+        fi
+      fi
+      continue
     fi
 
     if [[ "$expect_value" -eq 1 ]]; then
@@ -927,9 +948,13 @@ canon_git_C_path() {
       continue
     fi
 
-    # First bare non-'-' token is the subcommand — no -C before it.
+    # First bare non-'-' token is the subcommand — stop.
     break
   done
+
+  if [[ "$found_C" -eq 1 ]]; then
+    printf '%s' "$effective_dir"
+  fi
   return 0
 }
 
@@ -938,14 +963,24 @@ canon_git_C_path() {
 # ---------------------------------------------------------------------------
 # Detects a leading "cd <dir> &&" prefix OR a "git -C <dir> ..." inline form
 # in a shell command and, when the extracted directory exists on disk, prints
-# "-C <dir>" so git commands can be scoped to that directory.
+# just the DIRECTORY PATH so callers can pass it safely as: git -C "$path" ...
+#
+# Returning only the path (not "-C <path>") lets callers quote it correctly,
+# preventing word-splitting on paths containing spaces (P1 Finding B fix).
 #
 # Handles:
-#   "cd /some/path && git commit -m msg"   → "-C /some/path"
-#   "  cd ./relative && git commit"        → "-C ./relative"  (if dir exists)
-#   "git -C /some/path push origin HEAD"   → "-C /some/path"  (if dir exists)
-#   "git commit -m msg"                    → ""
-#   "cd /nonexistent && git commit"        → ""
+#   "cd /some/path && git commit -m msg"       → "/some/path"
+#   "  cd ./relative && git commit"            → "./relative"  (if dir exists)
+#   "git -C /some/path push origin HEAD"       → "/some/path"  (if dir exists)
+#   "git -C /tmp/a -C /tmp/b push origin HEAD" → "/tmp/b"  (effective dir, if exists)
+#   "git commit -m msg"                        → ""
+#   "cd /nonexistent && git commit"            → ""
+#
+# Callers MUST use the array form to avoid word-splitting on spaces:
+#   local -a gda=()
+#   local _p; _p=$(canon_git_dir_arg "$cmd")
+#   [[ -n "$_p" ]] && gda=(-C "$_p")
+#   git "${gda[@]}" <subcmd> ...
 #
 # Uses POSIX [[:space:]] throughout — macOS BSD grep does not support \s.
 canon_git_dir_arg() {
@@ -970,16 +1005,17 @@ canon_git_dir_arg() {
   esac
 
   if [[ -n "$cd_target" ]] && [[ -d "$cd_target" ]]; then
-    printf '%s' "-C $cd_target"
+    printf '%s' "$cd_target"
     return
   fi
 
   # Also check for a "git -C <path> ..." inline form (separate token, not =form).
   # This handles "git -C /other/repo push origin HEAD" where there is no leading cd.
+  # canon_git_C_path now returns the EFFECTIVE path after composing all -C options.
   local c_path
   c_path=$(canon_git_C_path "$command" || true) # DOCUMENTED FAIL-OPEN -- absent -C is the normal case
   if [[ -n "$c_path" ]] && [[ -d "$c_path" ]]; then
-    printf '%s' "-C $c_path"
+    printf '%s' "$c_path"
   fi
 }
 

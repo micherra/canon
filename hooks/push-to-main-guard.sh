@@ -121,17 +121,21 @@ git_subcommand_args() {
 # ---------------------------------------------------------------------------
 resolve_protected_branch() {
   local raw_segment="$1"
-  local git_dir_arg
-  # Resolution order (Finding B): (1) git -C <path> in the command — the command
-  # explicitly names the target repo; (2) CANON_GUARD_CWD (test/env override);
+  # Resolution order: (1) git -C <path> in the command — the command explicitly
+  # names the target repo; (2) CANON_GUARD_CWD (test/env override);
   # (3) leading "cd <dir> &&" prefix; (4) empty (use hook's cwd).
-  git_dir_arg=$(canon_git_dir_arg "$raw_segment")
-  if [[ -z "$git_dir_arg" ]] && [[ -n "${CANON_GUARD_CWD:-}" ]]; then
-    git_dir_arg="-C $CANON_GUARD_CWD"
+  # canon_git_dir_arg returns only the path; use an array to avoid word-splitting
+  # on paths containing spaces (P1 Finding B fix).
+  local _gda_path
+  _gda_path=$(canon_git_dir_arg "$raw_segment")
+  local -a git_dir_args=()
+  if [[ -n "$_gda_path" ]]; then
+    git_dir_args=(-C "$_gda_path")
+  elif [[ -n "${CANON_GUARD_CWD:-}" ]]; then
+    git_dir_args=(-C "$CANON_GUARD_CWD")
   fi
   local ref
-  # shellcheck disable=SC2086
-  ref=$(git $git_dir_arg symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset origin/HEAD falls back to main below
+  ref=$(git "${git_dir_args[@]}" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset origin/HEAD falls back to main below
   ref="${ref#refs/remotes/origin/}"
   if [[ -z "$ref" ]]; then
     ref="main"
@@ -203,24 +207,27 @@ bare_push_is_safe() {
   local raw_segment="$1"
   local protected="$2"
   local remote="${3:-origin}"
-  local git_dir_arg
-  # Resolution order (Finding B): (1) git -C <path> in the command; (2) CANON_GUARD_CWD;
+  # Resolution order: (1) git -C <path> in the command; (2) CANON_GUARD_CWD;
   # (3) leading "cd <dir> &&" prefix; (4) empty (use hook's cwd).
-  git_dir_arg=$(canon_git_dir_arg "$raw_segment")
-  if [[ -z "$git_dir_arg" ]] && [[ -n "${CANON_GUARD_CWD:-}" ]]; then
-    git_dir_arg="-C $CANON_GUARD_CWD"
+  # canon_git_dir_arg returns only the path; use an array to avoid word-splitting
+  # on paths containing spaces (P1 Finding B fix).
+  local _gda_path
+  _gda_path=$(canon_git_dir_arg "$raw_segment")
+  local -a git_dir_args=()
+  if [[ -n "$_gda_path" ]]; then
+    git_dir_args=(-C "$_gda_path")
+  elif [[ -n "${CANON_GUARD_CWD:-}" ]]; then
+    git_dir_args=(-C "$CANON_GUARD_CWD")
   fi
   local cur pd
-  # shellcheck disable=SC2086
-  cur=$(git $git_dir_arg symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- detached HEAD → empty → caller blocks
+  cur=$(git "${git_dir_args[@]}" symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- detached HEAD → empty → caller blocks
   if [[ -z "$cur" ]]; then
     return 1   # detached HEAD / unresolved → NOT safe → block
   fi
   if [[ "$cur" == "$protected" ]]; then
     return 1   # on the protected branch → bare push targets it → block
   fi
-  # shellcheck disable=SC2086
-  pd=$(git $git_dir_arg config --get push.default 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset → default 'simple' → safe
+  pd=$(git "${git_dir_args[@]}" config --get push.default 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset → default 'simple' → safe
   case "$pd" in
     ""|simple|current) ;;   # pushes current branch to same-named ref → safe so far (cur != protected)
     *) return 1 ;;          # matching/upstream/nothing/unknown → cannot prove safe → block
@@ -232,8 +239,7 @@ bare_push_is_safe() {
   # --mirror — pushes ALL refs including the protected branch regardless of
   # push.default or current branch. Block if any remote has mirror=true.
   local mirror_val
-  # shellcheck disable=SC2086
-  mirror_val=$(git $git_dir_arg config --bool --get "remote.${remote}.mirror" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
+  mirror_val=$(git "${git_dir_args[@]}" config --bool --get "remote.${remote}.mirror" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
   if [[ "$mirror_val" == "true" ]]; then
     return 1   # mirror config → bare push mirrors ALL refs including protected → block
   fi
@@ -244,8 +250,7 @@ bare_push_is_safe() {
   # for the target remote — we cannot cheaply prove a glob doesn't match the
   # protected branch, so fail-closed.
   local configured_push_refspec
-  # shellcheck disable=SC2086
-  configured_push_refspec=$(git $git_dir_arg config --get-all "remote.${remote}.push" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
+  configured_push_refspec=$(git "${git_dir_args[@]}" config --get-all "remote.${remote}.push" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
   if [[ -n "$configured_push_refspec" ]]; then
     return 1   # push refspec overrides push.default → cannot prove safe → block
   fi
@@ -453,16 +458,20 @@ push_updates_protected_branch() {
     # git unavailable), HEAD's target is unknown → block (dc-05).
     if [[ "$dst" == "HEAD" ]]; then
       local _head_branch
-      local _git_dir_arg
-      # Resolution order (Finding B): (1) git -C <path> in the command — the command
+      # Resolution order: (1) git -C <path> in the command — the command
       # explicitly targets that repo; (2) CANON_GUARD_CWD (test/env override);
       # (3) leading "cd <dir> &&" prefix; (4) empty (hook's cwd).
-      _git_dir_arg=$(canon_git_dir_arg "$raw_segment")
-      if [[ -z "$_git_dir_arg" ]] && [[ -n "${CANON_GUARD_CWD:-}" ]]; then
-        _git_dir_arg="-C $CANON_GUARD_CWD"
+      # canon_git_dir_arg returns only the path; use an array to avoid
+      # word-splitting on paths containing spaces (P1 Finding B fix).
+      local _gda_path_head
+      _gda_path_head=$(canon_git_dir_arg "$raw_segment")
+      local -a _gda_head=()
+      if [[ -n "$_gda_path_head" ]]; then
+        _gda_head=(-C "$_gda_path_head")
+      elif [[ -n "${CANON_GUARD_CWD:-}" ]]; then
+        _gda_head=(-C "$CANON_GUARD_CWD")
       fi
-      # shellcheck disable=SC2086
-      _head_branch=$(git $_git_dir_arg symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty on detached HEAD → fail-closed below
+      _head_branch=$(git "${_gda_head[@]}" symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty on detached HEAD → fail-closed below
       if [[ -z "$_head_branch" ]]; then
         echo "CANON: push refspec destination is HEAD but current branch cannot be resolved — blocking fail-closed." >&2
         return 0   # unknown HEAD target → BLOCK (dc-05: fail-closed-on-ambiguity)

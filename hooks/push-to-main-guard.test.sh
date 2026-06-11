@@ -639,6 +639,96 @@ rm -rf "$TMPDIR_C_MAIN" "$TMPDIR_C_FEATURE" "$TMPDIR_C_CWD_MAIN"
 
 echo ""
 # ---------------------------------------------------------------------------
+# Finding A (P1, round 4): multiple -C options — effective directory is the
+# last absolute path (or composed relative), not the first.
+# 'git -C /tmp/a -C /tmp/b push origin HEAD' must use HEAD from /tmp/b.
+# ---------------------------------------------------------------------------
+echo "-- Finding A (P1, round 4): multiple -C options — effective directory is the last --"
+
+# Repo A: HEAD is on main (would block if the first -C were used).
+TMPDIR_MULTI_A=$(mktemp -d)
+setup_repo "$TMPDIR_MULTI_A"
+git -C "$TMPDIR_MULTI_A" branch -m main
+
+# Repo B: HEAD is on a feature branch (should allow because it is the last -C).
+TMPDIR_MULTI_B=$(mktemp -d)
+setup_repo "$TMPDIR_MULTI_B"
+git -C "$TMPDIR_MULTI_B" branch -m main
+git -C "$TMPDIR_MULTI_B" checkout -q -b canon/feature-b
+
+# git -C <main-A> -C <feature-B> push origin HEAD → effective dir is B (feature branch) → ALLOW
+echo '{"command":"'"git -C $TMPDIR_MULTI_A -C $TMPDIR_MULTI_B push origin HEAD"'"}' \
+  | CANON_GUARD_CWD="$TMPDIR_MULTI_A" bash "$HOOK" >/dev/null 2>&1 && _exit_multi_allow=0 || _exit_multi_allow=$?
+if [[ "$_exit_multi_allow" -eq 0 ]]; then
+  echo "  PASS: git -C <main> -C <feature> push origin HEAD allows (last -C = feature branch)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: git -C <main> -C <feature> push origin HEAD should allow, got exit=$_exit_multi_allow"
+  FAIL=$((FAIL + 1))
+fi
+
+# git -C <feature-B> -C <main-A> push origin HEAD → effective dir is A (main) → BLOCK
+echo '{"command":"'"git -C $TMPDIR_MULTI_B -C $TMPDIR_MULTI_A push origin HEAD"'"}' \
+  | CANON_GUARD_CWD="$TMPDIR_MULTI_B" bash "$HOOK" >/dev/null 2>&1 && _exit_multi_block=0 || _exit_multi_block=$?
+if [[ "$_exit_multi_block" -eq 2 ]]; then
+  echo "  PASS: git -C <feature> -C <main> push origin HEAD blocks (last -C = main)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: git -C <feature> -C <main> push origin HEAD should block, got exit=$_exit_multi_block"
+  FAIL=$((FAIL + 1))
+fi
+
+rm -rf "$TMPDIR_MULTI_A" "$TMPDIR_MULTI_B"
+
+echo ""
+# ---------------------------------------------------------------------------
+# Finding B (P1, round 4): path-with-spaces — a -C path containing spaces
+# must be resolved correctly (no word-splitting bypass).
+# ---------------------------------------------------------------------------
+echo "-- Finding B (P1, round 4): -C path with spaces is resolved correctly --"
+
+# Create a repo inside a directory whose name contains a space.
+TMPDIR_SPACE_PARENT=$(mktemp -d)
+TMPDIR_SPACE_REPO="${TMPDIR_SPACE_PARENT}/repo with spaces"
+mkdir -p "$TMPDIR_SPACE_REPO"
+setup_repo "$TMPDIR_SPACE_REPO"
+git -C "$TMPDIR_SPACE_REPO" branch -m main
+
+# Feature-branch repo for CANON_GUARD_CWD (on a feature branch — should NOT
+# affect resolution when the command explicitly names the space-path repo).
+TMPDIR_SPACE_CWD=$(mktemp -d)
+setup_repo "$TMPDIR_SPACE_CWD"
+git -C "$TMPDIR_SPACE_CWD" branch -m main
+git -C "$TMPDIR_SPACE_CWD" checkout -q -b canon/space-feature
+
+# The command uses a quoted -C path with a space. It targets the space-repo
+# which is on main → must BLOCK (fail-closed).
+echo "{\"command\":\"git -C '$TMPDIR_SPACE_REPO' push origin HEAD\"}" \
+  | CANON_GUARD_CWD="$TMPDIR_SPACE_CWD" bash "$HOOK" >/dev/null 2>&1 && _exit_space=0 || _exit_space=$?
+if [[ "$_exit_space" -eq 2 ]]; then
+  echo "  PASS: git -C '<path with spaces>' push origin HEAD blocks (repo on main)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: git -C '<path with spaces>' push origin HEAD should block, got exit=$_exit_space"
+  FAIL=$((FAIL + 1))
+fi
+
+# Now checkout a feature branch in the space-repo and verify ALLOW.
+git -C "$TMPDIR_SPACE_REPO" checkout -q -b canon/space-feature2
+echo "{\"command\":\"git -C '$TMPDIR_SPACE_REPO' push origin HEAD\"}" \
+  | CANON_GUARD_CWD="$TMPDIR_SPACE_CWD" bash "$HOOK" >/dev/null 2>&1 && _exit_space_feat=0 || _exit_space_feat=$?
+if [[ "$_exit_space_feat" -eq 0 ]]; then
+  echo "  PASS: git -C '<path with spaces>' push origin HEAD allows (repo on feature branch)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: git -C '<path with spaces>' push origin HEAD should allow, got exit=$_exit_space_feat"
+  FAIL=$((FAIL + 1))
+fi
+
+rm -rf "$TMPDIR_SPACE_PARENT" "$TMPDIR_SPACE_CWD"
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
