@@ -427,4 +427,84 @@ describe("checkIndexDrift observable-best-effort", () => {
       chmodSync(join(tmpDir, "agents"), 0o755);
     }
   });
+
+  it("unreadable artifact file surfaces UNREADABLE_ARTIFACT so drift check is not CLEAN", async () => {
+    // Skip on non-Unix systems where chmod permissions don't apply the same way
+    if (process.platform === "win32") return;
+
+    // Create the agents dir with a readable and an unreadable .md file
+    mkdirSync(join(tmpDir, "agents"), { recursive: true });
+    mkdirSync(join(tmpDir, "agents", ".claude"), { recursive: true });
+
+    // Write a readable artifact file
+    writeFileSync(
+      join(tmpDir, "agents", "readable.md"),
+      "---\ntitle: Readable\n---\n# Readable agent\n",
+      "utf8",
+    );
+    // Write an unreadable artifact file
+    const unreadablePath = join(tmpDir, "agents", "locked.md");
+    writeFileSync(unreadablePath, "---\ntitle: Locked\n---\n# Locked agent\n", "utf8");
+    chmodSync(unreadablePath, 0o000);
+
+    // Index with markers (content doesn't matter — we're testing error surfacing)
+    writeFileSync(
+      join(tmpDir, "agents", ".claude", "CLAUDE.md"),
+      [
+        "# Agents",
+        "",
+        INVENTORY_START("agents"),
+        "| artifact | summary |",
+        "|---|---|",
+        "| readable.md | Readable |",
+        INVENTORY_END,
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const findings = await checkIndexDrift(tmpDir);
+      const unreadableFindings = findings.filter((f) => f.code === "UNREADABLE_ARTIFACT");
+      expect(unreadableFindings.length).toBeGreaterThan(0);
+      expect(unreadableFindings[0].class).toBe("agents");
+      expect(unreadableFindings[0].message).toContain("locked.md");
+    } finally {
+      chmodSync(unreadablePath, 0o644);
+    }
+  });
+
+  it("readable artifact file with no frontmatter is unaffected (treated as empty frontmatter)", async () => {
+    // Create the agents dir with a file that has no frontmatter block
+    mkdirSync(join(tmpDir, "agents"), { recursive: true });
+    mkdirSync(join(tmpDir, "agents", ".claude"), { recursive: true });
+
+    writeFileSync(
+      join(tmpDir, "agents", "no-frontmatter.md"),
+      "# Just a heading, no YAML frontmatter\n",
+      "utf8",
+    );
+
+    // Index with markers listing the file (summary will be empty)
+    writeFileSync(
+      join(tmpDir, "agents", ".claude", "CLAUDE.md"),
+      [
+        "# Agents",
+        "",
+        INVENTORY_START("agents"),
+        "| artifact | summary |",
+        "|---|---|",
+        "| no-frontmatter.md |  |",
+        INVENTORY_END,
+      ].join("\n"),
+      "utf8",
+    );
+
+    const findings = await checkIndexDrift(tmpDir);
+    // Must not emit UNREADABLE_ARTIFACT — the file was readable
+    const unreadableFindings = findings.filter((f) => f.code === "UNREADABLE_ARTIFACT");
+    expect(unreadableFindings).toHaveLength(0);
+    // Must not emit DISCOVERY_ERROR
+    const discoveryErrors = findings.filter((f) => f.code === "DISCOVERY_ERROR");
+    expect(discoveryErrors).toHaveLength(0);
+  });
 });

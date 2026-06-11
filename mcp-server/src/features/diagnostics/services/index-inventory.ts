@@ -34,7 +34,7 @@ export type ArtifactDescriptor = { name: string; summary: string };
 
 export type IndexDriftFinding = {
   class: ArtifactClass;
-  code: "MISSING_MARKERS" | "INVENTORY_MISMATCH" | "DISCOVERY_ERROR";
+  code: "MISSING_MARKERS" | "INVENTORY_MISMATCH" | "DISCOVERY_ERROR" | "UNREADABLE_ARTIFACT";
   message: string;
 };
 
@@ -201,18 +201,76 @@ export function diffIndex(
 
 // ---- I/O (clearly separated from pure functions above) ----
 
+type FrontmatterResult = { ok: true; frontmatter: string } | { ok: false; error: string };
+
 /**
  * Read frontmatter from a markdown file.
- * Returns the raw frontmatter string between --- delimiters, or "" if absent/unreadable.
+ *
+ * Returns { ok: true, frontmatter } on success (frontmatter is "" when no YAML block is
+ * found — a valid file with no frontmatter). Returns { ok: false, error } when the file
+ * cannot be read (permission error, broken symlink, transient I/O failure, etc.).
+ *
+ * This distinction matters: a read ERROR must not be treated as empty frontmatter, because
+ * that would silently mask real drift by producing CLEAN on incomplete data.
  */
-async function readFrontmatter(filePath: string): Promise<string> {
+async function readFrontmatter(filePath: string): Promise<FrontmatterResult> {
   try {
     const content = await readFile(filePath, "utf8");
     const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
-    return match ? match[1] : "";
-  } catch {
-    return "";
+    return { frontmatter: match ? match[1] : "", ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { error: `unreadable artifact '${filePath}': ${msg}`, ok: false };
   }
+}
+
+type ScanOneDirResult = {
+  files: Array<{ filename: string; frontmatter: string }>;
+  discoveryError?: string;
+  unreadableFiles: Array<{ filePath: string; message: string }>;
+};
+
+/**
+ * Scan one directory for .md artifact files.
+ *
+ * observable-best-effort: ENOENT/ENOTDIR → silent skip (legitimately absent).
+ * Any other readdir error → discoveryError (dir exists but unreadable).
+ * Individual file read errors → unreadableFiles (must surface, not silently empty).
+ */
+async function scanOneDir(fullDir: string): Promise<ScanOneDirResult> {
+  let entries: string[];
+  try {
+    entries = await readdir(fullDir);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return { files: [], unreadableFiles: [] };
+    }
+    return {
+      discoveryError: err instanceof Error ? err.message : String(err),
+      files: [],
+      unreadableFiles: [],
+    };
+  }
+
+  const mdFilenames = entries.filter(
+    (e) => e.endsWith(".md") && e !== "README.md" && !e.startsWith("."),
+  );
+
+  const files: Array<{ filename: string; frontmatter: string }> = [];
+  const unreadableFiles: Array<{ filePath: string; message: string }> = [];
+
+  for (const filename of mdFilenames) {
+    const fullPath = join(fullDir, filename);
+    const result = await readFrontmatter(fullPath);
+    if (!result.ok) {
+      unreadableFiles.push({ filePath: fullPath, message: result.error });
+    } else {
+      files.push({ filename, frontmatter: result.frontmatter });
+    }
+  }
+
+  return { files, unreadableFiles };
 }
 
 /**
@@ -224,10 +282,10 @@ async function readFrontmatter(filePath: string): Promise<string> {
  *   error (NOT ENOENT/ENOTDIR — those are silently skipped as legitimately
  *   absent dirs). Non-empty discoveryErrors means the inventory is truncated;
  *   callers must surface this rather than reporting CLEAN.
- *
- * observable-best-effort: ENOENT/ENOTDIR → silent skip (dir just not there).
- * Any other error → surfaced in discoveryErrors (dir exists but unreadable,
- * permissions issue, etc.) — the invisible-failure mode this policy prohibits.
+ * - `unreadableFiles`: one entry per artifact file that could not be read
+ *   (permission error, broken symlink, transient I/O failure). Non-empty means
+ *   the inventory is incomplete; callers must surface this rather than reporting
+ *   CLEAN against incomplete data.
  */
 async function discoverArtifacts(
   cls: ArtifactClass,
@@ -235,41 +293,24 @@ async function discoverArtifacts(
 ): Promise<{
   descriptors: ArtifactDescriptor[];
   discoveryErrors: Array<{ dir: string; message: string }>;
+  unreadableFiles: Array<{ filePath: string; message: string }>;
 }> {
-  const dirs = CLASS_DIRS[cls];
   const allFiles: Array<{ filename: string; frontmatter: string }> = [];
   const discoveryErrors: Array<{ dir: string; message: string }> = [];
+  const unreadableFiles: Array<{ filePath: string; message: string }> = [];
 
-  for (const dir of dirs) {
+  for (const dir of CLASS_DIRS[cls]) {
     const fullDir = join(projectDir, dir);
-    let entries: string[];
-    try {
-      entries = await readdir(fullDir);
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOENT" || code === "ENOTDIR") {
-        // Legitimately absent directory — skip silently
-        continue;
-      }
-      // Unexpected error (permissions, I/O failure, etc.) — must surface
-      discoveryErrors.push({
-        dir: fullDir,
-        message: err instanceof Error ? err.message : String(err),
-      });
-      continue;
-    }
-
-    const mdFiles = entries.filter(
-      (e) => e.endsWith(".md") && e !== "README.md" && !e.startsWith("."),
-    );
-
-    for (const filename of mdFiles) {
-      const frontmatter = await readFrontmatter(join(fullDir, filename));
-      allFiles.push({ filename, frontmatter });
+    const result = await scanOneDir(fullDir);
+    if (result.discoveryError) {
+      discoveryErrors.push({ dir: fullDir, message: result.discoveryError });
+    } else {
+      allFiles.push(...result.files);
+      unreadableFiles.push(...result.unreadableFiles);
     }
   }
 
-  return { descriptors: toDescriptors(allFiles), discoveryErrors };
+  return { descriptors: toDescriptors(allFiles), discoveryErrors, unreadableFiles };
 }
 
 /** Path to the index file for a given class (relative to projectDir). */
@@ -293,7 +334,10 @@ export async function checkIndexDrift(projectDir: string): Promise<IndexDriftFin
   await Promise.all(
     classes.map(async (cls) => {
       try {
-        const { descriptors, discoveryErrors } = await discoverArtifacts(cls, projectDir);
+        const { descriptors, discoveryErrors, unreadableFiles } = await discoverArtifacts(
+          cls,
+          projectDir,
+        );
 
         // Surface any unexpected directory-read errors — do NOT silently continue
         // past them, as doing so would report CLEAN against a truncated inventory
@@ -302,6 +346,17 @@ export async function checkIndexDrift(projectDir: string): Promise<IndexDriftFin
             class: cls,
             code: "DISCOVERY_ERROR",
             message: `Discovery degraded for class '${cls}': could not read directory '${de.dir}' — ${de.message}`,
+          });
+        }
+
+        // Surface any unreadable individual artifact files — a read error must NOT
+        // be treated as empty frontmatter; that would mask real drift by reporting
+        // CLEAN against an incomplete set of descriptors
+        for (const uf of unreadableFiles) {
+          allFindings.push({
+            class: cls,
+            code: "UNREADABLE_ARTIFACT",
+            message: `Could not read artifact file during index drift check: ${uf.message}`,
           });
         }
 
