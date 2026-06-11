@@ -30,18 +30,20 @@ import {
   checkStaleRefs,
   type WikiLintOutput,
 } from "../services/wiki-lint.ts";
+import { checkGlossaryConsistency } from "../services/wiki-lint-glossary.ts";
 
 // ---- Types ----
 
 type CheckName =
-  | "contradictions"
-  | "orphan_principles"
-  | "stale_refs"
-  | "missing_examples"
   | "cited_paths"
+  | "contradictions"
+  | "glossary_consistency"
+  | "missing_examples"
+  | "orphan_principles"
   | "scope_layers"
   | "scope_tags"
-  | "index_drift";
+  | "index_drift"
+  | "stale_refs";
 
 export type WikiLintInput = {
   checks?: CheckName[];
@@ -258,45 +260,30 @@ function runCitedPathCheck(
   return checkCitedPaths([...refFiles, ...dddDocFiles], existsOnDisk);
 }
 
+/** Read CONTEXT.md and run the glossary consistency check; returns [] when file is absent. */
+function runGlossaryCheck(projectDir: string): ReturnType<typeof checkGlossaryConsistency> {
+  const contextMdPath = join(projectDir, "CONTEXT.md");
+  const content = readFileSafe(contextMdPath);
+  if (content === null) return [];
+  return checkGlossaryConsistency({ content, path: contextMdPath });
+}
+
 // ---- Main tool function ----
 
-/**
- * Run wiki lint checks against Canon's own meta-layer artifacts.
- *
- * @param input - Which checks to run (default: all 7)
- * @param projectDir - Project root (for CLAUDE.md scanning, stale ref resolution, drift store)
- * @param pluginDir - Plugin directory (for principles loading, agent definitions)
- */
-export async function wikiLint(
-  input: WikiLintInput,
-  projectDir: string,
-  pluginDir: string,
-): Promise<WikiLintOutput> {
-  const ALL_CHECKS: CheckName[] = [
-    "contradictions",
-    "orphan_principles",
-    "stale_refs",
-    "missing_examples",
-    "cited_paths",
-    "scope_layers",
-    "scope_tags",
-    "index_drift",
-  ];
-  const enabled = new Set<CheckName>(input.checks ?? ALL_CHECKS);
+type CheckContext = {
+  agentFiles: FileRecord[];
+  claudeMdFiles: FileRecord[];
+  dddDocFiles: FileRecord[];
+  enabled: Set<CheckName>;
+  principles: Principle[];
+  projectDir: string;
+};
 
-  const principles = await loadAllPrinciples(projectDir, pluginDir);
-  const claudeMdPaths = findFiles(projectDir, (_fp, name) => name === "CLAUDE.md");
-  const claudeMdFiles = loadFileRecords(claudeMdPaths);
-
-  const agentsDir = join(pluginDir, "agents");
-  const agentFiles = loadFileRecords(findFiles(agentsDir, (_fp, name) => name.endsWith(".md")));
-
-  // DDD doc set: docs/**/*.md (excl. docs/explore/), domains/*/README.md, CONTEXT.md.
-  // Collected once and threaded into both stale_refs and cited_paths runners.
-  const dddDocFiles =
-    enabled.has("stale_refs") || enabled.has("cited_paths")
-      ? loadFileRecords(collectDddDocPaths(projectDir))
-      : [];
+/** Run all enabled checks and return the assembled input for assembleWikiLintOutput. */
+async function runEnabledChecks(
+  ctx: CheckContext,
+): Promise<Parameters<typeof assembleWikiLintOutput>[0]> {
+  const { agentFiles, claudeMdFiles, dddDocFiles, enabled, principles, projectDir } = ctx;
 
   const contradictions = enabled.has("contradictions") ? checkContradictions(claudeMdFiles) : [];
   const orphans = enabled.has("orphan_principles")
@@ -315,11 +302,15 @@ export async function wikiLint(
     ? checkScopeTags(principles, VALID_COMPUTED_TAGS)
     : [];
   const indexDrift = enabled.has("index_drift") ? await checkIndexDrift(projectDir) : [];
+  const glossaryConsistency = enabled.has("glossary_consistency")
+    ? runGlossaryCheck(projectDir)
+    : [];
 
-  return assembleWikiLintOutput({
+  return {
     citedPaths,
     contradictions,
     filesScanned: claudeMdFiles.length + agentFiles.length + dddDocFiles.length,
+    glossaryConsistency,
     indexDrift,
     missingExamples,
     orphans,
@@ -327,5 +318,55 @@ export async function wikiLint(
     scopeLayers,
     scopeTags,
     staleRefs,
+  };
+}
+
+/**
+ * Run wiki lint checks against Canon's own meta-layer artifacts.
+ *
+ * @param input - Which checks to run (default: all 8)
+ * @param projectDir - Project root (for CLAUDE.md scanning, stale ref resolution, drift store)
+ * @param pluginDir - Plugin directory (for principles loading, agent definitions)
+ */
+export async function wikiLint(
+  input: WikiLintInput,
+  projectDir: string,
+  pluginDir: string,
+): Promise<WikiLintOutput> {
+  const ALL_CHECKS: CheckName[] = [
+    "cited_paths",
+    "contradictions",
+    "glossary_consistency",
+    "missing_examples",
+    "orphan_principles",
+    "scope_layers",
+    "scope_tags",
+    "index_drift",
+    "stale_refs",
+  ];
+  const enabled = new Set<CheckName>(input.checks ?? ALL_CHECKS);
+
+  const principles = await loadAllPrinciples(projectDir, pluginDir);
+  const claudeMdPaths = findFiles(projectDir, (_fp, name) => name === "CLAUDE.md");
+  const claudeMdFiles = loadFileRecords(claudeMdPaths);
+
+  const agentsDir = join(pluginDir, "agents");
+  const agentFiles = loadFileRecords(findFiles(agentsDir, (_fp, name) => name.endsWith(".md")));
+
+  // DDD doc set: docs/**/*.md (excl. docs/explore/), domains/*/README.md, CONTEXT.md.
+  // Collected once and threaded into both stale_refs and cited_paths runners.
+  const dddDocFiles =
+    enabled.has("stale_refs") || enabled.has("cited_paths")
+      ? loadFileRecords(collectDddDocPaths(projectDir))
+      : [];
+
+  const assembleInput = await runEnabledChecks({
+    agentFiles,
+    claudeMdFiles,
+    dddDocFiles,
+    enabled,
+    principles,
+    projectDir,
   });
+  return assembleWikiLintOutput(assembleInput);
 }

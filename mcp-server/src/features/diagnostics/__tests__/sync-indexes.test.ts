@@ -310,4 +310,75 @@ describe("syncIndexes", () => {
       chmodSync(join(projectDir, "agents"), 0o755);
     }
   });
+
+  it("unreadable individual artifact file lands in skipped[] and does NOT blank the index", async () => {
+    if (process.platform === "win32") return;
+
+    const indexWithExistingData = [
+      "# Agents",
+      "",
+      INVENTORY_START("agents"),
+      "| artifact | summary |",
+      "|---|---|",
+      "| old-artifact.md | Old summary line |",
+      INVENTORY_END,
+      "",
+      "## Conventions",
+    ].join("\n");
+
+    // Create index with existing content
+    mkdirSync(join(projectDir, "agents", ".claude"), { recursive: true });
+    writeFileSync(
+      join(projectDir, "agents", ".claude", "CLAUDE.md"),
+      indexWithExistingData,
+      "utf8",
+    );
+
+    // Create unreadable artifact file
+    mkdirSync(join(projectDir, "agents"), { recursive: true });
+    const unreadablePath = join(projectDir, "agents", "secret-agent.md");
+    writeFileSync(unreadablePath, "---\ntitle: Secret\n---\nBody.", "utf8");
+    chmodSync(unreadablePath, 0o000);
+
+    const { readFileSync } = await import("node:fs");
+
+    try {
+      const result = await syncIndexes({ class: "agents" }, projectDir);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Must be in skipped — unreadable file triggers discovery error
+        const skipped = result.skipped.find((s) => s.class === "agents");
+        expect(skipped).toBeDefined();
+        expect(skipped?.reason).toBeDefined();
+        // The index must NOT have been rewritten — existing content preserved
+        const indexContent = readFileSync(
+          join(projectDir, "agents", ".claude", "CLAUDE.md"),
+          "utf8",
+        );
+        expect(indexContent).toContain("old-artifact.md");
+        expect(indexContent).toContain("Old summary line");
+      }
+    } finally {
+      chmodSync(unreadablePath, 0o644);
+    }
+  });
+
+  it("readable artifact file with no frontmatter yields empty summary (not an error)", async () => {
+    setupClass(
+      projectDir,
+      "agents",
+      [{ name: "no-frontmatter.md", content: "Just body text, no YAML front matter at all." }],
+      makeIndexWithMarkers("agents"),
+    );
+
+    const result = await syncIndexes({ class: "agents" }, projectDir);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Should be synced — a file with no frontmatter is a valid artifact (yields "" summary)
+      expect(result.synced).toContain("agents");
+      expect(result.skipped.map((s) => s.class)).not.toContain("agents");
+    }
+  });
 });

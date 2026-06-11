@@ -177,24 +177,25 @@ function registerWikiLintTool(server: McpServer): void {
     "wiki_lint",
     {
       description:
-        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, invalid scope.layers values, invalid scope.tags values outside the KG computed-tag vocabulary, and index_drift (inventory block mismatch or missing sentinel markers in sibling artifact-class indexes).",
+        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, invalid scope.layers values, invalid scope.tags values outside the KG computed-tag vocabulary, glossary self-consistency (duplicate or ambiguous CONTEXT.md terms), and index_drift (inventory block mismatch or missing sentinel markers in sibling artifact-class indexes).",
       inputSchema: {
         checks: z
           .array(
             z.enum([
-              "contradictions",
-              "orphan_principles",
-              "stale_refs",
-              "missing_examples",
               "cited_paths",
+              "contradictions",
+              "glossary_consistency",
+              "missing_examples",
+              "orphan_principles",
               "scope_layers",
               "scope_tags",
               "index_drift",
+              "stale_refs",
             ]),
           )
           .optional()
           .describe(
-            "Checks to run (default: all 8). Options: contradictions, orphan_principles, stale_refs, missing_examples, cited_paths, scope_layers, scope_tags, index_drift",
+            "Checks to run (default: all 8). Options: cited_paths, contradictions, glossary_consistency, index_drift, missing_examples, orphan_principles, scope_layers, scope_tags, stale_refs",
           ),
       },
     },

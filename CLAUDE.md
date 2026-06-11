@@ -327,7 +327,7 @@ is missing → re-spawn → second-failure HITL) is unchanged.
 
 > Authoritative artifact path and naming rules: `references/canon-artifact-locations.md`.
 
-### HITL Patterns <!-- last-updated: 2026-06-04 -->
+### HITL Patterns <!-- last-updated: 2026-06-09 -->
 
 Full catalog in `references/hitl-patterns.md`. Covers every mandatory and advisory
 gate: plan approval, review verdict, adversarial re-review, WARNING close-out,
@@ -402,9 +402,12 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
    - **GitHub release**: release-please (`release-please.yml`) is the primary tag/release mechanism — it runs automatically on push to `main` and cuts `vX.Y.Z` tags + GitHub releases when the release PR merges. The shipper does NOT create tags or run `gh release create`.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
-4. Verify file claims released.
-5. Run `.canon/learn.sh` if it exists.
-6. Record final flow metrics.
+4. **Fire `PushNotification` at build-complete** (after ship / PR created): call `PushNotification({ title: "Canon: Build Complete", message: "Build '{slug}' is done — PR created and ready for review." })`. This is the OS-push channel for HITL gates and build-complete signals (per channel split in `docs/supervised-build-quality.md:250`). Terminal digests (nightly digest, learner surfacing) remain terminal — do NOT convert them to push.
+   - **One-time user setup**: Desktop push works by default in the Claude.ai/API runtime — no setup needed. Phone push requires connecting **Remote Control** (optional one-time step). Not available on Bedrock/Vertex/Foundry — Canon runs on the Claude.ai/API path, so this is informational only.
+   - **LSP prerequisite**: The `LSP` tool (granted to reviewer, engineer, architect) requires `typescript-language-server` installed globally: `npm install -g typescript-language-server typescript`. Without it the tool will fail to return results.
+5. Verify file claims released.
+6. Run `.canon/learn.sh` if it exists.
+7. Record final flow metrics.
 
 ### Commit Provenance
 
@@ -491,7 +494,7 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Loop Framework (Phase A) <!-- last-updated: 2026-06-08 -->
+## Loop Framework <!-- last-updated: 2026-06-09 -->
 
 Loops are Canon's managed periodic-observation artifact class. A loop is authored as
 `loops/<id>.md` (YAML frontmatter + action-prompt body), registered via `list_loops`,
@@ -510,15 +513,28 @@ CronCreate({ schedule: "<interval>", command: "/canon:loop-tick <id>", max: <max
 initiates the `CronCreate` call at a named lifecycle moment. No manifest, hook, or command
 frontmatter starts a loop — the capability ground truth is that a plugin cannot do this.
 
-**Phase A boundary:** In Phase A, NO loop fires in production. Only `_probe` runs — invoked
-manually in the verify step to prove the schema→registry→runtime path. Ship-watch (Phase B)
-and session-watch/self-paced (Phase C) are separate later builds. Discovery: `list_loops`.
+**Phase history:** Phase A shipped the framework spine — schema, registry, MCP tools, `_probe`
+demo; no production loop ran. Phase B ships `loops/ship-watch.md` — the first real loop,
+dispatched via the post-ship tap. Phase C (session-watch, self-paced mode) is a future build.
+Discovery: `list_loops`.
+
+**Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
+`list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop:
+- `firing_posture[tier] === "auto"` → call `CronCreate({ schedule: loop.schedule.interval, command: "/canon:loop-tick <id>", max: loop.schedule.max_ticks })` immediately.
+- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; call `CronCreate` only on confirmation.
+- `firing_posture[tier] === "disabled"` → skip silently.
+
+`ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in).
+
+**Non-declarative invariant (dc-06):** Only the orchestrator initiates `CronCreate`. Authoring
+`loops/ship-watch.md` only registers the definition — it does NOT start the loop. No manifest
+field, hook script, or command frontmatter can trigger scheduling automatically.
 
 ## Project Structure <!-- last-updated: 2026-06-09 -->
 
 ```
 canon/
-├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (21 terms)
+├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (22 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
 │   └── lib/              # Shared hook helpers (canon-hook-lib.sh — JSON extraction, comment stripping, quote-aware tokenizer, git-token detection, string-executing-wrapper unwrap/scan-forward, jq wrappers)
@@ -532,14 +548,15 @@ canon/
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
-│       │   ├── loops/           # list_loops, get_loop_definition (Phase A loop framework)
+│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase B current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase A: _probe only)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase B: _probe + ship-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
-├── principles/           # Built-in principles (78 total: 7 rules, 35 strong-opinions, 36 conventions)
+├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
+├── principles/           # Built-in principles (79 total: 7 rules, 35 strong-opinions, 37 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/

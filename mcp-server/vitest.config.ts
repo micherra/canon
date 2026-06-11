@@ -17,5 +17,11 @@ export default defineConfig({
   },
   test: {
     exclude: ["dist/**", "node_modules/**", "**/*.spec.ts", ".canon/**"],
+    // 20s timeout for subprocess-heavy tests (git, depcruise, embeddings).
+    // The 5s vitest default trips under parallel load (watch_TTTTTT1/VVVVVV1).
+    testTimeout: 20000,
+    // Cap parallelism to reduce I/O contention in subprocess-heavy suites
+    // (git/depcruise/embeddings) that trip timeouts under full parallel load.
+    maxWorkers: 4,
   },
 });

@@ -6,7 +6,7 @@
 Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint, agent metrics, signal compilation, and summary storage. All tools surface quality signals; none mutate workflow state.
 
 ## Architecture
-<!-- last-updated: 2026-06-02 -->
+<!-- last-updated: 2026-06-09 -->
 
 **`tools/`** — MCP tool handlers (thin wrappers calling services).
 
@@ -22,7 +22,8 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 
 | File | Responsibility |
 |------|---------------|
-| `wiki-lint.ts` | `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `assembleWikiLintOutput(AssembleWikiLintInput)` |
+| `wiki-lint.ts` | `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `assembleWikiLintOutput(AssembleWikiLintInput)`; re-exports `GlossaryConsistencyFinding` type from sibling |
+| `wiki-lint-glossary.ts` | `checkGlossaryConsistency(file)` — glossary wiki_lint check; parses CONTEXT.md H2 headings, detects exact-duplicate and naked-vs-qualified collisions; pure, no I/O |
 | `index-inventory.ts` | `toDescriptors`, `renderInventoryBlock`, `rewriteManagedBlock`, `extractManagedBlock`, `diffIndex` (pure); `checkIndexDrift` (I/O boundary); sentinel constants `INVENTORY_START`/`INVENTORY_END`; types `ArtifactClass`, `ArtifactDescriptor`, `IndexDriftFinding`, `CLASS_DIRS` |
 | `doc-gap-detect.ts` | `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)` |
 | `signal-compiler.ts` | `compileSignals(filePaths, driftDbSignals)` — read-only; scores by priority within per-file token budget |
@@ -44,20 +45,21 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 
 | Value | What it checks |
 |-------|---------------|
-| `"contradictions"` | Conflicting rules between CLAUDE.md files |
-| `"orphan_principles"` | Principles not referenced anywhere |
-| `"stale_refs"` | File refs in CLAUDE.md files, plan docs, **and DDD doc set** that no longer resolve |
-| `"missing_examples"` | Principles lacking usage examples |
 | `"cited_paths"` | File paths cited in `references/**/*.md` **and DDD doc set** that do not resolve from repo root |
+| `"contradictions"` | Conflicting rules between CLAUDE.md files |
+| `"glossary_consistency"` | CONTEXT.md H2 headings — exact-duplicate or naked-vs-qualified collisions; allowed: same base with ≥2 distinct qualifiers |
+| `"missing_examples"` | Principles lacking usage examples |
+| `"orphan_principles"` | Principles not referenced anywhere |
 | `"scope_layers"` | `scope.layers` values in principles outside the valid set (derived from `loadLayerMappings(projectDir)` — project config keys when `.canon/config.json` defines `layers`, otherwise defaults; replaces defaults entirely when config defines any layers) |
 | `"scope_tags"` | `scope.tags` values in principles outside `VALID_COMPUTED_TAGS` (static const from `kg-tags.ts` — 15 values, no I/O); both `scope_tags` and `scope_layers` emit a "must be a YAML list" finding when the field is a scalar string |
 | `"index_drift"` | Sentinel-delimited `## Artifact Inventory` blocks in the 5 sibling indexes diverge from on-disk artifact set; `MISSING_MARKERS` when block absent, `INVENTORY_MISMATCH` when content differs |
+| `"stale_refs"` | File refs in CLAUDE.md files, plan docs, **and DDD doc set** that no longer resolve |
 
 **DDD doc set** (scanned by `stale_refs` and `cited_paths`): `docs/**/*.md` excluding `docs/explore/`, plus `mcp-server/src/domains/*/README.md`, plus root `CONTEXT.md`. Collected by `collectDddDocPaths(projectDir)` via live filesystem scan (KG-independent). `docs/explore/` excluded — stale-by-design competition/direction records produce false findings.
 
 **`cited_paths` check** (added 2026-06-02; extended to DDD doc set 2026-06-08): scans every `references/**/*.md` file and every DDD doc. A candidate is only considered when it is a backtick-quoted token matching the pattern `` `<alpha><word-chars/dots/slashes/hyphens>.<ext>` `` where `<ext>` is one of `sh|ts|js|md|json|yaml|yml`. It is excluded (not flagged) when: it contains `${`, `<`, `>`, `{`, or `}` (template variables / placeholders); starts with `http://` or `https://`; starts with `#`; has no `/` (bare filename); or appears inside a fenced block whose opening line is labeled `example`, `hypothetical`, or `template`. A non-excluded candidate that does not resolve from the repo root is reported as a finding with its 1-based line number. Conservative by design — false positives are worse than misses.
 
-**`assembleWikiLintOutput(input: AssembleWikiLintInput)`** — `total_findings` includes all 8 check counts including `scopeLayers`, `scopeTags`, and `indexDrift`. `filesScanned` counts CLAUDE.md files + agent files + DDD doc files.
+**`assembleWikiLintOutput(input: AssembleWikiLintInput)`** — `total_findings` includes all check counts including `scopeLayers`, `scopeTags`, `indexDrift`, and `glossaryConsistency`. `filesScanned` counts CLAUDE.md files + agent files + DDD doc files.
 
 ## Invariants
 <!-- last-updated: 2026-06-09 -->

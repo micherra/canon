@@ -43,6 +43,9 @@ The schema enforces this mechanically at load time — it is not prose:
 | Rule | What is enforced |
 |------|-----------------|
 | `mutates_build: false` + forbidden tool in `observe` | Rejected at load time |
+| `mutates_build: false` + `Bash` in `observe.tools` with non-empty `observe.shell_commands` (all on `READ_ONLY_SHELL_COMMANDS`) | Admitted at load time (read-only-shell carve-out, decision loops-phase-b-01) |
+| `mutates_build: false` + `Bash` in `observe.tools` with empty `shell_commands` | Rejected at load time |
+| `mutates_build: false` + `Bash` in `observe.tools` with mutating subcommand (e.g. `git push`) | Rejected at load time |
 | `mode: self-paced` + `mutates_build: true` | Rejected at load time |
 | Transition rule references a field not in `state.snapshot` | Rejected at load time |
 | `id` ≠ filename stem | Rejected at load time |
@@ -64,11 +67,9 @@ Loops may attach to these named lifecycle moments:
 
 | Phase | What ships |
 |-------|-----------|
-| **A (current)** | Schema + registry loader + `list_loops`/`get_loop_definition` + `/canon:loop-tick` runner + `_probe` demo |
-| **B** | Ship-watch definition (`loops/ship-watch.md`) |
+| **A** | Schema + registry loader + `list_loops`/`get_loop_definition` + `/canon:loop-tick` runner + `_probe` demo; no production loop fires |
+| **B (current)** | Ship-watch definition (`loops/ship-watch.md`) — first real loop; dispatched via post-ship tap |
 | **C** | Self-paced mode + ScheduleWakeup + session-watch + de-dupe ledger |
-
-In Phase A, NO loop fires in production — only `_probe` runs, invoked manually in verify.
 
 ## Relationship to Other Canon Concepts
 

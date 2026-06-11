@@ -22,6 +22,7 @@
  * the mutable state between tests using the exported resetForTesting() helper.
  */
 
+import { join } from "node:path";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, describe, expect, it } from "vitest";
@@ -31,6 +32,7 @@ import {
   gatedWrapHandler,
   registerConnectionScope,
   resetForTesting,
+  resolvePluginDir,
   resolveReady,
   resolveScope,
   STDIO_SESSION_ID,
@@ -366,5 +368,105 @@ describe("findAnchorDir: marker-walk plugin root resolution", () => {
     const fileExistsFn = (p: string) => p === "/repo/mcp-server/boot.sh";
     const result = findAnchorDir("/repo/mcp-server/src/app", ["boot.sh"], fileExistsFn);
     expect(result).toBe("/repo/mcp-server");
+  });
+});
+
+// ── resolvePluginDir: validated-candidate resolver ───────────────────────────
+//
+// TDD Layer-1 cases from DESIGN.md Regression Test Plan — all 8 cases plus
+// the mcpServerRoot derivation assertion. All tests use a fake existsFn so no
+// real filesystem is touched.
+//
+// The fake marker root used across these tests:
+const FAKE_PLUGIN_ROOT = "/real/plugin";
+// existsFn that says FAKE_PLUGIN_ROOT contains agents/ and principles/
+const markerExistsFn = (p: string): boolean =>
+  p === join(FAKE_PLUGIN_ROOT, "agents") || p === join(FAKE_PLUGIN_ROOT, "principles");
+
+describe("resolvePluginDir: validated-candidate resolver", () => {
+  // ── Case 1: var ABSENT (undefined) → marker-walk fallback (DC1) ────────────
+  it("var ABSENT (undefined) — falls through to marker-walk and returns marker root", () => {
+    const result = resolvePluginDir(undefined, "/real/plugin/mcp-server/src/app", markerExistsFn);
+    expect(result).toBe(FAKE_PLUGIN_ROOT);
+  });
+
+  // ── Case 2: empty string → marker-walk fallback (DC1) ──────────────────────
+  it("empty string — falls through to marker-walk and returns marker root", () => {
+    const result = resolvePluginDir("", "/real/plugin/mcp-server/src/app", markerExistsFn);
+    expect(result).toBe(FAKE_PLUGIN_ROOT);
+  });
+
+  // ── Case 3: literal ${CLAUDE_PLUGIN_ROOT} token → rejected, marker-walk (DC2) ──
+  it("literal ${CLAUDE_PLUGIN_ROOT} token — rejected, falls back to marker-walk (DC2 — the reproduced bug)", () => {
+    const result = resolvePluginDir(
+      "${CLAUDE_PLUGIN_ROOT}",
+      "/real/plugin/mcp-server/src/app",
+      markerExistsFn,
+    );
+    expect(result).toBe(FAKE_PLUGIN_ROOT);
+    // The result must NOT contain the literal token string
+    expect(result).not.toContain("${CLAUDE_PLUGIN_ROOT}");
+  });
+
+  // ── Case 4: token mid-path → rejected, marker-walk (DC1) ───────────────────
+  it("token mid-path '/x/${FOO}/y' — rejected, falls back to marker-walk", () => {
+    const result = resolvePluginDir(
+      "/x/${FOO}/y",
+      "/real/plugin/mcp-server/src/app",
+      markerExistsFn,
+    );
+    expect(result).toBe(FAKE_PLUGIN_ROOT);
+  });
+
+  // ── Case 5: relative path → rejected, marker-walk (DC1) ────────────────────
+  it("relative path 'mcp-server' — rejected, falls back to marker-walk", () => {
+    const result = resolvePluginDir(
+      "mcp-server",
+      "/real/plugin/mcp-server/src/app",
+      markerExistsFn,
+    );
+    expect(result).toBe(FAKE_PLUGIN_ROOT);
+  });
+
+  // ── Case 6: absolute non-marker dir → rejected, marker-walk (DC1, A2) ───────
+  it("absolute non-marker dir — rejected (does not contain Canon marker dirs), falls back to marker-walk", () => {
+    const result = resolvePluginDir(
+      "/tmp/not-canon",
+      "/real/plugin/mcp-server/src/app",
+      markerExistsFn, // /tmp/not-canon/{agents,principles} not in the fake set
+    );
+    expect(result).toBe(FAKE_PLUGIN_ROOT);
+  });
+
+  // ── Case 7: absolute valid marker dir → accepted as-is (A1 happy path) ──────
+  it("absolute valid marker dir — accepted unchanged (production-install happy path, A1)", () => {
+    const result = resolvePluginDir(FAKE_PLUGIN_ROOT, "/some/other/start", markerExistsFn);
+    expect(result).toBe(FAKE_PLUGIN_ROOT);
+  });
+
+  // ── Case 8: all miss → throws loud diagnostic naming the rejected candidate (DC3) ──
+  it("all miss (literal token AND marker-walk existsFn returns false) — throws loud diagnostic (DC3)", () => {
+    const neverExistsFn = () => false;
+    expect(() =>
+      resolvePluginDir("${CLAUDE_PLUGIN_ROOT}", "/repo/mcp-server/src/app", neverExistsFn),
+    ).toThrow(/Canon plugin root not found/);
+  });
+
+  // ── mcpServerRoot derivation assertion (A3) ──────────────────────────────────
+  it("mcpServerRoot === join(resolvedPluginDir, 'mcp-server') for an accepted candidate (A3)", () => {
+    const resolved = resolvePluginDir(FAKE_PLUGIN_ROOT, "/some/other/start", markerExistsFn);
+    const expectedMcpServerRoot = join(resolved, "mcp-server");
+    expect(expectedMcpServerRoot).toBe(join(FAKE_PLUGIN_ROOT, "mcp-server"));
+  });
+
+  // ── Valid marker dir is NOT overruled when markers are present (A1 guard) ────
+  it("a valid marker-containing absolute CANON_PLUGIN_DIR is accepted, not overruled by marker-walk", () => {
+    // Even though thisDir is a completely different location, the valid env value wins
+    const result = resolvePluginDir(
+      FAKE_PLUGIN_ROOT,
+      "/completely/different/location",
+      markerExistsFn,
+    );
+    expect(result).toBe(FAKE_PLUGIN_ROOT);
   });
 });

@@ -33,14 +33,26 @@ export type SyncIndexesOutput = {
 
 // ---- Helpers ----
 
-/** Read frontmatter from a markdown file; returns "" on any error. */
-async function readFrontmatter(filePath: string): Promise<string> {
+type FrontmatterResult = { ok: true; frontmatter: string } | { ok: false; error: string };
+
+/**
+ * Read frontmatter from a markdown file.
+ *
+ * Returns { ok: true, frontmatter } on success (frontmatter is "" when no YAML block is
+ * found — a valid file with no frontmatter). Returns { ok: false, error } when the file
+ * cannot be read (permission error, broken symlink, transient I/O failure, etc.).
+ *
+ * This distinction matters: a read ERROR must not be treated as empty frontmatter, because
+ * that would silently erase existing summaries from the managed inventory block.
+ */
+async function readFrontmatter(filePath: string): Promise<FrontmatterResult> {
   try {
     const content = await readFile(filePath, "utf8");
     const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
-    return match ? match[1] : "";
-  } catch {
-    return "";
+    return { frontmatter: match ? match[1] : "", ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { error: `unreadable artifact '${filePath}': ${msg}`, ok: false };
   }
 }
 
@@ -78,8 +90,11 @@ async function scanDir(
     (e) => e.endsWith(".md") && e !== "README.md" && !e.startsWith("."),
   );
   for (const filename of mdFiles) {
-    const frontmatter = await readFrontmatter(join(fullDir, filename));
-    files.push({ filename, frontmatter });
+    const result = await readFrontmatter(join(fullDir, filename));
+    if (!result.ok) {
+      return { error: result.error, skipped: false };
+    }
+    files.push({ filename, frontmatter: result.frontmatter });
   }
   return { skipped: false };
 }

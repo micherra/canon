@@ -169,8 +169,11 @@ boot.sh
  10. Resolve TSX_BIN
  11. --print-resolution: print "SERVER_DIR NODE_PATH TSX_BIN", exit 0
  12. tsx-absent fail-closed: exit 1 with loud message
+12.5. Node-version preflight: (cd "$SERVER_DIR" && node -v); exit 1 with actionable message if node absent or major < 24 (skipped under --print-resolution)
  13. Observability log + exec TSX_BIN src/app/index.ts
 ```
+
+**Node version pin removed (PR #354)**: `.tool-versions` (root and `mcp-server/`) were deleted and `.tool-versions` is now gitignored. The plugin runs on the user's ambient Node; `boot.sh` Step 12.5 enforces the >=24 floor at launch time. The canonical machine-readable declaration is `engines: { "node": ">=24" }` in `mcp-server/package.json`.
 
 ---
 
@@ -207,6 +210,14 @@ boot.sh
 **Cause**: `PLUGIN_DATA` was cleared (plugin reinstall, manual cache wipe) but the symlink in `SERVER_DIR` still points to the old location.
 
 **Fix**: The next SessionStart install recreates `PLUGIN_DATA/node_modules`, after which `boot.sh`'s `rm -f` + `ln -s` step (step 7) recreates a valid symlink.
+
+### Wrong Node version (asdf pin or version manager)
+
+**Symptom**: `CANON ERROR: Canon's MCP server requires Node >=24, but found vX.Y.Z` + exit 1.
+
+**Cause**: The Node version resolved in `$SERVER_DIR` (the directory `boot.sh` launches from) is below 24. A `.tool-versions` file or other version-manager config in or above `$SERVER_DIR` may be pinning an older version.
+
+**Fix**: Install and select Node 24+ for the Canon plugin directory — e.g., `asdf install nodejs 24.x.x && asdf set nodejs 24.x.x` (or equivalent for your version manager). The plugin no longer ships a `.tool-versions` pin; Step 12.5 in `boot.sh` enforces the >=24 floor with a clear, actionable error.
 
 ---
 

@@ -6,6 +6,8 @@
  *
  * File 1 of 2: initDriftDb schema, appendReview+getReviews,
  *              getReviews filtering, getLastReviewForPr, getLastReviewForBranch
+ *
+ * Auto-closure and read-path exclusion tests are in drift-db-closure.test.ts
  */
 
 import type { ReviewEntry } from "@shared/schema.ts";
