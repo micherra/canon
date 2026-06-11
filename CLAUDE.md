@@ -156,7 +156,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 1. `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` → save `worktree_path`, `workspace`.
 2. **Write PRD**: Fill `templates/prd.md` → write to `${WORKSPACE}/plans/${SLUG}/prd.md`. Verify it exists before Step 3.
-3. **Spawn `canon:architect`** with request, requirements summary, `PRD_PATH`, `WORKSPACE`.
+3. **Spawn `canon:architect`** with request, requirements summary, `PRD_PATH`, `WORKSPACE`, `worktree_path`. The architect needs `worktree_path` to write qualifying ADRs into the build branch (see Durable ADR gate in `agents/architect.md`).
 4. **Validate architect output**: Check Requirements Coverage section. Surface any `descoped`/`partial`/missing requirements to user before proceeding. If the section is absent or has no rows, treat all requirements as `descoped` and surface to user. For `covered` rows, verify each names an owning runbook step — rows without an owner are treated as `partial`. Proceed silently if all requirements are `covered` with owners.
 5. Present runbook for user approval. Architect decides execution strategy — orchestrator follows it.
 6. `batch_log_steps` with all approved runbook steps.

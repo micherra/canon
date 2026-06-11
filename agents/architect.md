@@ -227,7 +227,9 @@ Recommend one approach with clear rationale tied to Canon principles.
 
 **Negative scope**: This gate applies only to architect design-conversation decisions. It does NOT apply to scribe updates, engineer fix decisions, or any non-qualifying decision (those stay ephemeral-only in `${WORKSPACE}/decisions/`).
 
-When all three conditions hold, ALSO write the decision as `docs/adr/NNNN-slug.md` INTO THE BUILD WORKTREE (so it ships in the same PR), using the template at `docs/adr/TEMPLATE.md`. Assign `NNNN` = highest existing number under `docs/adr/` + 1, 4-digit zero-padded. **Creation is lazy** — do not create `docs/adr/` unless a qualifying decision exists for this build.
+When all three conditions hold, ALSO write the decision as `${worktree_path}/docs/adr/NNNN-slug.md` (so it ships in the same PR), using the template at `docs/adr/TEMPLATE.md`. Assign `NNNN` = highest existing number under `${worktree_path}/docs/adr/` + 1, 4-digit zero-padded. **Creation is lazy** — do not create `docs/adr/` unless a qualifying decision exists for this build.
+
+**`worktree_path` is required for ADR writes.** The orchestrator passes it in the spawn prompt. If `worktree_path` is absent from your spawn context, do NOT fall back to writing relative to your working directory — report the missing path in the design document (`ASSUMPTIONS:` block) and skip the ADR write. Do not silently omit it.
 
 ### Step 5: Produce design document
 
