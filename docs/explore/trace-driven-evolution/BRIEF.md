@@ -175,8 +175,11 @@ as optional extensions per artifact entry.
   `area_enrichment_injected` via `store.appendEvent(...)` (L142–156, L177–189).
 
 The instrumentation is therefore *additive, not invasive*: compute `content_hash` per `ResolvedSkill`,
-record each section's `char_span` as the `preload_prompt` is composed (L289–297), and append one
-`context_provenance` event. The two enrichment classes the agent does NOT get from
+then — *after* `applyAgentSkillsDisclosure` returns — compute each section's `char_span` against the
+**final** `preload_prompt` and append one `context_provenance` event (see Progressive disclosure rule
+above: spans must target the text that actually enters the spawn prompt, not the pre-disclosure draft).
+
+The two enrichment classes the agent does NOT get from
 `resolveAgentSkills` — the **agent definition body** itself and **MCP tool descriptions** — are
 assembled by the orchestrator's spawn-prompt construction and by the MCP `register-*.ts` tool
 registration respectively; covering them is exactly what the §5 attribution-coverage ladder rolls out
@@ -263,11 +266,14 @@ be targeted within a phase.
 | Tool descriptions | MCP `register-*.ts` strings | Medium-high | MCP tool registration (NOT yet captured) | Low |
 | Implementation code | `mcp-server/src/**` | High | n/a (code, not prompt context) | High (real unit tests) but highest risk |
 
-Two facts drive the phasing in §5: (1) the **first three rows are provenance-ready in Phase 1** because
-`resolveAgentSkills` already resolves them with concrete paths and content — instrumenting them is the
-additive hook described in §3.1; (2) **agent definitions and tool descriptions need new capture seams**
-(the agent-def body is assembled by the orchestrator's spawn construction; tool descriptions live in
-`register-*.ts`), so they join the loop only after those seams exist. The user's explicit ask — "evolve
+Two facts drive the phasing in §5: (1) the **first two rows are provenance-ready in Phase 1** because
+`resolveAgentSkills` already resolves `rule`, `ref`, `primer`, and `template` kinds with concrete paths
+and content — instrumenting them is the additive hook described in §3.1; (2) **principle wording, agent
+definitions, and tool descriptions need new or absent capture seams**: principle wording is not resolved
+by `resolveAgentSkills` (it reaches agents via `get_principles` MCP calls, a different path with no
+existing provenance seam), so it joins the loop in Phase 2 alongside agent definitions and tool
+descriptions (the agent-def body is assembled by the orchestrator's spawn construction; tool
+descriptions live in `register-*.ts`). The user's explicit ask — "evolve
 agent *behavior*, not just doc wording" — lands squarely on the *agent definitions* row, which is the
 headline Phase-2 deliverable precisely because it is the first row requiring a new provenance seam.
 
@@ -560,8 +566,9 @@ deliverables (§5).
 
 **1. Provenance instrumentation (foundation)**
 - `mcp-server/src/features/orchestration/tools/resolve-agent-skills.ts` — *change*: compute
-  `content_hash` per `ResolvedSkill`; record `char_span` per section during `preload_prompt` composition
-  (L289–297); append a `context_provenance` event (mirror the existing `appendEvent` pattern, L142–156).
+  `content_hash` per `ResolvedSkill`; after `applyAgentSkillsDisclosure` returns, compute `char_span`
+  per section against the final `preload_prompt` (not the pre-disclosure draft); append a
+  `context_provenance` event (mirror the existing `appendEvent` pattern, L142–156).
 - `mcp-server/src/domains/workspaces/execution-store.ts` — *reuse*: `appendEvent("context_provenance", …)`
   + `getEventsByType("context_provenance")` (already exist, L267–288). No schema change if stored as an
   event; optional new column only if indexed querying is needed.
