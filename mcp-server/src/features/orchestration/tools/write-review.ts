@@ -101,12 +101,13 @@ function groupViolationsBySubsystem(
 function extractAndStoreAreaObservations(
   input: WriteReviewInput,
   mappedVerdict: string,
-  areaMemoryWriter?: AreaMemoryWriter,
+  areaMemoryWriter: AreaMemoryWriter | undefined,
+  persistableViolations: WriteReviewInput["violations"],
 ): void {
   if (!areaMemoryWriter) return;
   if (mappedVerdict !== "BLOCKING" && mappedVerdict !== "WARNING") return;
 
-  for (const [subsystemKey, violations] of groupViolationsBySubsystem(input.violations)) {
+  for (const [subsystemKey, violations] of groupViolationsBySubsystem(persistableViolations)) {
     try {
       areaMemoryWriter.insertObservation({
         content: formatSubsystemContent(violations),
@@ -480,12 +481,20 @@ export async function writeReview(
   };
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
 
+  // Filter out correctness-scan pseudo-violations before any persistence.
+  // The human-facing REVIEW output (markdown + meta JSON) retains the full
+  // violations list; only the drift/area-memory persistence paths use this
+  // filtered list so the pseudo-principle never pollutes signals or context.
+  const persistableViolations = input.violations.filter(
+    (v) => v.principle_id !== CORRECTNESS_SCAN_PRINCIPLE_ID,
+  );
+
   if (signals) {
-    updateFileViolationHistory(signals, input.files, input.violations, mappedVerdict);
+    updateFileViolationHistory(signals, input.files, persistableViolations, mappedVerdict);
   }
 
   try {
-    extractAndStoreAreaObservations(input, mappedVerdict, areaMemoryWriter);
+    extractAndStoreAreaObservations(input, mappedVerdict, areaMemoryWriter, persistableViolations);
   } catch (err) {
     console.warn(
       "[write-review] area observation extraction failed:",
