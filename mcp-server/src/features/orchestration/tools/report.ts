@@ -2,7 +2,11 @@ import { validateAndPersistCraftProfile } from "@features/pr-review/tools/store-
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { ReportInput, ReviewEntry } from "@shared/schema.ts";
-import { type SignalWriter, updateFileViolationHistory } from "./write-review.ts";
+import {
+  type SignalWriter,
+  stripNonPersistableViolations,
+  updateFileViolationHistory,
+} from "./write-review.ts";
 
 export type ReportOutput = {
   recorded: boolean;
@@ -33,7 +37,12 @@ async function recordReview(
   store: DriftStore,
   signals: SignalWriter | undefined,
 ): Promise<ReportOutput> {
-  const violatedIds = new Set(review.violations.map((v) => v.principle_id));
+  // Filter correctness-scan pseudo-violations before ANY persistence.
+  // The human-facing output keeps the full list; the store only sees
+  // real principle violations (principle-keyed analytics invariant).
+  const persistableViolations = stripNonPersistableViolations(review.violations);
+
+  const violatedIds = new Set(persistableViolations.map((v) => v.principle_id));
   const cleanHonored = review.honored.filter((id) => !violatedIds.has(id));
   const id = generateId("rev");
 
@@ -43,15 +52,16 @@ async function recordReview(
     review_id: id,
     score: review.score,
     timestamp: new Date().toISOString(),
-    verdict: review.verdict ?? deriveVerdict(review.violations),
-    violations: review.violations,
+    verdict: review.verdict ?? deriveVerdict(persistableViolations),
+    violations: persistableViolations,
   };
 
   await store.appendReview(entry);
 
-  // Persist path effects to signal tables (non-blocking)
+  // Persist path effects to signal tables (non-blocking).
+  // Pass pre-filtered persistableViolations — correctness-scan already stripped.
   if (signals) {
-    updateFileViolationHistory(signals, review.files, review.violations, entry.verdict);
+    updateFileViolationHistory(signals, review.files, persistableViolations, entry.verdict);
   }
 
   // Persist craft profile rows via shared helper (validate-at-trust-boundaries + persist).

@@ -1,3 +1,4 @@
+import { stripNonPersistableViolations } from "@features/orchestration/tools/write-review.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
@@ -101,6 +102,13 @@ export async function storePrReview(
   const review_id = generateId("rev");
   const timestamp = new Date().toISOString();
 
+  // Filter correctness-scan pseudo-violations before ANY persistence.
+  // The human-facing output keeps the full list; the store only sees
+  // real principle violations (principle-keyed analytics invariant).
+  const persistableViolations = stripNonPersistableViolations(
+    input.violations as ReviewViolation[],
+  );
+
   await store.appendReview({
     review_id,
     timestamp,
@@ -113,7 +121,7 @@ export async function storePrReview(
     honored: input.honored,
     score: input.score,
     verdict: input.verdict,
-    violations: input.violations as ReviewViolation[],
+    violations: persistableViolations,
     ...(input.file_priorities !== undefined ? { file_priorities: input.file_priorities } : {}),
     ...(input.recommendations !== undefined ? { recommendations: input.recommendations } : {}),
   });

@@ -6,6 +6,7 @@ import { DriftStore } from "@platform/storage/drift/store.ts";
 import { reportInputSchema } from "@shared/schema.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { report } from "../tools/report.ts";
+import { CORRECTNESS_SCAN_PRINCIPLE_ID } from "../tools/write-review.ts";
 
 // --- Schema validation ---
 
@@ -231,5 +232,91 @@ describe("report()", () => {
     const dao = getDriftDb(tmpDir).getCraftProfiles();
     const rows = dao.getRecentProfiles(10);
     expect(rows).toHaveLength(0);
+  });
+
+  // ---- correctness-scan persistence filter ----
+
+  it("does NOT persist correctness-scan violations to the review store", async () => {
+    // correctness-scan is a pseudo-principle; it must never appear in stored reviews
+    await report(
+      {
+        files: ["src/a.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 1 },
+        },
+        type: "review",
+        violations: [{ principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" }],
+      },
+      tmpDir,
+    );
+
+    const store = new DriftStore(tmpDir);
+    const entries = await store.getReviews();
+    expect(entries).toHaveLength(1);
+    // No correctness-scan violation in the stored entry
+    const stored = entries[0];
+    expect(stored.violations.map((v) => v.principle_id)).not.toContain(
+      CORRECTNESS_SCAN_PRINCIPLE_ID,
+    );
+    expect(stored.violations).toHaveLength(0);
+  });
+
+  it("stores real violations while stripping correctness-scan from the same review", async () => {
+    // Mixed review: one real violation + one correctness-scan violation.
+    // Store should only contain the real violation.
+    await report(
+      {
+        files: ["src/a.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 2 },
+        },
+        type: "review",
+        violations: [
+          { principle_id: "errors-are-values", severity: "rule" },
+          { principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" },
+        ],
+      },
+      tmpDir,
+    );
+
+    const store = new DriftStore(tmpDir);
+    const entries = await store.getReviews();
+    expect(entries).toHaveLength(1);
+    const stored = entries[0];
+    // Only the real principle is persisted
+    expect(stored.violations).toHaveLength(1);
+    expect(stored.violations[0].principle_id).toBe("errors-are-values");
+    expect(stored.violations.map((v) => v.principle_id)).not.toContain(
+      CORRECTNESS_SCAN_PRINCIPLE_ID,
+    );
+  });
+
+  it("derives verdict from persistable violations only (correctness-scan excluded)", async () => {
+    // Input has only a correctness-scan violation (would be BLOCKING if counted).
+    // Without it, verdict should be CLEAN.
+    await report(
+      {
+        files: ["src/a.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 1, total: 1 },
+        },
+        type: "review",
+        violations: [{ principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" }],
+      },
+      tmpDir,
+    );
+
+    const store = new DriftStore(tmpDir);
+    const entries = await store.getReviews();
+    expect(entries[0].verdict).toBe("CLEAN");
   });
 });

@@ -381,6 +381,28 @@ function persistPathEffects(
 export const CORRECTNESS_SCAN_PRINCIPLE_ID = "correctness-scan";
 
 /**
+ * Single chokepoint for filtering non-persistable violations before any
+ * DriftStore / review-violation write.
+ *
+ * correctness-scan findings are advisory human-facing annotations that use a
+ * reserved pseudo-principle_id. They must never be written to any persistent
+ * store (reviews table, violations table, file_violation_history, path_effects,
+ * area_observations) because those stores are principle-keyed analytics layers.
+ *
+ * Call this at EVERY write boundary before passing violations to a store.
+ * The human-facing output (REVIEW.md, tool return values shown to the user)
+ * KEEPS the full violations list — only persistence is filtered.
+ *
+ * @param violations - Array of violations, possibly including correctness-scan entries
+ * @returns A new array with all correctness-scan violations removed
+ */
+export function stripNonPersistableViolations<T extends { principle_id: string }>(
+  violations: T[],
+): T[] {
+  return violations.filter((v) => v.principle_id !== CORRECTNESS_SCAN_PRINCIPLE_ID);
+}
+
+/**
  * Update file_violation_history and path_effects tables after a review.
  *
  * Non-blocking: catches all errors internally. Signal persistence

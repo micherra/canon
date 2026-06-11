@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CORRECTNESS_SCAN_PRINCIPLE_ID } from "@features/orchestration/tools/write-review.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import type { CraftProfile } from "@shared/schema.ts";
@@ -438,5 +439,68 @@ describe("storePrReview", () => {
     const rows = db.getCraftProfiles().getRecentProfiles(10);
     expect(rows).toHaveLength(1); // same subsystem → one row
     expect(rows[0].subsystem_key).toBe("features/orchestration");
+  });
+
+  // ---- correctness-scan persistence filter ----
+
+  it("does NOT persist correctness-scan violations to the review store", async () => {
+    // correctness-scan is a pseudo-principle; it must never appear in stored reviews
+    await storePrReview(
+      {
+        files: ["src/a.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 1 },
+        },
+        verdict: "BLOCKING",
+        violations: [{ principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" }],
+      },
+      tmpDir,
+    );
+
+    const store = new DriftStore(tmpDir);
+    const reviews = await store.getReviews();
+    expect(reviews).toHaveLength(1);
+    const stored = reviews[0];
+    // No correctness-scan violation persisted
+    expect(stored.violations.map((v) => v.principle_id)).not.toContain(
+      CORRECTNESS_SCAN_PRINCIPLE_ID,
+    );
+    expect(stored.violations).toHaveLength(0);
+  });
+
+  it("stores real violations while stripping correctness-scan from the same review", async () => {
+    // Mixed input: one real violation + one correctness-scan.
+    // Only the real violation should appear in the store.
+    await storePrReview(
+      {
+        files: ["src/a.ts"],
+        honored: [],
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 2 },
+        },
+        verdict: "BLOCKING",
+        violations: [
+          { principle_id: "thin-handlers", severity: "strong-opinion" },
+          { principle_id: CORRECTNESS_SCAN_PRINCIPLE_ID, severity: "rule" },
+        ],
+      },
+      tmpDir,
+    );
+
+    const store = new DriftStore(tmpDir);
+    const reviews = await store.getReviews();
+    expect(reviews).toHaveLength(1);
+    const stored = reviews[0];
+    // Only thin-handlers persisted, not correctness-scan
+    expect(stored.violations).toHaveLength(1);
+    expect(stored.violations[0].principle_id).toBe("thin-handlers");
+    expect(stored.violations.map((v) => v.principle_id)).not.toContain(
+      CORRECTNESS_SCAN_PRINCIPLE_ID,
+    );
   });
 });
