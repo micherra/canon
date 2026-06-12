@@ -3,8 +3,8 @@
  * Verifies the relocation peer task cleaned the tree.
  */
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
 import { loadAllPrinciples } from "@shared/matcher.ts";
+import { describe, expect, it } from "vitest";
 import {
   checkDuplicateTitles,
   checkMisroutedPrinciples,
