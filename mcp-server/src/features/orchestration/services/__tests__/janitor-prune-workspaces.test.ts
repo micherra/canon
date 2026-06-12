@@ -44,9 +44,9 @@ vi.mock("@platform/storage/archive/archive-service.ts", () => ({
   }),
 }));
 
+import { gitExec } from "@platform/adapters/git-adapter.ts";
 // Import after mocks are set up
 import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
-import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { loadJanitorConfig } from "@shared/lib/config.ts";
 import {
   acquireJanitorLock,

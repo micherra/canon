@@ -10,8 +10,8 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { buildRunSummary } from "@platform/storage/archive/run-summary-builder.ts";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 // ---- Helpers ----
 

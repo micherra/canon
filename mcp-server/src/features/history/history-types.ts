@@ -18,13 +18,6 @@
 import type { ConfidenceAnnotation } from "../../shared/lib/confidence.ts";
 import type { CraftDimension } from "../../shared/lib/craft-rubric.ts";
 
-// Re-export shared types so consumers can import from one place
-export type {
-  ArchiveManifestEntry,
-  ArchiveManifestFilter,
-} from "../../platform/storage/drift/drift-analytics-types.ts";
-export type { ConfidenceAnnotation, CraftDimension };
-
 // Re-export run-summary types that moved to platform/storage/archive
 export type {
   ArtifactInventory,
@@ -35,6 +28,12 @@ export type {
   RunSummary,
   StepOutcome,
 } from "../../platform/storage/archive/archive-types.ts";
+// Re-export shared types so consumers can import from one place
+export type {
+  ArchiveManifestEntry,
+  ArchiveManifestFilter,
+} from "../../platform/storage/drift/drift-analytics-types.ts";
+export type { ConfidenceAnnotation, CraftDimension };
 
 // --- Result shapes for tools ---
 

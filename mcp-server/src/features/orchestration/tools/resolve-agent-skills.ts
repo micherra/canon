@@ -2,12 +2,12 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { buildAreaMemorySection } from "@features/orchestration/services/area-memory-enrichment.ts";
-import { buildHotFileSection } from "@features/orchestration/services/hot-file-detection.ts";
-import { buildPitfallsSection } from "@features/orchestration/services/pitfall-enrichment.ts";
 import {
   formatCorrectionsSection,
   readCorrections,
 } from "@features/orchestration/services/correction-reader.ts";
+import { buildHotFileSection } from "@features/orchestration/services/hot-file-detection.ts";
+import { buildPitfallsSection } from "@features/orchestration/services/pitfall-enrichment.ts";
 import { applyAgentSkillsDisclosure } from "@features/orchestration/tools/resolve-agent-skills-disclosure.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import matter from "gray-matter";

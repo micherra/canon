@@ -1,7 +1,7 @@
 import { validateAndPersistCraftProfile } from "@platform/storage/drift/craft-persistence.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
-import { type CraftProfile } from "@shared/schema.ts";
+import type { CraftProfile } from "@shared/schema.ts";
 
 export type StorePrReviewInput = {
   pr_number?: number;
