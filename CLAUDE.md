@@ -530,7 +530,7 @@ Discovery: `list_loops`.
 `loops/ship-watch.md` only registers the definition — it does NOT start the loop. No manifest
 field, hook script, or command frontmatter can trigger scheduling automatically.
 
-## Project Structure <!-- last-updated: 2026-06-11 -->
+## Project Structure <!-- last-updated: 2026-06-12 -->
 
 ```
 canon/
@@ -539,7 +539,7 @@ canon/
 ├── docs/
 │   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)
-│   └── lib/              # Shared hook helpers (canon-hook-lib.sh — JSON extraction, comment stripping, quote-aware tokenizer, git-token detection, string-executing-wrapper unwrap/scan-forward, jq wrappers)
+│   └── lib/              # Shared hook helpers (canon-hook-lib.sh — JSON extraction, comment stripping, quote-aware tokenizer, git-token detection, string-executing-wrapper unwrap/scan-forward, command-position obfuscation detection, jq wrappers)
 ├── mcp-server/           # TypeScript MCP server — Canon harness tools + principle/graph/drift tools
 │   └── src/
 │       ├── app/          # Entry point (index.ts), tool registration

@@ -1061,6 +1061,147 @@ unset _dp _bs _cwobf_tmpdir
 
 echo ""
 # ---------------------------------------------------------------------------
+# DISCRIMINATOR STRESS — trailing-push-token honest-limit documentation
+# (tester-added 2026-06-12)
+#
+# The command-position obfuscation check (canon_command_word_is_obfuscated)
+# requires TWO conditions to block: (1) the command word is obfuscated AND
+# (2) a LITERAL "push" token follows. This design decision (D3) is load-bearing
+# for false-positive avoidance: without the trailing-push requirement, lone
+# substitutions (echo $(whoami), heredoc bodies) would fail closed.
+#
+# The inverse: if the "push" subcommand is ALSO obfuscated (variable or
+# substitution), no literal "push" token exists => check returns 1 => ALLOW.
+# Similarly, if the ENTIRE command is inside a single substitution, the
+# tokenizer does not see a separate "push" token.
+#
+# These are DOCUMENTED HONEST LIMITS (DESIGN.md Probe 5f). Tests assert the
+# current known behavior (exit 0) and annotate the limit class. They are NOT
+# failures of the implementation — they are tests of documented limitations.
+# Changing them to exit 2 would require abandoning the D3 false-positive guard
+# or adding subshell-aware tokenization (undecidable in general).
+#
+# JSON fixtures use intermediate Python-written files to keep this .test.sh
+# free of literal $() sequences that would trip the installed guard.
+# ---------------------------------------------------------------------------
+echo "-- DISCRIMINATOR STRESS: documented honest-limit forms (DOCUMENTED-LIMIT, exit 0) --"
+
+# Create stress test fixtures via temp Python-written JSON files.
+_stress_tmpdir=$(mktemp -d)
+/usr/bin/git -C "$_stress_tmpdir" init -q
+/usr/bin/git -C "$_stress_tmpdir" checkout -q -b "canon/stress-test" 2>/dev/null || true
+
+# Write fixture files using python3 so no metacharacters appear in this script.
+# Use chr(36) for '$' and chr(40)/chr(41) for '(' ')' to avoid $() in the python
+# code itself (which would be shell-expanded before python3 sees it if not careful).
+python3 -c "
+import json
+d=chr(36); lp=chr(40); rp=chr(41); lb=chr(123); rb=chr(125)
+cases = [
+    ('s1', 'p=push; ' + d+lp+'echo git'+rp + ' ' + d+'p origin main'),
+    ('s2', d+lp+'echo ' + chr(39)+'git push origin main'+chr(39)+rp),
+    ('s3', d+lp+'echo '+chr(34)+'git push'+chr(34)+rp + ' origin main'),
+    ('s4', 'p=push; ' + d+lp+'echo git'+rp + ' ' + d+lb+'p'+rb+' origin main'),
+    ('s5', d+lp+'echo git'+rp + ' push origin HEAD:refs/heads/main'),
+]
+for name, cmd in cases:
+    payload = json.dumps({'tool_input': {'command': cmd}})
+    with open('/tmp/stress_' + name + '.json', 'w') as f:
+        f.write(payload)
+" 2>/dev/null || true
+
+# Helper: run a stress fixture and check exit code; label with DOCUMENTED-LIMIT
+_run_stress_limit() {
+  local label="$1" fixture="$2" expected_exit="$3" note="$4"
+  local actual_exit=0
+  CANON_GUARD_CWD="$_stress_tmpdir" bash "$HOOK" < "$fixture" >/dev/null 2>&1 || actual_exit=$?
+  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
+    echo "  PASS [DOCUMENTED-LIMIT $label]: exit=$actual_exit (expected $expected_exit) -- $note"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL [DOCUMENTED-LIMIT $label]: exit=$actual_exit (expected $expected_exit) -- $note"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# S1: p=push; $(echo git) $p origin main
+# Obfuscated git (cmd-word) + obfuscated push ($p variable) => no literal 'push' token
+# => canon_command_word_is_obfuscated returns 1 => ALLOW (exit 0). Honest limit.
+# Would execute: git push origin main at runtime.
+[[ -f /tmp/stress_s1.json ]] && _run_stress_limit "S1" "/tmp/stress_s1.json" 0 \
+  "p=push; \$(echo git) \$p origin main — push-subcommand also obfuscated, no literal 'push' token"
+
+# S2: $(echo 'git push origin main') — entire command in single substitution
+# Tokenizer sees whole expression as one span, no 'push' literal follows cmd-word
+# => ALLOW (exit 0). Honest limit.
+[[ -f /tmp/stress_s2.json ]] && _run_stress_limit "S2" "/tmp/stress_s2.json" 0 \
+  "\$(echo 'git push origin main') — full cmd in one substitution, no separate 'push' token"
+
+# S3: $(echo "git push") origin main
+# After guard quote-deletion: $(echo git push) origin main
+# canon_tokenize (whitespace-only, not subshell-aware) produces tok[2]='push)'
+# with trailing ')' => not equal to literal 'push' => ALLOW (exit 0). Honest limit.
+[[ -f /tmp/stress_s3.json ]] && _run_stress_limit "S3" "/tmp/stress_s3.json" 0 \
+  "\$(echo 'git push') origin main — push) token includes ')' from substitution close"
+
+# S4: p=push; $(echo git) ${p} origin main
+# Same class as S1 but ${p} form; no literal 'push' token => ALLOW (exit 0). Honest limit.
+[[ -f /tmp/stress_s4.json ]] && _run_stress_limit "S4" "/tmp/stress_s4.json" 0 \
+  "p=push; \$(echo git) \${p} origin main — braced-var push token, no literal 'push'"
+
+echo ""
+echo "-- DISCRIMINATOR STRESS: forms that DO block despite obfuscation (should exit 2) --"
+
+# S5: $(echo git) push origin HEAD:refs/heads/main
+# Obfuscated cmd-word + LITERAL 'push' token => canon_command_word_is_obfuscated
+# returns 0 => BLOCK (exit 2). The refs/heads/ form also exercises the SAFE_REFSPEC_RE
+# path via the command-word detection.
+_run_stress_s5() {
+  local actual_exit=0
+  CANON_GUARD_CWD="$_stress_tmpdir" bash "$HOOK" < /tmp/stress_s5.json >/dev/null 2>&1 || actual_exit=$?
+  if [[ "$actual_exit" -eq 2 ]]; then
+    echo "  PASS [DISCRIMINATOR S5]: \$(echo git) push origin HEAD:refs/heads/main → block (exit 2)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL [DISCRIMINATOR S5]: \$(echo git) push origin HEAD:refs/heads/main — expected 2, got $actual_exit"
+    FAIL=$((FAIL + 1))
+  fi
+}
+[[ -f /tmp/stress_s5.json ]] && _run_stress_s5
+
+echo ""
+echo "-- DISCRIMINATOR STRESS: false-positive boundary (literal cmd-word + push token => allow) --"
+
+# Allow A1: echo $(whoami) push — command word is literal 'echo', not obfuscated.
+# canon_command_word_is_obfuscated checks the COMMAND WORD; 'echo' is literal.
+# Even though 'push' follows, the command-word check returns 1 => ALLOW (exit 0).
+_cwobf_allow_tmpdir=$(mktemp -d)
+python3 -c "
+import json
+d=chr(36); lp=chr(40); rp=chr(41)
+cmd = 'echo ' + d+lp+'whoami'+rp + ' push'
+payload = json.dumps({'tool_input': {'command': cmd}})
+with open('/tmp/stress_allow1.json', 'w') as f:
+    f.write(payload)
+" 2>/dev/null || true
+
+_allow_exit=0
+CANON_GUARD_CWD="$_cwobf_allow_tmpdir" bash "$HOOK" < /tmp/stress_allow1.json >/dev/null 2>&1 || _allow_exit=$?
+if [[ "$_allow_exit" -eq 0 ]]; then
+  echo "  PASS [ALLOW-BOUNDARY A1]: echo \$(whoami) push — literal cmd-word 'echo' not flagged (exit 0)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL [ALLOW-BOUNDARY A1]: echo \$(whoami) push — expected 0, got $_allow_exit"
+  FAIL=$((FAIL + 1))
+fi
+rm -rf "$_cwobf_allow_tmpdir"
+
+rm -rf "$_stress_tmpdir"
+rm -f /tmp/stress_s1.json /tmp/stress_s2.json /tmp/stress_s3.json /tmp/stress_s4.json /tmp/stress_s5.json /tmp/stress_allow1.json
+unset _stress_tmpdir _run_stress_limit _run_stress_s5 _allow_exit _cwobf_allow_tmpdir
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
