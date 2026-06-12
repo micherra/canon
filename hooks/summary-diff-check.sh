@@ -9,13 +9,17 @@
 #   | `path` | action | purpose |
 #
 # CLAIMED SYMBOLS: parsed from backtick-quoted identifiers in "### What Changed".
-#   Conservative extraction: only identifiers that match /^[A-Za-z_$][A-Za-z0-9_$]*$/
-#   (function/type/constant names). Symbol prose that describes old names without
-#   being in backticks will NOT false-block. Limitation: a renamed symbol where both
-#   old and new names appear in backticks in the prose but only the new name is in
-#   the diff may produce a phantom hit; this is a known acceptable false-positive
-#   rate — see risk-mitigation note in dvh-02-PLAN.md. Test: renamed symbol described
-#   by new name accurately → no false block (see .test.sh).
+#   Conservative extraction: only camelCase/PascalCase/mixed-case identifiers that
+#   match /^[A-Za-z_$][A-Za-z0-9_$]*$/ AND contain at least one lowercase letter
+#   (function/type/class names). This excludes:
+#   - ALL_CAPS_UNDERSCORE tokens (status-enum prose: NO_TEST, MANUAL, DONE, etc.)
+#   - Short tokens under 4 characters (yes, no, etc.)
+#   The rationale: status-enum words like NO_TEST and MANUAL appear in backticks as
+#   descriptive prose ("status `NO_TEST`"), not as authored code symbols. Requiring
+#   at least one lowercase letter ensures only genuine code identifiers (functions,
+#   types, variables) are checked. Truly fabricated camelCase/PascalCase symbol
+#   claims (e.g. `phantomSymbol`, `FakeClass`) are still caught.
+#   See dvh-02-PLAN.md Revisit-If notes; dogfood bug fixed in dvh-02-fix.
 #
 # Exit semantics:
 #   Exit 0: clean (no phantom claims, possibly advisory unreported changes)
@@ -55,11 +59,17 @@ if ! CHANGED_FILES=$(git diff --name-only "${BASE_COMMIT}..HEAD" 2>&1); then
 fi
 
 # ---------------------------------------------------------------------------
-# Collect the diff body for symbol search
+# Collect the diff body for symbol search — written to a temp file to avoid
+# the set -o pipefail + grep -q SIGPIPE false-negative: when grep -q finds a
+# match early and exits, the echo writer gets SIGPIPE (exit 141); pipefail
+# propagates 141 as the pipeline exit; "if ! pipeline" then inverts to truthy,
+# falsely reporting the symbol absent. Grepping a file instead eliminates the
+# pipe entirely.
 # ---------------------------------------------------------------------------
-DIFF_BODY=""
-if ! DIFF_BODY=$(git diff "${BASE_COMMIT}..HEAD" 2>&1); then
-  echo "CANON: summary-diff-check failed-closed — git diff (body) failed: $DIFF_BODY" >&2
+DIFF_FILE=$(mktemp)
+if ! git diff "${BASE_COMMIT}..HEAD" >"$DIFF_FILE" 2>&1; then
+  rm -f "$DIFF_FILE"
+  echo "CANON: summary-diff-check failed-closed — git diff (body) failed" >&2
   exit 2
 fi
 
@@ -118,6 +128,11 @@ parse_claimed_symbols() {
   sed 's/`//g' | \
   # Keep only valid identifier-shaped tokens (not paths, not expressions)
   grep -E '^[A-Za-z_$][A-Za-z0-9_$]*$' | \
+  # Exclude ALL_CAPS_UNDERSCORE status-enum prose tokens (NO_TEST, MANUAL, DONE…)
+  # and short tokens under 4 chars (yes, no, etc.) — these appear in descriptive
+  # prose ("status `NO_TEST`") and are not authored code symbols.
+  grep -vE '^[A-Z_$][A-Z0-9_$]*$' | \
+  grep -vE '^.{1,3}$' | \
   sort -u
 }
 
@@ -130,32 +145,39 @@ SUMMARY_CONTENT=$(cat "$SUMMARY_PATH")
 PHANTOM_COUNT=0
 ADVISORY_COUNT=0
 
+# Build claimed-files and changed-files lists in temp files to avoid
+# set -o pipefail + grep -q SIGPIPE false-negatives throughout.
+CHANGED_FILE=$(mktemp)
+CLAIMED_FILE=$(mktemp)
+trap 'rm -f "$DIFF_FILE" "$CHANGED_FILE" "$CLAIMED_FILE"' EXIT
+printf '%s\n' "$CHANGED_FILES" > "$CHANGED_FILE"
+parse_claimed_files "$SUMMARY_CONTENT" > "$CLAIMED_FILE"
+
 # -- Check claimed files --
 while IFS= read -r claimed_file; do
   [[ -z "$claimed_file" ]] && continue
 
-  if ! echo "$CHANGED_FILES" | grep -qxF "$claimed_file"; then
+  if ! grep -qxF "$claimed_file" "$CHANGED_FILE"; then
     echo "PHANTOM-CLAIM (file): $claimed_file claimed in SUMMARY but absent from diff."
     PHANTOM_COUNT=$((PHANTOM_COUNT + 1))
   fi
-done < <(parse_claimed_files "$SUMMARY_CONTENT")
+done < "$CLAIMED_FILE"
 
 # -- Check unreported changes (advisory only) --
 while IFS= read -r changed_file; do
   [[ -z "$changed_file" ]] && continue
 
-  # Build the full set of claimed files for this check
-  if ! parse_claimed_files "$SUMMARY_CONTENT" | grep -qxF "$changed_file"; then
+  if ! grep -qxF "$changed_file" "$CLAIMED_FILE"; then
     echo "ADVISORY (unreported change): $changed_file in diff but not in SUMMARY."
     ADVISORY_COUNT=$((ADVISORY_COUNT + 1))
   fi
-done <<< "$CHANGED_FILES"
+done < "$CHANGED_FILE"
 
 # -- Check claimed symbols --
 while IFS= read -r symbol; do
   [[ -z "$symbol" ]] && continue
 
-  if ! echo "$DIFF_BODY" | grep -qF "$symbol"; then
+  if ! grep -qF "$symbol" "$DIFF_FILE"; then
     echo "PHANTOM-CLAIM (symbol): $symbol claimed in ### What Changed but absent from diff."
     PHANTOM_COUNT=$((PHANTOM_COUNT + 1))
   fi

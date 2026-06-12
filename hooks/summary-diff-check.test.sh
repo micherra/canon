@@ -315,6 +315,82 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# TC8: STATUS-ENUM PROSE TOKENS — backtick status words like NO_TEST and MANUAL
+# that ARE present in the diff must NOT trigger phantom (regression for dogfood bug).
+# Root cause: ALL_CAPS_UNDERSCORE tokens are status-enum prose, not authored symbols;
+# the previous extractor over-extracted them. Also covers the SIGPIPE false-negative
+# where grep -qF exits early on a large diff and echo gets SIGPIPE (141); pipefail
+# propagated 141 as the pipeline exit; "if !" inverted it to truthy → false phantom.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- Status-enum prose tokens in diff (regression: no phantom, exit 0) --"
+
+REPO8="$TMP_DIR/repo8"
+mkdir -p "$REPO8"
+git -C "$REPO8" init -q
+git -C "$REPO8" config user.email "test@example.com"
+git -C "$REPO8" config user.name "Test User"
+git -C "$REPO8" config commit.gpgsign false
+
+# Base commit
+echo "base" > "$REPO8/base.txt"
+git -C "$REPO8" add "$REPO8/base.txt"
+git -C "$REPO8" commit -q -m "base"
+
+# HEAD commit: add a doc file whose content includes NO_TEST and MANUAL
+mkdir -p "$REPO8/agents"
+cat > "$REPO8/agents/tester.md" << 'TESTEREOF'
+# Tester
+
+## Step 4.5: AC Traceability
+
+Map each AC to a test. Status `NO_TEST` means no test yet. Manual ACs are status `MANUAL`.
+TESTEREOF
+git -C "$REPO8" add "$REPO8/agents/tester.md"
+git -C "$REPO8" commit -q -m "add tester doc"
+
+BASE8=$(git -C "$REPO8" rev-parse HEAD~1)
+
+SUMMARY8="$TMP_DIR/summary8.md"
+build_summary \
+  "| \`agents/tester.md\` | added | doc |" \
+  "Added tester doc with status \`NO_TEST\` and status \`MANUAL\` prose tokens." \
+  > "$SUMMARY8"
+
+# NO_TEST and MANUAL are in the diff AND in the summary backtick prose.
+# They must NOT be flagged as phantom (they are ALL_CAPS status-enum tokens).
+run_checker 0 "$REPO8" "$SUMMARY8" "$BASE8" \
+  "status-enum prose tokens (NO_TEST, MANUAL) present in diff → exit 0, no phantom"
+
+# ---------------------------------------------------------------------------
+# TC9: FABRICATED CAMELCASE SYMBOL — a symbol the SUMMARY claims was added but
+# is genuinely absent from the diff must STILL block (guard not gutted).
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- Fabricated camelCase symbol absent from diff (still blocks, exit 2) --"
+
+REPO9="$TMP_DIR/repo9"
+setup_diff_repo "$REPO9" "src/real-file.ts"
+BASE9=$(git -C "$REPO9" rev-parse HEAD~1)
+
+# Add real content with a real symbol
+cat >> "$REPO9/src/real-file.ts" << 'TSEOF'
+export function realImplementation() { return true; }
+TSEOF
+git -C "$REPO9" add "$REPO9/src/real-file.ts"
+git -C "$REPO9" commit -q --amend --no-edit
+
+SUMMARY9="$TMP_DIR/summary9.md"
+build_summary \
+  "| \`src/real-file.ts\` | added | real |" \
+  "Added \`realImplementation\`. Also added \`phantomCamelCase\` (not in diff)." \
+  > "$SUMMARY9"
+
+run_checker_with_output 2 "PHANTOM-CLAIM (symbol): phantomCamelCase" \
+  "$REPO9" "$SUMMARY9" "$BASE9" \
+  "fabricated camelCase symbol absent from diff → still exit 2 (guard intact)"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
