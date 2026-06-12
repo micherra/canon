@@ -50,10 +50,10 @@ Skip units whose output already exists on disk. Do not re-run them.
 | Agent | "Write first" (output unit) | "Advance cursor" | Resume reconcile |
 |-------|-----------------------------|------------------|------------------|
 | **engineer / DAG worker** | `wip({task-id})` git commit per passing unit | `git diff --name-only <base>..<HEAD>` | Re-spawn Enrichment Protocol: committed files → "do NOT re-implement"; uncommitted → commit first |
-| **learner** | one JSONL object appended to `learning.jsonl` | implicit (last line written = cursor position) | on resume, read JSONL tail; skip already-emitted pattern ids |
+| **learner** | dimension findings section appended to `.canon/LEARNING-REPORT.md` after each dimension completes | set of dimension sections already present in `.canon/LEARNING-REPORT.md` | on resume, read `.canon/LEARNING-REPORT.md`; dimensions already present as sections are done — skip them; re-run only the in-flight/remaining dimensions. (`learning.jsonl` is a single end-of-run write after the report is finalized — it is NOT the resume cursor.) |
 | **reviewer (target state)** | per-file findings block appended to REVIEW.md | `files_reviewed[]` frontmatter list in REVIEW.md | on resume, read `files_reviewed[]`; diff files not in list = not yet reviewed; restart there |
 
-The engineer and DAG worker already fully implement this convention via git. The learner already uses the JSONL pattern. The reviewer's target state (per-file incremental write + cursor) is the primary gap this convention names.
+The engineer and DAG worker already fully implement this convention via git. The learner is compliant at dimension granularity: it appends each dimension's findings section to `.canon/LEARNING-REPORT.md` before moving to the next dimension, and can reconcile on resume by reading which sections are already present. Residual gap: a compaction mid-dimension re-runs that one in-flight dimension (per-pattern resume is the finer target state). The reviewer's target state (per-file incremental write + cursor) is the primary gap this convention names.
 
 ## Relationship to Adjacent Principles
 
@@ -82,18 +82,20 @@ git diff --name-only <base>..HEAD
 # Re-spawn Enrichment Protocol: "file A does NOT need re-implementation"
 ```
 
-**Good — learner appends per pattern:**
+**Good — learner checkpoints per dimension to its report:**
 
 ```
-# Learner mining patterns:
-[analyzes watch file 1, finds pattern P1]
-append {"id": "P1", "file": "...", ...} to learning.jsonl
-[analyzes watch file 2, finds pattern P2]
-append {"id": "P2", "file": "...", ...} to learning.jsonl
+# Learner running dimensions:
+[completes principle-health dimension analysis]
+append "## Principle Health\n..." to .canon/LEARNING-REPORT.md
+[completes codebase-patterns dimension analysis]
+append "## Codebase Patterns\n..." to .canon/LEARNING-REPORT.md
+[context compaction event mid convention-lifecycle]
 
 # If resumed:
-tail learning.jsonl → last id = "P2"
-Skip P1 and P2; resume from watch file 3
+read .canon/LEARNING-REPORT.md → sections present: "Principle Health", "Codebase Patterns"
+Skip those two dimensions; re-run convention-lifecycle (in-flight) and remaining dimensions
+# learning.jsonl is written once after the full report is finalized — it is not the resume cursor
 ```
 
 **Bad — reviewer holds all per-file findings in conversation memory:**
