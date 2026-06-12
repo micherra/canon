@@ -56,10 +56,12 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | explicit-transaction-boundaries.md | Define Transaction Boundaries Explicitly |
 | externalize-configuration.md | Externalize Environment-Specific Configuration |
 | fail-closed-by-default.md | Fail Closed by Default |
+| fail-closed-scan-scope.md | A Fail-Closed Scan Must Be Scoped to Its Threat Model |
 | fail-open-audit-event-emission.md | Detection/Compute Tools Emit Fail-Open Audit Events from Inside the Tool |
 | functions-do-one-thing.md | Functions Do One Thing |
 | grey-box-module.md | Grey-Box Modules — Human Owns the Interface, AI Fills the Body |
 | handle-partial-failure.md | Handle Partial Failure in Distributed Calls |
+| harness-tool-invocation-check.md | A Harness Built-In Capability Grant Requires Runtime Invocation Verification |
 | hooks-fail-closed.md | Safety Hooks Must Fail Closed |
 | hooks-observable-failures.md | Hook Failures Must Be Observable or Explicitly Justified |
 | idempotent-operations.md | Retryable Operations Must Be Idempotent |
@@ -74,6 +76,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | leave-touched-files-better.md | Leave Touched Files Better Than You Found Them |
 | line-limit-split-into-siblings.md | Extract Cohesive Siblings When a File Crosses the Line Limit |
 | measure-before-optimizing.md | Measure Before Optimizing |
+| mechanism-ships-first-instance.md | A New Mechanism Must Ship Its Own First Instance |
 | minimize-attack-surface.md | Minimize the Attack Surface |
 | minimize-client-side-state.md | Minimize Client-Side State |
 | no-hidden-side-effects.md | No Hidden Side Effects |
@@ -89,6 +92,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | prefer-composition-over-inheritance.md | Prefer Composition Over Inheritance |
 | prefer-constructor-injection.md | Prefer Constructor Injection |
 | prefer-immutable-data.md | Prefer Immutable Data by Default |
+| probe-before-build-invoke-not-infer.md | Probe External Contracts Before Design Freeze — Invoke, Don't Infer |
 | props-are-the-component-contract.md | Props Are the Component Contract |
 | pure-io-service-split.md | Split Services Into a Pure Entry Point and an I/O Companion |
 | read-only-tool-reuse-over-reimplementation.md | New MCP Tools Must Reuse Existing Internal Helpers Rather Than Reimplementing Their Logic |
@@ -96,6 +100,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | resilient-frontend-composition.md | A Failing Module Must Not Break the Page |
 | secrets-never-in-code.md | Secrets Must Never Appear in Source Code |
 | services-own-their-data.md | Each Service Owns Its Data Store Exclusively |
+| scanner-avoids-its-own-pattern.md | A Scanner Must Not Contain the Literal Pattern It Detects |
 | shared-renderer-helper-placement.md | Shared Renderer Helpers — Build-Time Logic in DESIGN-SYSTEM.md, Runtime Scripts in Snippet Files |
 | simplicity-first.md | The Simplest Thing That Could Work |
 | single-source-of-component-styles.md | One Component, One Style Source |
@@ -131,7 +136,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 - Principles should be specific and actionable — not aspirational
 - Rules (7): `secrets-never-in-code`, `least-privilege-access`, `fail-closed-by-default`, `validate-at-trust-boundaries`, `no-llm-calls-in-mcp-tools` (added 2026-05-02 — MCP tools must not make LLM API calls), `refactoring-integrity`, `hooks-fail-closed` (added 2026-05-29 — safety/guard hooks must fail closed on extraction failure or missing tooling; scoped to `hooks/**`)
 - Strong opinions cover architecture, testing, error handling, data flow
-- Conventions cover naming, file organization, test structure (42 total as of 2026-06-12)
+- Conventions cover naming, file organization, test structure (44 total as of 2026-06-12)
 - `accumulator-test-coverage` (added 2026-05-16) — accumulator functions in `mcp-server/**` require at least one test case with N>1 input and exact numeric assertion; capped accumulators require below-cap, at-cap, and above-cap cases
 - `source-shared-hook-helpers` (added 2026-05-29) — hooks that parse Claude Code `tool_input` JSON must source `hooks/lib/canon-hook-lib.sh` and use `canon_extract_command`; no inlined extraction expressions; scoped to `hooks/**`
 - `hooks-observable-failures` (added 2026-05-29) — bare silent swallows (`|| true`, `2>/dev/null`) in `hooks/**` must carry a justifying comment, emit `CANON WARNING:` to stderr, or exit non-zero; the `hooks/**`-scoped sibling of `observable-best-effort` at convention severity (see decision quality-coverage-01); scoped to `hooks/**`
