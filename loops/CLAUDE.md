@@ -61,15 +61,20 @@ Loops may attach to these named lifecycle moments:
 |------|--------------|
 | `post-ship` | After the shipper pushes a branch and creates a PR |
 | `on-long-dispatch` | When the orchestrator dispatches a build expected to take > N minutes |
-| `session-start` | At the start of a new Canon session (Phase C; not yet wired) |
+| `session-start` | At the start of a new Canon session (Phase C; wired via session-start tap in CLAUDE.md) |
 
 ## Phase Boundary
 
 | Phase | What ships |
 |-------|-----------|
 | **A** | Schema + registry loader + `list_loops`/`get_loop_definition` + `/canon:loop-tick` runner + `_probe` demo; no production loop fires |
-| **B (current)** | Ship-watch definition (`loops/ship-watch.md`) — first real loop; dispatched via post-ship tap; command registration fix (`"commands": ["./skills/canon/commands/"]` in plugin.json) enabling `/canon:loop-tick` to resolve as a real harness slash command |
-| **C** | Self-paced mode + ScheduleWakeup + session-watch + de-dupe ledger |
+| **B** | Ship-watch definition (`loops/ship-watch.md`) — first real loop; dispatched via post-ship tap; command registration fix (`"commands": ["./skills/canon/commands/"]` in plugin.json) enabling `/canon:loop-tick` to resolve as a real harness slash command |
+| **C (current)** | Self-paced mode + ScheduleWakeup + session-watch + de-dupe ledger; session-start tap wired in CLAUDE.md |
+
+**First tick is baseline-only — transition rules never fire against an empty prior (ADR-0002).**
+A loop's first tick captures the initial snapshot and surfaces nothing. Transition rules compare
+a new value against a *known prior* — a field with no prior value (first tick or missing from
+prior snapshot) is never a transition, not even for any-change or `to:`-matching rules.
 
 ## Relationship to Other Canon Concepts
 
