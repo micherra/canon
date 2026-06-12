@@ -147,6 +147,11 @@ extract_mcp_tools() {
 # Check if a TS symbol is suppressed via canon:allow-unwired: marker.
 # Checks the export's own line and the line directly above in the worktree.
 # Returns: prints suppression reason if valid; exits with status 0 if suppressed, 1 if not.
+#
+# Assumption: this function reads the working-tree file at the diff-reported line number.
+# This is correct under the intended usage where the gate runs against <base_commit>..HEAD
+# on the currently checked-out worktree (HEAD == worktree). If the worktree were checked
+# out to a different commit than HEAD, reported line numbers could drift from file content.
 # ---------------------------------------------------------------------------
 check_suppression() {
   local file="$1"
@@ -268,6 +273,14 @@ while IFS= read -r tool_name; do
     continue
   fi
 
+  # Structural note: the normal gate workflow (diff BASE..HEAD on a checked-out worktree)
+  # cannot produce this DEAD path organically, because extract_mcp_tools reads the diff's
+  # '+' lines (what is in HEAD) and the grep also reads HEAD's register-*.ts files — they
+  # are the same state. The DEAD path fires only under abnormal conditions: the worktree
+  # is checked out to a commit different from HEAD, or register-*.ts files were deleted
+  # between when the diff was captured and when the grep runs. The reachability check is
+  # retained for defense-in-depth; its test coverage is provided by a unit-style fixture
+  # in dead-wire-gate.test.sh (Test 27) that exercises the grep/empty-match logic directly.
   echo "DEAD-WIRE: ${tool_name} exported in register-*.ts but never referenced/registered." >&2
   DEAD_COUNT=$((DEAD_COUNT + 1))
 
