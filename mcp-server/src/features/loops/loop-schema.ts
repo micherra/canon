@@ -35,6 +35,14 @@ export const BUILTIN_FORBIDDEN_MCP: ReadonlyArray<string> = [
   "get_next_escalation_strategy",
 ] as const;
 
+// ── Orchestrator-consumed follow-on actions (derive-from-const, watch_BBBBBB1) ──
+// A loop DECLARES one of these on a transition; the read-only loop/runner SURFACES it;
+// the orchestrator (allowed to mutate) CONSUMES the signal and acts. The loop/runner
+// NEVER executes these. Extend by explicit diff only; each entry must ship with a
+// documented orchestrator-consumption contract (see CLAUDE.md § Loop Framework).
+export const ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-update"] as const;
+export type OrchestratorAction = (typeof ORCHESTRATOR_ACTIONS)[number];
+
 // Read-only gh/git subcommand prefixes admitted under the Bash carve-out (decision loops-phase-b-01).
 // Extend by explicit diff only; every entry must be genuinely read-only.
 export const READ_ONLY_SHELL_COMMANDS: ReadonlyArray<string> = [
@@ -101,6 +109,7 @@ const TransitionRuleSchema = z.object({
   field: z.string(),
   from: z.string().optional(),
   message: z.string(),
+  orchestrator_action: z.enum(ORCHESTRATOR_ACTIONS).optional(),
   terminate: z.boolean().optional(),
   to: z.string().optional(),
 });

@@ -548,7 +548,32 @@ Discovery: `list_loops`.
 NOT start the loop. No manifest field, hook script, or command frontmatter can trigger
 scheduling automatically.
 
-## Project Structure <!-- last-updated: 2026-06-11 -->
+**Consuming `orchestrator_action` (Phase B+):** When a `/canon:loop-tick` run surfaces a line
+`ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>`, the orchestrator (which is allowed to
+mutate — the loop is not) consumes it. The loop/runner only declared and surfaced the signal;
+acting is the orchestrator's job. dc-06 holds: `orchestrator_action` is a declarative signal the
+orchestrator consumes, NOT something the loop or the loop-tick runner executes. The loop's
+`guardrails.mutates_build` stays `false`.
+
+**`auto-triage-fix`** (fires on the `external_review_comment_ids` transition and the CI
+`pending → failure` transition):
+1. Reads the trigger source — the new PR comment(s) for the comment transition, or the failing
+   CI job logs (`gh pr checks` / run logs) for the CI transition.
+2. If a CLEAR actionable defect → dispatches a fix flow (engineer → re-run verify gates → push
+   to the build branch) WITHOUT asking first.
+3. If AMBIGUOUS / a question / design-level pushback → surfaces with a proposed approach and
+   ASKS first.
+4. NEVER auto-merges the PR.
+
+**`auto-plugin-update`** (fires on the `release_tag` transition): **ASK-FIRST, never unattended.**
+On a release tag being cut:
+1. Fire a `PushNotification` that a release tag was cut.
+2. ASK the user to confirm before running `plugin-update` (this is a mutating local action that
+   must not happen unattended — it swaps the installed plugin version mid-session).
+3. Run `plugin-update` + confirm the new version is active ONLY after explicit user confirmation.
+NEVER silently run plugin-update; the ask-first/confirm requirement is non-optional.
+
+## Project Structure <!-- last-updated: 2026-06-12 -->
 
 ```
 canon/
