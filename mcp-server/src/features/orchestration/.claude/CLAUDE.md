@@ -31,31 +31,33 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `write-test-report.ts` | `write_test_report` |
 
 **`services/`** — Business logic backing tools.
-<!-- last-updated: 2026-06-05 (workspace-cleanup.ts: diff-stat exports + tryAppendAnalytics wiring; janitor: prune_husk_dirs task added) -->
+<!-- last-updated: 2026-06-12 (workspace-cleanup.ts + janitor.ts: Guard 1 symlink teardown before worktree remove) -->
 
 | File | Responsibility |
 |------|---------------|
 | `artifact-matching.ts` | Pure artifact-path resolution — `artifactExists`, `scanArtifactList`, `classifyArtifact`, `scanArtifacts` (+ `ArtifactScan` type), `computeSummaryGlobFallback`. Extracted from `orchestration-journal.ts` for line-count compliance + compute/effect separation. |
-| `janitor.ts` | `runJanitor(projectDir)` — gate checks (enabled, time, lock), then `runJanitorTasks`: WAL checkpoint, prune worktrees, prune workspaces, prune empty husk dirs under `.canon/workspaces/`; returns `JanitorResult` <!-- last-updated: 2026-06-05 --> |
+| `janitor.ts` | `runJanitor(projectDir)` — gate checks (enabled, time, lock), then `runJanitorTasks`: WAL checkpoint, prune worktrees, prune workspaces, prune empty husk dirs under `.canon/workspaces/`; returns `JanitorResult`; calls `unlinkWorktreeNodeModulesSymlink` (Guard 1) before each `git worktree remove` <!-- last-updated: 2026-06-12 --> |
 | `transcript-transformer.ts` | `transformClaudeCodeTranscript(entries)` — pure; converts CC JSONL entries to Canon `TranscriptEntry[]`; exports `ClaudeCodeEntry` type |
 | `review-confidence-adapter.ts` | Pure compute function; returns `ConfidenceAnnotation` for a violation from severity_tier, violation_history, path_effects, base_sample signals; zero-confidence for undefined file_path |
-| `workspace-cleanup.ts` | Workspace cleanup + finalize-time diff stats: exports `DiffStatFields`, `DiffStatSeams` (bundles `gitDiffFn` + `gitLsFilesFn` seams), `parseShortstat` (pure), `tryComputeDiffStats` (single-rev `git diff --shortstat {base}` measures worktree state: committed + staged + unstaged; untracked files counted via `git ls-files --others`, merged into `total_files_changed`, appended as `, N untracked` to `diff_stat`; `gitLsFilesFn` failure degrades gracefully to tracked-only); `tryAppendAnalytics(workspace, seams: DiffStatSeams = {})` spreads result into `FlowRunEntry` at finalize. <!-- last-updated: 2026-06-05 --> |
+| `workspace-cleanup.ts` | Workspace cleanup + finalize-time diff stats: exports `DiffStatFields`, `DiffStatSeams` (bundles `gitDiffFn` + `gitLsFilesFn` seams), `parseShortstat` (pure), `tryComputeDiffStats` (single-rev `git diff --shortstat {base}` measures worktree state: committed + staged + unstaged; untracked files counted via `git ls-files --others`, merged into `total_files_changed`, appended as `, N untracked` to `diff_stat`; `gitLsFilesFn` failure degrades gracefully to tracked-only); `tryAppendAnalytics(workspace, seams: DiffStatSeams = {})` spreads result into `FlowRunEntry` at finalize; calls `unlinkWorktreeNodeModulesSymlink` (Guard 1) before `git worktree remove`. <!-- last-updated: 2026-06-12 --> |
 
 ## Contracts
-<!-- last-updated: 2026-06-02 (artifact-matching module: SUMMARY auto-discovery fallback) -->
+<!-- last-updated: 2026-06-12 (init-workspace: linkWorktreeNodeModules exported; workspace-cleanup + janitor: Guard 1 teardown invariant) -->
 Key tool functions (all return `ToolResult<T>` — see `@shared/lib/tool-result.ts`):
 
 - **`artifact-matching.ts` SUMMARY fallback contract**: `artifactExists(workspace, artifact)` checks both `workspace/` and `workspace/worktree/` via `globSync`. For a literal `*-SUMMARY.md` entry that misses on exact match, `computeSummaryGlobFallback` retries with a directory-scoped `*-SUMMARY.md` glob — the only artifact type with a caller-unpredictable (slug/task_id-variable) filename. Fixed-stem artifacts (`DESIGN.md`, `REVIEW.md`, `TEST-REPORT.md`) are NOT subject to fallback — a genuine miss still fails. `ArtifactScan` type: `{ expected, missing, skipped_unresolved }`.
 - `openArtifact(input: OpenArtifactInput)` → `Promise<ToolResult<{ url: string }>>` — reads `${workspace}/artifacts/${artifact_name}` (appends `.html` if no extension), validates no path traversal, registers with HTTP server, opens browser fire-and-forget; `INVALID_INPUT` on traversal or missing file; `UNEXPECTED` when HTTP server not running
 - `initWorkspace(input)` — create or resume workspace; preflight checks when `preflight: true`; `tryResumeWorkspace` accepts optional `expectedTask` to block resume on task-identity mismatch (slug-collision defense)
+- `linkWorktreeNodeModules(worktreePath, projectDir)` — **exported** best-effort helper; symlinks `<worktree>/mcp-server/node_modules` → `realpathSync(<projectDir>/mcp-server/node_modules)` after worktree creation so the LSP tool resolves TypeScript imports; Guard 2: target is `realpathSync` output (absolute, outside worktree — non-circular by construction); no-op when main node_modules absent or link site already exists; never throws (warns on failure, build proceeds)
 - `captureTranscript(input: CaptureTranscriptInput)` → `Promise<ToolResult<CaptureTranscriptResult>>` — best-effort; reads CC agent JSONL from `{CLAUDE_CONFIG_DIR}/projects/{projectId}/{sessionId}/subagents/agent-{agentId}.jsonl`, transforms to Canon format, writes to `{workspace}/transcripts/{step_id}--{agent_type}--{iso}.jsonl`; returns `warning` (never an error) when source file not found
 - `transformClaudeCodeTranscript(entries: ClaudeCodeEntry[])` → `TranscriptEntry[]` — pure function; maps CC JSONL content blocks to Canon transcript entries; malformed entries skipped silently; exported from `services/transcript-transformer.ts`
 - `resolveAgentSkills(input, pluginDir, projectDir?)` → `Promise<ToolResult<ResolveAgentSkillsResult>>` — **async** since 2026-05-20; when `projectDir` provided, runs progressive disclosure via `applyAgentSkillsDisclosure`; `ResolveAgentSkillsResult.full_data_path?: string` when disclosure truncated the payload; `input.options?: { filePaths?: string[]; workspace?: string }` — when `filePaths` provided, appends "Known Pitfalls" (drift signals + error_fixes), "Area Memory" (`area_observations`), and "Hot-File Caution" (files in 3+ recent builds) sections; audit events `pitfall_injected` and `area_enrichment_injected` logged when data found; section order: base → corrections → pitfalls → area memory → hot-file caution. Updated 2026-05-29.
 
 ## Invariants
-<!-- last-updated: 2026-05-15 -->
+<!-- last-updated: 2026-06-12 -->
 - Must not import directly from other features — uses `@domains/*` types as shared contracts
 - All tool handlers are wrapped with `wrapHandler` from `@shared/lib/wrap-handler.ts`
+- **Guard 1 (symlink teardown)**: `workspace-cleanup.ts` and `janitor.ts` MUST call `unlinkWorktreeNodeModulesSymlink` (using `lstatSync` — never `statSync`) before any `git worktree remove` call; this ensures the symlink is removed without following it, keeping the main `mcp-server/node_modules` intact.
 
 ## Conventions
 <!-- last-updated: 2026-05-15 -->
