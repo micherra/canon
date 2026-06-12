@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-06-10 -->
+<!-- last-updated: 2026-06-12 -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -43,6 +43,7 @@ src/
 - **Boot / server scope** (`app/`) — `boot.sh` launcher, per-connection scope, per-project `JobManager`. See `src/app/.claude/CLAUDE.md`.
 - **HTTP auth + sessions** (`app/mcp-http/`) — token auth, per-session McpServer, scope handshake, idle reaper. See `src/app/mcp-http/.claude/CLAUDE.md`.
 - **Drift storage** (`platform/storage/drift/`) — SQLite drift DB, DAO inventory, confidence-decay adapters. See `src/platform/storage/drift/.claude/CLAUDE.md`.
+- **Archive storage** (`platform/storage/archive/`) — build-archive persistence (ADR-0006 relocation from `features/history/services/`): `archiveWorkspace`, `buildRunSummary`, pure extractors, shared archive types. See `src/platform/storage/archive/.claude/CLAUDE.md`.
 - **Orchestration tools** (`features/orchestration/`) — workspace lifecycle, artifact writing, agent skill resolution. See `src/features/orchestration/.claude/CLAUDE.md`.
 - **Diagnostics tools** (`features/diagnostics/`) — drift reports, wiki lint, signal compiler, area memory, doc freshness. See `src/features/diagnostics/.claude/CLAUDE.md`.
 - **History tools + RecurringViolation types** → `src/features/history/.claude/CLAUDE.md`.
@@ -56,7 +57,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect
 
 ## Contracts
-<!-- last-updated: 2026-06-09 -->
+<!-- last-updated: 2026-06-12 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -98,6 +99,8 @@ src/
 **`get_drift_report`** — `pr_reviews` field uses `ReviewEntry[]`; renders `### Documentation freshness` section (omitted when empty), sorted by staleness descending with `[confidence: TIER]` per doc.
 
 **`get_compliance` tool** — returns `confidence: ConfidenceAnnotation`; uses per-principle confidence from `analyzeDrift` when available, falls back to drift confidence adapter.
+
+**`presentArtifact` function** — canonical implementation lives in `src/app/artifact-presentation.ts` (moved from `features/orchestration/tools/present-artifact.ts`, ADR-0006); `features/orchestration/tools/present-artifact.ts` is now a thin re-export shim; `features/pr-review` and `app/register-present-artifact.ts` import from `@app/artifact-presentation.ts` directly.
 
 **`present_artifact` MCP tool** — `html` parameter required; serves HTML via HTTP server; returns `{ url: string }` fire-and-forget.
 
@@ -195,8 +198,9 @@ src/
 | `vitest` | Unit testing (dev) |
 
 ## Invariants
-<!-- last-updated: 2026-05-27 -->
+<!-- last-updated: 2026-06-12 -->
 
+- **no-cross-feature-internal-import** (ADR-0005, ADR-0006): Features must not import internal modules from other features; enforced by `mcp-server/.dependency-cruiser.cjs` `no-cross-feature-internal-import` rule (error severity, 0 violations); sole exception: `^src/features/knowledge-graph/` is a designated foundational service features may depend on (see `docs/adr/0005-knowledge-graph-is-a-foundational-service.md`). Added 2026-06-12.
 - **ADR-002 subprocess isolation**: Only files in `src/platform/adapters/` may import `node:child_process`; all `features/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
 - **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors caught as `UNEXPECTED` by `gatedWrapHandler` or `wrapHandler`; tools never throw for expected conditions — added 2026-03-31
 - **ADR-002 security boundary**: `git-adapter.ts` never sets `shell: true`; `process-adapter.ts` sets `shell: true`; the two adapters must not be interchanged for git operations — added 2026-03-31

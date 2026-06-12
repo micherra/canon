@@ -6,7 +6,7 @@
 SQLite-backed drift storage: violation history, path effects, error fixes, area observations, craft profiles, and confidence-decay adapters. All DAO classes are synchronous (better-sqlite3). This layer is imported by `features/diagnostics/` and `features/orchestration/` but must not import from features.
 
 ## Architecture
-<!-- last-updated: 2026-06-08 -->
+<!-- last-updated: 2026-06-12 -->
 
 **Schema / migration:**
 
@@ -28,6 +28,12 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 | `cliff-events-dao.ts` | `CliffEventsDao` | `cliff_events` | `DriftDb.getCliffEvents()` lazy accessor; upsert semantics (UNIQUE workspace_slug+step_id); exports `CLIFF_RECOVERY_OUTCOMES`, `CliffRecoveryOutcome`, `CliffEventRow`, `UpsertCliffEventInput` |
 | `violation-closure-dao.ts` | `ViolationClosureDao` | `violations` | `DriftDb.getClosures()` lazy accessor; `supersedeOpenViolations({ files, honored, recordedViolations, reviewId, timestamp })` sets `status='resolved'` for open violations where file ∈ review.files AND principle ∈ honored AND no new violation recorded in this review |
 | `store.ts` | `DriftStore` | `reviews.jsonl` | `ReviewEntry` unified type; `PrStore` deleted 2026-03-25; `getReviews(options?)` AND-filters by principleId/branch/prNumber |
+
+**Cross-feature persistence helpers:**
+
+| File | Key export | Notes |
+|------|-----------|-------|
+| `craft-persistence.ts` | `validateAndPersistCraftProfile(craft_profile, files, projectDir)` | Extracted from `features/pr-review` (ADR-0003); validates via `CraftProfileSchema`, persists one row per distinct subsystem area to `craft_profiles` via `getDriftDb`; pure platform layer — no `@features` imports |
 
 **Confidence / analytics:**
 

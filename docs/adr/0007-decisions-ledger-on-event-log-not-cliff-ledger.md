@@ -1,12 +1,12 @@
 ---
-adr: "0005"
+adr: "0007"
 title: "Orchestrator decisions ledger lives on the execution-store event log, not cliff-ledger or a new table"
 status: accepted
 date: "2026-06-12"
 build: "batch-b-orchestrator-memory-hardening-1-orchestrator-self-handoff"
 ---
 
-# ADR-0005: Orchestrator decisions ledger lives on the execution-store event log, not cliff-ledger or a new table
+# ADR-0007: Orchestrator decisions ledger lives on the execution-store event log, not cliff-ledger or a new table
 
 ## Context
 

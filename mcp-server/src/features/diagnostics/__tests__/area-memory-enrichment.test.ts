@@ -13,7 +13,7 @@ import {
   buildAreaMemorySection,
   formatAreaMemorySection,
   queryAreaObservations,
-} from "../services/area-memory-enrichment.ts";
+} from "../../orchestration/services/area-memory-enrichment.ts";
 
 // ---- Setup helpers ----
 

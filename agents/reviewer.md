@@ -184,6 +184,10 @@ For each matched principle, evaluate the code: does it honor or violate the prin
 - Test exercises a happy path that both old and new code satisfy equally
 - Catch branch is the primary fix target but has zero test execution (spy declared but never asserted; real error path never triggered)
 
+**Feature-layer module checks**: When the diff touches `src/features/` files, additionally check:
+- **`grey-box-module`**: was the public interface (types, signatures, acceptance tests) specified separately from the implementation body? Flag if the interface and its full internals were authored in a single undifferentiated pass with no independent test contract.
+- **`per-folder-public-interface`**: does any non-test file in one feature directly import an internal of a sibling feature (other than `knowledge-graph`, which is a sanctioned foundational service per ADR-0002)? The `no-cross-feature-internal-import` depcruise rule is the mechanical check — verify it is green (`npm run lint:deps`) and flag any exemption not documented in `docs/adr/`.
+
 ### Step 3: Produce Stage 1 output
 
 Follow the **Principle Compliance** section of the review template. If no violations found, say so clearly.
