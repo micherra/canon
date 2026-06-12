@@ -530,11 +530,11 @@ Discovery: `list_loops`.
 `loops/ship-watch.md` only registers the definition — it does NOT start the loop. No manifest
 field, hook script, or command frontmatter can trigger scheduling automatically.
 
-## Project Structure <!-- last-updated: 2026-06-10 -->
+## Project Structure <!-- last-updated: 2026-06-11 -->
 
 ```
 canon/
-├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (22 terms)
+├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (23 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── docs/
 │   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
