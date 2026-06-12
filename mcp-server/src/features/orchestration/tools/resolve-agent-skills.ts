@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
-import { buildAreaMemorySection } from "@features/diagnostics/services/area-memory-enrichment.ts";
-import { buildHotFileSection } from "@features/diagnostics/services/hot-file-detection.ts";
-import { buildPitfallsSection } from "@features/diagnostics/services/pitfall-enrichment.ts";
+import { buildAreaMemorySection } from "@features/orchestration/services/area-memory-enrichment.ts";
+import { buildHotFileSection } from "@features/orchestration/services/hot-file-detection.ts";
+import { buildPitfallsSection } from "@features/orchestration/services/pitfall-enrichment.ts";
 import {
   formatCorrectionsSection,
   readCorrections,
