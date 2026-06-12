@@ -6,16 +6,17 @@
 Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer registry, scope handshake, and idle-session eviction. Flag-dark (CANON_HTTP_DAEMON=1) until Phase 3.
 
 ## Architecture
-<!-- last-updated: 2026-06-08 -->
+<!-- last-updated: 2026-06-11 -->
 
 | File | Responsibility |
 |------|---------------|
 | `loopback-host.ts` | Shared DNS-rebinding guard — single source of truth for `LOOPBACK_ALLOWED_HOSTS` set, `extractLoopbackHostname`, `isAllowedLoopbackHost`, `isLoopbackHostRequest`; consumed by `auth.ts`, `daemon.ts`, and `http-server.ts` (sidecar) |
-| `auth.ts` | Token lifecycle (`resolveTokenPath`/`loadOrCreateToken` 0600 fail-closed) + request auth (`authenticate` timingSafeEqual, loopback+Host rebinding guards via `loopback-host.ts`, `rereadToken` rate-limited rotation) |
+| `auth.ts` | Token lifecycle (`resolveTokenPath`/`loadOrCreateToken` 0600 fail-closed, O_EXCL exclusive create, 0700 parent dir) + request auth (`authenticate` timingSafeEqual, loopback+Host rebinding guards via `loopback-host.ts`, `rereadToken` rate-limited rotation) |
+| `identity-proof.ts` | Pure HMAC challenge-response module (F4): `generateNonce`, `computeIdentityProof`, `verifyIdentityProof` (timing-safe, length-guard), `probeIdentity` — authenticated GET /identity probe; returns `"same-version" | "identity-mismatch"` |
 | `session-manager.ts` | Per-session `McpServer`+`StreamableHTTPServerTransport` registry; scope handshake (header→roots/list capped retry, fail-closed, fs.realpath-normalized); refcount+pending-handshake-guarded eviction in isolation-finish-01 order (server.close first); idle reaper (`CANON_HTTP_SESSION_TTL_MS`, default 30 min); scope immutable after first registration |
 
 ## Contracts
-<!-- last-updated: 2026-06-08 -->
+<!-- last-updated: 2026-06-11 -->
 
 **`loopback-host.ts`**
 - `LOOPBACK_ALLOWED_HOSTS` — `Set<string>` of allowed loopback hostnames: `"127.0.0.1"`, `"localhost"`, `"[::1]"`; single source of truth for all Canon HTTP endpoints
@@ -25,9 +26,15 @@ Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer r
 
 **`auth.ts`**
 - `resolveTokenPath(env?)` — 3-tier: `CANON_MCP_TOKEN_FILE` → `${CLAUDE_PLUGIN_DATA}/canon-mcp-token` → `~/.claude/canon/canon-mcp-token`
-- `loadOrCreateToken(tokenPath)` — async, fail-closed; explicit `chmod(0o600)` after `writeFile` (umask-safe); regenerates on empty/whitespace; returns `TokenResult` discriminated union
+- `loadOrCreateToken(tokenPath)` — async, fail-closed; parent dir created at `mode:0o700` + explicit `chmod(0o700)` (hardens pre-existing world-traversable dirs); exclusive `writeFile({ flag:"wx" })` (O_EXCL — fails EEXIST, never follows symlinks); on EEXIST re-reads via `rereadToken`, fails closed if invalid; `chmod(0o600)` applied after write (umask-safe); regenerates on empty/whitespace via `unlink`+re-create; returns `TokenResult`
 - `authenticate(req, expectedToken)` — sync; loopback remoteAddress check (403), Host header DNS-rebinding guard (403), Bearer presence (401), `crypto.timingSafeEqual` with length-mismatch short-circuit (401)
 - `rereadToken(tokenPath)` — async; re-reads file for rate-limited background rotation recovery; fail-closed on delete/ENOENT
+
+**`identity-proof.ts`**
+- `generateNonce()` — cryptographically random 32-char hex nonce; unique per probe
+- `computeIdentityProof(token, nonce)` — HMAC-SHA256 keyed on token, bound to nonce; returns hex digest; never exposes raw token
+- `verifyIdentityProof(token, nonce, proof)` — timing-safe comparison with length guard before `timingSafeEqual`; returns `boolean`
+- `probeIdentity(port, token, nonce, timeoutMs?)` — authenticated `GET /identity?nonce=<n>` with Bearer token; returns `"same-version" | "identity-mismatch"`; errors resolve to `"identity-mismatch"` (fail-closed)
 
 **`session-manager.ts`**
 - `handleMcpRequest(req, res, port)` — main entry point; routes by session ID; creates transport+server for new POSTs; `cleanupFailedInit` on abrupt close
@@ -40,10 +47,13 @@ Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer r
 - `startReaper()` / `stopReaper()` — unref'd interval; started lazily on first `onsessioninitialized`
 
 ## Invariants
-<!-- last-updated: 2026-06-08 -->
+<!-- last-updated: 2026-06-11 -->
 - `loopback-host.ts` is the sole definition of the loopback allowlist — do NOT redeclare `LOOPBACK_ALLOWED_HOSTS` or `extractLoopbackHostname` in `auth.ts`, `daemon.ts`, or `http-server.ts`; divergent copies are a security-consistency risk
 - `authenticate` always checks remoteAddress (loopback) BEFORE Host header BEFORE token comparison — order is security-critical (defense-in-depth)
 - `loadOrCreateToken` returns `{ ok: false }` on any fs error — callers must serve 503 (never fall through to auth)
+- `loadOrCreateToken` creates the token with O_EXCL (`flag:"wx"`) — NEVER clobbers a pre-existing file; EEXIST → re-read then fail-closed; protects against symlink pre-plant and race injection
+- `loadOrCreateToken` creates parent dir at mode 0700 + explicit `chmod(0700)` — hardens pre-existing world-traversable dirs (umask-safe)
+- `identity-proof.ts` never returns the raw token — `/identity` route returns HMAC digest bound to a per-probe nonce only
 - Scope resolution never falls back to daemon cwd/env — gate stays pending on all failure paths
 - `fs.realpath` used for all root URI normalization — `path.resolve` is explicitly NOT sufficient (macOS symlink issue documented in PROBE-FINDINGS.md)
 - `teardownSession` is idempotent — second call is a no-op; unknown session is a no-op

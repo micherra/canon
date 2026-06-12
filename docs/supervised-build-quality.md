@@ -234,6 +234,7 @@ Parallel infra track to the build-quality threads. Removes the MCP server's proc
 | **1b** | Migrate consumers to connection scope | Shipped (PR #290) |
 | **1c + 1d** | Eliminate `process.cwd()` implicit-scope sites; delete the `projectDir`/`setProjectDir` global; add (unwired) `evictStoresForScope`/`evictDriftDbForScope` eviction hooks; split `drift-db.ts` into siblings | Shipped (PR #304) — CLEAN review, behavioral no-op under stdio. Isolation-finish (per-project `JobManager` via `getOrCreateJobManager`) shipped PR #316. |
 | **2** | HTTP daemon: per-session Streamable-HTTP transport, loopback auth, scope handshake, supervisor, idle reaper; flag-dark (`CANON_HTTP_DAEMON=1`) until Phase 3 cutover | Shipped (PR #342) — flag-dark |
+| **3** | Security hardening (F1: O_EXCL token create, 0700 parent dir; F4: challenge-response `/identity` probe on EADDRINUSE) + `mcp-auth-headers.sh` headersHelper + default transport flip (`.mcp.json` stdio → HTTP daemon) | Shipped (PR in progress — 2026-06-11) |
 
 **Sequencing notes:**
 

@@ -47,4 +47,7 @@ Use `docs/adr/TEMPLATE.md` as the starting point for every new ADR. Copy it, fil
 | # | Title | Status | Date | Build |
 |---|-------|--------|------|-------|
 | [0001](0001-adr-template-placement.md) | ADR template lives at docs/adr/TEMPLATE.md and coexists with templates/design-decision.md | accepted | 2026-06-09 | close-the-adr-gap-the-architect-currently-writes-rich-design-decision |
-| [0003](0003-worktree-node-modules-symlink-containment.md) | Worktree node_modules via gitignored symlink with containment gate (not npm-install, not NODE_PATH) | accepted | 2026-06-11 | worktree-dev-environment-fixes-symlink-mcp-servernodemodules-into |
+| [0002](0002-loop-first-tick-baseline-semantics.md) | Loop first-tick is baseline-capture-only — transition rules never fire against an empty prior | accepted | 2026-06-11 | loop-framework-phase-c-self-paced-mode-schedulewakeup-adapter-session |
+| [0003](0003-daemon-identity-proof-on-eaddrinuse-probe.md) | Daemon proves token possession via challenge-response on the EADDRINUSE probe, not a public version match | accepted | 2026-06-11 | harden-http-daemon-f1-same-user-token-read-f4-probe-identity-security |
+| [0004](0004-retarget-boot-install-guards-onto-http-launch-path.md) | Retarget the boot-resolver + install-sim CI guards onto the HTTP launch path instead of deleting them | accepted | 2026-06-11 | adapt-install-sim-boot-resolver-ci-guards-for-the-http-mcpjson |
+| [0005](0005-worktree-node-modules-symlink-containment.md) | Worktree node_modules via gitignored symlink with containment gate (not npm-install, not NODE_PATH) | accepted | 2026-06-11 | worktree-dev-environment-fixes-symlink-mcp-servernodemodules-into |
