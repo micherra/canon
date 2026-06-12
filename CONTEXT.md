@@ -24,6 +24,10 @@ A project-level pattern recorded in `.canon/CONVENTIONS.md`. Less formal than a 
 
 A directed acyclic graph of task dependencies, stored in `task-dag.yaml` under the workspace plans directory. Each node names a task, its dependent tasks (`depends_on`), and its target files. The DAG enables parallel dispatch: tasks with no unresolved dependencies are dispatched as wave 1; subsequent waves run after their dependencies complete.
 
+## Decisions Ledger
+
+The durable record of consequential orchestrator decisions (HITL gate outcomes, scope cuts, AC changes, tier overrides, merge-conflict resolutions) stored as `orchestrator_decision` events on the execution-store event log. Written via `log_decision` (authoritative — store failure surfaces as error, not silently swallowed) and read via `get_decisions` (returns structured `DecisionRecord[]` + rendered markdown table). Used during in-session compaction rehydration and explicit resume to restore decided state without relying on conversation memory. Built on the event log per ADR-0005 — not on `cliff-ledger.ts`, which is a `Set<string>` de-dupe ledger for a different purpose.
+
 ## Drift
 
 Divergence between declared Canon principles and actual codebase patterns, tracked in the drift database (`reviews.jsonl`, `orchestration.db`). Drift accumulates when builds introduce violations that are acknowledged rather than fixed. The `get_drift_report` MCP tool surfaces current drift state.
@@ -47,6 +51,10 @@ The file `journal.json` in the workspace root. An ordered log of step executions
 ## Loop
 
 A Canon-managed periodic-observation artifact authored as `loops/<id>.md` (YAML frontmatter + action-prompt body). The `loops/` directory at the repo root is the loop registry — no hardcoded catalog exists. Loops are discovered via `list_loops` and dispatched by the orchestrator via `CronCreate` at a named lifecycle moment (`post-ship`, `on-long-dispatch`, `session-start`). Nothing auto-starts; authoring a `loops/*.md` registers the definition but does not start the loop (dc-06 non-declarative constraint). Phase A ships the framework spine (schema, registry, MCP tools, `_probe` demo); Phase B adds ship-watch; Phase C adds self-paced mode.
+
+## Orchestrator Checkpoint
+
+The file `checkpoint.md` written to the workspace root by `write_orchestrator_checkpoint`. A compact, derived resume-state snapshot containing completed and pending steps, recent decisions, and the recommended next action. Written as a best-effort-observable operation — failure surfaces as a `ToolResult` error but never throws or silently succeeds. Authoritative sources (`journal.json`, decisions ledger) always supersede `checkpoint.md`; the file is a convenience cache for fast in-session or post-compaction rehydration. Refreshed per completed step (alongside `log_step` completion) and at each HITL gate.
 
 ## Primer
 
