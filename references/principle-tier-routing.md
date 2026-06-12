@@ -40,15 +40,28 @@ When the detection result is **installed-copy**, skip this test entirely — all
 
 ---
 
-## Action Table
+## Action Table <!-- last-updated: 2026-06-11 -->
 
-| Detected context | Principle type | Save destination |
-|---|---|---|
-| installed-copy | any | `.canon/principles/<sev>/{id}.md` |
-| tracked-source | project-specific | `.canon/principles/<sev>/{id}.md` |
-| tracked-source | universal | `principles/<sev>/{id}.md` |
+| Detected context | Principle type | Save destination | `portable` flag |
+|---|---|---|---|
+| installed-copy | any | `.canon/principles/<sev>/{id}.md` | `portable: false` |
+| tracked-source | project-specific | `.canon/principles/<sev>/{id}.md` | `portable: false` |
+| tracked-source | universal | `principles/<sev>/{id}.md` | `portable: true` |
 
 `<sev>` is the severity subdirectory: `rules/`, `strong-opinions/`, or `conventions/`.
+
+---
+
+## Portable flag (mandatory)
+
+Every principle file MUST carry a top-level `portable: true|false` frontmatter field. The flag records authorial intent; the physical location enforces it:
+
+- **`portable: false`** → save destination is `.canon/principles/<sev>/` (gitignored, never ships with the plugin).
+- **`portable: true`** → save destination is `principles/<sev>/` (tracked, ships via release).
+
+The flag and the physical location MUST agree. A `portable: false` file under the shipped `principles/` tree is a `wiki_lint misrouted_principles` failure and requires relocation. The check name is **`misrouted_principles`** in `mcp-server/src/features/diagnostics/services/wiki-lint-principle-tier.ts`.
+
+Auditing the portable set: `grep -rl 'portable: true' principles/` lists every principle that ships.
 
 ---
 
