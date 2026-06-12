@@ -367,7 +367,7 @@ MCP requirements: `renderer-design.md` — none; `renderer-review.md` — `show_
 
 When the review step completes and a tester step follows: extract Stage 5 "Acceptance Criteria Verification" from `${WORKSPACE}/reviews/REVIEW.md` and include it (plus the architect design's Acceptance Criteria section) in the tester's spawn prompt. When runbook ACs include verification method/type columns, the tester MUST run after the review step — it consumes the reviewer's Stage 5 output.
 
-### Step Enforcement Contracts <!-- last-updated: 2026-06-05 -->
+### Step Enforcement Contracts <!-- last-updated: 2026-06-12 -->
 
 **Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh` → `bash hooks/dead-wire-gate.sh {base_commit}`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL. For builds with user-observable ACs, the verify step also drives the live app (background-launch + readiness-poll + curl/CLI-invocation, never `sleep N`), distinct from `npm test` — see `agents/tester.md` Live App Smoke. This closes the tests-pass-but-app-doesn't-boot gap.
 
