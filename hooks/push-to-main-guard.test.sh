@@ -754,6 +754,10 @@ run_test 'printf "%s" "$VAR" (no git token — must pass)' \
 _node_symlink_input='{"command":"node -e \"require('"'"'fs'"'"').symlinkSync(require('"'"'fs'"'"').realpathSync('"'"'/a'"'"'),'"'"'/b'"'"','"'"'dir'"'"')\""}'
 run_test 'node -e symlinkSync(realpathSync(...)) (node symlink — must pass)' \
   0 "$_node_symlink_input"
+# dc-03: VAR=val prefix + real cmd + arg-pos substitution must pass (no false positive)
+_foo_ls_pwd_input='{"command":"FOO=bar ls $(pwd)"}'
+run_test 'FOO=bar ls $(pwd) (VAR=val prefix + real cmd + arg-pos sub — must pass, dc-03)' \
+  0 "$_foo_ls_pwd_input"
 
 echo ""
 # ---------------------------------------------------------------------------
@@ -769,6 +773,21 @@ run_test 'git push origin main (direct push — unchanged, still blocked)' \
   2 "$(make_input 'git push origin main')"
 run_test 'git push --all origin (push-everything — unchanged, still blocked)' \
   2 "$(make_input 'git push --all origin')"
+# dc-01: command-NAME-position $(...) bypass — Codex P1 fix
+# NOTE: payload contains $( literally — must NOT use make_input (shell would expand).
+# Use direct printf with single-quote literals.
+_echo_git_input='{"command":"$(echo git) push origin main"}'
+run_test '$(echo git) push origin main (cmd-name-position $() bypass — must block, dc-01)' \
+  2 "$_echo_git_input"
+# dc-02: backtick command-name-position form (lock-in; already blocked incidentally via
+# ambiguous-git-token, this test locks in the guarantee explicitly)
+_backtick_git_input='{"command":"`echo git` push origin main"}'
+run_test '`echo git` push origin main (cmd-name-position backtick — must block, dc-02)' \
+  2 "$_backtick_git_input"
+# dc-01 extended: VAR=val prefix before command-name-position substitution — still blocked
+_foo_echo_git_input='{"command":"FOO=bar $(echo git) push origin main"}'
+run_test 'FOO=bar $(echo git) push origin main (VAR=val prefix + cmd-name-pos $() — must block)' \
+  2 "$_foo_echo_git_input"
 
 echo ""
 # ---------------------------------------------------------------------------

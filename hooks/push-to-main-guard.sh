@@ -534,13 +534,35 @@ process_segment() {
         echo "CANON: ambiguous git-prefixed token detected — blocking fail-closed." >&2
         exit 2
       fi
-      # A segment with no git token, no recognized string-executing wrapper, and no
-      # ambiguous git token (checked above) cannot be a disguised git push. Command
-      # substitution / pipes / redirects in such a segment are ordinary non-git Bash —
-      # do NOT fail-closed (watch_GGGGGGGG1: false-positives on ln -s "$(...)..." etc.).
-      # The disguised-push vector (bash -c "$(echo git push ...)") is still caught:
-      # a recognized wrapper hits the rc=2 guard and the post-unwrap $(/backtick guard
-      # below; an ambiguous git token hits canon_has_ambiguous_git_token above.
+      # P1 (PR #386 Codex): command-NAME-position command substitution.
+      # At this point the segment has no standalone git token, is not a recognized
+      # string-executing wrapper, and has no ambiguous git<metachar> token. The only
+      # remaining disguised-push vector is a substitution occupying the COMMAND-NAME
+      # (first-word) position — e.g. $(echo git) push origin main — which bash expands
+      # to `git` at runtime. We cannot evaluate it statically → fail closed (dc-01).
+      #
+      # Conservative predicate: strip leading whitespace and any leading VAR=val
+      # assignment prefixes, then if the remainder begins with $( or a backtick, block.
+      # This fires ONLY when the FIRST word is a substitution. It does NOT fire on
+      # substitutions in ARGUMENT position behind a real command word (ls $(pwd),
+      # echo $(date), ln -s "$(realpath x)" ... ) — those keep a literal command name.
+      local _cmdpos="$segment"
+      # strip leading whitespace
+      _cmdpos="${_cmdpos#"${_cmdpos%%[![:space:]]*}"}"
+      # strip leading VAR=val assignment prefixes (repeat for multiple assignments)
+      while [[ "$_cmdpos" =~ ^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+ ]]; do
+        _cmdpos="${_cmdpos#"${BASH_REMATCH[0]}"}"
+        _cmdpos="${_cmdpos#"${_cmdpos%%[![:space:]]*}"}"
+      done
+      if [[ "$_cmdpos" == '$('* || "$_cmdpos" == '`'* ]]; then
+        echo "CANON: command-name position is a command substitution — cannot prove it does not resolve to 'git push' — blocking fail-closed." >&2
+        exit 2
+      fi
+      # A segment with no git token, no recognized string-executing wrapper, no
+      # ambiguous git token, and no command-name-position substitution cannot be a
+      # disguised git push. Command substitution / pipes / redirects in such a segment
+      # are ordinary non-git Bash — do NOT fail-closed
+      # (watch_GGGGGGGG1: false-positives on ln -s "$(...)..." etc.).
       return 0
     fi
 
