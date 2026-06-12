@@ -45,16 +45,16 @@ jobs:
   # install-sim: Faithful install-simulation smoke test (backstop for novel leak classes).
   # Uses Node 24.x — deliberately DIFFERENT from the repo-pinned 25.8.0 — to exercise
   # the #361 ambient-node path (.tool-versions pins 25.8.0; wrong Node → shim exit 126).
-  # The script itself archives HEAD, spawns the real .mcp.json launcher from a non-repo
-  # cwd, and connects via MCP SDK StdioClientTransport.
+  # The script detects the HTTP form of .mcp.json: it archives HEAD, boots boot.sh
+  # --daemon on a throwaway test port with a throwaway token from a non-repo cwd,
+  # resolves the headersHelper, and connects via MCP SDK StreamableHTTPClientTransport.
   #
-  # Status (post-#356-fix, activated by PR #368):
-  #   --self-check: PASSES — proves the harness catches the #356 broken form.
-  #   normal mode:  ACTIVE GATE — PR #356 merged (fixing .mcp.json to use bash -c with
-  #                 shell-expanded path instead of literal ${} token). Normal mode now
-  #                 reproduces a real install: archives HEAD, symlinks node_modules,
-  #                 spawns the real .mcp.json launcher, and asserts initialize +
-  #                 non-empty listTools succeeds.
+  # Status (HTTP transport, activated post-#356/#370):
+  #   --self-check: PASSES — proves the harness catches the unresolved-headersHelper
+  #                 broken form (HTTP analog of the #356 broken form).
+  #   normal mode:  ACTIVE GATE — exercises the full HTTP launch path: archives HEAD,
+  #                 symlinks node_modules, boots the daemon, resolves headersHelper,
+  #                 and asserts initialize + non-empty listTools succeeds.
   #
   # Fidelity gap: node_modules are symlinked from the CI-installed repo copy rather than
   # a real CLAUDE_PLUGIN_DATA install. Does not affect path-resolution testing (#356/#361).

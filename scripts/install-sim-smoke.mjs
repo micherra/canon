@@ -1,42 +1,41 @@
 #!/usr/bin/env node
 /**
- * install-sim-smoke.mjs — Faithful install-simulation smoke test.
+ * install-sim-smoke.mjs — Faithful install-simulation smoke test (HTTP transport).
  *
- * Reproduces the environment of a Claude Code plugin install:
- *   - Archives HEAD via `git archive` to a temp dir outside the repo.
- *   - Resolves the canon server block from the ARCHIVED .mcp.json.
- *   - Applies env substitution EXACTLY as Claude Code does:
- *       • In env values: expands ${VAR} and ${VAR:-default} tokens.
- *       • In args: does NOT expand ${...} (CC does not substitute here).
- *         WARNING: expanding args would paper over the #356 bug this test exists
- *         to catch. See decisions/install-faithful-01.md.
- *   - Spawns from a NON-REPO cwd (throwaway user-project dir).
- *   - Connects an MCP SDK Client over StdioClientTransport.
- *   - Asserts initialize() succeeds AND listTools() returns a non-empty set.
+ * Old→new regression mapping (ADR-0004 / PROBE-FINDINGS.md):
+ *
+ *   #356 (literal ${...} in args → boot.sh not found) →
+ *     HTTP analog: unresolved headersHelper (literal ${CLAUDE_PLUGIN_ROOT:-.} →
+ *     helper path not found → no Authorization header → connection FAILS).
+ *     Self-check BROKEN form exercises this path.
+ *
+ *   #361 (ambient Node ≠ repo pin → asdf/mise shim exit 126) →
+ *     UNCHANGED: checkNodeVersion() retained in normal mode; boot.sh --daemon
+ *     also exercises the ambient-node path (boot.sh Step 12.5 Node preflight).
+ *
+ *   #370 (var-absent / broken install → silent -32000 collapse) →
+ *     Fail-closed: runHeadersHelper returns { ok: false } on any failure (no
+ *     silent swallowing); empty tool set → exit 1 with named reason; connection
+ *     failure reported loudly. Self-check BROKEN form must exit non-zero.
+ *
+ * What this harness does (HTTP form):
+ *   1. Archives HEAD via `git archive` to a temp dir outside the repo.
+ *   2. Resolves the HTTP canon server block from the ARCHIVED .mcp.json.
+ *   3. Boots a Canon HTTP daemon on an ephemeral test port with a throwaway
+ *      token file — NEVER touches ~/.claude or the real daemon on :3142.
+ *   4. Expands ${...} in url and headersHelper exactly as Claude Code does.
+ *   5. Runs the headersHelper → gets {"Authorization":"Bearer <token>"}.
+ *   6. Connects via StreamableHTTPClientTransport; asserts initialize + non-empty
+ *      listTools. Tears the daemon down after (no port leak).
  *
  * Flags:
- *   (none)         Normal mode — drive the actual .mcp.json from the archive.
- *                  On the current base (pre-#356-fix), this REPRODUCES #356:
- *                  ${CLAUDE_PLUGIN_ROOT:-.} is unsubstituted in args → bash
- *                  cannot find the script at a literal ${...} path → fails.
- *                  This is EXPECTED and INTENTIONAL.
+ *   (none)       Normal mode — drive the actual .mcp.json from the archive.
+ *   --self-check Self-verification: BROKEN form (unresolved headersHelper) FAILS;
+ *                FIXED form SUCCEEDS. Exits 0 iff both behave as expected.
+ *   --debug      Print resolved env and params to stderr before spawning.
  *
- *   --self-check   Self-verification mode. Runs two sub-tests:
- *                    1. BROKEN form: token in args (pre-#356) → must FAIL.
- *                       Confirms the harness catches the bug.
- *                    2. FIXED form: path resolved at spawn time → must SUCCEED.
- *                       Confirms the harness passes when the install is correct.
- *                  Exits 0 iff both sub-tests behave as expected.
- *
- *   --debug        Print resolved env and command to stderr before spawning.
- *
- * Usage:
- *   node scripts/install-sim-smoke.mjs            # normal mode
- *   node scripts/install-sim-smoke.mjs --self-check  # self-verification
- *
- * CI context: run by the install-sim job in .github/workflows/ci.yml.
- * That job uses a Node version DIFFERENT from the repo-pinned 25.8.0 to
- * exercise the #361 ambient-node path.
+ * CI: run by the install-sim job in .github/workflows/ci.yml on Node 24.x
+ * (distinct from the repo-pinned 25.8.0) to exercise the #361 ambient-node path.
  */
 
 import { execSync } from "node:child_process";
@@ -45,6 +44,21 @@ import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import {
+  pickEphemeralPort,
+  makeDaemonTempDir,
+  prepareTokenFile,
+  startTestDaemon,
+  waitForHealth,
+  teardownDaemon,
+  cleanupDaemonTempDir,
+} from "./lib/install-sim-daemon.mjs";
+import {
+  resolveHeadersHelper,
+  runHeadersHelper,
+  attemptHttpHandshake,
+} from "./lib/install-sim-http.mjs";
 
 // ── Repo root resolution ────────────────────────────────────────────────────
 
@@ -65,19 +79,18 @@ const SERVER_NAME = "canon";
 
 // ── Argument parsing ────────────────────────────────────────────────────────
 
-const args = process.argv.slice(2);
-const SELF_CHECK_MODE = args.includes("--self-check");
-const DEBUG = args.includes("--debug");
+const cliArgs = process.argv.slice(2);
+const SELF_CHECK_MODE = cliArgs.includes("--self-check");
+const DEBUG = cliArgs.includes("--debug");
 
 // ── node_modules discovery ───────────────────────────────────────────────────
 
 /**
- * Locate an installed mcp-server/node_modules that contains tsx.
+ * Locate an installed mcp-server/node_modules that contains the MCP SDK.
  * Resolution order:
  *   1. REPO_ROOT/mcp-server/node_modules — present after `npm ci` in CI.
  *   2. <main-repo>/mcp-server/node_modules — fallback when running from a
  *      git worktree whose mcp-server/ has no node_modules yet (local dev).
- *      The worktree is 5 levels deep under the main repo.
  */
 function findNodeModules() {
   const candidates = [
@@ -85,16 +98,24 @@ function findNodeModules() {
     join(REPO_ROOT, "..", "..", "..", "..", "..", "mcp-server", "node_modules"),
   ];
   for (const candidate of candidates) {
-    const tsxBin = join(candidate, ".bin", "tsx");
+    const sdkCheck = join(
+      candidate,
+      "@modelcontextprotocol",
+      "sdk",
+      "dist",
+      "esm",
+      "client",
+      "index.js",
+    );
     try {
-      execSync(`test -x "${tsxBin}"`, { stdio: "pipe" });
+      readFileSync(sdkCheck);
       return candidate;
     } catch {
       // try next
     }
   }
   throw new Error(
-    `[install-sim] Cannot locate tsx in any node_modules candidate:\n` +
+    `[install-sim] Cannot locate MCP SDK in any node_modules candidate:\n` +
       candidates.map((c) => `  ${c}`).join("\n") +
       `\nEnsure mcp-server deps are installed (npm ci in mcp-server/).`,
   );
@@ -102,18 +123,14 @@ function findNodeModules() {
 
 // ── #361 guard: assert this process is NOT running the pinned node ──────────
 // Applied in normal mode only (not --self-check, which tests harness internals).
-// Purpose: ensure CI's install-sim job exercises the ambient-Node path that
-// caused #361 (.tool-versions pins nodejs 25.8.0 → asdf/mise shim exit 126).
-// If CI uses the same Node as the pin, the test would pass spuriously.
 
 function checkNodeVersion() {
-  const runningVersion = process.version; // e.g. "v24.0.0"
+  const runningVersion = process.version;
   if (runningVersion === REPO_PINNED_NODE_VERSION) {
     console.error(
       `[install-sim] FAIL: Node ${runningVersion} matches the repo-pinned version ` +
         `${REPO_PINNED_NODE_VERSION}. The CI install-sim job MUST use a DIFFERENT ` +
-        `Node version (e.g. 24.x) to exercise the #361 ambient-node path. ` +
-        `This ensures .tool-versions breakage is detectable from the runner.`,
+        `Node version (e.g. 24.x) to exercise the #361 ambient-node path.`,
     );
     process.exit(1);
   }
@@ -125,9 +142,8 @@ function checkNodeVersion() {
 // ── Guard: spawn cwd must not be repo root ──────────────────────────────────
 
 /**
- * Asserts that `spawnCwd` is NOT the repo root.
- * If this were accidentally process.cwd() (the repo), #356 would not reproduce
- * because BASH_SOURCE fallback in boot.sh would silently succeed.
+ * Asserts that `spawnCwd` is NOT inside the repo root.
+ * Prevents boot.sh BASH_SOURCE fallback from masking real path failures.
  */
 function assertNotRepoCwd(spawnCwd) {
   const repoReal = execSync("git rev-parse --show-toplevel", {
@@ -137,8 +153,7 @@ function assertNotRepoCwd(spawnCwd) {
   if (spawnCwd.startsWith(repoReal)) {
     throw new Error(
       `[install-sim] INTERNAL ERROR: spawn cwd "${spawnCwd}" is inside the repo ` +
-        `root "${repoReal}". This would allow boot.sh BASH_SOURCE fallback to ` +
-        `silently mask the #356 bug. Use a temp dir outside the repo.`,
+        `root "${repoReal}". Use a temp dir outside the repo.`,
     );
   }
 }
@@ -147,16 +162,15 @@ function assertNotRepoCwd(spawnCwd) {
 
 /**
  * Expand ${VAR} and ${VAR:-default} tokens in a string.
- * Used ONLY for env value expansion — NOT for args (CC does not expand args).
- *
- * Reference: decisions/install-faithful-01.md — the no-args-expansion constraint.
+ * Used for url, headersHelper, and env values — NOT for args (CC does not expand args).
+ * Exported so install-sim-http.mjs can receive it as an expandFn argument.
  */
-function expandEnvToken(value, envMap) {
+export function expandEnvToken(value, envMap) {
   return value.replace(/\$\{([^}:]+)(?::-(.*?))?\}/g, (_, varName, fallback) => {
     const resolved = envMap[varName];
     if (resolved !== undefined && resolved !== "") return resolved;
     if (fallback !== undefined) return fallback;
-    return ""; // unset with no fallback → empty
+    return "";
   });
 }
 
@@ -164,7 +178,7 @@ function expandEnvToken(value, envMap) {
 
 /**
  * Extract the canon server block from .mcp.json.
- * Returns { command, args, env } with args VERBATIM (no substitution).
+ * Returns HTTP form: { type, url, headersHelper }.
  */
 function parseMcpJson(mcpJsonPath) {
   const raw = JSON.parse(readFileSync(mcpJsonPath, "utf8"));
@@ -176,214 +190,37 @@ function parseMcpJson(mcpJsonPath) {
     );
   }
   return {
+    type: server.type ?? "stdio",
+    url: server.url,
+    headersHelper: server.headersHelper,
+    // Legacy stdio fields (kept for forward compat if form reverts):
     command: server.command,
     args: server.args ?? [],
     env: server.env ?? {},
   };
 }
 
-// ── MCP SDK handshake ───────────────────────────────────────────────────────
-
-/**
- * Spawn the server with the given params and attempt an MCP initialize + listTools.
- * Returns { ok: true, toolCount } on success.
- * Returns { ok: false, reason, stderr } on failure.
- *
- * @param {object} spawnParams - { command, args, env, cwd }
- * @param {string} label - Human-readable label for log output
- */
-async function attemptHandshake(spawnParams, label) {
-  // Deferred dynamic imports so the module works without pre-installed node_modules
-  // at the script's own location — we use the repo's mcp-server/node_modules.
-  // Resolution order:
-  //   1. REPO_ROOT/mcp-server/node_modules (present after npm ci in CI, or in dev worktrees)
-  //   2. REPO_ROOT/../../../mcp-server/node_modules (fallback: main repo node_modules when
-  //      this script runs from a git worktree whose mcp-server/ has no node_modules yet)
-  const candidatePaths = [
-    join(REPO_ROOT, "mcp-server", "node_modules"),
-    // Worktree-to-main-repo fallback: the worktree is typically at
-    //   <main-repo>/.canon/workspaces/<branch>/<slug>/worktree
-    // which is 5 levels below the main repo root. This fallback allows local
-    // development runs when the worktree's mcp-server/node_modules is absent
-    // (e.g., fresh worktree without npm ci). In CI the primary path is used.
-    join(REPO_ROOT, "..", "..", "..", "..", "..", "mcp-server", "node_modules"),
-  ];
-
-  let nodeModulesPath = null;
-  for (const candidate of candidatePaths) {
-    try {
-      const sdkCheck = join(
-        candidate,
-        "@modelcontextprotocol",
-        "sdk",
-        "dist",
-        "esm",
-        "client",
-        "index.js",
-      );
-      readFileSync(sdkCheck); // will throw if not found
-      nodeModulesPath = candidate;
-      break;
-    } catch {
-      // try next
-    }
-  }
-
-  if (!nodeModulesPath) {
-    return {
-      ok: false,
-      reason:
-        `SDK not found in any candidate node_modules path. ` +
-        `Tried: ${candidatePaths.join(", ")}. ` +
-        `Ensure mcp-server deps are installed (npm ci in mcp-server/).`,
-      stderr: "",
-    };
-  }
-
-  // Resolve SDK paths via the discovered node_modules.
-  const sdkBase = join(
-    nodeModulesPath,
-    "@modelcontextprotocol",
-    "sdk",
-    "dist",
-    "esm",
-    "client",
-  );
-
-  let Client, StdioClientTransport;
-  try {
-    ({ Client } = await import(join(sdkBase, "index.js")));
-    ({ StdioClientTransport } = await import(join(sdkBase, "stdio.js")));
-  } catch (err) {
-    return {
-      ok: false,
-      reason: `SDK import failed — is mcp-server/node_modules installed? Error: ${err.message}`,
-      stderr: "",
-    };
-  }
-
-  if (DEBUG) {
-    console.error(`[install-sim][${label}] Spawning:`, JSON.stringify(spawnParams, null, 2));
-  }
-
-  assertNotRepoCwd(spawnParams.cwd);
-
-  let stderrOutput = "";
-  const transport = new StdioClientTransport({
-    command: spawnParams.command,
-    args: spawnParams.args,
-    env: spawnParams.env,
-    cwd: spawnParams.cwd,
-    stderr: "pipe",
-  });
-
-  // Capture stderr from the spawned process.
-  // StdioClientTransport exposes stderr as a readable stream after start().
-  const client = new Client({ name: "install-sim-smoke", version: "1.0.0" });
-
-  return await new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      resolve({
-        ok: false,
-        reason: `Handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms`,
-        stderr: stderrOutput,
-      });
-      // Best-effort cleanup
-      try {
-        transport.close();
-      } catch {}
-    }, HANDSHAKE_TIMEOUT_MS);
-
-    // Wire up stderr capture before connect
-    client
-      .connect(transport)
-      .then(async () => {
-        // Capture stderr if available via transport
-        if (transport.stderr) {
-          transport.stderr.on("data", (chunk) => {
-            stderrOutput += chunk.toString();
-          });
-        }
-
-        let toolCount = 0;
-        try {
-          const result = await client.listTools();
-          toolCount = result.tools?.length ?? 0;
-        } catch (err) {
-          clearTimeout(timer);
-          await client.close().catch(() => {});
-          resolve({
-            ok: false,
-            reason: `listTools() failed: ${err.message}`,
-            stderr: stderrOutput,
-          });
-          return;
-        }
-
-        clearTimeout(timer);
-        await client.close().catch(() => {});
-
-        if (toolCount === 0) {
-          resolve({
-            ok: false,
-            reason: "listTools() returned an EMPTY tool set — server booted but registered no tools",
-            stderr: stderrOutput,
-          });
-        } else {
-          resolve({ ok: true, toolCount });
-        }
-      })
-      .catch((err) => {
-        // Capture stderr from the transport process if accessible
-        if (transport.stderr) {
-          transport.stderr.on("data", (chunk) => {
-            stderrOutput += chunk.toString();
-          });
-        }
-        clearTimeout(timer);
-        client.close().catch(() => {});
-        resolve({ ok: false, reason: err.message, stderr: stderrOutput });
-      });
-  });
-}
-
 // ── Archive + environment setup ─────────────────────────────────────────────
 
 /**
  * Archive the repo HEAD to a temp dir and prepare the environment.
- * Returns { archivePath, userProjectDir, cleanup }.
+ * Symlinks the repo's installed node_modules into the archive's mcp-server/
+ * (mirrors CLAUDE_PLUGIN_DATA symlink that boot.sh creates in plugin context).
  */
 async function setupInstallEnv() {
   const baseTmp = tmpdir();
-
-  // Archive path — must NOT be inside the repo.
   const archivePath = await mkdtemp(join(baseTmp, "canon-install-sim-archive-"));
-
-  // User project dir — the "cwd" perspective of a user running Claude Code.
   const userProjectDir = await mkdtemp(join(baseTmp, "canon-install-sim-project-"));
 
   console.log(`[install-sim] Archive path:      ${archivePath}`);
   console.log(`[install-sim] User project dir:  ${userProjectDir}`);
 
-  // git archive HEAD → extract to archivePath
   execSync(`git archive HEAD | tar -x -C "${archivePath}"`, {
     cwd: REPO_ROOT,
     stdio: ["pipe", "pipe", "inherit"],
   });
   console.log(`[install-sim] Archived HEAD to ${archivePath}`);
 
-  // Deps: symlink the repo's installed node_modules into the archive's mcp-server/.
-  // This mirrors the CLAUDE_PLUGIN_DATA symlink that boot.sh creates in plugin context.
-  // Without this, boot.sh can't find tsx and fails. We use the repo's installed
-  // deps (already CI-installed) — this is the closest approximation CI allows.
-  //
-  // Fidelity gap (documented): in a real install, deps come from CLAUDE_PLUGIN_DATA;
-  // here we reuse the repo node_modules via symlink. This doesn't affect the
-  // structural test (path resolution via CLAUDE_PLUGIN_ROOT / BASH_SOURCE) but
-  // means dependency version differences between install and dev won't be caught.
-  //
-  // Resolution order: worktree's mcp-server/node_modules first (CI), then fallback
-  // to main repo node_modules (local dev with fresh worktree).
   const archiveNmPath = join(archivePath, "mcp-server", "node_modules");
   const repoNmPath = findNodeModules();
   try {
@@ -404,86 +241,148 @@ async function setupInstallEnv() {
   return { archivePath, userProjectDir, cleanup };
 }
 
+// ── HTTP sub-test helper ─────────────────────────────────────────────────────
+
+/**
+ * Run a single HTTP handshake sub-test with the given options.
+ *
+ * @param {{
+ *   nodeModulesPath: string,
+ *   expandedUrl: string,
+ *   headersHelperRaw: string,
+ *   installEnvForHelper: Record<string, string>,
+ *   tokenFile: string,
+ *   label: string,
+ *   helperCwd: string,
+ * }} opts
+ * @returns {Promise<{ ok: boolean, reason?: string, toolCount?: number }>}
+ */
+async function runHttpSubTest({
+  nodeModulesPath,
+  expandedUrl,
+  headersHelperRaw,
+  installEnvForHelper,
+  tokenFile,
+  label,
+  helperCwd,
+}) {
+  const helperPath = resolveHeadersHelper(headersHelperRaw, installEnvForHelper, expandEnvToken);
+  if (DEBUG) {
+    console.error(`[install-sim][${label}] headersHelper resolved: ${helperPath}`);
+    console.error(`[install-sim][${label}] url: ${expandedUrl}`);
+  }
+
+  const headerResult = runHeadersHelper(
+    helperPath,
+    { ...installEnvForHelper, CANON_MCP_TOKEN_FILE: tokenFile },
+    helperCwd,
+  );
+
+  if (!headerResult.ok) {
+    console.error(
+      `[install-sim][${label}] headersHelper FAILED (fail-closed): ${headerResult.reason}`,
+    );
+    return { ok: false, reason: headerResult.reason };
+  }
+
+  const result = await attemptHttpHandshake({
+    url: expandedUrl,
+    headers: headerResult.headers,
+    nodeModulesPath,
+    timeoutMs: HANDSHAKE_TIMEOUT_MS,
+  });
+
+  return result;
+}
+
 // ── Normal mode ─────────────────────────────────────────────────────────────
 
 async function runNormalMode() {
-  // Enforce the #361 guard in normal mode: CI must use a node ≠ repo pin.
+  // #361 guard: CI must use a Node ≠ repo pin.
   checkNodeVersion();
 
-  console.log("\n[install-sim] === NORMAL MODE ===");
+  console.log("\n[install-sim] === NORMAL MODE (HTTP transport) ===");
   console.log("[install-sim] Reproducing install environment from HEAD...");
 
   const { archivePath, userProjectDir, cleanup } = await setupInstallEnv();
+  const nodeModulesPath = findNodeModules();
+  const daemonTmpDir = await makeDaemonTempDir();
+  let proc = null;
+  let ephemeralPort = 0;
 
   try {
+    assertNotRepoCwd(userProjectDir);
+
     // Parse .mcp.json from the ARCHIVED tree.
     const mcpJsonPath = join(archivePath, ".mcp.json");
-    const { command, args: rawArgs, env: rawEnv } = parseMcpJson(mcpJsonPath);
+    const { type, url: rawUrl, headersHelper: rawHeadersHelper } = parseMcpJson(mcpJsonPath);
 
-    console.log(`[install-sim] Parsed .mcp.json command: ${command}`);
-    console.log(`[install-sim] Parsed .mcp.json args (verbatim): ${JSON.stringify(rawArgs)}`);
-    console.log(`[install-sim] Parsed .mcp.json env: ${JSON.stringify(rawEnv)}`);
+    if (type !== "http" || !rawUrl || !rawHeadersHelper) {
+      throw new Error(
+        `[install-sim] Expected HTTP .mcp.json form (type=http, url, headersHelper). ` +
+          `Got: type=${type}, url=${rawUrl}, headersHelper=${rawHeadersHelper}`,
+      );
+    }
 
-    // Apply env substitution ONLY in env values.
-    // We provide CLAUDE_PLUGIN_ROOT = archivePath (as the install would).
-    // We provide CLAUDE_PROJECT_DIR = userProjectDir (as CC would for the user).
     const installEnv = {
-      ...process.env, // inherit PATH etc.
+      ...process.env,
       CLAUDE_PLUGIN_ROOT: archivePath,
       CLAUDE_PROJECT_DIR: userProjectDir,
     };
 
-    const resolvedEnv = {};
-    for (const [k, v] of Object.entries(rawEnv)) {
-      resolvedEnv[k] = expandEnvToken(v, installEnv);
+    // Pick ephemeral port — proves CANON_DAEMON_PORT path (#356 analog for url).
+    ephemeralPort = await pickEphemeralPort();
+    const port = ephemeralPort;
+    const tokenFile = join(daemonTmpDir, "canon-mcp-token");
+    await prepareTokenFile(tokenFile);
+
+    // Expand url: must contain the ephemeral port (not :3142).
+    const expandedUrl = expandEnvToken(rawUrl, { ...installEnv, CANON_DAEMON_PORT: String(port) });
+    if (expandedUrl.includes("${")) {
+      throw new Error(
+        `[install-sim] FAIL: url still contains unresolved \${...} after expansion: ${expandedUrl}. ` +
+          `This is the #356 analog for the HTTP url field — check .mcp.json and installEnv.`,
+      );
     }
+    if (!expandedUrl.includes(`:${port}`)) {
+      throw new Error(
+        `[install-sim] FAIL: expanded url "${expandedUrl}" does not contain the ephemeral port ${port}. ` +
+          `CANON_DAEMON_PORT expansion may have failed.`,
+      );
+    }
+    console.log(`[install-sim] Expanded url: ${expandedUrl}`);
 
-    // Build spawn params. Args are VERBATIM — no ${...} expansion.
-    // On the current base (pre-#356-fix), rawArgs = ["${CLAUDE_PLUGIN_ROOT:-.}/mcp-server/boot.sh"]
-    // which bash will receive as a literal path → file not found → boot fails.
-    const spawnParams = {
-      command,
-      args: rawArgs, // VERBATIM — do NOT expand
-      env: {
-        ...installEnv,
-        ...resolvedEnv,
-      },
-      cwd: userProjectDir, // spawn from non-repo user project dir
-    };
+    // Boot daemon on the ephemeral port.
+    ({ proc } = await startTestDaemon({ archivePath, userProjectDir, port, tokenFile }));
+    await waitForHealth(port);
 
-    console.log(`[install-sim] Spawn cwd: ${spawnParams.cwd}`);
-    console.log(`[install-sim] CLAUDE_PLUGIN_ROOT in env: ${spawnParams.env.CLAUDE_PLUGIN_ROOT}`);
-    console.log(`[install-sim] args (verbatim, not expanded): ${JSON.stringify(spawnParams.args)}`);
-
-    const result = await attemptHandshake(spawnParams, "normal");
+    const result = await runHttpSubTest({
+      nodeModulesPath,
+      expandedUrl,
+      headersHelperRaw: rawHeadersHelper,
+      installEnvForHelper: installEnv,
+      tokenFile,
+      label: "normal",
+      helperCwd: userProjectDir,
+    });
 
     if (result.ok) {
       console.log(
         `[install-sim] PASS: initialize + listTools succeeded (${result.toolCount} tools).`,
       );
-      console.log(
-        "[install-sim] NOTE: If you see this on the pre-#356-fix base, something unexpected happened.",
-      );
       return 0;
     } else {
-      // On the pre-#356-fix base this is EXPECTED: ${CLAUDE_PLUGIN_ROOT:-.} is
-      // literally passed to bash as a script path, which doesn't exist.
-      console.error(`[install-sim] FAIL (expected on pre-#356-fix base): ${result.reason}`);
-      if (result.stderr) {
-        console.error("[install-sim] Server stderr output:");
-        console.error(result.stderr);
-      }
-      console.error(
-        "\n[install-sim] INTERPRETATION: This failure REPRODUCES issue #356.",
-        "\n  The .mcp.json args contain '${CLAUDE_PLUGIN_ROOT:-.}/mcp-server/boot.sh'",
-        "\n  which is passed VERBATIM to bash (CC does not expand ${} in args).",
-        "\n  bash receives the literal string as a script path → file not found.",
-        "\n  EXPECTED STATUS: This will PASS once PR #356 merges (fixing .mcp.json",
-        "\n  to use a self-resolving BASH_SOURCE path instead of the ${} token).",
-      );
+      console.error(`[install-sim] FAIL: ${result.reason}`);
       return 1;
     }
   } finally {
+    if (proc) {
+      const { portLeaked } = await teardownDaemon(proc, ephemeralPort);
+      if (portLeaked) {
+        console.error("[install-sim] WARNING: port may be leaked — check ephemeral port above.");
+      }
+    }
+    await cleanupDaemonTempDir(daemonTmpDir);
     await cleanup();
   }
 }
@@ -491,76 +390,102 @@ async function runNormalMode() {
 // ── Self-check mode ──────────────────────────────────────────────────────────
 
 /**
- * Self-verification: proves the harness correctly catches the #356 bug form
- * AND passes the fixed form.
+ * Self-verification: proves the harness correctly catches the HTTP #356 analog
+ * AND passes the fixed HTTP form.
  *
- * Sub-test 1 (BROKEN form, must FAIL):
- *   Synthetic .mcp.json with ${CLAUDE_PLUGIN_ROOT:-.} in args → handshake must fail.
- *   If it passes, the harness is papering over #356 — itself a defect.
+ * One daemon is booted and shared between both sub-tests for efficiency.
  *
- * Sub-test 2 (FIXED form, must SUCCEED):
- *   Synthetic .mcp.json with the actual resolved archive path in args →
- *   handshake must succeed (proves the harness works when the install is correct).
+ * Sub-test 1 — BROKEN form (must FAIL):
+ *   Clean url (correct) + UNRESOLVED headersHelper (CLAUDE_PLUGIN_ROOT unset →
+ *   ${CLAUDE_PLUGIN_ROOT:-.} → "." → helper path under cwd, not found →
+ *   runHeadersHelper returns { ok: false } → no Authorization → connection FAILS).
+ *   This is Probe C from PROBE-FINDINGS.md. If this SUCCEEDS, the harness is
+ *   papering over the #356 HTTP analog → harness defect → exit 1.
+ *
+ * Sub-test 2 — FIXED form (must SUCCEED):
+ *   Clean url + resolved headersHelper (CLAUDE_PLUGIN_ROOT=archivePath) +
+ *   valid throwaway token → handshake SUCCEEDS, non-empty tools.
+ *   This is Probe A from PROBE-FINDINGS.md.
+ *
+ * Sub-test 3 — WRONG-PORT form (optional, Codex P2 class, must FAIL):
+ *   Hardcoded wrong port in url (3142) while daemon is on the ephemeral port →
+ *   connection FAILS. Validates the Codex P2 fix (${CANON_DAEMON_PORT:-3142}).
  */
 async function runSelfCheck() {
-  console.log("\n[install-sim] === SELF-CHECK MODE ===");
-  console.log("[install-sim] Verifying the harness correctly catches and passes the #356 forms...");
+  console.log("\n[install-sim] === SELF-CHECK MODE (HTTP transport) ===");
+  console.log("[install-sim] Verifying harness catches HTTP ${...} regression classes...");
 
   const { archivePath, userProjectDir, cleanup } = await setupInstallEnv();
-
+  const nodeModulesPath = findNodeModules();
+  const daemonTmpDir = await makeDaemonTempDir();
+  const tokenFile = join(daemonTmpDir, "canon-mcp-token");
+  let proc = null;
+  let selfCheckPort = 0;
   let passed = true;
 
   try {
+    assertNotRepoCwd(userProjectDir);
+    await prepareTokenFile(tokenFile);
+
+    const port = await pickEphemeralPort();
+    selfCheckPort = port;
+    ({ proc } = await startTestDaemon({ archivePath, userProjectDir, port, tokenFile }));
+    await waitForHealth(port);
+
     const installEnv = {
       ...process.env,
       CLAUDE_PLUGIN_ROOT: archivePath,
       CLAUDE_PROJECT_DIR: userProjectDir,
     };
+    const expandedUrl = expandEnvToken(
+      "http://127.0.0.1:${CANON_DAEMON_PORT:-3142}/mcp",
+      { ...installEnv, CANON_DAEMON_PORT: String(port) },
+    );
 
-    // ── Sub-test 1: BROKEN form — token in args (pre-#356) ───────────────────
-    console.log("\n[install-sim][self-check/1] BROKEN form: ${CLAUDE_PLUGIN_ROOT:-.} in args");
-    console.log("[install-sim][self-check/1] Expected: FAIL (harness must catch #356)");
+    // Sub-test 1: BROKEN form — unresolved headersHelper (Probe C / #356 HTTP analog).
+    console.log("\n[install-sim][self-check/1] BROKEN: unresolved headersHelper → no auth");
+    console.log("[install-sim][self-check/1] Expected: FAIL");
 
-    const brokenParams = {
-      command: "bash",
-      // CRITICAL: literal ${CLAUDE_PLUGIN_ROOT:-.} token in args — NOT expanded.
-      // This is the pre-#356 form. bash receives this as a literal script path.
-      args: ["${CLAUDE_PLUGIN_ROOT:-.}/mcp-server/boot.sh"],
-      env: installEnv,
-      cwd: userProjectDir,
-    };
+    const brokenEnv = { ...installEnv };
+    delete brokenEnv.CLAUDE_PLUGIN_ROOT; // Force :- default to resolve to cwd "."
+    const rawHelperTemplate = "${CLAUDE_PLUGIN_ROOT:-.}/mcp-server/mcp-auth-headers.sh";
 
-    const brokenResult = await attemptHandshake(brokenParams, "self-check/broken");
+    const brokenResult = await runHttpSubTest({
+      nodeModulesPath,
+      expandedUrl,
+      headersHelperRaw: rawHelperTemplate,
+      installEnvForHelper: brokenEnv,
+      tokenFile,
+      label: "self-check/broken",
+      helperCwd: userProjectDir, // relative "." resolves against userProjectDir (no mcp-server/ there)
+    });
 
     if (brokenResult.ok) {
       console.error(
-        "[install-sim][self-check/1] HARNESS DEFECT: BROKEN form SUCCEEDED — " +
-          "the harness is papering over #356. The token was somehow resolved " +
-          "(check: did args expansion sneak in?). This is a harness bug.",
+        "[install-sim][self-check/1] HARNESS DEFECT: BROKEN form SUCCEEDED. " +
+          "The harness is papering over the HTTP #356 analog (headersHelper not found " +
+          "should mean no auth → connection fails). This is a harness bug.",
       );
       passed = false;
     } else {
       console.log(
-        `[install-sim][self-check/1] PASS: BROKEN form correctly FAILED. ` +
-          `Reason: ${brokenResult.reason}`,
+        `[install-sim][self-check/1] PASS: BROKEN form correctly FAILED. Reason: ${brokenResult.reason}`,
       );
     }
 
-    // ── Sub-test 2: FIXED form — resolved path in args ────────────────────────
-    console.log("\n[install-sim][self-check/2] FIXED form: resolved path in args");
-    console.log("[install-sim][self-check/2] Expected: SUCCEED (harness passes clean install)");
+    // Sub-test 2: FIXED form — resolved headersHelper + valid token (Probe A).
+    console.log("\n[install-sim][self-check/2] FIXED: resolved headersHelper + valid token");
+    console.log("[install-sim][self-check/2] Expected: SUCCEED");
 
-    const fixedBootPath = join(archivePath, "mcp-server", "boot.sh");
-    const fixedParams = {
-      command: "bash",
-      // Fixed form: the path is fully resolved at spawn time — no shell tokens.
-      // This is what a correct .mcp.json would produce after #356 fix.
-      args: [fixedBootPath],
-      env: installEnv,
-      cwd: userProjectDir,
-    };
-
-    const fixedResult = await attemptHandshake(fixedParams, "self-check/fixed");
+    const fixedResult = await runHttpSubTest({
+      nodeModulesPath,
+      expandedUrl,
+      headersHelperRaw: rawHelperTemplate,
+      installEnvForHelper: installEnv, // CLAUDE_PLUGIN_ROOT set → resolves correctly
+      tokenFile,
+      label: "self-check/fixed",
+      helperCwd: userProjectDir,
+    });
 
     if (fixedResult.ok) {
       console.log(
@@ -570,26 +495,56 @@ async function runSelfCheck() {
       console.error(
         `[install-sim][self-check/2] FAIL: FIXED form failed — ${fixedResult.reason}`,
       );
-      if (fixedResult.stderr) {
-        console.error("[install-sim][self-check/2] Server stderr:");
-        console.error(fixedResult.stderr);
-      }
-      console.error(
-        "[install-sim][self-check/2] DIAGNOSIS: The fixed form should always succeed.",
-        "Check that mcp-server/node_modules is installed and CLAUDE_PLUGIN_ROOT points",
-        "to the archive path containing mcp-server/boot.sh.",
-      );
       passed = false;
     }
+
+    // Sub-test 3: WRONG-PORT form (Codex P2 — optional, low cost).
+    console.log("\n[install-sim][self-check/3] WRONG-PORT: hardcoded :3142 (Codex P2 class)");
+    console.log("[install-sim][self-check/3] Expected: FAIL to connect");
+
+    const wrongPortUrl = "http://127.0.0.1:3142/mcp";
+    const headerResult = runHeadersHelper(
+      resolveHeadersHelper(rawHelperTemplate, installEnv, expandEnvToken),
+      { ...installEnv, CANON_MCP_TOKEN_FILE: tokenFile },
+      userProjectDir,
+    );
+
+    if (headerResult.ok) {
+      const wrongPortResult = await attemptHttpHandshake({
+        url: wrongPortUrl,
+        headers: headerResult.headers,
+        nodeModulesPath,
+        timeoutMs: 5_000, // shorter timeout for the wrong-port case
+      });
+      if (!wrongPortResult.ok) {
+        console.log(
+          `[install-sim][self-check/3] PASS: Wrong-port form correctly FAILED (${wrongPortResult.reason}).`,
+        );
+      } else {
+        console.error(
+          "[install-sim][self-check/3] UNEXPECTED: Wrong-port form SUCCEEDED. " +
+            "Is a daemon running on :3142? Skipping as inconclusive (not fatal).",
+        );
+        // Not fatal — a real daemon on :3142 would cause this; don't fail the build over it.
+      }
+    } else {
+      console.error(
+        `[install-sim][self-check/3] SKIP: could not get auth header for wrong-port test: ${headerResult.reason}`,
+      );
+    }
   } finally {
+    if (proc) {
+      await teardownDaemon(proc, selfCheckPort);
+    }
+    await cleanupDaemonTempDir(daemonTmpDir);
     await cleanup();
   }
 
   if (passed) {
     console.log(
       "\n[install-sim][self-check] ALL CHECKS PASSED.",
-      "\n  • BROKEN form correctly fails (harness catches #356).",
-      "\n  • FIXED form correctly succeeds (harness passes clean install).",
+      "\n  • BROKEN form correctly fails (harness catches HTTP #356 analog).",
+      "\n  • FIXED form correctly succeeds (harness passes clean HTTP install).",
     );
     return 0;
   } else {

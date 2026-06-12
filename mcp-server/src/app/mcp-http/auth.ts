@@ -16,7 +16,7 @@
  */
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -92,14 +92,43 @@ export async function rereadToken(tokenPath: string): Promise<TokenResult> {
 }
 
 /**
+ * Writes `token` to `tokenPath` using O_EXCL (exclusive create).
+ *
+ * - `flag:"wx"` = O_CREAT|O_EXCL|O_WRONLY — fails with EEXIST if ANY path
+ *   already exists, including a pre-planted symlink (never follows it).
+ * - On success: explicit `chmod(0o600)` applied (umask-safe).
+ * - On EEXIST: re-reads the existing file via `rereadToken`; returns it if
+ *   valid, or fails closed with `{ ok: false }`. NEVER silently overwrites.
+ * - Other errors are re-thrown so the caller's outer catch can log them.
+ */
+async function writeExclusiveToken(tokenPath: string, token: string): Promise<TokenResult> {
+  try {
+    // { flag, mode } — sorted keys (biome useSortedKeys)
+    await writeFile(tokenPath, token, { flag: "wx", mode: 0o600 });
+    // writeFile mode is umask-masked — explicit chmod ensures 0600 regardless of umask
+    await chmod(tokenPath, 0o600);
+    return { ok: true, token };
+  } catch (err: unknown) {
+    const nodeErr = err as NodeJS.ErrnoException;
+    if (nodeErr.code !== "EEXIST") throw err;
+    // A file appeared between the ENOENT read and this exclusive create
+    // (race or pre-plant). Re-read and return if valid; fail closed otherwise.
+    const reread = await rereadToken(tokenPath);
+    if (reread.ok) return reread;
+    const reason = `token path ${tokenPath} exists but is unreadable/invalid`;
+    process.stderr.write(`Canon MCP ERROR: ${reason}\n`);
+    return { error: reason, ok: false };
+  }
+}
+
+/**
  * Loads the token from `tokenPath`, or creates a new one if the file is absent
  * or has empty/whitespace content.
  *
  * On create:
- * - `mkdir -p` parent directory
+ * - `mkdir -p` parent directory at mode 0700 + explicit `chmod 0700` (umask-safe)
  * - Generate 32 random bytes → 64-char hex string
- * - `writeFile(..., { mode: 0o600 })` then explicit `chmod(path, 0o600)`
- *   (writeFile mode is umask-masked; explicit chmod is umask-safe)
+ * - Exclusive `writeFile(..., { flag:"wx", mode: 0o600 })` then `chmod(0o600)`
  *
  * Returns `{ ok: false, error }` for any unrecoverable fs error.
  * Callers MUST serve 503 and never fall through to the MCP route.
@@ -107,19 +136,22 @@ export async function rereadToken(tokenPath: string): Promise<TokenResult> {
  * @param tokenPath - Absolute path to the token file.
  */
 export async function loadOrCreateToken(tokenPath: string): Promise<TokenResult> {
-  // Attempt to read existing file
+  // Attempt to read existing file.
+  // emptyFile=true means we fell through because content was empty/whitespace
+  // (not ENOENT). The create branch removes the placeholder before the O_EXCL
+  // write so it gets a clean ENOENT rather than a spurious EEXIST.
+  let emptyFile = false;
   try {
     const existing = await readFile(tokenPath, "utf8");
     const trimmed = existing.trim();
     if (trimmed.length > 0) {
-      // Valid existing token
       return { ok: true, token: trimmed };
     }
     // Fall through to regenerate — treat empty/whitespace as absent
+    emptyFile = true;
   } catch (err: unknown) {
     const nodeErr = err as NodeJS.ErrnoException;
     if (nodeErr.code !== "ENOENT") {
-      // Read failed for a reason other than "file absent" — log and fail closed
       const message = err instanceof Error ? err.message : String(err);
       process.stderr.write(`Canon MCP ERROR: could not read token file ${tokenPath}: ${message}\n`);
       return { error: message, ok: false };
@@ -130,15 +162,20 @@ export async function loadOrCreateToken(tokenPath: string): Promise<TokenResult>
   // Create new token
   try {
     const parentDir = dirname(tokenPath);
-    await mkdir(parentDir, { recursive: true });
+    // mkdir mode only applies to newly-created dirs; a pre-existing dir keeps its mode.
+    // The explicit chmod hardens a pre-existing world-traversable dir (umask-safe).
+    await mkdir(parentDir, { mode: 0o700, recursive: true });
+    await chmod(parentDir, 0o700);
+
+    // Remove a known-empty placeholder so the exclusive write gets a clean ENOENT.
+    if (emptyFile) {
+      await unlink(tokenPath).catch(() => {
+        // Concurrent deletion is fine — O_EXCL handles the resulting state correctly.
+      });
+    }
 
     const token = randomBytes(32).toString("hex");
-
-    // writeFile mode is umask-masked — explicit chmod ensures 0600 regardless of umask
-    await writeFile(tokenPath, token, { mode: 0o600 });
-    await chmod(tokenPath, 0o600);
-
-    return { ok: true, token };
+    return await writeExclusiveToken(tokenPath, token);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     process.stderr.write(`Canon MCP ERROR: could not create token file ${tokenPath}: ${message}\n`);
