@@ -4,6 +4,7 @@ import {
   finalizeWorkspace,
   logStep,
 } from "@features/orchestration/tools/orchestration-journal.ts";
+import { writeOrchestratorCheckpoint } from "@features/orchestration/tools/orchestrator-checkpoint.ts";
 import { reconcileWorkspace } from "@features/orchestration/tools/reconcile-workspace.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -221,6 +222,31 @@ function registerGetDecisions(server: McpServer): void {
   );
 }
 
+function registerWriteOrchestratorCheckpoint(server: McpServer): void {
+  server.registerTool(
+    "write_orchestrator_checkpoint",
+    {
+      description:
+        "Write a derived compact resume-state snapshot to ${workspace}/checkpoint.md " +
+        "(current/completed/pending steps + recent decisions + next action). " +
+        "Best-effort-observable: returns a ToolResult error on write failure (never silent). " +
+        "Refresh after each completed step (alongside log_step(...completed)) and at each HITL gate.",
+      inputSchema: {
+        next_action: z
+          .string()
+          .optional()
+          .describe(
+            "Explicit next-action hint. If absent, derived from the first non-terminal journal step.",
+          ),
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    gatedWrapHandler(async (input, extra) =>
+      writeOrchestratorCheckpoint({ ...input, projectDir: resolveScope(extra) }),
+    ),
+  );
+}
+
 export function registerJournalTools(server: McpServer): void {
   registerLogStep(server);
   registerBatchLogSteps(server);
@@ -228,4 +254,5 @@ export function registerJournalTools(server: McpServer): void {
   registerReconcileWorkspace(server);
   registerLogDecision(server);
   registerGetDecisions(server);
+  registerWriteOrchestratorCheckpoint(server);
 }
