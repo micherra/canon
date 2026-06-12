@@ -12,7 +12,7 @@ build: "separate-canon-internal-conventions-from-the-universalshipped-principle"
 
 Canon's shipped `principles/` library had accumulated ~24 Canon-internal conventions (scoped exclusively to `mcp-server/**`, `hooks/**`, `templates/**`, `agents/*.md`, `principles/**`) that can never match a file in an adopter's project. The project-local overlay `.canon/principles/` and its merge loader (`loadAllPrinciples`, project-local-wins) already existed and worked, but the universal-vs-project-specific routing was an unenforced judgment call with no mechanical guard. We needed a tier signal that (a) marks each principle's portability and (b) lets a mechanical lint catch mis-routing — without changing the loader or the release packaging.
 
-A subtlety forces the decision: `.canon/**` is gitignored, so physical location ALREADY determines what ships (anything in `.canon/` is untracked and never installed). The question is whether to introduce a `portable` flag at all, and if so, what authority it carries relative to location.
+A subtlety forces the decision: physical location in `.canon/principles/` ALREADY determines what adopters receive. The principle loader (`loadAllPrinciples` in `mcp-server/src/shared/matcher.ts:378-379`) reads the SHIPPED `principles/` from the plugin-install directory plus the ADOPTER'S OWN `projectDir/.canon/principles/` — it never reads the plugin-install directory's own `.canon/principles/`. So adopters do not receive relocated Canon-internal files because of the loader's `projectDir`-vs-`pluginDir` path resolution (not because of gitignore — the files are git-tracked in this repo). The question is whether to introduce a `portable` flag at all, and if so, what authority it carries relative to location.
 
 ## Options Considered
 

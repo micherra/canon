@@ -26,6 +26,27 @@ import { gatedWrapHandler, pluginDir, registerToolWithUi, resolveScope } from ".
 export type { GetContextOutput, SlimmedDriftOutput };
 export { buildSlimmedOutput, handleGetContext };
 
+/**
+ * Canonical list of all valid wiki_lint check names.
+ * Exported so tests can validate the zod schema's enum membership against the
+ * CheckName union in wiki-lint.ts — the two must stay in sync.
+ */
+export const WIKI_LINT_CHECK_NAMES = [
+  "cited_paths",
+  "contradictions",
+  "duplicate_titles",
+  "glossary_consistency",
+  "missing_examples",
+  "misrouted_principles",
+  "orphan_principles",
+  "scope_layers",
+  "scope_tags",
+  "index_drift",
+  "stale_refs",
+] as const;
+
+export type WikiLintCheckName = (typeof WIKI_LINT_CHECK_NAMES)[number];
+
 function registerCompositeContextTool(server: McpServer): void {
   server.registerTool(
     "get_context",
@@ -177,25 +198,13 @@ function registerWikiLintTool(server: McpServer): void {
     "wiki_lint",
     {
       description:
-        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, invalid scope.layers values, invalid scope.tags values outside the KG computed-tag vocabulary, glossary self-consistency (duplicate or ambiguous CONTEXT.md terms), and index_drift (inventory block mismatch or missing sentinel markers in sibling artifact-class indexes).",
+        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, invalid scope.layers values, invalid scope.tags values outside the KG computed-tag vocabulary, glossary self-consistency (duplicate or ambiguous CONTEXT.md terms), index_drift (inventory block mismatch or missing sentinel markers in sibling artifact-class indexes), duplicate_titles (two principles sharing the same title), and misrouted_principles (portable:false principles living in the shipped principles/ tree).",
       inputSchema: {
         checks: z
-          .array(
-            z.enum([
-              "cited_paths",
-              "contradictions",
-              "glossary_consistency",
-              "missing_examples",
-              "orphan_principles",
-              "scope_layers",
-              "scope_tags",
-              "index_drift",
-              "stale_refs",
-            ]),
-          )
+          .array(z.enum(WIKI_LINT_CHECK_NAMES))
           .optional()
           .describe(
-            "Checks to run (default: 8 checks excluding index_drift — pass ['index_drift'] explicitly to run it). Options: cited_paths, contradictions, glossary_consistency, index_drift, missing_examples, orphan_principles, scope_layers, scope_tags, stale_refs",
+            "Checks to run (default: 8 checks excluding index_drift — pass ['index_drift'] explicitly to run it). Options: cited_paths, contradictions, duplicate_titles, glossary_consistency, index_drift, missing_examples, misrouted_principles, orphan_principles, scope_layers, scope_tags, stale_refs",
           ),
       },
     },

@@ -56,7 +56,7 @@ When the detection result is **installed-copy**, skip this test entirely — all
 
 Every principle file MUST carry a top-level `portable: true|false` frontmatter field. The flag records authorial intent; the physical location enforces it:
 
-- **`portable: false`** → save destination is `.canon/principles/<sev>/` (gitignored, never ships with the plugin).
+- **`portable: false`** → save destination is `.canon/principles/<sev>/`. These files are git-tracked in this repo but adopters never receive them: the principle loader (`loadAllPrinciples` in `mcp-server/src/shared/matcher.ts:378-379`) reads `pluginDir/principles/` plus the adopter's own `projectDir/.canon/principles/` — it does not read the plugin-install directory's `.canon/principles/`.
 - **`portable: true`** → save destination is `principles/<sev>/` (tracked, ships via release).
 
 The flag and the physical location MUST agree. A `portable: false` file under the shipped `principles/` tree is a `wiki_lint misrouted_principles` failure and requires relocation. The check name is **`misrouted_principles`** in `mcp-server/src/features/diagnostics/services/wiki-lint-principle-tier.ts`.
