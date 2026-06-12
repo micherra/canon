@@ -2,7 +2,7 @@
   "mcpServers": {
     "canon": {
       "type": "http",
-      "url": "http://127.0.0.1:3142/mcp",
+      "url": "http://127.0.0.1:${CANON_DAEMON_PORT:-3142}/mcp",
       "headersHelper": "${CLAUDE_PLUGIN_ROOT:-.}/mcp-server/mcp-auth-headers.sh"
     }
   }
