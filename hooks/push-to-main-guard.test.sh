@@ -865,6 +865,24 @@ unset _bm_wrapper_input _bm_wrapper_exit
 
 echo ""
 # ---------------------------------------------------------------------------
+# BYPASS MATRIX completeness — gap-fill rows (tester-added 2026-06-12)
+# Rows 5 and 15 from the DESIGN.md threat model were verified to block but
+# lacked explicit named test entries. Added here for full matrix coverage.
+# ---------------------------------------------------------------------------
+echo "-- BYPASS MATRIX (gap-fill): rows 5 and 15 explicit coverage --"
+
+# Row 5: git push origin refs/heads/main (standalone, not HEAD:refs/heads/main)
+# SAFE_REFSPEC_RE strips 'refs/heads/' prefix → dst==main → BLOCK
+run_test "git push origin refs/heads/main (row 5 — standalone refs/heads/ form → block)" \
+  2 "$(make_input 'git push origin refs/heads/main')"
+
+# Row 15: abbreviated/aliased remote (e.g. 'o' for 'origin')
+# The remote name is irrelevant to refspec matching; dst==main regardless → BLOCK
+run_test "git push o main (row 15 — abbreviated remote 'o', dst==main → block)" \
+  2 "$(make_input 'git push o main')"
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
