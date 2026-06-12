@@ -139,6 +139,27 @@ function selfTestContainmentTripwire() {
     assertNoLeakedArtifacts(realNmDir); // must not throw
 
     console.log("[install-sim] Guard 3 self-test: all containment assertions passed.");
+
+    // Test 5: .gitignore covers node_modules symlink form (not just directory form).
+    // The repo .gitignore line 1 "node_modules/" (trailing slash) only matches directories.
+    // A symlink named "node_modules" is NOT a directory and would slip through.
+    // This check asserts the SLASH-LESS rule "node_modules" is present so that
+    // `git check-ignore mcp-server/node_modules` returns a match (exit 0).
+    // FAIL condition: if only "node_modules/" exists in .gitignore, `git check-ignore`
+    // exits 1 for a symlink path — meaning agents could stage the symlink via `git add -A`.
+    try {
+      execSync('git check-ignore -q mcp-server/node_modules', {
+        cwd: REPO_ROOT,
+        stdio: 'pipe',
+      });
+      console.log("[install-sim] .gitignore symlink coverage check: mcp-server/node_modules is git-ignored (PASS).");
+    } catch {
+      throw new Error(
+        "[install-sim] .gitignore SYMLINK GAP DETECTED: `git check-ignore mcp-server/node_modules` returned no match.\n" +
+        "The .gitignore only has 'node_modules/' (directory form) — symlinks are NOT directories and slip through.\n" +
+        "Fix: add 'node_modules' (no trailing slash) to .gitignore so both directories and symlinks are covered."
+      );
+    }
   } finally {
     rmSyncFs(tmpRoot, { recursive: true, force: true });
   }
