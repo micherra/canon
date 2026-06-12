@@ -46,10 +46,10 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | decompose-by-domain-not-layer.md | Decompose by Business Domain, Not Technical Layer |
 | deep-modules.md | Deep Modules, Simple Interfaces |
 | define-errors-out-of-existence.md | Define Errors Out of Existence |
-| disk-is-source-of-truth-on-resume.md | Unit-Loop Agents Externalize Progress Durably and Reconcile on Resume |
 | deploy-frontend-modules-independently.md | Deploy Frontend Modules Independently |
 | design-for-self-healing.md | Design for Automatic Recovery |
 | design-tokens-as-style-contract.md | Design Tokens Are the Style Contract |
+| disk-is-source-of-truth-on-resume.md | Unit-Loop Agents Externalize Progress Durably and Reconcile on Resume |
 | doc-trim-fact-preservation.md | Doc-Trim Builds Require a Reviewer Fact-Preservation Audit |
 | enrichment-pipeline-convention.md | Enrichment Pipeline Follows DAO + Service + Fail-Open Wrapper Shape |
 | errors-are-values.md | Errors Are Values, Not Surprises |
