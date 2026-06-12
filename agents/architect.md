@@ -214,6 +214,10 @@ Evaluate approaches in priority order:
 
 For simple tasks, propose one approach with clear rationale.
 
+**Design checklist (apply per module introduced or modified):**
+- **Deep-module sizing** (`deep-modules`): is the public interface small relative to the functionality? Reject shallow pass-through modules.
+- **Design-the-interface-first / grey-box** (`grey-box-module`): specify the public interface, types, and acceptance tests in the design BEFORE the engineer fills the body — the test suite is the trust contract.
+
 ### Step 2a: Empirical Candidate Comparison
 
 When two or more design candidates are both plausible and have non-obvious tradeoffs — or when one has a potential silent failure mode — build and probe both before recommending. Do not argue from first principles when a probe is cheaper.

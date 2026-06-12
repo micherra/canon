@@ -46,7 +46,7 @@ vi.mock("node:fs", async (importOriginal) => {
   return { ...actual, rmdirSync: vi.fn(actual.rmdirSync) };
 });
 
-vi.mock("@features/history/services/archive-service.ts", () => ({
+vi.mock("@platform/storage/archive/archive-service.ts", () => ({
   archiveWorkspace: vi.fn().mockResolvedValue({
     archive_path: "/tmp/archive",
     archived: true,

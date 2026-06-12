@@ -31,15 +31,19 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `write-test-report.ts` | `write_test_report` |
 
 **`services/`** — Business logic backing tools.
-<!-- last-updated: 2026-06-05 (workspace-cleanup.ts: diff-stat exports + tryAppendAnalytics wiring; janitor: prune_husk_dirs task added) -->
+<!-- last-updated: 2026-06-11 (cliff-ledger.ts added; workspace-cleanup.ts: cliff-ledger cleanup at finalize) -->
 
 | File | Responsibility |
 |------|---------------|
 | `artifact-matching.ts` | Pure artifact-path resolution — `artifactExists`, `scanArtifactList`, `classifyArtifact`, `scanArtifacts` (+ `ArtifactScan` type), `computeSummaryGlobFallback`. Extracted from `orchestration-journal.ts` for line-count compliance + compute/effect separation. |
+| `cliff-ledger.ts` | Per-session surface-once de-dupe ledger for cliff detection — `readLedger`, `appendLedger`, `filterUnsurfaced`, `cliffSignature`; stored at `${workspace}/.cliff-surfaced.json`; fail-open (ENOENT → empty set); atomic rename write; used by loop runner to suppress repeated cliff surfacing across ticks. <!-- last-updated: 2026-06-11 --> |
 | `janitor.ts` | `runJanitor(projectDir)` — gate checks (enabled, time, lock), then `runJanitorTasks`: WAL checkpoint, prune worktrees, prune workspaces, prune empty husk dirs under `.canon/workspaces/`; returns `JanitorResult` <!-- last-updated: 2026-06-05 --> |
 | `transcript-transformer.ts` | `transformClaudeCodeTranscript(entries)` — pure; converts CC JSONL entries to Canon `TranscriptEntry[]`; exports `ClaudeCodeEntry` type |
 | `review-confidence-adapter.ts` | Pure compute function; returns `ConfidenceAnnotation` for a violation from severity_tier, violation_history, path_effects, base_sample signals; zero-confidence for undefined file_path |
-| `workspace-cleanup.ts` | Workspace cleanup + finalize-time diff stats: exports `DiffStatFields`, `DiffStatSeams` (bundles `gitDiffFn` + `gitLsFilesFn` seams), `parseShortstat` (pure), `tryComputeDiffStats` (single-rev `git diff --shortstat {base}` measures worktree state: committed + staged + unstaged; untracked files counted via `git ls-files --others`, merged into `total_files_changed`, appended as `, N untracked` to `diff_stat`; `gitLsFilesFn` failure degrades gracefully to tracked-only); `tryAppendAnalytics(workspace, seams: DiffStatSeams = {})` spreads result into `FlowRunEntry` at finalize. <!-- last-updated: 2026-06-05 --> |
+| `workspace-cleanup.ts` | Workspace cleanup + finalize-time diff stats: exports `DiffStatFields`, `DiffStatSeams` (bundles `gitDiffFn` + `gitLsFilesFn` seams), `parseShortstat` (pure), `tryComputeDiffStats` (single-rev `git diff --shortstat {base}` measures worktree state: committed + staged + unstaged; untracked files counted via `git ls-files --others`, merged into `total_files_changed`, appended as `, N untracked` to `diff_stat`; `gitLsFilesFn` failure degrades gracefully to tracked-only); `tryAppendAnalytics(workspace, seams: DiffStatSeams = {})` spreads result into `FlowRunEntry` at finalize; also cleans up `.cliff-surfaced.json` ledger at finalize. <!-- last-updated: 2026-06-11 --> |
+| `area-memory-enrichment.ts` | `queryAreaObservations`, `formatAreaMemorySection`, `buildAreaMemorySection`; fail-open; queries drift.db area_observations for recent build context to inject into agent prompts. Relocated from `features/diagnostics/services/` (ADR-0006). |
+| `hot-file-detection.ts` | `detectHotFiles`, `formatHotFileSection`, `buildHotFileSection`; threshold ≥ 3 appearances in last 14 days; queries drift.db flow_runs to flag frequently-modified files. Relocated from `features/diagnostics/services/` (ADR-0006). |
+| `pitfall-enrichment.ts` | `queryDriftSignalPitfalls`, `queryErrorFixPitfalls`, `formatPitfallsSection`, `countPitfalls`, `buildPitfallsSection`; fail-open; queries drift.db for historical violation patterns and error→fix pairs. Relocated from `features/diagnostics/services/` (ADR-0006). |
 
 ## Contracts
 <!-- last-updated: 2026-06-02 (artifact-matching module: SUMMARY auto-discovery fallback) -->

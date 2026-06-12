@@ -1,4 +1,4 @@
-import { validateAndPersistCraftProfile } from "@features/pr-review/tools/store-pr-review.ts";
+import { validateAndPersistCraftProfile } from "@platform/storage/drift/craft-persistence.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { ReportInput, ReviewEntry } from "@shared/schema.ts";

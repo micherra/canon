@@ -17,9 +17,6 @@ Pure computation services backing `get_cross_run_analysis`. All functions are pu
 | `cross-run-patterns.ts` | Pattern-extraction helpers — `computePerformanceTrends`, `analyzePlannerPatterns`; pure functions over `FlowRunEntry` and `RunSummary` inputs |
 | `judge-weight.ts` | `computeOutcomeWeight(OutcomeSignals): number` — maps review outcome signals to a promotion weight clamped to `[0.4, 1.2]` (neutral = 1.0) |
 | `consolidate-policy.ts` | `decideWatchDisposition(watch, confidence): WatchDisposition` — rule engine for `.canon/proposed-learnings/` promotion/decay; `isWatchProposal(x)` named type guard |
-| `archive-service.ts` | Build-archive read/write utilities |
-| `run-summary-builder.ts` | Assembles `RunSummary` from archived artifacts |
-| `run-summary-extractors.ts` | Pure extractors for summary sub-fields |
 
 ## Invariants
 <!-- last-updated: 2026-06-08 -->

@@ -5,15 +5,17 @@
  * - /mcp returns 401 without Authorization header
  * - /mcp returns 503 when token is forced unavailable
  * - /health includes version matching package.json
- * - EADDRINUSE race: same version → process.exit(0) path tested via injection
  * - SIGTERM teardown: sessions drained + PID file removed
  * - PID filename is canon-daemon.pid (not canon-server.pid)
  * - Default port constant is 3142 (not 3141)
- * - startHttpServer default remains 3141 (port regression guard)
+ * - W6 Host-header guard on non-MCP routes
+ * - DEC-05: isHttpServerRunning() true + getHttpPort() returns daemon port after startDaemon
+ *
+ * F4 identity-proof tests and /identity auth gate tests live in daemon-identity.test.ts.
  */
 
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { createServer, type IncomingMessage } from "node:http";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import type { IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -337,74 +339,38 @@ describe("W6 — Host-header guard on non-MCP routes", () => {
 });
 
 // ---------------------------------------------------------------------------
-// EADDRINUSE: same version → exit(0) path (injection-based)
+// DEC-05 — daemon artifact-port wiring
+// (F4 identity probe + /identity auth gate tests moved to daemon-identity.test.ts)
 // ---------------------------------------------------------------------------
 
-describe("Daemon EADDRINUSE — same version exit(0)", () => {
-  it("resolves a same-version probe by calling process.exit(0) (via injection)", async () => {
-    // Set up a "fake existing daemon" on an ephemeral port that responds same version
-    const { readFile: rf } = await import("node:fs/promises");
-    const pkgPath = join(new URL("../../../package.json", import.meta.url).pathname);
-    const pkg = JSON.parse(await rf(pkgPath, "utf8")) as { version: string };
+describe("DEC-05 — getHttpPort() and isHttpServerRunning() in daemon mode", () => {
+  const TEST_DAEMON_PORT = 13211;
+  let tmpDir: string;
+  let tokenPath: string;
 
-    const fakePort = 13204;
-    const fakeServer = createServer((req: IncomingMessage, res) => {
-      if (req.url === "/health") {
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({ ok: true, port: fakePort, version: pkg.version, transport: "http" }),
-        );
-      } else {
-        res.writeHead(404);
-        res.end();
-      }
-    });
-
-    await new Promise<void>((resolve) => fakeServer.listen(fakePort, "127.0.0.1", resolve));
-
-    try {
-      // Import and test probeExistingDaemon directly
-      const { probeExistingDaemon } = await import("../daemon.ts");
-      const result = await probeExistingDaemon(fakePort, pkg.version, 2000);
-      expect(result).toBe("same-version");
-    } finally {
-      await new Promise<void>((resolve) => {
-        fakeServer.closeAllConnections();
-        fakeServer.close(() => resolve());
-      });
-    }
+  beforeAll(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-daemon-dec05-test-"));
+    tokenPath = join(tmpDir, "canon-mcp-token");
+    await writeFile(tokenPath, "test-token-dec05", { mode: 0o600 });
+    await chmod(tokenPath, 0o600);
+    await startDaemon({ port: TEST_DAEMON_PORT, pidDir: tmpDir, tokenPath });
   });
 
-  it("probeExistingDaemon returns different-version when version differs", async () => {
-    const fakePort = 13205;
-    const fakeServer = createServer((req: IncomingMessage, res) => {
-      if (req.url === "/health") {
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, port: fakePort, version: "0.0.0", transport: "http" }));
-      } else {
-        res.writeHead(404);
-        res.end();
-      }
-    });
-
-    await new Promise<void>((resolve) => fakeServer.listen(fakePort, "127.0.0.1", resolve));
-
-    try {
-      const { probeExistingDaemon } = await import("../daemon.ts");
-      const result = await probeExistingDaemon(fakePort, "1.2.3", 2000);
-      expect(result).toBe("different-version");
-    } finally {
-      await new Promise<void>((resolve) => {
-        fakeServer.closeAllConnections();
-        fakeServer.close(() => resolve());
-      });
-    }
+  afterAll(async () => {
+    await stopDaemon();
+    // Reset http-server module state so DEC-05 signal doesn't leak into other test suites
+    const { resetStateForTesting } = await import("../http-server.ts");
+    resetStateForTesting();
+    await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("probeExistingDaemon returns unreachable when connection refused", async () => {
-    const { probeExistingDaemon } = await import("../daemon.ts");
-    // Port 13299 should not be in use
-    const result = await probeExistingDaemon(13299, "2.6.0", 500);
-    expect(result).toBe("unreachable");
+  it("getHttpPort() returns the daemon port after startDaemon()", async () => {
+    const { getHttpPort } = await import("../http-server.ts");
+    expect(getHttpPort()).toBe(TEST_DAEMON_PORT);
+  });
+
+  it("isHttpServerRunning() returns true after startDaemon() (DEC-05 flag)", async () => {
+    const { isHttpServerRunning } = await import("../http-server.ts");
+    expect(isHttpServerRunning()).toBe(true);
   });
 });

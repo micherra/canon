@@ -5,7 +5,7 @@
  * All I/O-dependent collaborators are mocked with vi.mock.
  */
 
-import type { PresentArtifactResult } from "@features/orchestration/tools/present-artifact.ts";
+import type { PresentArtifactResult } from "@app/artifact-presentation.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UnifiedPrOutput } from "../tools/show-pr-impact.ts";
@@ -16,10 +16,10 @@ import type { UnifiedPrOutput } from "../tools/show-pr-impact.ts";
 
 vi.mock("../tools/show-pr-impact.ts");
 vi.mock("node:fs/promises");
-vi.mock("@features/orchestration/tools/present-artifact.ts");
+vi.mock("@app/artifact-presentation.ts");
 
 import { readFile } from "node:fs/promises";
-import { presentArtifact } from "@features/orchestration/tools/present-artifact.ts";
+import { presentArtifact } from "@app/artifact-presentation.ts";
 import { presentReview } from "../tools/present-review.ts";
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 
