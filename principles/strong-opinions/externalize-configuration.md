@@ -2,6 +2,7 @@
 id: externalize-configuration
 title: Externalize Environment-Specific Configuration
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - api

@@ -2,6 +2,7 @@
 id: secrets-never-in-code
 title: Secrets Must Never Appear in Source Code
 severity: rule
+portable: true
 scope:
   layers: []
 tags:

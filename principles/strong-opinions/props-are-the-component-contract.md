@@ -2,6 +2,7 @@
 id: props-are-the-component-contract
 title: Props Are the Component Contract
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - ui

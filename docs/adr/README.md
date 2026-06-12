@@ -47,3 +47,5 @@ Use `docs/adr/TEMPLATE.md` as the starting point for every new ADR. Copy it, fil
 | # | Title | Status | Date | Build |
 |---|-------|--------|------|-------|
 | [0001](0001-adr-template-placement.md) | ADR template lives at docs/adr/TEMPLATE.md and coexists with templates/design-decision.md | accepted | 2026-06-09 | close-the-adr-gap-the-architect-currently-writes-rich-design-decision |
+| [0002](0002-portable-flag-tier-signal.md) | portable: frontmatter flag is the tier signal; physical location is authoritative for shipping | accepted | 2026-06-11 | separate-canon-internal-conventions-from-the-universalshipped-principle |
+| [0003](0003-dedup-collision-not-semantic.md) | Duplicate-concept prevention uses title/ID/scope collision detection, not semantic_search | accepted | 2026-06-11 | separate-canon-internal-conventions-from-the-universalshipped-principle |

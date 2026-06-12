@@ -2,6 +2,7 @@
 id: no-hidden-side-effects
 title: No Hidden Side Effects
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:

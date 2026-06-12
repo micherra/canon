@@ -2,6 +2,7 @@
 id: validate-at-trust-boundaries
 title: Validate Data at Every Trust Boundary
 severity: rule
+portable: true
 scope:
   file_patterns:
     - "mcp-server/**"

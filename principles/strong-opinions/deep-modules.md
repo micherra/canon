@@ -2,6 +2,7 @@
 id: deep-modules
 title: Deep Modules, Simple Interfaces
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:

@@ -2,6 +2,7 @@
 id: fail-closed-by-default
 title: Fail Closed by Default
 severity: rule
+portable: true
 scope:
   layers:
     - api
