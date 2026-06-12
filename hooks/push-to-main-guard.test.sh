@@ -818,6 +818,81 @@ fi
 
 echo ""
 # ---------------------------------------------------------------------------
+# P1-SECURITY (CRITICAL): transparent-exec prefix + group-opener bypass
+#
+# These 8 payloads all pass the current guard (exit 0) but invoke
+# `git push origin main` at runtime. After the normalization fix they MUST
+# exit 2. Payloads contain $( literals — use direct printf/single-quotes,
+# NOT make_input, so the JSON reaches the hook without shell expansion.
+# ---------------------------------------------------------------------------
+echo "-- P1-SECURITY: transparent-exec + group-opener bypass (must block, exit 2) --"
+
+run_test 'env $(echo git) push origin main (transparent-exec — must block)' \
+  2 '{"command":"env $(echo git) push origin main"}'
+
+run_test 'command $(echo git) push origin main (transparent-exec — must block)' \
+  2 '{"command":"command $(echo git) push origin main"}'
+
+run_test 'exec $(echo git) push origin main (transparent-exec — must block)' \
+  2 '{"command":"exec $(echo git) push origin main"}'
+
+run_test 'nice $(echo git) push origin main (transparent-exec — must block)' \
+  2 '{"command":"nice $(echo git) push origin main"}'
+
+run_test 'timeout 5 $(echo git) push origin main (timeout+arg — must block)' \
+  2 '{"command":"timeout 5 $(echo git) push origin main"}'
+
+run_test 'stdbuf -o0 $(echo git) push origin main (stdbuf+flag — must block)' \
+  2 '{"command":"stdbuf -o0 $(echo git) push origin main"}'
+
+run_test '( $(echo git) push origin main ) (subshell group — must block)' \
+  2 '{"command":"( $(echo git) push origin main )"}'
+
+run_test '{ $(echo git) push origin main ; } (brace group — must block)' \
+  2 '{"command":"{ $(echo git) push origin main ; }"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# P1-SECURITY: FALSE-POSITIVE regression locks for transparent-exec fix
+#
+# These must stay exit 0 — they are inert commands (no git push) and must
+# not be broken by the normalization added for the CRITICAL fix above.
+# ---------------------------------------------------------------------------
+echo "-- P1-SECURITY PASSTHROUGH: false-positive regression locks (must pass, exit 0) --"
+
+# ls $(pwd) — ordinary non-git cmd with arg-position substitution
+run_test 'ls $(pwd) (arg-pos sub behind real cmd — must stay exit 0)' \
+  0 '{"command":"ls $(pwd)"}'
+
+# ln -s "$(realpath x)" mcp-server/node_modules — the original false-positive from watch_GGGGGGGG1
+run_test 'ln -s "$(realpath x)" mcp-server/node_modules (false-positive lock — must stay exit 0)' \
+  0 '{"command":"ln -s \"$(realpath x)\" mcp-server/node_modules"}'
+
+# a=$(echo git) push origin main — substitution is the assignment VALUE; command
+# word is empty → runtime rc=127 (no push). Keep current behavior (not forced-blocked).
+run_test 'a=$(echo git) push origin main (assignment value, empty cmd word — must stay exit 0)' \
+  0 '{"command":"a=$(echo git) push origin main"}'
+
+# "$(echo git)" push origin main — quoted form; already blocks via ambiguous-token
+# path (SECURITY.md LOW finding). Keep blocked — this is a regression lock.
+run_test '"$(echo git)" push origin main (quoted-cmdsub — already blocked via ambiguous-token, keep exit 2)' \
+  2 '{"command":"\"$(echo git)\" push origin main"}'
+
+# env non-git-cmd — transparent-exec prefix behind a real non-git command name
+# must NOT be false-blocked (env only becomes dangerous when paired with cmd-sub).
+run_test 'env ls /tmp (transparent-exec + real cmd, no cmd-sub — must stay exit 0)' \
+  0 '{"command":"env ls /tmp"}'
+
+# env VAR=val cmd — env with assignment prefix before a real literal command
+run_test 'env FOO=bar ls /tmp (env + assignment + real cmd — must stay exit 0)' \
+  0 '{"command":"env FOO=bar ls /tmp"}'
+
+# stacked prefixes with real command — env command ls (no cmd-sub)
+run_test 'env command ls /tmp (stacked prefixes + real cmd — must stay exit 0)' \
+  0 '{"command":"env command ls /tmp"}'
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
