@@ -22,7 +22,7 @@
 
 import { existsSync, lstatSync, readdirSync, rmdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { archiveWorkspace } from "@features/history/services/archive-service.ts";
+import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import { type JanitorConfig, loadJanitorConfig } from "@shared/lib/config.ts";
