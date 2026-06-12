@@ -1,12 +1,12 @@
 ---
-adr: "0003"
+adr: "0005"
 title: "Duplicate-concept prevention uses title/ID/scope collision detection, not semantic_search"
 status: accepted
 date: "2026-06-11"
 build: "separate-canon-internal-conventions-from-the-universalshipped-principle"
 ---
 
-# ADR-0003: Duplicate-concept prevention uses title/ID/scope collision detection, not semantic_search
+# ADR-0005: Duplicate-concept prevention uses title/ID/scope collision detection, not semantic_search
 
 ## Context
 

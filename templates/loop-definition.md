@@ -37,8 +37,11 @@ schedule:
 
   # Self-paced mode (Phase C — remove these lines for Phase A/B):
   # cadence_hint:
-  #   active: 5m           # [PHASE C] cadence when active
-  #   idle: 30m            # [PHASE C] cadence when idle
+  #   active: 5m           # [PHASE C] cadence when active; maps 1:1 to ScheduleWakeup delaySeconds
+  #   idle: 30m            # [PHASE C] cadence when idle; prefer active ≤ 270s (cache warm), idle ≥ 1200s
+  # max_wall: "2h"         # [PHASE C] optional; "0" or absent = bounded only by terminate conditions
+  #                        # max_wall is enforced in the tick body (no primitive argument) — the tick
+  #                        # tracks elapsed time/tick count and stops re-arming when max_wall exceeded
 
 state:
   scope: workspace         # workspace | session
@@ -63,7 +66,12 @@ surface:
 
 terminate:
   when:                    # [REQUIRED] at least one condition
-    - max_ticks_reached    # fires when tick count reaches schedule.max_ticks
+    - max_ticks_reached    # fires when tick count reaches schedule.max_ticks (interval mode)
+    # Self-paced terminate vocabulary (Phase C):
+    # - at_hitl_gate       # loop terminates when a HITL gate is opened (supervised mode)
+    # - at_finalize        # loop terminates when the workspace is finalized
+    # - on_cliff_surfaced  # loop terminates after surfacing a cliff (cliff concern self-terminates)
+    # - max_wall_reached   # loop terminates when max_wall elapsed time is exceeded (body-enforced)
 
 guardrails:
   mutates_build: false     # [REQUIRED] false = observe+surface only (STRONGLY recommended)
@@ -87,6 +95,12 @@ no per-loop branching should exist in the runner.
 4. Record the updated values for each field in `state.snapshot`.
 
 ### Diff against snapshot
+
+**First-tick semantics (ADR-0002):** The first tick establishes a baseline and surfaces
+nothing. A field with no prior value is never treated as a transition. Author transition
+rules assuming they fire only on a *change from a known prior* (tick 2+). If a loop must
+surface an already-true condition at arm time, that requires an explicit opt-in (not
+available in Phase C).
 
 Compare observed values against the last-seen snapshot (from the state file).
 
