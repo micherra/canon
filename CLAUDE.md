@@ -494,23 +494,37 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Loop Framework <!-- last-updated: 2026-06-11 -->
+## Loop Framework <!-- last-updated: 2026-06-12 -->
 
 Loops are Canon's managed periodic-observation artifact class. A loop is authored as
 `loops/<id>.md` (YAML frontmatter + action-prompt body), registered via `list_loops`,
 and dispatched by the orchestrator via `CronCreate` (interval loops) or `ScheduleWakeup`
 (self-paced loops).
 
-**Command registration:** `/canon:loop-tick` (and all `/canon:*` slash commands under `skills/canon/commands/`) are registered as harness plugin commands via the `commands` field in `.claude-plugin/plugin.json` (`"commands": ["./skills/canon/commands/"]`). Before this was added, NO `/canon:*` command was a registered harness slash command — they only worked as Read-and-execute runner bodies. Registration (via the manifest) is distinct from scheduling (via `CronCreate`); dc-06 is preserved.
+**Command registration:** `/canon:loop-tick` (and all `/canon:*` slash commands under `skills/canon/commands/`) are registered as harness plugin commands via the `commands` field in `.claude-plugin/plugin.json` (`"commands": ["./skills/canon/commands/"]`). `/canon:loop-tick` is the **registered-install convenience form** of the tick — it works when the command is live in the running session. The default documented dispatch is the self-contained inline prompt (see Resilient dispatch below), which works on both fresh and stale installs. Registration (via the manifest) is distinct from scheduling (via `CronCreate`); dc-06 is preserved.
+
+**Resilient dispatch (ADR-0008):** The canonical tick prompt for loop `<id>` is:
+```
+Run one tick of Canon loop "<id>": call get_loop_definition({ id: "<id>" }) to load its
+definition + body, then execute that body's observe → diff → surface → write → evaluate
+pipeline (the steps in skills/canon/commands/loop-tick.md), using the loop's state.path
+(substitute ${WORKSPACE}) for the prior snapshot. Read-only observation only (dc-06).
+```
+This inline prompt depends only on `get_loop_definition` — an always-available registered MCP
+tool — and therefore works on both fresh and stale plugin installs. There is no
+orchestrator-side probe for command registration, and no check-first branch is used; the
+inline form works uniformly, so no fallback logic is needed (Q1 inline-only decision, ADR-0008).
+`/canon:loop-tick <id>` (the slash command) is the registered-install convenience form;
+contributors must not "simplify" the inline dispatch back to a bare slash call.
 
 **Lifecycle-hook vocabulary:** `post-ship` | `on-long-dispatch` | `session-start`.
 At such a moment, the orchestrator calls:
 ```
 list_loops({ lifecycle_hook, tier })
 # → for each interval loop with firing_posture[tier] === "auto":
-CronCreate({ schedule: "<interval>", command: "/canon:loop-tick <id>", max: <max_ticks> })
+CronCreate({ schedule: "<interval>", command: "<inline tick prompt — see Resilient dispatch above>", max: <max_ticks> })
 # → for each self-paced loop with firing_posture[tier] === "auto":
-ScheduleWakeup({ delaySeconds: <initial_delay>, reason: "Starting <id>", prompt: "/canon:loop-tick <id>" })
+ScheduleWakeup({ delaySeconds: <initial_delay>, reason: "Starting <id>", prompt: "<inline tick prompt — see Resilient dispatch above>" })
 # → for each loop with firing_posture[tier] === "opt-in": ask user, then dispatch
 ```
 
@@ -526,17 +540,17 @@ Discovery: `list_loops`.
 
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
 `list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop:
-- `firing_posture[tier] === "auto"` → call `CronCreate({ schedule: loop.schedule.interval, command: "/canon:loop-tick <id>", max: loop.schedule.max_ticks })` immediately.
+- `firing_posture[tier] === "auto"` → call `CronCreate({ schedule: loop.schedule.interval, command: "<inline tick prompt for <id> — see Resilient dispatch above>", max: loop.schedule.max_ticks })` immediately.
 - `firing_posture[tier] === "opt-in"` → offer the watch to the user first; call `CronCreate` only on confirmation.
 - `firing_posture[tier] === "disabled"` → skip silently.
 
-`ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in).
+`ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in). It demonstrates the resilient inline dispatch form (mechanism-ships-first-instance, dc-06).
 
 **Session-start tap (Phase C+):** At session start, the orchestrator calls
 `list_loops({ lifecycle_hook: "session-start", tier })`. For each returned loop:
 - `firing_posture[tier] === "auto"` → start it now via `ScheduleWakeup` (self-paced mode):
   ```
-  ScheduleWakeup({ delaySeconds: <initial_active_delay>, reason: "Starting <id> at session-start", prompt: "/canon:loop-tick <id>" })
+  ScheduleWakeup({ delaySeconds: <initial_active_delay>, reason: "Starting <id> at session-start", prompt: "<inline tick prompt for <id> — see Resilient dispatch above>" })
   ```
 - `firing_posture[tier] === "opt-in"` → offer the watch to the user first; call `ScheduleWakeup` only on confirmation.
 - `firing_posture[tier] === "disabled"` → skip silently.

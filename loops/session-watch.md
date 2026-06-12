@@ -148,7 +148,7 @@ Re-arm the next wakeup:
 ScheduleWakeup({
   delaySeconds: <cadence>,   # active (240s) if cliff in flight; idle (1800s) otherwise
   reason: "[loop: session-watch] Tick <N> complete. Re-arming at <active|idle> cadence.",
-  prompt: "/canon:loop-tick session-watch"
+  prompt: "Run one tick of Canon loop \"session-watch\": call get_loop_definition({ id: \"session-watch\" }) to load its definition + body, then execute that body's observe → diff → surface → write → evaluate pipeline (the steps in skills/canon/commands/loop-tick.md), using the loop's state.path (substitute ${WORKSPACE}) for the prior snapshot. Read-only observation only (dc-06)."
 })
 ```
 

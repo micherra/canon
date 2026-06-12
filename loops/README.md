@@ -36,10 +36,16 @@ definition; it does not schedule it. The orchestrator initiates scheduling:
 # Orchestrator, at a lifecycle_hook moment:
 list_loops({ lifecycle_hook: "post-ship", tier: "supervised" })
 # → for each loop with firing_posture[tier] === "auto":
-CronCreate({ schedule: "<interval>", command: "/canon:loop-tick <id>", max: <max_ticks> })
+CronCreate({ schedule: "<interval>", command: "<inline tick prompt for <id>>", max: <max_ticks> })
 # → for each loop with firing_posture[tier] === "opt-in":
 # → ask user for confirmation, then CronCreate
 ```
+
+The `command` / `prompt` value is the **self-contained inline tick prompt** (see CLAUDE.md
+§Loop Framework "Resilient dispatch" and ADR-0008). This form depends only on
+`get_loop_definition` — an always-available MCP tool — and therefore works on both fresh and
+stale plugin installs. `/canon:loop-tick <id>` is the registered-install convenience form
+(available when the slash command is live), but the inline prompt is the default dispatch.
 
 ## Two modes
 
