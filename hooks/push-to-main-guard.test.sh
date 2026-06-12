@@ -729,6 +729,142 @@ rm -rf "$TMPDIR_SPACE_PARENT" "$TMPDIR_SPACE_CWD"
 
 echo ""
 # ---------------------------------------------------------------------------
+# CRASH REGRESSION (bash-3.x empty-array fix): bare git push under set -u
+# The guard previously emitted "unbound variable" on stderr when git_dir_args
+# was empty (no -C token in the command). Fixed by using the bash-3.x-safe
+# conditional expansion ${arr[@]+"${arr[@]}"} at all 6 expansion sites.
+# This test verifies stderr is clean (no "unbound variable") while the
+# bare-push path still blocks (exit 2 — no real repo → fails bare_push_is_safe).
+# Uses /bin/bash explicitly (macOS = 3.2.57) to match the crash environment.
+# ---------------------------------------------------------------------------
+echo "-- CRASH REGRESSION: bare 'git push' must not emit 'unbound variable' (bash 3.2) --"
+
+# run_test_in_dir_no_pattern: assert exit 0 AND no pattern in stderr.
+# Bare push exits 2, not 0 — so we must use a custom check here.
+_crash_output=$( printf '%s' '{"command":"git push"}' | /bin/bash "$HOOK" 2>&1 ) || true
+if echo "$_crash_output" | grep -q "unbound variable"; then
+  echo "  FAIL: bare 'git push' emits 'unbound variable' on stderr (crash regression)"
+  FAIL=$((FAIL + 1))
+else
+  echo "  PASS: bare 'git push' does NOT emit 'unbound variable' (crash fixed)"
+  PASS=$((PASS + 1))
+fi
+unset _crash_output
+
+echo ""
+# ---------------------------------------------------------------------------
+# PASSTHROUGH additions (over-broad fix): non-git segments with $() / backticks
+# The old over-broad block blocked ANY segment containing $() or backticks even
+# when it had no git token at all. After the fix these must exit 0.
+# ---------------------------------------------------------------------------
+echo "-- PASSTHROUGH (over-broad fix): non-git segments with metacharacters must allow (exit 0) --"
+
+# echo with command substitution (was blocked by the over-broad block)
+# Input: {"command":"echo hello $(whoami)"}
+_pt_echo_input='{"command":"echo hello $(whoami)"}'
+_pt_echo_exit=0
+printf '%s' "$_pt_echo_input" | bash "$HOOK" >/dev/null 2>&1 || _pt_echo_exit=$?
+if [[ "$_pt_echo_exit" -eq 0 ]]; then
+  echo "  PASS: echo hello \$(whoami) allowed (exit 0)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: echo hello \$(whoami) should be allowed, got exit=$_pt_echo_exit"
+  FAIL=$((FAIL + 1))
+fi
+unset _pt_echo_input _pt_echo_exit
+
+# gh pr comment with backtick in body (was blocked by the over-broad block)
+# The backtick is inside the --body value, a non-git segment
+_pt_gh_input='{"command":"gh pr comment 1 --body \"see `foo` here\""}'
+_pt_gh_exit=0
+printf '%s' "$_pt_gh_input" | bash "$HOOK" >/dev/null 2>&1 || _pt_gh_exit=$?
+if [[ "$_pt_gh_exit" -eq 0 ]]; then
+  echo "  PASS: gh pr comment body with backtick allowed (exit 0)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: gh pr comment body with backtick should be allowed, got exit=$_pt_gh_exit"
+  FAIL=$((FAIL + 1))
+fi
+unset _pt_gh_input _pt_gh_exit
+
+# heredoc-style body containing backticks
+_pt_heredoc_input='{"command":"cat <<EOF\nsee `code` here\nEOF"}'
+_pt_heredoc_exit=0
+printf '%s' "$_pt_heredoc_input" | bash "$HOOK" >/dev/null 2>&1 || _pt_heredoc_exit=$?
+if [[ "$_pt_heredoc_exit" -eq 0 ]]; then
+  echo "  PASS: heredoc body with backtick allowed (exit 0)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: heredoc body with backtick should be allowed, got exit=$_pt_heredoc_exit"
+  FAIL=$((FAIL + 1))
+fi
+unset _pt_heredoc_input _pt_heredoc_exit
+
+# git log piped to tail (non-push git command with pipe + stderr redirect)
+_pt_log_input='{"command":"git log --oneline 2>&1 | tail -5"}'
+_pt_log_exit=0
+printf '%s' "$_pt_log_input" | bash "$HOOK" >/dev/null 2>&1 || _pt_log_exit=$?
+if [[ "$_pt_log_exit" -eq 0 ]]; then
+  echo "  PASS: git log --oneline 2>&1 | tail -5 allowed (exit 0)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: git log --oneline 2>&1 | tail -5 should be allowed, got exit=$_pt_log_exit"
+  FAIL=$((FAIL + 1))
+fi
+unset _pt_log_input _pt_log_exit
+
+echo ""
+# ---------------------------------------------------------------------------
+# BYPASS MATRIX — obfuscation forms that must still BLOCK (exit 2)
+# These existed before; this section adds explicit named rows to confirm
+# the over-broad-fix does NOT weaken push-to-main protection.
+# ---------------------------------------------------------------------------
+echo "-- BYPASS MATRIX: obfuscated push forms must still block (exit 2) --"
+
+# Obfuscated refspec: git push origin $(echo main)
+# Takes git-token path → SAFE_REFSPEC_RE rejects the $() refspec → BLOCK
+_bm_cmdsub_input='{"command":"git push origin $(echo main)"}'
+_bm_cmdsub_exit=0
+printf '%s' "$_bm_cmdsub_input" | bash "$HOOK" >/dev/null 2>&1 || _bm_cmdsub_exit=$?
+if [[ "$_bm_cmdsub_exit" -eq 2 ]]; then
+  echo "  PASS: git push origin \$(echo main) blocked (exit 2)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: git push origin \$(echo main) should block, got exit=$_bm_cmdsub_exit"
+  FAIL=$((FAIL + 1))
+fi
+unset _bm_cmdsub_input _bm_cmdsub_exit
+
+# Obfuscated refspec: git push origin ${B:-main}
+# Already in F2 ALLOWLIST section above; add explicit named row for bypass matrix
+run_test "git push origin \${B:-main} (bypass matrix — obfuscated refspec → block)" \
+  2 "$(make_input 'git push origin ${B:-main}')"
+
+# Obfuscated refspec: backtick form
+run_test 'git push origin `echo main` (bypass matrix — backtick refspec → block)' \
+  2 "$(printf '{"command":"%s"}' 'git push origin `echo main`')"
+
+# Glued git token: git$(x) push origin main
+# canon_has_ambiguous_git_token fires → fail-closed → BLOCK
+run_test "git push origin main via glued token (bypass matrix → block)" \
+  2 "$(printf '{"command":"%s"}' 'git$(x) push origin main')"
+
+# Wrapper inner cmdsubst: bash -c "$(echo git push origin main)"
+# wrapper-inner-cmdsubst block fires (line preserved after Edit B) → BLOCK
+_bm_wrapper_input='{"command":"bash -c \"$(echo git push origin HEAD:main)\""}'
+_bm_wrapper_exit=0
+printf '%s' "$_bm_wrapper_input" | bash "$HOOK" >/dev/null 2>&1 || _bm_wrapper_exit=$?
+if [[ "$_bm_wrapper_exit" -eq 2 ]]; then
+  echo "  PASS: bash -c \"\$(echo git push origin HEAD:main)\" blocked (exit 2)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: bash -c \"\$(echo git push origin HEAD:main)\" should block, got exit=$_bm_wrapper_exit"
+  FAIL=$((FAIL + 1))
+fi
+unset _bm_wrapper_input _bm_wrapper_exit
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="

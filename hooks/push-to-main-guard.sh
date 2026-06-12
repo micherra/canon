@@ -24,7 +24,10 @@
 #      check for a standalone "git" token — skips segments without one.
 #   5a. String-executing-wrapper expansion: same three-way rc logic as
 #       destructive-guard.sh — rc=2 → fail-closed; rc=0 → recurse on inner
-#       segments (depth-capped at 3); rc=1 + ambiguous token → fail-closed.
+#       segments (depth-capped at 3); rc=1 (not a wrapper): check for ambiguous
+#       git-prefixed token (fail-closed if found), else ALLOW. Non-git segments
+#       containing $(...) or backticks are allowed — they cannot be git pushes.
+#       Obfuscated refspecs WITHIN a real git push are caught by SAFE_REFSPEC_RE.
 #   6. Resolve the git subcommand via canon_git_subcommand (shape-validated).
 #      Empty → fail-closed.
 #   7. case "$sub": only "push" is inspected; all other subcommands return 0.
@@ -135,7 +138,7 @@ resolve_protected_branch() {
     git_dir_args=(-C "$CANON_GUARD_CWD")
   fi
   local ref
-  ref=$(git "${git_dir_args[@]}" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset origin/HEAD falls back to main below
+  ref=$(git ${git_dir_args[@]+"${git_dir_args[@]}"} symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset origin/HEAD falls back to main below
   ref="${ref#refs/remotes/origin/}"
   if [[ -z "$ref" ]]; then
     ref="main"
@@ -220,14 +223,14 @@ bare_push_is_safe() {
     git_dir_args=(-C "$CANON_GUARD_CWD")
   fi
   local cur pd
-  cur=$(git "${git_dir_args[@]}" symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- detached HEAD → empty → caller blocks
+  cur=$(git ${git_dir_args[@]+"${git_dir_args[@]}"} symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- detached HEAD → empty → caller blocks
   if [[ -z "$cur" ]]; then
     return 1   # detached HEAD / unresolved → NOT safe → block
   fi
   if [[ "$cur" == "$protected" ]]; then
     return 1   # on the protected branch → bare push targets it → block
   fi
-  pd=$(git "${git_dir_args[@]}" config --get push.default 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset → default 'simple' → safe
+  pd=$(git ${git_dir_args[@]+"${git_dir_args[@]}"} config --get push.default 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset → default 'simple' → safe
   case "$pd" in
     ""|simple|current) ;;   # pushes current branch to same-named ref → safe so far (cur != protected)
     *) return 1 ;;          # matching/upstream/nothing/unknown → cannot prove safe → block
@@ -239,7 +242,7 @@ bare_push_is_safe() {
   # --mirror — pushes ALL refs including the protected branch regardless of
   # push.default or current branch. Block if any remote has mirror=true.
   local mirror_val
-  mirror_val=$(git "${git_dir_args[@]}" config --bool --get "remote.${remote}.mirror" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
+  mirror_val=$(git ${git_dir_args[@]+"${git_dir_args[@]}"} config --bool --get "remote.${remote}.mirror" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
   if [[ "$mirror_val" == "true" ]]; then
     return 1   # mirror config → bare push mirrors ALL refs including protected → block
   fi
@@ -250,7 +253,7 @@ bare_push_is_safe() {
   # for the target remote — we cannot cheaply prove a glob doesn't match the
   # protected branch, so fail-closed.
   local configured_push_refspec
-  configured_push_refspec=$(git "${git_dir_args[@]}" config --get-all "remote.${remote}.push" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
+  configured_push_refspec=$(git ${git_dir_args[@]+"${git_dir_args[@]}"} config --get-all "remote.${remote}.push" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
   if [[ -n "$configured_push_refspec" ]]; then
     return 1   # push refspec overrides push.default → cannot prove safe → block
   fi
@@ -471,7 +474,7 @@ push_updates_protected_branch() {
       elif [[ -n "${CANON_GUARD_CWD:-}" ]]; then
         _gda_head=(-C "$CANON_GUARD_CWD")
       fi
-      _head_branch=$(git "${_gda_head[@]}" symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty on detached HEAD → fail-closed below
+      _head_branch=$(git ${_gda_head[@]+"${_gda_head[@]}"} symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty on detached HEAD → fail-closed below
       if [[ -z "$_head_branch" ]]; then
         echo "CANON: push refspec destination is HEAD but current branch cannot be resolved — blocking fail-closed." >&2
         return 0   # unknown HEAD target → BLOCK (dc-05: fail-closed-on-ambiguity)
@@ -534,14 +537,12 @@ process_segment() {
         echo "CANON: ambiguous git-prefixed token detected — blocking fail-closed." >&2
         exit 2
       fi
-      # F1: Fail-CLOSED when the segment looks like a string-executing wrapper
-      # whose inner command contains shell metacharacters we cannot evaluate
-      # statically (command substitution via $( ) or backticks). We cannot
-      # prove the inner expansion does NOT push to the protected branch → block.
-      if [[ "$raw_segment" == *'$('* || "$raw_segment" == *'`'* ]]; then
-        echo "CANON: segment contains unexpanded command substitution — blocking fail-closed." >&2
-        exit 2
-      fi
+      # No standalone git token, not a string-executing wrapper, and no ambiguous
+      # git-prefixed token: this segment cannot be a git push. Allow it.
+      # (Command substitution inside a NON-git segment, e.g. `echo $(whoami)` or a
+      # gh-comment body with backticks, is not a push and must not be fail-closed —
+      # that was the over-broad defect. Obfuscated refspecs WITHIN a git push are
+      # still caught by the SAFE_REFSPEC_RE allowlist in push_updates_protected_branch.)
       return 0
     fi
 
