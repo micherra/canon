@@ -1,3 +1,4 @@
+import { getDecisions, logDecision } from "@features/orchestration/tools/decisions-ledger.ts";
 import {
   batchLogSteps,
   finalizeWorkspace,
@@ -161,9 +162,70 @@ function registerReconcileWorkspace(server: McpServer): void {
   );
 }
 
+/** Decision type enum values for Zod schema. */
+const DECISION_TYPES = [
+  "hitl_gate",
+  "scope_cut",
+  "ac_change",
+  "tier_override",
+  "merge_resolution",
+  "manual_verification",
+  "other",
+] as const;
+
+function registerLogDecision(server: McpServer): void {
+  server.registerTool(
+    "log_decision",
+    {
+      description:
+        "Append a timestamped orchestrator decision to the durable event log (orchestrator_decision type). " +
+        "This is an AUTHORITATIVE write — returns a ToolResult error on store failure (NOT fail-open). " +
+        "Call at each consequential decision: HITL gate outcomes, scope cuts, AC changes, tier overrides, merge resolutions, manual-verification confirmations.",
+      inputSchema: {
+        decision_type: z.enum(DECISION_TYPES).describe("Category of decision (closed enum)"),
+        gate: z
+          .string()
+          .optional()
+          .describe("HITL gate name, e.g. 'plan_approval', 'review_verdict'"),
+        outcome: z
+          .string()
+          .optional()
+          .describe("Result of the decision, e.g. 'approved', 'overridden', 'descoped'"),
+        rationale: z.string().optional().describe("Why this decision was made"),
+        refs: z.array(z.string()).optional().describe("References, e.g. ['AC#3', 'REVIEW.md']"),
+        summary: z.string().describe("One-line human-readable description of what was decided"),
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    gatedWrapHandler(async (input, extra) =>
+      logDecision({ ...input, projectDir: resolveScope(extra) }),
+    ),
+  );
+}
+
+function registerGetDecisions(server: McpServer): void {
+  server.registerTool(
+    "get_decisions",
+    {
+      description:
+        "Read the orchestrator decisions ledger (getEventsByType('orchestrator_decision')). " +
+        "Returns the structured array of DecisionRecord objects and a rendered markdown table (human-readable view). " +
+        "Use before HITL gates and on resume to rehydrate decided state.",
+      inputSchema: {
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    gatedWrapHandler(async (input, extra) =>
+      getDecisions({ ...input, projectDir: resolveScope(extra) }),
+    ),
+  );
+}
+
 export function registerJournalTools(server: McpServer): void {
   registerLogStep(server);
   registerBatchLogSteps(server);
   registerFinalizeWorkspace(server);
   registerReconcileWorkspace(server);
+  registerLogDecision(server);
+  registerGetDecisions(server);
 }
