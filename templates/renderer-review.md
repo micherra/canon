@@ -564,6 +564,8 @@ Color constants, CSS property values, and numeric values do not need escaping.
 
 ## Step 8 — Write output
 
+NEVER echo the HTML or large content into your response — compose it and write directly to the output path; if large, write then Edit-append. Echoing the artifact will exceed the output-token limit and fail the render.
+
 Write the complete, self-contained HTML to:
   ${WORKSPACE}/artifacts/review.html
 

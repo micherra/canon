@@ -8,7 +8,7 @@
  * Canon principles:
  *   - fail-closed-by-default: extraction errors return partial data, not exceptions
  *   - validate-at-trust-boundaries: file contents are validated before use
- *   - bounded-context-boundaries: only imports from history feature and shared kernel
+ *   - bounded-context-boundaries: only imports from platform and node builtins
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -20,7 +20,7 @@ import type {
   RunbookStep,
   RunSummary,
   StepOutcome,
-} from "../history-types.ts";
+} from "./archive-types.ts";
 import {
   parsePlanningBrief,
   parseReviewFile,

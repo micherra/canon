@@ -38,9 +38,9 @@ vi.mock("better-sqlite3", () => {
   return { default: MockDatabase };
 });
 
-import { getDriftDb } from "../../../platform/storage/drift/drift-db-cache.ts";
 // Import after mocks so mocks are in place
-import { archiveWorkspace } from "../services/archive-service.ts";
+import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
+import { getDriftDb } from "../../../platform/storage/drift/drift-db-cache.ts";
 
 // ---- Helpers ----
 

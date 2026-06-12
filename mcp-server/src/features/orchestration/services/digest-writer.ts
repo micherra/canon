@@ -12,9 +12,8 @@
  *
  * Design decisions:
  *  - DigestData is a local type (not history-types.ts) — orchestration concern
- *  - Cross-feature import from history/services/run-summary-extractors.ts is
- *    justified by the precedent in orchestration-journal.ts importing from
- *    history/services/archive-service.ts (see decision digest-01)
+ *  - parsePlanningBrief / parseReviewFile imported from @platform/storage/archive/
+ *    (ADR-0003: run-summary-extractors relocated from history/services to platform)
  *  - Auto-memory path derived from CANON_PROJECT_DIR (via server-state.ts projectDir)
  *  - atomicWriteFile used for all writes (same filesystem = atomic rename)
  */
@@ -26,7 +25,7 @@ import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts"
 import {
   parsePlanningBrief,
   parseReviewFile,
-} from "@features/history/services/run-summary-extractors.ts";
+} from "@platform/storage/archive/run-summary-extractors.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 
 // ---- Local types ----
