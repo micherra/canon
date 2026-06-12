@@ -18,6 +18,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | Script | Trigger | Purpose |
 |--------|---------|---------|
 | `pre-commit-check.sh` | PreToolUse (Bash) | Detect secrets, validate principle compliance |
+| `dead-wire-gate.sh` | verify contract (CLI arg, not hooks.json) | Standing dead-wire reachability gate — fails closed on unwired new exports/tools |
 | `destructive-guard.sh` | PreToolUse (Bash) | Prevent force push, hard reset, and other dangerous git ops |
 | `workspace-lock-guard.sh` | PreToolUse (Bash) | Prevent concurrent builds on same branch |
 | `pre-push-review.sh` | PreToolUse (Bash) | Require review before pushing |
@@ -59,7 +60,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 - Each hook script must be executable and exit 0 (pass) or non-zero (block)
 - Hook configuration lives in `hooks.json` with matcher patterns for tool names
 - `principle-inject-worker.mjs` is a Node.js helper invoked by `principle-inject.sh`
-- `destructive-guard.test.sh` and `install-git-hooks.sh` are utilities, not registered hooks
+- `destructive-guard.test.sh`, `dead-wire-gate.test.sh`, and `install-git-hooks.sh` are utilities, not registered hooks; `dead-wire-gate.test.sh` is the test suite for `dead-wire-gate.sh`
 - When testing secret-detection hooks, use all-zeros suffixes or EXAMPLE-pattern placeholders for key fixtures — not plausible real-looking values. GitHub push protection scans test files regardless of hook exclusion rules.
 - **Hook test files**: Hooks with 3+ decision branches, runtime state inspection (sqlite queries, filesystem checks), or bypass gate env vars MUST have a corresponding `.test.sh` file. Place it alongside the hook (e.g., `pre-commit-check.test.sh`) or in a `__tests__/` subdirectory. Tests must cover: bypass gate, all silent-pass paths, and all warning/blocking paths. Run with `bash hooks/<name>.test.sh`.
 - **Shared test helpers**: All hook test files source `hooks/test-helpers.sh` for shared utilities (`run_test`, `assert_eq`, etc.); do not define these helpers inline in individual test files.
