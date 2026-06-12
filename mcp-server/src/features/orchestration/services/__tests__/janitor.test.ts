@@ -30,7 +30,7 @@ vi.mock("@platform/adapters/git-adapter.ts", async (importOriginal) => {
   };
 });
 
-vi.mock("@features/history/services/archive-service.ts", () => ({
+vi.mock("@platform/storage/archive/archive-service.ts", () => ({
   archiveWorkspace: vi.fn().mockResolvedValue({
     archive_path: "/tmp/archive",
     archived: true,
