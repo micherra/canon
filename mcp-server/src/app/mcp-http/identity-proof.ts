@@ -23,7 +23,7 @@
  *   request to the incumbent daemon and verifies its proof. Extracted here
  *   from daemon.ts for line-budget compliance and cohesion.
  *
- * @see docs/adr/0002-daemon-identity-proof-on-eaddrinuse-probe.md
+ * @see docs/adr/0003-daemon-identity-proof-on-eaddrinuse-probe.md
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";

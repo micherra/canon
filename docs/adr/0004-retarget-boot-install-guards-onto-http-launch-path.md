@@ -1,12 +1,12 @@
 ---
-adr: "0003"
+adr: "0004"
 title: "Retarget the boot-resolver + install-sim CI guards onto the HTTP launch path instead of deleting them"
 status: accepted
 date: "2026-06-11"
 build: "adapt-install-sim-boot-resolver-ci-guards-for-the-http-mcpjson"
 ---
 
-# ADR-0003: Retarget the boot-resolver + install-sim CI guards onto the HTTP launch path
+# ADR-0004: Retarget the boot-resolver + install-sim CI guards onto the HTTP launch path
 
 ## Context
 

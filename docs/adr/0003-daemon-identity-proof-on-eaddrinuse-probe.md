@@ -1,12 +1,12 @@
 ---
-adr: "0002"
+adr: "0003"
 title: "Daemon proves token possession via challenge-response on the EADDRINUSE probe, not a public version match"
 status: accepted
 date: "2026-06-11"
 build: "harden-http-daemon-f1-same-user-token-read-f4-probe-identity-security"
 ---
 
-# ADR-0002: Daemon identity proof on the EADDRINUSE probe
+# ADR-0003: Daemon identity proof on the EADDRINUSE probe
 
 ## Context
 

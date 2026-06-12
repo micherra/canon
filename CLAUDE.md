@@ -494,28 +494,34 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Loop Framework <!-- last-updated: 2026-06-09 -->
+## Loop Framework <!-- last-updated: 2026-06-11 -->
 
 Loops are Canon's managed periodic-observation artifact class. A loop is authored as
 `loops/<id>.md` (YAML frontmatter + action-prompt body), registered via `list_loops`,
-and dispatched by the orchestrator via `CronCreate`.
+and dispatched by the orchestrator via `CronCreate` (interval loops) or `ScheduleWakeup`
+(self-paced loops).
+
+**Command registration:** `/canon:loop-tick` (and all `/canon:*` slash commands under `skills/canon/commands/`) are registered as harness plugin commands via the `commands` field in `.claude-plugin/plugin.json` (`"commands": ["./skills/canon/commands/"]`). Before this was added, NO `/canon:*` command was a registered harness slash command — they only worked as Read-and-execute runner bodies. Registration (via the manifest) is distinct from scheduling (via `CronCreate`); dc-06 is preserved.
 
 **Lifecycle-hook vocabulary:** `post-ship` | `on-long-dispatch` | `session-start`.
 At such a moment, the orchestrator calls:
 ```
 list_loops({ lifecycle_hook, tier })
-# → for each loop with firing_posture[tier] === "auto": CronCreate(...)
-# → for each loop with firing_posture[tier] === "opt-in": ask user, then CronCreate(...)
+# → for each interval loop with firing_posture[tier] === "auto":
 CronCreate({ schedule: "<interval>", command: "/canon:loop-tick <id>", max: <max_ticks> })
+# → for each self-paced loop with firing_posture[tier] === "auto":
+ScheduleWakeup({ delaySeconds: <initial_delay>, reason: "Starting <id>", prompt: "/canon:loop-tick <id>" })
+# → for each loop with firing_posture[tier] === "opt-in": ask user, then dispatch
 ```
 
 **The non-declarative constraint (dc-06):** Nothing auto-starts. Only the orchestrator
-initiates the `CronCreate` call at a named lifecycle moment. No manifest, hook, or command
-frontmatter starts a loop — the capability ground truth is that a plugin cannot do this.
+initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named lifecycle moment.
+No manifest, hook, or command frontmatter starts a loop — the capability ground truth is that
+a plugin cannot do this.
 
 **Phase history:** Phase A shipped the framework spine — schema, registry, MCP tools, `_probe`
 demo; no production loop ran. Phase B ships `loops/ship-watch.md` — the first real loop,
-dispatched via the post-ship tap. Phase C (session-watch, self-paced mode) is a future build.
+dispatched via the post-ship tap. Phase C ships session-watch + self-paced mode.
 Discovery: `list_loops`.
 
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
@@ -526,15 +532,27 @@ Discovery: `list_loops`.
 
 `ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in).
 
-**Non-declarative invariant (dc-06):** Only the orchestrator initiates `CronCreate`. Authoring
-`loops/ship-watch.md` only registers the definition — it does NOT start the loop. No manifest
-field, hook script, or command frontmatter can trigger scheduling automatically.
+**Session-start tap (Phase C+):** At session start, the orchestrator calls
+`list_loops({ lifecycle_hook: "session-start", tier })`. For each returned loop:
+- `firing_posture[tier] === "auto"` → start it now via `ScheduleWakeup` (self-paced mode):
+  ```
+  ScheduleWakeup({ delaySeconds: <initial_active_delay>, reason: "Starting <id> at session-start", prompt: "/canon:loop-tick <id>" })
+  ```
+- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; call `ScheduleWakeup` only on confirmation.
+- `firing_posture[tier] === "disabled"` → skip silently.
 
-## Project Structure <!-- last-updated: 2026-06-10 -->
+`session-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in).
+
+**Non-declarative invariant (dc-06):** Only the orchestrator initiates `CronCreate` or
+`ScheduleWakeup`. Authoring `loops/session-watch.md` only registers the definition — it does
+NOT start the loop. No manifest field, hook script, or command frontmatter can trigger
+scheduling automatically.
+
+## Project Structure <!-- last-updated: 2026-06-11 -->
 
 ```
 canon/
-├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (22 terms)
+├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (23 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── docs/
 │   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
@@ -550,15 +568,15 @@ canon/
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
-│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase B current)
+│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase C current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase B: _probe + ship-watch)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase C: _probe + ship-watch + session-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
-├── principles/           # Built-in principles (80 total: 7 rules, 35 strong-opinions, 38 conventions)
+├── principles/           # Built-in principles (83 total: 7 rules, 35 strong-opinions, 41 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/

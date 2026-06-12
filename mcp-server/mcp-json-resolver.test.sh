@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # mcp-json-resolver.test.sh — behavioral tests for the HTTP launch path in .mcp.json.
 #
-# Why this file exists (regression guard — HTTP edition, see ADR-0003):
+# Why this file exists (regression guard — HTTP edition, see ADR-0004):
 #   The stdio form (PRs #191/#287/#356/#370) embedded a bash -c payload in args[1];
 #   tests exercised that payload's resolver under var-present/absent/loud-fail conditions.
 #   The .mcp.json is now an HTTP form (PR #382): no args array, no -c payload.
 #   Old guard: args[1] extraction → PAYLOAD → run_payload() → assert STUB_BOOTED/CANON FATAL
 #   New guard (this file): url token presence + headersHelper ${...} resolution + boot.sh --daemon
 #
-# Old → new coverage mapping (per decision httpci-03, ADR-0003):
+# Old → new coverage mapping (per decision httpci-03, ADR-0004):
 #
 #   #356 class (CC stops expanding ${...} → config collapses to literal path):
 #     Old: run_payload() with CLAUDE_PLUGIN_ROOT present/absent/cwd → STUB_BOOTED resolves

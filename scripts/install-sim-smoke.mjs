@@ -2,7 +2,7 @@
 /**
  * install-sim-smoke.mjs — Faithful install-simulation smoke test (HTTP transport).
  *
- * Old→new regression mapping (ADR-0003 / PROBE-FINDINGS.md):
+ * Old→new regression mapping (ADR-0004 / PROBE-FINDINGS.md):
  *
  *   #356 (literal ${...} in args → boot.sh not found) →
  *     HTTP analog: unresolved headersHelper (literal ${CLAUDE_PLUGIN_ROOT:-.} →

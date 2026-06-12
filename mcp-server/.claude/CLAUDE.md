@@ -25,7 +25,7 @@ src/
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
-│   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader + read-only-shell carve-out (Phase B current)
+│   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader + read-only-shell carve-out (Phase C current)
 │   ├── orchestration/    # Orchestration runtime: init_workspace, finalize_workspace, log_step, record_agent_metrics, all orchestration tools
 │   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
 │   ├── principles/       # get_principles, list_principles, get_compliance
@@ -138,7 +138,7 @@ src/
 | `capture_transcript` | Best-effort transcript capture; reads CC agent JSONL, writes `TranscriptEntry[]` to `{workspace}/transcripts/`; warning (never error) when source not found; `source_path` primary, `agent_id` glob fallback; `persist_path: true` records path for `get_transcript` (fail-open) — added 2026-04-26, updated 2026-05-30 |
 | `compute_autonomy_tier` | autonomous/light-touch/supervised from build history + blast radius + compliance; fail-safe: defaults to supervised on error; logs `auto_decision`; returns `{ tier, score, reasoning, signals_used }` |
 | `get_next_escalation_strategy` | Next fallback strategy on agent failure; cascade: add_primer → increase_budget → escalate_model → narrow_scope → hitl; 2-minute cumulative timeout; `skip_strategies` per-flow config; logs `auto_decision`; returns `EscalationResult` with `strategy`, `is_terminal` |
-| `reconcile_workspace` | Cliff detection; `{ workspace, emit_telemetry?, source?, projectDir? }`; returns `{ incomplete_steps[], needs_recovery }`; flags `started`/`planned` steps with missing or partial-skeleton artifacts; `completed` and empty-`artifacts_expected` planned steps never flagged; `emit_telemetry: true` appends fail-open `cliff_detected` event to orchestration.db AND upserts rows to drift.db `cliff_events` table via `CliffEventsDao` (dual fail-open write-through; `projectDir` required for drift.db write, injected by `register-journal.ts` via `resolveScope`); `WORKSPACE_NOT_FOUND` when journal absent — added 2026-05-29, dual-write 2026-06-08 |
+| `reconcile_workspace` | Cliff detection; `{ workspace, emit_telemetry?, source?, projectDir? }`; `source` accepts `"resume" \| "post_subagent" \| "loop"` (pass `"loop"` when called from loop runner); returns `{ incomplete_steps[], needs_recovery }`; flags `started`/`planned` steps with missing or partial-skeleton artifacts; `completed` and empty-`artifacts_expected` planned steps never flagged; `emit_telemetry: true` appends fail-open `cliff_detected` event to orchestration.db AND upserts rows to drift.db `cliff_events` table via `CliffEventsDao` (dual fail-open write-through; `projectDir` required for drift.db write, injected by `register-journal.ts` via `resolveScope`); `WORKSPACE_NOT_FOUND` when journal absent — added 2026-05-29, dual-write 2026-06-08, `source:"loop"` 2026-06-11 |
 
 **Text-only principle/review tools:**
 
@@ -165,7 +165,7 @@ src/
 | `get_historical_artifacts` | Retrieve archived artifacts from a previous build |
 | `get_cross_run_analysis` | Cross-run meta-analysis for the learner; includes `craft_drift: CraftDrift` (`by_dimension[]`, `by_area[]`, `profile_count`) and `cliff_events: CliffEventsDimension`; runs fail-open `sweepCliffEvents(project_dir)` before analysis |
 
-**Loop tools** (`src/features/loops/`): <!-- last-updated: 2026-06-09 -->
+**Loop tools** (`src/features/loops/`): <!-- last-updated: 2026-06-11 -->
 
 | Tool | Purpose |
 |------|---------|

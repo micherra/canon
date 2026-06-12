@@ -125,6 +125,24 @@ function registerFinalizeWorkspace(server: McpServer): void {
   );
 }
 
+/**
+ * Exported for boundary testing — validates the registered input schema directly.
+ * Tests that use this schema exercise the actual rejection point, not just the impl.
+ */
+export const reconcileWorkspaceInputSchema = z.object({
+  emit_telemetry: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true and a cliff is detected, append a fail-open cliff_detected audit event to the execution store.",
+    ),
+  source: z
+    .enum(["resume", "post_subagent", "loop"])
+    .optional()
+    .describe("Telemetry source tag — which orchestrator path triggered the check."),
+  workspace: z.string().describe("Workspace directory path"),
+});
+
 function registerReconcileWorkspace(server: McpServer): void {
   server.registerTool(
     "reconcile_workspace",
@@ -132,17 +150,9 @@ function registerReconcileWorkspace(server: McpServer): void {
       description:
         "Cliff detection, read-only w.r.t. the journal/archive: return started/planned steps whose declared artifacts are missing on disk. Call on resume/turn-start to detect agents that stopped before producing their artifacts. Never mutates or archives the journal. When emit_telemetry is true and a cliff is detected, performs two fail-open writes: (1) appends a cliff_detected audit event to the execution-store event log, and (2) writes a durable row per incomplete step to drift.db via CliffEventsDao (when projectDir is available). Both writes are best-effort — failures are warned but never alter the returned result.",
       inputSchema: {
-        emit_telemetry: z
-          .boolean()
-          .optional()
-          .describe(
-            "When true and a cliff is detected, append a fail-open cliff_detected audit event to the execution store.",
-          ),
-        source: z
-          .enum(["resume", "post_subagent"])
-          .optional()
-          .describe("Telemetry source tag — which orchestrator path triggered the check."),
-        workspace: z.string().describe("Workspace directory path"),
+        emit_telemetry: reconcileWorkspaceInputSchema.shape.emit_telemetry,
+        source: reconcileWorkspaceInputSchema.shape.source,
+        workspace: reconcileWorkspaceInputSchema.shape.workspace,
       },
     },
     gatedWrapHandler(async (input, extra) =>

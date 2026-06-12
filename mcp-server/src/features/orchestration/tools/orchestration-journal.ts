@@ -39,6 +39,7 @@ import {
   archiveAndDeleteWorkspace,
   tryAppendAnalytics,
   tryReleaseClaims,
+  tryRemoveCliffLedger,
   tryRunJanitor,
 } from "../services/workspace-cleanup.ts";
 import { captureTranscript } from "./capture-transcript.ts";
@@ -576,6 +577,7 @@ async function runCompletionSideEffects(
   const analytics_recorded = await tryAppendAnalytics(workspace, steps, projectDir);
   const trend_summary_written = await tryWriteBuildTrendSummary(workspace, projectDir);
   const claims_released = await tryReleaseClaims(workspace, projectDir);
+  await tryRemoveCliffLedger(workspace); // best-effort cleanup (loops-phase-c-03)
   await tryRunJanitor(projectDir);
   return { analytics_recorded, claims_released, digest_written, trend_summary_written };
 }

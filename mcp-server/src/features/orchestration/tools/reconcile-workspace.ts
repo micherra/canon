@@ -31,7 +31,7 @@ import {
 export type ReconcileWorkspaceInput = {
   workspace: string;
   emit_telemetry?: boolean;
-  source?: "resume" | "post_subagent";
+  source?: "resume" | "post_subagent" | "loop";
   projectDir?: string; // injected by register-journal.ts via resolveScope(extra); enables drift.db write-through
 };
 
@@ -144,7 +144,7 @@ async function toIncompleteStep(
 function emitCliffTelemetry(
   workspace: string,
   incompleteSteps: IncompleteStep[],
-  source: "resume" | "post_subagent",
+  source: "resume" | "post_subagent" | "loop",
 ): void {
   try {
     const store = getExecutionStore(workspace);
@@ -180,7 +180,7 @@ function writeCliffEventsThrough(
   projectDir: string,
   workspace: string,
   incompleteSteps: IncompleteStep[],
-  source: "resume" | "post_subagent",
+  source: "resume" | "post_subagent" | "loop",
 ): void {
   try {
     const dao = getDriftDb(projectDir).getCliffEvents();
