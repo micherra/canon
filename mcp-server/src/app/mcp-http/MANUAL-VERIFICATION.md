@@ -171,7 +171,8 @@ client and resolve scope from the first root URI.
 **Live check (Path B):**
 
 1. Edit `/tmp/canon-http-scratch.mcp.json` — remove any `x-canon-project-dir`
-   header from the `headers` object.
+   header from the `headers` object (or use the repo's `.mcp.json` which uses
+   `headersHelper` with no `x-canon-project-dir`).
 2. Restart Claude Code with `--mcp-config /tmp/canon-http-scratch.mcp.json`.
 3. Call `list_principles` or `init_workspace` as in Step 7.
 
@@ -179,15 +180,17 @@ client and resolve scope from the first root URI.
 directory (the client's working directory at session start). The daemon answered
 `roots/list` with the client cwd as a `file://` URI and resolved scope from it.
 
-**If tools fail with a scope-unresolved error:** Add `"x-canon-project-dir":
-"<absolute path to canon repo>"` to the `headers` object in your `.mcp.json` and
-retry. File this finding — it means Claude Code's interactive HTTP client does not
-answer `roots/list` in this version, and decision http2-03's primary path for
-Phase 3 needs updating.
+> **RESOLVED (2026-06-11):** A fresh INTERACTIVE Claude Code session launched with
+> `--mcp-config` pointing at the HTTP daemon config (HTTP transport, `headersHelper`,
+> NO `x-canon-project-dir` header) against the live daemon v2.12.0 successfully
+> resolved project scope via `roots/list` and returned results from
+> `mcp__canon__list_principles`. The interactive client DOES answer `roots/list`.
+> **Path B (roots/list) is the confirmed interactive-session path for Phase 3.
+> The residual risk is RESOLVED.**
 
-> **Note:** The headless client (`claude -p`, `--strict-mcp-config`) DOES answer
-> `roots/list` as validated by PROBE-FINDINGS.md (2026-06-06, SDK 2.1.167). The
-> interactive client's behavior is the residual risk confirmed at this gate.
+> **Note (headless client):** The headless client (`claude -p`, `--strict-mcp-config`)
+> also answers `roots/list` as validated by PROBE-FINDINGS.md (2026-06-06,
+> Claude Code 2.1.167). Both interactive and headless paths are confirmed.
 
 ---
 
@@ -242,6 +245,70 @@ rm -rf .canon/workspaces/*http-manual-verify*
 
 ---
 
+## F1 residual same-user risk — accepted (threat-model sign-off)
+
+**Date accepted:** 2026-06-11
+
+### What F1 hardening provides
+
+The mechanical hardening shipped in F1 (`O_EXCL` exclusive token creation + `0700`
+parent directory + fail-closed `EEXIST`) defends against the following adversary
+classes:
+
+- **Token-LESS adversary**: a process that attempts to connect to the daemon without
+  a token is rejected (401).
+- **Pre-plant adversary**: an attacker who creates the token file before the daemon
+  starts is blocked by `O_EXCL` — the daemon exits rather than accepting a
+  pre-planted token.
+- **Clobber / replace adversary**: overwriting the token file after daemon start has
+  no effect — the daemon reads the token once at startup via `loadOrCreateToken`.
+- **Symlink adversary**: `O_EXCL` on a target that exists (including a symlink
+  target) causes the create to fail.
+
+### What F1 hardening does NOT provide
+
+**Same-user process isolation is NOT provided by the TCP+token transport.** A
+process running as the same OS user can:
+
+1. Read the `0600` token file (same-user ACL permits read).
+2. Present the token in a `Authorization: Bearer` header to the loopback TCP port.
+3. Receive a valid MCP session with full tool access.
+
+This is an **accepted, documented asymmetry** versus the stdio transport it replaces.
+The stdio transport's parent-child pipe is unaddressable and unreadable by an
+unrelated same-user process — it inherently provides same-user process isolation.
+The TCP+token transport cannot provide this property: any process running as the same
+user has filesystem read access to the token.
+
+### Decision: accepted
+
+This asymmetry is accepted for the following reasons:
+
+- The threat is bounded to **same-user processes on the same host** (loopback-only
+  binding, remoteAddress guard, Host-header DNS-rebinding guard all applied).
+- The Canon MCP server is a **local developer tool** — the threat model for same-user
+  local processes is equivalent to the threat model for any other local developer
+  tooling (e.g., language servers, build daemons) that stores secrets in `$HOME`.
+- The stdio transport provided same-user isolation as a **side effect** of UNIX pipe
+  semantics, not by design. Reproducing this property over TCP would require a
+  unix-domain socket.
+
+### Architecturally-complete fix (blocked upstream)
+
+The durable fix is to replace the TCP+token transport with a **unix-domain socket at
+`0600`** (`/tmp/canon-mcp-NNNNN.sock` or `$CLAUDE_PLUGIN_DATA/canon-mcp.sock`). A
+0600 unix-domain socket ties authorization to filesystem ACLs and eliminates the
+readable-secret entirely — only the owning user can connect at the OS level, without
+a token.
+
+**Blocked upstream today**: Claude Code's `.mcp.json` schema and the MCP TypeScript
+SDK have no unix-socket transport type. Until the upstream supports unix-socket
+transports, the TCP+token transport is the only available option for the HTTP daemon
+path. This is filed as a future durable-fix epic and must be revisited when upstream
+support lands.
+
+---
+
 ## Summary of expected outcomes
 
 | Check | Expected |
@@ -250,5 +317,104 @@ rm -rf .canon/workspaces/*http-manual-verify*
 | Tools available in session | 42+ tools from `canon-http` server |
 | `list_principles` | Returns principle list, no error |
 | `init_workspace` writes | Land in current repo's `.canon/workspaces/` |
-| `roots/list` Path B | Scope resolves without `x-canon-project-dir` header (if supported) |
+| `roots/list` Path B | Scope resolves without `x-canon-project-dir` header — CONFIRMED (interactive + headless, 2026-06-11, Claude Code 2.1.167, daemon v2.12.0) |
 | Cleanup | Daemon stopped, PID file removed, scratch config deleted |
+
+---
+
+## Post-cutover default transport — operational reference (T-FLIP)
+
+**Date flipped:** 2026-06-11. `.mcp.json` in the repo root now connects the `canon`
+MCP server to `http://127.0.0.1:3142/mcp` via `headersHelper`. This section
+documents the operational behavior after the flip.
+
+### Default configuration (repo `.mcp.json`)
+
+```json
+{
+  "mcpServers": {
+    "canon": {
+      "type": "http",
+      "url": "http://127.0.0.1:3142/mcp",
+      "headersHelper": "${CLAUDE_PLUGIN_ROOT:-.}/mcp-server/mcp-auth-headers.sh"
+    }
+  }
+}
+```
+
+The `headersHelper` script (`mcp-auth-headers.sh`) resolves the auth token
+dynamically at connection time. **No token literal is committed** — the helper
+provides the `Authorization: Bearer <token>` header by reading the token file
+(see Token-path dependency below).
+
+### Down-daemon failure mode (fail-closed)
+
+If the daemon is not running when Claude Code starts:
+
+- Claude Code reports the `canon` MCP connection as **FAILED** (visible in `/mcp`
+  output and session start warnings). This is an explicit, observable failure.
+- All `mcp__canon__*` tools are **unavailable** for the session.
+- **There is no stdio fallback.** The flip is a hard transport swap; the stdio
+  `command`/`args`/`env` block is removed entirely by design (DEC-03, fail-closed).
+- Silence or hang is not the failure mode — Canon chose fail-loudly observable
+  failure over silent degradation.
+
+### Recovery paths
+
+1. **Automatic (recommended)**: The SessionStart supervisor
+   (`hooks/canon-agent-teams/session-start-daemon-supervisor.sh`) restarts the
+   daemon automatically on the next Claude Code session start when
+   `CANON_HTTP_DAEMON=1`. Ensure this env var is set in your shell profile.
+
+2. **Manual**: Start the daemon directly:
+   ```bash
+   bash mcp-server/boot.sh --daemon
+   ```
+   Then use `/mcp` in Claude Code to reconnect.
+
+### Emergency kill-switch (DEC-03)
+
+To revert to stdio transport immediately:
+
+1. Unset the daemon flag: `unset CANON_HTTP_DAEMON`
+2. Revert `.mcp.json` to the stdio `command` form (git history has the prior form).
+3. Restart Claude Code — it will use the stdio transport directly.
+
+No daemon process will be started; all tools route through the stdio subprocess.
+
+### Plugin distribution and migration (DEC-04)
+
+This flip changes the **default transport for every Canon install** when users
+update the plugin. Behavior on plugin update:
+
+- The new `.mcp.json` (HTTP form) takes effect on next Claude Code session start.
+- The daemon is started by the SessionStart supervisor when `CANON_HTTP_DAEMON=1`.
+- Users without `CANON_HTTP_DAEMON=1` will see a connection failure until they set
+  the flag. The error is explicit (see Down-daemon failure mode above).
+- This change rides a plugin version bump (release-please). The PR body for this
+  ship must call out the transport change and the `CANON_HTTP_DAEMON=1` requirement.
+
+### Token-path runtime dependency (REQUIRED precondition — live finding 2026-06-11)
+
+The `headersHelper` resolves the auth token via `auth.ts resolveTokenPath` with the
+following tier priority:
+
+1. `$CANON_MCP_TOKEN_FILE` (explicit override)
+2. `$CLAUDE_PLUGIN_DATA/canon-mcp-token` **(Tier 2 — used by supervisor-launched daemon)**
+3. `$HOME/.claude/canon/canon-mcp-token` (Tier 3 — fallback)
+
+**Live verification finding (2026-06-11):** The supervisor-launched daemon writes and
+reads the **Tier 2 token** (`$CLAUDE_PLUGIN_DATA/canon-mcp-token`). When the
+headersHelper is invoked by Claude Code, it must use the same Tier 2 token to
+authenticate successfully (Tier-2 token → HTTP 200; a stale Tier-3 HOME token → 401).
+
+**Required precondition:** `CLAUDE_PLUGIN_DATA` must be present in the environment
+when Claude Code invokes the headersHelper. The plugin-shipped `.mcp.json` is
+evaluated in an environment where `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}`
+are set (the prior stdio form already depended on `${CLAUDE_PLUGIN_ROOT}`), so the
+plugin default path is satisfied.
+
+**Failure scenario to watch:** If a future change strips `CLAUDE_PLUGIN_DATA` from
+the helper-runtime environment, the helper falls back to the stale Tier-3 HOME token.
+This produces an authentication failure (HTTP 401), which surfaces as an explicit MCP
+connection failure — **fail-closed, not silent**. No tool calls proceed on a 401.

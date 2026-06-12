@@ -254,5 +254,10 @@ while (( _elapsed < TIMEOUT )); do
   fi
 done
 
-echo "CANON WARNING: daemon failed to start within ${TIMEOUT}s; see ${LOG_FILE}"
+echo "CANON ERROR: HTTP daemon is NOT reachable on 127.0.0.1:${PORT} — mcp__canon__* tools will FAIL this session."
+echo "  Recovery options:"
+echo "    1) Start it manually:   bash mcp-server/boot.sh --daemon"
+echo "    2) Kill-switch to stdio: unset CANON_HTTP_DAEMON  and revert .mcp.json 'canon' to the stdio command form"
+echo "  Details: mcp-server/src/app/mcp-http/MANUAL-VERIFICATION.md (down-daemon recovery)"
+echo "  (start log: ${LOG_FILE})"
 exit 0
