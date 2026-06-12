@@ -274,6 +274,66 @@ canon_has_ambiguous_git_token() {
 }
 
 # ---------------------------------------------------------------------------
+# canon_command_word_is_obfuscated <raw_segment>
+# ---------------------------------------------------------------------------
+# Returns 0 (true → caller fail-closes) when the COMMAND-POSITION token is an
+# unresolvable shell substitution / variable-indirection AND a literal "push"
+# token follows it in the same segment. Returns 1 otherwise.
+#
+# Command position = first token after skipping leading NAME=VALUE assignments.
+# A command word is obfuscated when, after stripping one leading backslash, it
+# contains $(...) or a backtick, or begins with ${ or $. Such a word can PRODUCE
+# "git" at runtime ($(echo git) push, gi$(echo t) push, $g push, `echo git`
+# push) while canon_has_git_token sees no standalone "git".
+#
+# The trailing-"push" requirement keeps benign lone substitutions ALLOWED
+# (heredoc body $(whoami), echo $(whoami), gh-comment backticks have no "push"
+# token). Substitution in ARGUMENT position is never flagged.
+#
+# Fail-closed-on-ambiguity: the only false positive is an exotic non-git command
+# whose command word is a substitution AND which also has a literal "push" token;
+# the inverse (allowing an obfuscated push) is a bypass. The asymmetry favors
+# blocking. Bash 3.2 / macOS BSD compatible.
+canon_command_word_is_obfuscated() {
+  local segment="$1"
+  local -a _cwobf_toks=()
+  local _cwobf_n=0 _cwobf_t
+  while IFS= read -r _cwobf_t; do
+    _cwobf_toks[_cwobf_n]="$_cwobf_t"
+    _cwobf_n=$(( _cwobf_n + 1 ))
+  done < <(canon_tokenize "$segment")
+  [[ $_cwobf_n -eq 0 ]] && return 1
+
+  local _cwobf_idx=0
+  while [[ $_cwobf_idx -lt $_cwobf_n ]]; do
+    local _cwobf_tk="${_cwobf_toks[$_cwobf_idx]}"
+    local _cwobf_tk_noeol="${_cwobf_tk%;}"
+    if printf '%s' "$_cwobf_tk_noeol" | grep -qE '^[A-Za-z_][A-Za-z0-9_]*='; then
+      _cwobf_idx=$(( _cwobf_idx + 1 )); continue
+    fi
+    break
+  done
+  [[ $_cwobf_idx -ge $_cwobf_n ]] && return 1
+
+  local _cwobf_cw="${_cwobf_toks[$_cwobf_idx]}"
+  local _cwobf_cw_noesc="${_cwobf_cw#\\}"
+
+  case "$_cwobf_cw_noesc" in
+    *'$('*|*'`'*|'${'*|'$'*) ;;
+    *) return 1 ;;
+  esac
+
+  local _cwobf_j=$(( _cwobf_idx + 1 ))
+  while [[ $_cwobf_j -lt $_cwobf_n ]]; do
+    if [[ "${_cwobf_toks[$_cwobf_j]}" == "push" ]]; then
+      return 0
+    fi
+    _cwobf_j=$(( _cwobf_j + 1 ))
+  done
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # canon_unwrap_string_exec_arg <raw_segment>
 # ---------------------------------------------------------------------------
 # String-executing-wrapper detector.  Classifies a segment into one of three

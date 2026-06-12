@@ -86,6 +86,45 @@ canon_delete_quotes() {
   printf '%s' "$1" | tr -d '"'"'"''
 }
 
+# canon_deescape_command_word — strip a single leading backslash from the
+# command-position token (after leading NAME=VALUE assignments). "\git" → "git"
+# so the escaped form is seen by canon_has_git_token. Argument-position tokens
+# are untouched. Re-joins tokens with single spaces ONLY when a rewrite occurs
+# (downstream detection is whitespace-insensitive). Bash 3.2 / BSD compatible.
+canon_deescape_command_word() {
+  local _seg="$1"
+  local -a _dw_toks=()
+  local _dw_n=0 _dw_t
+  while IFS= read -r _dw_t; do
+    _dw_toks[_dw_n]="$_dw_t"
+    _dw_n=$(( _dw_n + 1 ))
+  done < <(canon_tokenize "$_seg")
+  [[ $_dw_n -eq 0 ]] && { printf '%s' "$_seg"; return 0; }
+  local _dw_idx=0
+  while [[ $_dw_idx -lt $_dw_n ]]; do
+    local _dw_tk="${_dw_toks[$_dw_idx]}"
+    local _dw_tk_noeol="${_dw_tk%;}"
+    if printf '%s' "$_dw_tk_noeol" | grep -qE '^[A-Za-z_][A-Za-z0-9_]*='; then
+      _dw_idx=$(( _dw_idx + 1 )); continue
+    fi
+    break
+  done
+  [[ $_dw_idx -ge $_dw_n ]] && { printf '%s' "$_seg"; return 0; }
+  case "${_dw_toks[$_dw_idx]}" in
+    \\*)
+      _dw_toks[_dw_idx]="${_dw_toks[$_dw_idx]#\\}"
+      local _dw_out="" _dw_j=0
+      for (( _dw_j=0; _dw_j<_dw_n; _dw_j++ )); do
+        if [[ -z "$_dw_out" ]]; then _dw_out="${_dw_toks[$_dw_j]}"; else _dw_out="$_dw_out ${_dw_toks[$_dw_j]}"; fi
+      done
+      printf '%s' "$_dw_out"
+      ;;
+    *)
+      printf '%s' "$_seg"
+      ;;
+  esac
+}
+
 # Neutralize shell quote characters before any boundary/flag matching.
 COMMAND=$(canon_delete_quotes "$COMMAND")
 
@@ -517,6 +556,12 @@ process_segment() {
   local raw_segment="$2"
   local depth="$3"
 
+  # Command-position backslash de-escape ("\git push" → "git push") so the
+  # escaped form is seen as a "git" token by the detection path below. Only the
+  # command-position token is normalized; argument-position backslashes are kept.
+  raw_segment=$(canon_deescape_command_word "$raw_segment")
+  segment=$(canon_deescape_command_word "$segment")
+
   # Does this segment contain a standalone "git" token (quote-aware)?
   if ! canon_has_git_token "$raw_segment"; then
     # No standalone git token. Check whether this segment is a
@@ -538,11 +583,23 @@ process_segment() {
         exit 2
       fi
       # No standalone git token, not a string-executing wrapper, and no ambiguous
-      # git-prefixed token: this segment cannot be a git push. Allow it.
+      # git-prefixed token: check for command-position obfuscation before allowing.
       # (Command substitution inside a NON-git segment, e.g. `echo $(whoami)` or a
       # gh-comment body with backticks, is not a push and must not be fail-closed —
       # that was the over-broad defect. Obfuscated refspecs WITHIN a git push are
       # still caught by the SAFE_REFSPEC_RE allowlist in push_updates_protected_branch.)
+
+      # Command-position obfuscation: when the COMMAND-WORD is an unresolvable
+      # substitution/indirection ($(echo git) push, gi$(echo t) push, $g push,
+      # `echo git` push) AND a literal "push" token follows, it can PRODUCE a git
+      # push at runtime while canon_has_git_token sees no "git". Fail closed.
+      # (Argument-position substitution — echo $(whoami), gh pr comment ... `x` —
+      # and lone substitutions without a "push" token — heredoc bodies — are NOT
+      # flagged. Narrow replacement for the deleted blanket block; see push-guard-02.)
+      if canon_command_word_is_obfuscated "$raw_segment"; then
+        echo "CANON: command-position token is an unresolvable shell expansion preceding a push — blocking fail-closed." >&2
+        exit 2
+      fi
       return 0
     fi
 

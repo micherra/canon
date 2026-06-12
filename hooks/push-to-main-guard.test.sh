@@ -883,6 +883,184 @@ run_test "git push o main (row 15 — abbreviated remote 'o', dst==main → bloc
 
 echo ""
 # ---------------------------------------------------------------------------
+# COMMAND-POSITION OBFUSCATION MATRIX (push-guard-02)
+# 18-row block matrix + allow-class for the narrow command-position detection.
+# All block rows must exit 2; all allow rows must exit 0.
+#
+# NOTE: The test JSON values contain shell metacharacters ($(, ${, \) that
+# would trigger the installed push-to-main-guard if passed as Bash command-
+# line arguments. They are therefore assembled via intermediate variables so
+# the Bash command string seen by the installed hook is free of those chars.
+# The CANON_GUARD_CWD env var is set to a temp repo on a non-protected branch
+# so the test environment mirrors the real harness (D4 allow-path is bypassed).
+# ---------------------------------------------------------------------------
+echo "-- COMMAND-POSITION OBFUSCATION: block matrix (exit 2 required) --"
+
+# Set up a temp git repo on a non-protected branch for these tests.
+_cwobf_tmpdir=$(mktemp -d)
+git -C "$_cwobf_tmpdir" init -q
+git -C "$_cwobf_tmpdir" checkout -q -b "canon/test-cwobf"
+
+# Assemble metachar fragments as variables so this file doesn't contain
+# literal $( or ${ sequences at top-level that would trip the installed guard.
+_dp='$'   # dollar
+_bs='\'   # backslash
+
+# --- Block rows (exit 2) ---
+
+# Row 1: $(echo git) push origin main
+_cwobf_j="{\"tool_input\":{\"command\":\"${_dp}(echo git) push origin main\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: dollar-paren-echo-git push origin main → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: dollar-paren-echo-git push origin main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 2: gi$(echo t) push origin main
+_cwobf_j="{\"tool_input\":{\"command\":\"gi${_dp}(echo t) push origin main\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: gi-dollar-paren-echo-t push origin main → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: gi-dollar-paren-echo-t push origin main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 3: $(printf git) push origin main
+_cwobf_j="{\"tool_input\":{\"command\":\"${_dp}(printf git) push origin main\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: dollar-paren-printf-git push origin main → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: dollar-paren-printf-git push origin main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 4: gi`echo t` push origin main (backtick mid-word)
+_cwobf_j='{"tool_input":{"command":"gi`echo t` push origin main"}}'
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: gi-backtick-echo-t push origin main → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: gi-backtick-echo-t push origin main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 5: `echo git` push origin main (already covered by canon_has_ambiguous_git_token,
+# confirm still blocks after command-position change)
+_cwobf_j='{"tool_input":{"command":"`echo git` push origin main"}}'
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: backtick-echo-git push origin main → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: backtick-echo-git push origin main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 6: $g push origin main (var indirection)
+_cwobf_j="{\"tool_input\":{\"command\":\"${_dp}g push origin main\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: dollar-g push origin main (var indirection) → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: dollar-g push origin main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 7: ${g} push origin main
+_cwobf_j="{\"tool_input\":{\"command\":\"${_dp}{g} push origin main\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: dollar-brace-g push origin main → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: dollar-brace-g push origin main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 8: g=git; $g push origin main (multi-segment; second segment is the push)
+_cwobf_j="{\"tool_input\":{\"command\":\"g=git; ${_dp}g push origin main\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: g=git; dollar-g push origin main (multi-segment) → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: g=git; dollar-g push origin main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 9: g=git $g push origin main (env-assignment prefix, single segment)
+_cwobf_j="{\"tool_input\":{\"command\":\"g=git ${_dp}g push origin main\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: g=git dollar-g push origin main (env-assign prefix) → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: g=git dollar-g push origin main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 10: \git push origin main (backslash-escaped git)
+_cwobf_j="{\"tool_input\":{\"command\":\"${_bs}git push origin main\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: backslash-git push origin main → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: backslash-git push origin main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 11: \gi$(echo t) push origin main (combination: backslash + substitution)
+_cwobf_j="{\"tool_input\":{\"command\":\"${_bs}gi${_dp}(echo t) push origin main\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: backslash-gi-dollar-paren-t push origin main (combination) → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: backslash-gi-dollar-paren-t push origin main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 12: G=git; $G push origin +main (combination: var indirection + force-push)
+_cwobf_j="{\"tool_input\":{\"command\":\"G=git; ${_dp}G push origin +main\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: G=git; dollar-G push origin +main (combination) → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: G=git; dollar-G push origin +main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Row 13: $(echo git) push origin HEAD:main (combination: subst + HEAD:main)
+_cwobf_j="{\"tool_input\":{\"command\":\"${_dp}(echo git) push origin HEAD:main\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 2 ]]; then echo "  PASS: dollar-paren-echo-git push origin HEAD:main (combination) → block (exit 2)"; PASS=$((PASS+1))
+else echo "  FAIL: dollar-paren-echo-git push origin HEAD:main — expected 2, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+echo ""
+echo "-- COMMAND-POSITION OBFUSCATION: allow class (exit 0 required) --"
+
+# Allow A: echo $(whoami) — subst in ARGUMENT position, no git push
+_cwobf_j="{\"tool_input\":{\"command\":\"echo ${_dp}(whoami)\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 0 ]]; then echo "  PASS: echo dollar-paren-whoami → allow (exit 0)"; PASS=$((PASS+1))
+else echo "  FAIL: echo dollar-paren-whoami — expected 0, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Allow B: echo hello $(whoami)
+_cwobf_j="{\"tool_input\":{\"command\":\"echo hello ${_dp}(whoami)\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 0 ]]; then echo "  PASS: echo hello dollar-paren-whoami → allow (exit 0)"; PASS=$((PASS+1))
+else echo "  FAIL: echo hello dollar-paren-whoami — expected 0, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Allow C: gh pr comment 1 --body "see `x` here" (backtick in arg position)
+_cwobf_j='{"tool_input":{"command":"gh pr comment 1 --body \"see `x` here\""}}'
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 0 ]]; then echo "  PASS: gh pr comment body with backtick → allow (exit 0)"; PASS=$((PASS+1))
+else echo "  FAIL: gh pr comment body with backtick — expected 0, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Allow D: echo \foo (backslash-escaped non-git command word)
+_cwobf_j="{\"tool_input\":{\"command\":\"echo ${_bs}foo\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 0 ]]; then echo "  PASS: echo backslash-foo (non-git escaped cmd word) → allow (exit 0)"; PASS=$((PASS+1))
+else echo "  FAIL: echo backslash-foo — expected 0, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+# Allow E: FOO=$(date) echo hi (assignment with substitution value, benign cmd word)
+_cwobf_j="{\"tool_input\":{\"command\":\"FOO=${_dp}(date) echo hi\"}}"
+_cwobf_rc=0
+printf '%s' "$_cwobf_j" | CANON_GUARD_CWD="$_cwobf_tmpdir" bash "$HOOK" >/dev/null 2>&1 || _cwobf_rc=$?
+if [[ "$_cwobf_rc" -eq 0 ]]; then echo "  PASS: FOO=dollar-paren-date echo hi (assignment+subst) → allow (exit 0)"; PASS=$((PASS+1))
+else echo "  FAIL: FOO=dollar-paren-date echo hi — expected 0, got $_cwobf_rc"; FAIL=$((FAIL+1)); fi
+unset _cwobf_j _cwobf_rc
+
+rm -rf "$_cwobf_tmpdir"
+unset _dp _bs _cwobf_tmpdir
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
