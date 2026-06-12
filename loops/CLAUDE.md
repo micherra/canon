@@ -68,7 +68,7 @@ Loops may attach to these named lifecycle moments:
 | Phase | What ships |
 |-------|-----------|
 | **A** | Schema + registry loader + `list_loops`/`get_loop_definition` + `/canon:loop-tick` runner + `_probe` demo; no production loop fires |
-| **B** | Ship-watch definition (`loops/ship-watch.md`) — first real loop; dispatched via post-ship tap |
+| **B** | Ship-watch definition (`loops/ship-watch.md`) — first real loop; dispatched via post-ship tap; command registration fix (`"commands": ["./skills/canon/commands/"]` in plugin.json) enabling `/canon:loop-tick` to resolve as a real harness slash command |
 | **C (current)** | Self-paced mode + ScheduleWakeup + session-watch + de-dupe ledger; session-start tap wired in CLAUDE.md |
 
 **First tick is baseline-only — transition rules never fire against an empty prior (ADR-0002).**

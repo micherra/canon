@@ -501,6 +501,8 @@ Loops are Canon's managed periodic-observation artifact class. A loop is authore
 and dispatched by the orchestrator via `CronCreate` (interval loops) or `ScheduleWakeup`
 (self-paced loops).
 
+**Command registration:** `/canon:loop-tick` (and all `/canon:*` slash commands under `skills/canon/commands/`) are registered as harness plugin commands via the `commands` field in `.claude-plugin/plugin.json` (`"commands": ["./skills/canon/commands/"]`). Before this was added, NO `/canon:*` command was a registered harness slash command — they only worked as Read-and-execute runner bodies. Registration (via the manifest) is distinct from scheduling (via `CronCreate`); dc-06 is preserved.
+
 **Lifecycle-hook vocabulary:** `post-ship` | `on-long-dispatch` | `session-start`.
 At such a moment, the orchestrator calls:
 ```
@@ -550,7 +552,7 @@ scheduling automatically.
 
 ```
 canon/
-├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (22 terms)
+├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (23 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── docs/
 │   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
@@ -574,7 +576,7 @@ canon/
 ├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase C: _probe + ship-watch + session-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
-├── principles/           # Built-in principles (80 total: 7 rules, 35 strong-opinions, 38 conventions)
+├── principles/           # Built-in principles (83 total: 7 rules, 35 strong-opinions, 41 conventions)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
