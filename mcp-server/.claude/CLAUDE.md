@@ -25,7 +25,7 @@ src/
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
-│   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader + read-only-shell carve-out (Phase B current)
+│   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader + read-only-shell carve-out (Phase C current)
 │   ├── orchestration/    # Orchestration runtime: init_workspace, finalize_workspace, log_step, record_agent_metrics, all orchestration tools
 │   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
 │   ├── principles/       # get_principles, list_principles, get_compliance
@@ -43,7 +43,7 @@ src/
 - **Boot / server scope** (`app/`) — `boot.sh` launcher, per-connection scope, per-project `JobManager`. See `src/app/.claude/CLAUDE.md`.
 - **HTTP auth + sessions** (`app/mcp-http/`) — token auth, per-session McpServer, scope handshake, idle reaper. See `src/app/mcp-http/.claude/CLAUDE.md`.
 - **Drift storage** (`platform/storage/drift/`) — SQLite drift DB, DAO inventory, confidence-decay adapters. See `src/platform/storage/drift/.claude/CLAUDE.md`.
-- **Archive storage** (`platform/storage/archive/`) — build-archive persistence (ADR-0003 relocation from `features/history/services/`): `archiveWorkspace`, `buildRunSummary`, pure extractors, shared archive types. See `src/platform/storage/archive/.claude/CLAUDE.md`.
+- **Archive storage** (`platform/storage/archive/`) — build-archive persistence (ADR-0006 relocation from `features/history/services/`): `archiveWorkspace`, `buildRunSummary`, pure extractors, shared archive types. See `src/platform/storage/archive/.claude/CLAUDE.md`.
 - **Orchestration tools** (`features/orchestration/`) — workspace lifecycle, artifact writing, agent skill resolution. See `src/features/orchestration/.claude/CLAUDE.md`.
 - **Diagnostics tools** (`features/diagnostics/`) — drift reports, wiki lint, signal compiler, area memory, doc freshness. See `src/features/diagnostics/.claude/CLAUDE.md`.
 - **History tools + RecurringViolation types** → `src/features/history/.claude/CLAUDE.md`.
@@ -100,7 +100,7 @@ src/
 
 **`get_compliance` tool** — returns `confidence: ConfidenceAnnotation`; uses per-principle confidence from `analyzeDrift` when available, falls back to drift confidence adapter.
 
-**`presentArtifact` function** — canonical implementation lives in `src/app/artifact-presentation.ts` (moved from `features/orchestration/tools/present-artifact.ts`, ADR-0003); `features/orchestration/tools/present-artifact.ts` is now a thin re-export shim; `features/pr-review` and `app/register-present-artifact.ts` import from `@app/artifact-presentation.ts` directly.
+**`presentArtifact` function** — canonical implementation lives in `src/app/artifact-presentation.ts` (moved from `features/orchestration/tools/present-artifact.ts`, ADR-0006); `features/orchestration/tools/present-artifact.ts` is now a thin re-export shim; `features/pr-review` and `app/register-present-artifact.ts` import from `@app/artifact-presentation.ts` directly.
 
 **`present_artifact` MCP tool** — `html` parameter required; serves HTML via HTTP server; returns `{ url: string }` fire-and-forget.
 
@@ -141,7 +141,7 @@ src/
 | `capture_transcript` | Best-effort transcript capture; reads CC agent JSONL, writes `TranscriptEntry[]` to `{workspace}/transcripts/`; warning (never error) when source not found; `source_path` primary, `agent_id` glob fallback; `persist_path: true` records path for `get_transcript` (fail-open) — added 2026-04-26, updated 2026-05-30 |
 | `compute_autonomy_tier` | autonomous/light-touch/supervised from build history + blast radius + compliance; fail-safe: defaults to supervised on error; logs `auto_decision`; returns `{ tier, score, reasoning, signals_used }` |
 | `get_next_escalation_strategy` | Next fallback strategy on agent failure; cascade: add_primer → increase_budget → escalate_model → narrow_scope → hitl; 2-minute cumulative timeout; `skip_strategies` per-flow config; logs `auto_decision`; returns `EscalationResult` with `strategy`, `is_terminal` |
-| `reconcile_workspace` | Cliff detection; `{ workspace, emit_telemetry?, source?, projectDir? }`; returns `{ incomplete_steps[], needs_recovery }`; flags `started`/`planned` steps with missing or partial-skeleton artifacts; `completed` and empty-`artifacts_expected` planned steps never flagged; `emit_telemetry: true` appends fail-open `cliff_detected` event to orchestration.db AND upserts rows to drift.db `cliff_events` table via `CliffEventsDao` (dual fail-open write-through; `projectDir` required for drift.db write, injected by `register-journal.ts` via `resolveScope`); `WORKSPACE_NOT_FOUND` when journal absent — added 2026-05-29, dual-write 2026-06-08 |
+| `reconcile_workspace` | Cliff detection; `{ workspace, emit_telemetry?, source?, projectDir? }`; `source` accepts `"resume" \| "post_subagent" \| "loop"` (pass `"loop"` when called from loop runner); returns `{ incomplete_steps[], needs_recovery }`; flags `started`/`planned` steps with missing or partial-skeleton artifacts; `completed` and empty-`artifacts_expected` planned steps never flagged; `emit_telemetry: true` appends fail-open `cliff_detected` event to orchestration.db AND upserts rows to drift.db `cliff_events` table via `CliffEventsDao` (dual fail-open write-through; `projectDir` required for drift.db write, injected by `register-journal.ts` via `resolveScope`); `WORKSPACE_NOT_FOUND` when journal absent — added 2026-05-29, dual-write 2026-06-08, `source:"loop"` 2026-06-11 |
 
 **Text-only principle/review tools:**
 
@@ -168,7 +168,7 @@ src/
 | `get_historical_artifacts` | Retrieve archived artifacts from a previous build |
 | `get_cross_run_analysis` | Cross-run meta-analysis for the learner; includes `craft_drift: CraftDrift` (`by_dimension[]`, `by_area[]`, `profile_count`) and `cliff_events: CliffEventsDimension`; runs fail-open `sweepCliffEvents(project_dir)` before analysis |
 
-**Loop tools** (`src/features/loops/`): <!-- last-updated: 2026-06-09 -->
+**Loop tools** (`src/features/loops/`): <!-- last-updated: 2026-06-11 -->
 
 | Tool | Purpose |
 |------|---------|
@@ -197,7 +197,7 @@ src/
 ## Invariants
 <!-- last-updated: 2026-06-12 -->
 
-- **no-cross-feature-internal-import** (ADR-0002, ADR-0003): Features must not import internal modules from other features; enforced by `mcp-server/.dependency-cruiser.cjs` `no-cross-feature-internal-import` rule (error severity, 0 violations); sole exception: `^src/features/knowledge-graph/` is a designated foundational service features may depend on (see `docs/adr/0002-knowledge-graph-is-a-foundational-service.md`). Added 2026-06-12.
+- **no-cross-feature-internal-import** (ADR-0005, ADR-0006): Features must not import internal modules from other features; enforced by `mcp-server/.dependency-cruiser.cjs` `no-cross-feature-internal-import` rule (error severity, 0 violations); sole exception: `^src/features/knowledge-graph/` is a designated foundational service features may depend on (see `docs/adr/0005-knowledge-graph-is-a-foundational-service.md`). Added 2026-06-12.
 - **ADR-002 subprocess isolation**: Only files in `src/platform/adapters/` may import `node:child_process`; all `features/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
 - **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors caught as `UNEXPECTED` by `gatedWrapHandler` or `wrapHandler`; tools never throw for expected conditions — added 2026-03-31
 - **ADR-002 security boundary**: `git-adapter.ts` never sets `shell: true`; `process-adapter.ts` sets `shell: true`; the two adapters must not be interchanged for git operations — added 2026-03-31

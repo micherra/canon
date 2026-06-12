@@ -129,7 +129,7 @@ type FlowEventMap = {
     missing_count: number;
     partial_count: number;
     needs_recovery: true;
-    source: "resume" | "post_subagent";
+    source: "resume" | "post_subagent" | "loop";
     timestamp: string;
     correlation_id?: string;
   };
@@ -171,7 +171,7 @@ export const EventPayloadSchemas = {
     missing_count: z.number(),
     needs_recovery: z.literal(true),
     partial_count: z.number(),
-    source: z.enum(["resume", "post_subagent"]),
+    source: z.enum(["resume", "post_subagent", "loop"]),
     timestamp: z.string(),
   }),
 

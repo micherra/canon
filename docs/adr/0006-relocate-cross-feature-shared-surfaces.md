@@ -1,16 +1,16 @@
 ---
-adr: "0003"
+adr: "0006"
 title: "Relocate cross-feature shared surfaces to their correct architectural homes"
 status: accepted
 date: "2026-06-12"
 build: "enforce-ai-navigability-canon-already-preaches-name-the-grey-box-model"
 ---
 
-# ADR-0003: Relocate cross-feature shared surfaces to their correct architectural homes
+# ADR-0006: Relocate cross-feature shared surfaces to their correct architectural homes
 
 ## Context
 
-The `no-cross-feature-internal-import` rule (ADR-0002 context) surfaced four clusters of feature→feature edges that are NOT foundational-service dependencies (those are handled by ADR-0002) but rather *misfiled logic* — code that physically lives in one feature while conceptually belonging to a shared layer or to its sole consumer:
+The `no-cross-feature-internal-import` rule (ADR-0005 context) surfaced four clusters of feature→feature edges that are NOT foundational-service dependencies (those are handled by ADR-0005) but rather *misfiled logic* — code that physically lives in one feature while conceptually belonging to a shared layer or to its sole consumer:
 
 - **ORCH-PRESENT** (1 edge): `pr-review/present-review.ts` → `orchestration/tools/present-artifact.ts`. `presentArtifact` is a generic "serve HTML over the Canon HTTP server + open browser" utility depending only on `@app/http-server`, `@platform/adapters`, `@shared`. It is not orchestration-specific.
 - **HISTORY-ARCHIVAL** (3 edges): `orchestration/{janitor,workspace-cleanup,digest-writer}` → `history/services/{archive-service,run-summary-extractors}`. `archiveWorkspace` is a workspace-lifecycle persistence service (writes workspace state to the archive/drift DB); `run-summary-extractors` are pure extraction helpers. Orchestration owns the lifecycle (cleanup/janitor/digest) and reaches *down* into history for archival — an inverted dependency.
@@ -72,7 +72,7 @@ Each of the four clusters is a *placement* error, not a coupling that needs an a
 ## Consequences
 
 **Positive:**
-- 10 of the 16 cross-feature edges (all but the 7 KG-PUBLIC edges, of which 1 overlaps confidence-scorer→graph-query — see DESIGN.md table) are eliminated by relocation; combined with ADR-0002, the depcruise gate is green with exactly one documented allowance (KG).
+- 10 of the 16 cross-feature edges (all but the 7 KG-PUBLIC edges, of which 1 overlaps confidence-scorer→graph-query — see DESIGN.md table) are eliminated by relocation; combined with ADR-0005, the depcruise gate is green with exactly one documented allowance (KG).
 - `src/platform/storage/archive/` and `src/platform/storage/drift/craft-persistence.ts` become the discoverable homes for archival and craft persistence.
 - MCP tool wiring is preserved via re-export at the `register-*.ts` layer (no tool behavior change — satisfies the "no change to runtime tool behavior" scope constraint).
 

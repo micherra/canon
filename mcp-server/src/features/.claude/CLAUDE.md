@@ -33,7 +33,7 @@ Features are structured around bounded contexts. Each feature directory is an in
 
 ## Invariants
 <!-- last-updated: 2026-06-12 -->
-- Features must not import internal modules from each other — mechanically enforced by `mcp-server/.dependency-cruiser.cjs` `no-cross-feature-internal-import` rule (error severity); sole exception: `knowledge-graph/` is a foundational service features may depend on (ADR-0002)
+- Features must not import internal modules from each other — mechanically enforced by `mcp-server/.dependency-cruiser.cjs` `no-cross-feature-internal-import` rule (error severity); sole exception: `knowledge-graph/` is a foundational service features may depend on (ADR-0005)
 - All tool handlers must be thin wrappers; logic lives in services
 - All tool handlers must be wrapped with `wrapHandler` from `@shared/lib/wrap-handler.ts`
 

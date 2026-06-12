@@ -52,7 +52,7 @@ module.exports = {
           // reconcile-workspace writes cliff events to drift.db (fail-open write-through, decision cliff-d2) —
           // deferred DI exception until a DI container is wired
           "^src/features/orchestration/tools/reconcile-workspace\\.ts$",
-          // Relocated from diagnostics (ADR-0003): pitfall-enrichment, hot-file-detection, area-memory-enrichment
+          // Relocated from diagnostics (ADR-0006): pitfall-enrichment, hot-file-detection, area-memory-enrichment
           // query drift.db directly — deferred DI exception until a DI container is wired
           "^src/features/orchestration/services/pitfall-enrichment\\.ts$",
           "^src/features/orchestration/services/hot-file-detection\\.ts$",
@@ -99,8 +99,8 @@ module.exports = {
         "a single named public entry, or a sanctioned foundational layer (@shared/*, @domains/*, @platform/*, @app/*). " +
         "Enforces the per-folder-public-interface convention. The $1 back-reference excludes same-feature imports. " +
         "ALLOWANCE: knowledge-graph is a foundational read service (freshness/query/git-intel over the @graph/ engine) " +
-        "that peer features legitimately depend on — see docs/adr/0002-knowledge-graph-is-a-foundational-service.md. " +
-        "This is the ONLY feature-target allowance; all other former cross-feature edges were relocated (ADR-0003).",
+        "that peer features legitimately depend on — see docs/adr/0005-knowledge-graph-is-a-foundational-service.md. " +
+        "This is the ONLY feature-target allowance; all other former cross-feature edges were relocated (ADR-0006).",
       severity: "error",
       from: {
         path: "^src/features/([^/]+)/",
@@ -111,7 +111,7 @@ module.exports = {
         pathNot: [
           // Self-exclusion — MUST be first. $1 = the source feature from from.path.
           "^src/features/$1/",
-          // ADR-0002: knowledge-graph is a foundational service features may depend on.
+          // ADR-0005: knowledge-graph is a foundational service features may depend on.
           "^src/features/knowledge-graph/",
         ],
       },

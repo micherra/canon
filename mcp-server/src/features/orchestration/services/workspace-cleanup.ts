@@ -1,4 +1,5 @@
 import { existsSync, rmSync } from "node:fs";
+import { unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { gitDiff, gitExec } from "@platform/adapters/git-adapter.ts";
@@ -269,6 +270,26 @@ export async function tryAppendAnalytics(
       err instanceof Error ? err.message : err,
     );
     return false;
+  }
+}
+
+/**
+ * Remove the cliff de-dupe ledger at finalize time. Best-effort — never throws.
+ * A missing or unremovable ledger never blocks finalize (loops-phase-c-03).
+ */
+export async function tryRemoveCliffLedger(workspace: string): Promise<void> {
+  try {
+    await unlink(join(workspace, ".cliff-surfaced.json"));
+  } catch (err: unknown) {
+    // ENOENT is expected (no cliffs surfaced this session); all other errors are warn-only
+    const code =
+      err instanceof Error && "code" in err ? (err as NodeJS.ErrnoException).code : undefined;
+    if (code !== "ENOENT") {
+      console.warn(
+        "[canon] finalizeWorkspace: failed to remove cliff ledger:",
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 }
 

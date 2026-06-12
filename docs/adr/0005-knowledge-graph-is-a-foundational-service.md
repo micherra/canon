@@ -1,12 +1,12 @@
 ---
-adr: "0002"
+adr: "0005"
 title: "knowledge-graph is a foundational service features may depend on"
 status: accepted
 date: "2026-06-12"
 build: "enforce-ai-navigability-canon-already-preaches-name-the-grey-box-model"
 ---
 
-# ADR-0002: knowledge-graph is a foundational service features may depend on
+# ADR-0005: knowledge-graph is a foundational service features may depend on
 
 ## Context
 
@@ -56,7 +56,7 @@ Move `ensure-graph-fresh`, the git-intel public functions, and `graph-query` int
 
 Chosen: **Option A — Recognize knowledge-graph as a sanctioned foundational dependency.**
 
-`knowledge-graph` is a foundational read service over the `@graph/` engine that peer features legitimately consume (freshness, query, git-intel). The depcruise blanket rule exempts `^src/features/knowledge-graph/` as an allowed target via a single, ADR-backed `to.pathNot` allowance. This is the one deliberately-retained boundary allowance permitted by AC#2 — it is an architectural recognition, not a grandfather of accidental coupling. The other four clusters (ORCH-PRESENT, HISTORY-ARCHIVAL, DIAGNOSTICS-ENRICH, CRAFT-PERSIST) are genuinely decoupled by real code relocation (see ADR-0003).
+`knowledge-graph` is a foundational read service over the `@graph/` engine that peer features legitimately consume (freshness, query, git-intel). The depcruise blanket rule exempts `^src/features/knowledge-graph/` as an allowed target via a single, ADR-backed `to.pathNot` allowance. This is the one deliberately-retained boundary allowance permitted by AC#2 — it is an architectural recognition, not a grandfather of accidental coupling. The other four clusters (ORCH-PRESENT, HISTORY-ARCHIVAL, DIAGNOSTICS-ENRICH, CRAFT-PERSIST) are genuinely decoupled by real code relocation (see ADR-0006).
 
 ## Canon-Principle Alignment
 

@@ -51,7 +51,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanupAllJobManagers } from "@platform/jobs/job-manager.ts";
 import { handleArtifactRoutes, respondJson } from "./http-routes.ts";
-import { removePidFile, writePidFile } from "./http-server.ts";
+import {
+  markDaemonArtifactActive,
+  removePidFile,
+  setHttpPort,
+  writePidFile,
+} from "./http-server.ts";
 import {
   authenticate,
   loadOrCreateToken,
@@ -59,6 +64,7 @@ import {
   resolveTokenPath,
   type TokenResult,
 } from "./mcp-http/auth.ts";
+import { computeIdentityProof, generateNonce, probeIdentity } from "./mcp-http/identity-proof.ts";
 import { isLoopbackHostRequest } from "./mcp-http/loopback-host.ts";
 import { closeAllSessions, handleMcpRequest } from "./mcp-http/session-manager.ts";
 import { resolveReady } from "./server-state.ts";
@@ -155,19 +161,25 @@ async function readPackageVersion(): Promise<string> {
 // ---------------------------------------------------------------------------
 
 /**
- * Probes an existing process on the given port's /health endpoint.
+ * Probes an existing process on the given port via challenge-response identity proof (F4).
  *
- * Returns:
- * - "same-version" — /health responded with the same version string → benign race loss
- * - "different-version" — /health responded with a different version → conflict
- * - "unreachable" — connection refused or timeout → not a Canon daemon
+ * Step 1: GET /health — version mismatch → "different-version"; connection failure → "unreachable".
+ * Step 2: On version match, GET /identity?nonce=<n> with Bearer token to verify HMAC proof.
+ *   Valid proof → "same-version" (safe to cede). Proof failure / token unavailable → "identity-mismatch".
+ *
+ * @param port      - Port to probe.
+ * @param myVersion - This daemon's version string.
+ * @param myToken   - This daemon's local token; undefined → "identity-mismatch" (fail-closed).
+ * @param timeoutMs - Per-request timeout ms (default 2000).
  */
 export function probeExistingDaemon(
   port: number,
   myVersion: string,
+  myToken: string | undefined,
   timeoutMs = 2000,
-): Promise<"same-version" | "different-version" | "unreachable"> {
+): Promise<"same-version" | "different-version" | "identity-mismatch" | "unreachable"> {
   return new Promise((resolve) => {
+    // Step 1: GET /health to check version
     const req = httpRequest(
       {
         hostname: "127.0.0.1",
@@ -184,11 +196,23 @@ export function probeExistingDaemon(
         res.on("end", () => {
           try {
             const parsed = JSON.parse(body) as { version?: string };
-            if (parsed.version === myVersion) {
-              resolve("same-version");
-            } else {
+            if (parsed.version !== myVersion) {
               resolve("different-version");
+              return;
             }
+            // Version matches — proceed to identity challenge-response (Step 2)
+            if (myToken === undefined) {
+              // Token unavailable locally — cannot prove identity → fail-closed
+              resolve("identity-mismatch");
+              return;
+            }
+            // Step 2: challenge-response HMAC proof on /identity
+            const nonce = generateNonce();
+            probeIdentity(port, myToken, nonce, timeoutMs)
+              .then(resolve)
+              .catch(() => {
+                resolve("identity-mismatch");
+              });
           } catch {
             resolve("different-version");
           }
@@ -203,10 +227,6 @@ export function probeExistingDaemon(
     req.end();
   });
 }
-
-// ---------------------------------------------------------------------------
-// Daemon start / stop (exported for tests)
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Request handler (extracted for line-limit compliance)
@@ -276,8 +296,63 @@ function handleDaemonRequest(
   )
     return;
 
+  // F4: /identity — authenticated challenge-response identity proof route.
+  // Auth-gated with the same checks as /mcp (loopback-Host already applied above).
+  // Returns HMAC-SHA256_token(nonce) so the prober can verify we hold the live token.
+  // Never returns the raw token — only a digest bound to the per-probe nonce.
+  if (url.pathname === "/identity" && req.method === "GET") {
+    handleIdentityRoute(req, res, tokenResult);
+    return;
+  }
+
   // 404 fallback
   respondJson(res, 404, { error: "Not found" });
+}
+
+/**
+ * Handles the authenticated GET /identity route (F4 identity proof).
+ *
+ * Auth-gated: 503 on token-unavailable, 401/403 on auth failure (same as /mcp).
+ * On auth success: reads `nonce` from the URL query string and responds with
+ * `{ proof: HMAC-SHA256_token(nonce) }`. The prober can then recompute the
+ * expected HMAC with its own local token and timingSafeEqual-compare.
+ *
+ * Never returns the raw token — only a digest bound to the per-probe nonce,
+ * making it non-replayable (each probe uses a fresh nonce from generateNonce()).
+ *
+ * @param req         - Incoming HTTP request.
+ * @param res         - Outgoing HTTP response.
+ * @param tokenResult - Mutable ref to the current token result.
+ */
+function handleIdentityRoute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  tokenResult: { current: TokenResult },
+): void {
+  // 503 when token unavailable (fail-closed — cannot produce a proof)
+  if (!tokenResult.current.ok) {
+    respondJson(res, 503, {
+      detail: tokenResult.current.error,
+      error: "Service unavailable: token not loaded",
+    });
+    return;
+  }
+  // Auth check (loopback + Host + Bearer token)
+  const authResult = authenticate(req, tokenResult.current.token);
+  if (!authResult.ok) {
+    respondJson(res, authResult.status, { error: authResult.reason });
+    return;
+  }
+  // Extract nonce from query string
+  const url = new URL(req.url ?? "/", `http://127.0.0.1:${daemonPort}`);
+  const nonce = url.searchParams.get("nonce");
+  if (!nonce) {
+    respondJson(res, 400, { error: "Missing required query parameter: nonce" });
+    return;
+  }
+  // Compute proof — HMAC-SHA256 keyed on our token, bound to the nonce
+  const proof = computeIdentityProof(tokenResult.current.token, nonce);
+  respondJson(res, 200, { proof });
 }
 
 /**
@@ -340,6 +415,39 @@ function handleMcpRoute(
 // ---------------------------------------------------------------------------
 
 /**
+ * Handles an EADDRINUSE error on the daemon port via F4 challenge-response probe.
+ * Extracted from bindDaemonServer to keep cognitive complexity within Biome limit.
+ *
+ * Exits the process on all EADDRINUSE outcomes — callers do not need to handle the
+ * returned promise; it never resolves (process always exits).
+ */
+async function handleEaddrinuse(tokenResult: TokenResult, version: string): Promise<never> {
+  // F4: pass the local token to enable challenge-response proof.
+  // If token unavailable (tokenResult.ok === false), receives undefined → "identity-mismatch" (fail-closed).
+  const myToken = tokenResult.ok ? tokenResult.token : undefined;
+  const probeResult = await probeExistingDaemon(daemonPort, version, myToken);
+  if (probeResult === "same-version") {
+    process.stderr.write(
+      `Canon daemon: port ${daemonPort} already held by same version (identity verified) — exiting cleanly.\n`,
+    );
+    process.exit(0);
+  } else if (probeResult === "identity-mismatch") {
+    // F4 fail-closed + observable: version matched but identity proof failed.
+    // Do NOT exit(0) — this may be an impostor. Refuse to cede the port.
+    process.stderr.write(
+      `CANON ERROR: port ${daemonPort} held by a process that could not prove Canon daemon identity (token mismatch) — refusing to cede. Possible impostor.\n`,
+    );
+    process.exit(1);
+  } else {
+    process.stderr.write(
+      `CANON ERROR: port ${daemonPort} held by a different process/version ` +
+        `(probe: ${probeResult}). Refusing to start.\n`,
+    );
+    process.exit(1);
+  }
+}
+
+/**
  * Binds the daemon server to the configured port and writes the PID file.
  * Extracted from startDaemon for line-limit compliance.
  *
@@ -351,21 +459,9 @@ function bindDaemonServer(tokenResult: TokenResult, version: string): Promise<vo
   return new Promise<void>((resolve, reject) => {
     daemonServer = createServer((req, res) => handleDaemonRequest(req, res, tokenRef, version));
 
-    daemonServer.on("error", async (err: NodeJS.ErrnoException) => {
+    daemonServer.on("error", (err: NodeJS.ErrnoException) => {
       if (err.code === "EADDRINUSE") {
-        const probeResult = await probeExistingDaemon(daemonPort, version);
-        if (probeResult === "same-version") {
-          process.stderr.write(
-            `Canon daemon: port ${daemonPort} already held by same version — exiting cleanly.\n`,
-          );
-          process.exit(0);
-        } else {
-          process.stderr.write(
-            `CANON ERROR: port ${daemonPort} held by a different process/version ` +
-              `(probe: ${probeResult}). Refusing to start.\n`,
-          );
-          process.exit(1);
-        }
+        handleEaddrinuse(tokenResult, version).catch(() => process.exit(1));
       } else {
         process.stderr.write(`CANON ERROR: daemon server error: ${err.message}\n`);
         reject(err);
@@ -413,6 +509,15 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<void> {
 
   // Read version once at boot
   const version = await readPackageVersion();
+
+  // DEC-05: Signal to the http-server module that the daemon is actively serving
+  // artifacts on its port. This makes isHttpServerRunning() return true and
+  // getHttpPort() return the daemon port, so present_artifact / open_artifact
+  // can resolve artifact URLs to the daemon instead of returning UNEXPECTED.
+  // The daemon already calls handleArtifactRoutes and shares the in-process
+  // artifacts Map — only the port/running signal was missing.
+  setHttpPort(daemonPort);
+  markDaemonArtifactActive();
 
   // Resolve the global ready gate so stray code paths don't hang.
   // Per-session gates govern all HTTP tool handlers — the global gate

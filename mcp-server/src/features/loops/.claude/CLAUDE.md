@@ -51,8 +51,8 @@ so future authors cannot bypass it by omission.
 ## Phase Boundary
 
 Phase A: schema + loader + tools + `_probe` demo loop; no production loop fires.
-Phase B (current): `loops/ship-watch.md` added — first real loop, dispatched post-ship.
-Phase C: self-paced mode + ScheduleWakeup + session-watch.
+Phase B: `loops/ship-watch.md` added — first real loop, dispatched post-ship.
+Phase C (current): self-paced mode + ScheduleWakeup + `loops/session-watch.md`; `BUILTIN_FORBIDDEN_MCP` denylist + `max_wall` schedule field added to schema (ADR-0002 first-tick-baseline invariant formalised).
 
 ## Non-Declarative Constraint (dc-06)
 
