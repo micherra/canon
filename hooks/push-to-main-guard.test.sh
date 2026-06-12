@@ -856,22 +856,22 @@ echo ""
 # P1-SECURITY: FALSE-POSITIVE regression locks for transparent-exec fix
 #
 # These must stay exit 0 — they are inert commands (no git push) and must
-# not be broken by the normalization added for the CRITICAL fix above.
+# not be broken by the V2 span predicate (PR #386 V2, ADR-0006).
 # ---------------------------------------------------------------------------
 echo "-- P1-SECURITY PASSTHROUGH: false-positive regression locks (must pass, exit 0) --"
 
-# ls $(pwd) — ordinary non-git cmd with arg-position substitution
+# ls $(pwd) — ordinary non-git cmd with arg-position substitution (clause-final → inert)
 run_test 'ls $(pwd) (arg-pos sub behind real cmd — must stay exit 0)' \
   0 '{"command":"ls $(pwd)"}'
-
-# ln -s "$(realpath x)" mcp-server/node_modules — the original false-positive from watch_GGGGGGGG1
-run_test 'ln -s "$(realpath x)" mcp-server/node_modules (false-positive lock — must stay exit 0)' \
-  0 '{"command":"ln -s \"$(realpath x)\" mcp-server/node_modules"}'
 
 # a=$(echo git) push origin main — substitution is the assignment VALUE; command
 # word is empty → runtime rc=127 (no push). Keep current behavior (not forced-blocked).
 run_test 'a=$(echo git) push origin main (assignment value, empty cmd word — must stay exit 0)' \
   0 '{"command":"a=$(echo git) push origin main"}'
+
+# ${x} push — parameter expansion (not cmd-sub); V2 does not touch it.
+run_test '${x} push (param expansion, not cmd-sub — must stay exit 0)' \
+  0 '{"command":"${x} push"}'
 
 # "$(echo git)" push origin main — quoted form; already blocks via ambiguous-token
 # path (SECURITY.md LOW finding). Keep blocked — this is a regression lock.
@@ -890,6 +890,102 @@ run_test 'env FOO=bar ls /tmp (env + assignment + real cmd — must stay exit 0)
 # stacked prefixes with real command — env command ls (no cmd-sub)
 run_test 'env command ls /tmp (stacked prefixes + real cmd — must stay exit 0)' \
   0 '{"command":"env command ls /tmp"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# V2 PREDICATE (ADR-0006): denylist-omitted wrapper BLOCK cases
+#
+# These were NOT blocked by the V1 denylist (nohup/time/setsid/ionice/taskset/
+# chrt/unbuffer/doas/env -i) but ARE blocked by the V2 span-final predicate.
+# The substitution is FOLLOWED BY further command tokens in every case → BLOCK.
+# DEC-386-guard-v2-fail-closed-span: denylist-free, fail-closed on ambiguity.
+# ---------------------------------------------------------------------------
+echo "-- V2 PREDICATE: denylist-omitted wrappers BLOCK (exit 2) --"
+
+run_test 'nohup $(echo git) push origin main (nohup — V2 blocks, exit 2)' \
+  2 '{"command":"nohup $(echo git) push origin main"}'
+
+run_test 'time $(echo git) push origin main (time — V2 blocks, exit 2)' \
+  2 '{"command":"time $(echo git) push origin main"}'
+
+run_test 'setsid $(echo git) push origin main (setsid — V2 blocks, exit 2)' \
+  2 '{"command":"setsid $(echo git) push origin main"}'
+
+run_test 'ionice $(echo git) push origin main (ionice — V2 blocks, exit 2)' \
+  2 '{"command":"ionice $(echo git) push origin main"}'
+
+run_test 'taskset -c 0 $(echo git) push origin main (taskset — V2 blocks, exit 2)' \
+  2 '{"command":"taskset -c 0 $(echo git) push origin main"}'
+
+run_test 'chrt -b 0 $(echo git) push origin main (chrt — V2 blocks, exit 2)' \
+  2 '{"command":"chrt -b 0 $(echo git) push origin main"}'
+
+run_test 'unbuffer $(echo git) push origin main (unbuffer — V2 blocks, exit 2)' \
+  2 '{"command":"unbuffer $(echo git) push origin main"}'
+
+run_test 'doas $(echo git) push origin main (doas — V2 blocks, exit 2)' \
+  2 '{"command":"doas $(echo git) push origin main"}'
+
+run_test 'env -i $(echo git) push origin main (env -i — V2 blocks, exit 2)' \
+  2 '{"command":"env -i $(echo git) push origin main"}'
+
+run_test 'env -i nohup $(echo git) push origin main (stacked env+nohup — V2 blocks, exit 2)' \
+  2 '{"command":"env -i nohup $(echo git) push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# V2 PREDICATE (ADR-0006): nested / complex forms
+#
+# A nested substitution like $(echo $(echo git)) also has a non-final sub-span
+# (the outer span is followed by "push") → BLOCK.
+# ---------------------------------------------------------------------------
+echo "-- V2 PREDICATE: nested/complex BLOCK forms (exit 2) --"
+
+run_test '$(echo $(echo git)) push origin main (nested sub — V2 blocks, exit 2)' \
+  2 '{"command":"$(echo $(echo git)) push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# V2 PREDICATE (ADR-0006): SACRIFICED FALSE-POSITIVE (intentional over-block)
+#
+# ln -s "$(realpath x)" mcp-server/node_modules — the substitution $(realpath x)
+# is NOT clause-final (mcp-server/node_modules follows it) → V2 BLOCKS.
+#
+# Per DEC-386-guard-v2-fail-closed-span: this form is intentionally fail-closed.
+# The motivating Canon command (worktree node_modules symlink) is created via
+# TypeScript symlinkSync (init-workspace.ts), NOT shell ln; so no real Canon
+# command path regresses. Any genuine need rewrites to put the substitution last
+# or uses a VAR=$(…) assignment (which the V2 predicate skips).
+#
+# This test documents the sacrificed FP — do NOT revert it to exit 0 without
+# re-opening the entire denylist-vs-span tradeoff (see ADR-0006).
+# ---------------------------------------------------------------------------
+echo "-- V2 PREDICATE: sacrificed false-positive is now BLOCK (exit 2) --"
+
+run_test 'ln -s "$(realpath x)" mcp-server/node_modules (sacrificed FP — DEC-386 fail-closed, exit 2)' \
+  2 '{"command":"ln -s \"$(realpath x)\" mcp-server/node_modules"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# V2 PREDICATE (ADR-0006): ALLOW cases — substitution in clause-FINAL position
+#
+# These forms have the substitution as the LAST element of their clause.
+# A clause-final substitution is inert (argument-position data, cannot forward
+# to push argv) → ALLOW. This is the key watch_GGGGGGGG1 false-positive fix.
+# ---------------------------------------------------------------------------
+echo "-- V2 PREDICATE: clause-final substitution ALLOW cases (exit 0) --"
+
+run_test 'ls $(pwd) (final sub — V2 allows, exit 0)' \
+  0 '{"command":"ls $(pwd)"}'
+
+run_test 'echo $(date) (final sub — V2 allows, exit 0)' \
+  0 '{"command":"echo $(date)"}'
+
+run_test 'cat $(ls foo) (final sub — V2 allows, exit 0)' \
+  0 '{"command":"cat $(ls foo)"}'
+
+run_test 'FOO=bar ls $(pwd) (assignment prefix + final sub — V2 allows, exit 0)' \
+  0 '{"command":"FOO=bar ls $(pwd)"}'
 
 echo ""
 # ---------------------------------------------------------------------------

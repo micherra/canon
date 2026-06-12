@@ -534,209 +534,89 @@ process_segment() {
         echo "CANON: ambiguous git-prefixed token detected — blocking fail-closed." >&2
         exit 2
       fi
-      # P1 (PR #386 Codex + security review): command-NAME-position command substitution.
-      # At this point the segment has no standalone git token, is not a recognized
-      # string-executing wrapper, and has no ambiguous git<metachar> token. The only
-      # remaining disguised-push vector is a substitution occupying the COMMAND-NAME
-      # (first-word) position — e.g. $(echo git) push origin main — which bash expands
-      # to `git` at runtime. We cannot evaluate it statically → fail closed (dc-01).
+      # DURABLE PREDICATE (PR #386 V2, ADR-0006, supersedes the transparent-exec denylist).
+      # Fail-closed-on-ambiguity (dc-05): a command-substitution that is FOLLOWED BY another
+      # command token can occupy/forward-to a command-name slot and expand to `git push` at
+      # runtime — through ANY chain of wrappers/assignments/group-openers — so block it. A
+      # substitution that is the FINAL element of its clause is inert (argument-position data)
+      # and is allowed, preserving the watch_GGGGGGGG1 false-positive wins.
       #
-      # Normalization: resolve the EFFECTIVE command-name position past:
-      #   1. Leading whitespace and VAR=val assignment prefixes (original fix)
-      #   2. Transparent-exec prefix words that hand off to their first non-option
-      #      argument: env, command, exec, nice, timeout, stdbuf.
-      #      These are a best-effort denylist of common transparent-exec wrappers.
-      #      Exhaustive coverage (xargs -I{} bash -c ..., setsid, etc.) is out of
-      #      scope; this hook is defense-in-depth over accidental/obfuscated commands
-      #      by the agent itself, not a hardened boundary against an adversary.
-      #   3. Subshell ( and brace-group { openers at segment start.
-      # After normalization, if the resolved token starts with $( or backtick, block.
-      # This fires ONLY when a COMMAND-NAME-POSITION token is a substitution. It does
-      # NOT fire on substitutions in ARGUMENT position behind a real command word
-      # (ls $(pwd), echo $(date), ln -s "$(realpath x)" ...).
-      local _cmdpos="$segment"
-      # helper: strip leading whitespace from _cmdpos
-      _cmdpos_strip_ws() { _cmdpos="${_cmdpos#"${_cmdpos%%[![:space:]]*}"}"; }
-      # helper: consume first word of _cmdpos, storing it in _word
-      # sets _word to the first whitespace-delimited token and advances _cmdpos past it
-      _cmdpos_pop_word() {
-        local _rest="${_cmdpos#"${_cmdpos%%[ 	]*}"}"  # everything from first ws
-        if [[ "$_rest" == "$_cmdpos" ]]; then
-          # no whitespace found — the entire _cmdpos is one word
-          _word="$_cmdpos"
-          _cmdpos=""
-        else
-          _word="${_cmdpos%"$_rest"}"  # everything before first whitespace run
-          _cmdpos="$_rest"
-          _cmdpos_strip_ws
-        fi
+      # Operates on the quote-deleted $segment. canon_tokenize splits on unquoted whitespace, so
+      # a whitespace-bearing substitution spans multiple tokens; we walk paren/backtick balance to
+      # find the span's closing token, then block iff a meaningful token follows it.
+      # DEC-386-guard-v2-fail-closed-span: this replaces the V1 denylist (env/command/exec/nice/
+      # timeout/stdbuf + group-openers). The denylist was open-ended; V2 is denylist-free.
+      _p2m_cmdsub_not_final() {
+        local _clause="$1"
+        local -a _toks=()
+        local _t _tok_str
+        # Use here-string (not process substitution) to avoid fd-inheritance issues
+        # under set -euo pipefail in nested function context.
+        _tok_str=$(canon_tokenize "$_clause") || true
+        while IFS= read -r _t; do
+          [[ -n "$_t" ]] && _toks+=("$_t")
+        done <<< "$_tok_str"
+        local _n=${#_toks[@]}
+        local _i=0
+        while (( _i < _n )); do
+          local _tok="${_toks[_i]}"
+          # strip leading group openers for the substitution-start test
+          local _core="$_tok"
+          while [[ "$_core" == '('* || "$_core" == '{'* ]]; do _core="${_core:1}"; done
+          if [[ "$_core" == '$('* || "$_core" == '`'* ]]; then
+            # found a substitution span start at _i — find its closing token _end
+            local _end=$_i
+            if [[ "$_core" == '$('* ]]; then
+              local _depth=0 _j=$_i
+              while (( _j < _n )); do
+                local _s="${_toks[_j]}"
+                local _opens="${_s//[!(]/}"; local _closes="${_s//[!)]/}"
+                _depth=$(( _depth + ${#_opens} - ${#_closes} ))
+                if (( _depth <= 0 )); then _end=$_j; break; fi
+                _end=$_j; _j=$(( _j + 1 ))
+              done
+            else
+              local _cnt=0 _j=$_i
+              while (( _j < _n )); do
+                local _s="${_toks[_j]}"; local _bt="${_s//[!\`]/}"
+                _cnt=$(( _cnt + ${#_bt} ))
+                if (( _cnt >= 2 && _cnt % 2 == 0 )); then _end=$_j; break; fi
+                _end=$_j; _j=$(( _j + 1 ))
+              done
+            fi
+            # any meaningful token after _end?  (skip pure closers ) } ; )
+            local _k=$(( _end + 1 ))
+            while (( _k < _n )); do
+              local _rest="${_toks[_k]//[(){};]/}"
+              if [[ -n "$_rest" ]]; then return 0; fi   # substitution NOT final → BLOCK
+              _k=$(( _k + 1 ))
+            done
+            _i=$(( _end + 1 )); continue
+          fi
+          _i=$(( _i + 1 ))
+        done
+        return 1   # no non-final substitution → no block from this rule
       }
 
-      _cmdpos_strip_ws
-      # Strip leading VAR=val assignment prefixes (repeat for multiple assignments).
-      while [[ "$_cmdpos" =~ ^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+ ]]; do
-        _cmdpos="${_cmdpos#"${BASH_REMATCH[0]}"}"
-        _cmdpos_strip_ws
-      done
+      # Re-split defensively on separators (upstream already split, but a stray separator could
+      # survive quote-deletion); evaluate each clause. Use a here-string (not process substitution)
+      # to avoid pipefail / fd-inheritance issues when running deep inside nested functions.
+      local _p2m_block=false
+      local _p2m_clauses
+      _p2m_clauses=$(printf '%s' "$segment" | sed -E 's/(&&|\|\||;|\|)/\n/g') || true
+      while IFS= read -r _clause; do
+        [[ -z "$_clause" ]] && continue
+        if _p2m_cmdsub_not_final "$_clause"; then _p2m_block=true; break; fi
+      done <<< "$_p2m_clauses"
 
-      # Normalize past transparent-exec prefixes and group openers.
-      # TRANSPARENT_EXEC_PREFIXES: best-effort denylist of wrappers that forward
-      # their first non-option argument as the command name. Not exhaustive.
-      local _normalized=true
-      while [[ "$_normalized" == true && -n "$_cmdpos" ]]; do
-        _normalized=false
-        local _word=""
-        case "$_cmdpos" in
-          # Subshell group opener: ( CMD ... )
-          '('*)
-            _cmdpos="${_cmdpos#'('}"
-            _cmdpos_strip_ws
-            # strip trailing ) if present — handles single-token forms
-            _cmdpos="${_cmdpos%')'}"
-            _cmdpos_strip_ws
-            _normalized=true
-            ;;
-          # Brace group opener: { CMD ... ; }
-          '{'*)
-            _cmdpos="${_cmdpos#'{'}"
-            _cmdpos_strip_ws
-            # strip trailing ;} or } if present
-            _cmdpos="${_cmdpos%';}'}"
-            _cmdpos="${_cmdpos%'}'}"
-            _cmdpos_strip_ws
-            _normalized=true
-            ;;
-          # env: consume flags (-i --ignore-environment -u NAME --unset=NAME --null)
-          #      and VAR=val assignments before the real command
-          env\ *|env$'\t'*)
-            _cmdpos_pop_word  # consume 'env'
-            # consume env's own flags and VAR=val prefixes
-            local _env_done=false
-            while [[ "$_env_done" == false && -n "$_cmdpos" ]]; do
-              _cmdpos_pop_word
-              case "$_word" in
-                -i|--ignore-environment|-0|--null) ;;   # self-contained flags
-                -u|--unset)                              # flag consuming next arg
-                  _cmdpos_pop_word ;;                    # skip the NAME arg
-                --unset=*) ;;                            # inline value, self-contained
-                *=*) ;;                                  # VAR=val prefix — skip
-                *)
-                  # Not an env flag or assignment — this is the command name.
-                  # Put it back conceptually: set _cmdpos to word + remaining
-                  if [[ -n "$_cmdpos" ]]; then
-                    _cmdpos="${_word} ${_cmdpos}"
-                  else
-                    _cmdpos="$_word"
-                  fi
-                  _env_done=true
-                  ;;
-              esac
-            done
-            _normalized=true
-            ;;
-          # command: consume flags (-v -p -V) then real command
-          command\ *|command$'\t'*)
-            _cmdpos_pop_word  # consume 'command'
-            while [[ -n "$_cmdpos" ]]; do
-              case "$_cmdpos" in
-                -v\ *|-v$'\t'*|-p\ *|-p$'\t'*|-V\ *|-V$'\t'*|-vp\ *|-vp$'\t'*)
-                  _cmdpos_pop_word ;;  # consume the flag, keep looping
-                *)  break ;;
-              esac
-            done
-            _normalized=true
-            ;;
-          # exec: consume flags (-a NAME -c -l) then real command
-          exec\ *|exec$'\t'*)
-            _cmdpos_pop_word  # consume 'exec'
-            while [[ -n "$_cmdpos" ]]; do
-              case "$_cmdpos" in
-                -c\ *|-c$'\t'*|-l\ *|-l$'\t'*)
-                  _cmdpos_pop_word ;;  # self-contained flags
-                -a\ *|-a$'\t'*)
-                  _cmdpos_pop_word     # consume -a
-                  _cmdpos_pop_word ;;  # consume NAME arg
-                *)  break ;;
-              esac
-            done
-            _normalized=true
-            ;;
-          # nice: consume -n N, -N (negative number), or plain N before the command
-          nice\ *|nice$'\t'*)
-            _cmdpos_pop_word  # consume 'nice'
-            case "$_cmdpos" in
-              -n\ *|-n$'\t'*)
-                _cmdpos_pop_word   # consume -n
-                _cmdpos_pop_word   # consume N (the niceness value)
-                ;;
-              -[0-9]*\ *|-[0-9]*$'\t'*)
-                _cmdpos_pop_word   # consume -N shorthand
-                ;;
-            esac
-            _normalized=true
-            ;;
-          # timeout: consume [OPTION...] DURATION then real command
-          timeout\ *|timeout$'\t'*)
-            _cmdpos_pop_word  # consume 'timeout'
-            # consume option flags: --preserve-status --foreground -k/-s + arg
-            while [[ -n "$_cmdpos" ]]; do
-              case "$_cmdpos" in
-                --preserve-status\ *|--preserve-status$'\t'*| \
-                --foreground\ *|--foreground$'\t'*)
-                  _cmdpos_pop_word ;;
-                -k\ *|-k$'\t'*|-s\ *|-s$'\t'*)
-                  _cmdpos_pop_word   # consume flag
-                  _cmdpos_pop_word   # consume arg
-                  ;;
-                *)  break ;;
-              esac
-            done
-            # consume DURATION (any token that looks like a number with optional suffix)
-            if [[ "$_cmdpos" =~ ^[0-9] ]]; then
-              _cmdpos_pop_word
-            fi
-            _normalized=true
-            ;;
-          # stdbuf: consume -i/-o/-e + SIZE then real command
-          # SIZE may be a separate token (-o 0), a concatenated suffix (-o0),
-          # or an =-delimited form (-o=0 / -o=L / -o=1K).
-          stdbuf\ *|stdbuf$'\t'*)
-            _cmdpos_pop_word  # consume 'stdbuf'
-            while [[ -n "$_cmdpos" ]]; do
-              case "$_cmdpos" in
-                # Space-separated: -o SIZE — pop flag AND the following SIZE token
-                -i\ *|-i$'\t'*|-o\ *|-o$'\t'*|-e\ *|-e$'\t'*)
-                  _cmdpos_pop_word   # consume flag (-i/-o/-e)
-                  _cmdpos_pop_word   # consume SIZE
-                  ;;
-                # Concatenated: -o0  -oL  -o=0  etc. (flag+size as one token)
-                -i*|-o*|-e*)
-                  _cmdpos_pop_word   # flag+size in one token
-                  ;;
-                *)  break ;;
-              esac
-            done
-            _normalized=true
-            ;;
-        esac
-        # After each prefix/opener consumed, re-strip VAR=val prefixes that may
-        # appear after `env` emits them (env VAR=val cmd is handled above, but
-        # stacked forms like `env command VAR=val cmd` need this).
-        while [[ "$_cmdpos" =~ ^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+ ]]; do
-          _cmdpos="${_cmdpos#"${BASH_REMATCH[0]}"}"
-          _cmdpos_strip_ws
-        done
-      done
-
-      if [[ "$_cmdpos" == '$('* || "$_cmdpos" == '`'* ]]; then
-        echo "CANON: command-name position is a command substitution — cannot prove it does not resolve to 'git push' — blocking fail-closed." >&2
+      if [[ "$_p2m_block" == true ]]; then
+        echo "CANON: a command substitution is followed by further command tokens — cannot prove it does not resolve to 'git push' — blocking fail-closed." >&2
         exit 2
       fi
-      # A segment with no git token, no recognized string-executing wrapper, no
-      # ambiguous git token, and no command-name-position substitution cannot be a
-      # disguised git push. Command substitution / pipes / redirects in such a segment
-      # are ordinary non-git Bash — do NOT fail-closed
-      # (watch_GGGGGGGG1: false-positives on ln -s "$(...)..." etc.).
+      # A segment with no git token, no recognised string-executing wrapper, no
+      # ambiguous git token, and no non-final command substitution cannot be a
+      # disguised git push. Command substitution in clause-final position is inert
+      # (argument-position data — watch_GGGGGGGG1 preserved for ls $(pwd) etc.).
       return 0
     fi
 
