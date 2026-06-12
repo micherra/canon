@@ -1,12 +1,12 @@
 ---
-adr: "0003"
+adr: "0005"
 title: "Deterministic verification gates are bash scripts invoked by the verify contract, not MCP tools"
 status: accepted
 date: "2026-06-11"
 build: "deterministic-verification-hardening-batch-a-1-dead-wire-reachability"
 ---
 
-# ADR-0003: Deterministic verification gates are bash scripts invoked by the verify contract, not MCP tools
+# ADR-0005: Deterministic verification gates are bash scripts invoked by the verify contract, not MCP tools
 
 ## Context
 

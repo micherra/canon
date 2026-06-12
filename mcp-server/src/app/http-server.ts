@@ -79,12 +79,44 @@ let serverPort = DEFAULT_PORT;
 // index.ts's resolved startup dir rather than read from ambient cwd.
 let resolvedProjectDir: string | null = null;
 
+// DEC-05: daemon artifact-serving signal.
+// When the HTTP daemon (daemon.ts) is running and serving artifacts, it calls
+// markDaemonArtifactActive() and setHttpPort(daemonPort) so that isHttpServerRunning()
+// returns true and getHttpPort() returns the daemon's port. This lets present_artifact
+// and open_artifact resolve URLs to the daemon rather than refusing with UNEXPECTED.
+// Cleared by resetStateForTesting() for test isolation.
+let daemonArtifactActive = false;
+
 /**
  * Returns the port the HTTP server is currently bound to.
  * Returns the configured default when the server has not started yet.
+ * In daemon mode (DEC-05), returns the daemon port set by setHttpPort().
  */
 export function getHttpPort(): number {
   return serverPort;
+}
+
+/**
+ * Sets the HTTP port explicitly. Used by the daemon (DEC-05) to signal that
+ * artifacts are being served on the daemon's port rather than the default 3141.
+ *
+ * @param port - The port the daemon is listening on (typically 3142).
+ */
+export function setHttpPort(port: number): void {
+  serverPort = port;
+}
+
+/**
+ * Marks that the HTTP daemon is actively serving artifacts on the daemon port.
+ * Called by daemon.ts startDaemon() so that isHttpServerRunning() returns true
+ * in daemon mode, enabling present_artifact / open_artifact to resolve URLs.
+ *
+ * DEC-05: the daemon serves artifacts via the same in-process artifacts Map as
+ * the sidecar, but because it starts its own HTTP server (daemon.ts → createServer),
+ * the sidecar's httpServer variable stays null. This flag bridges that gap.
+ */
+export function markDaemonArtifactActive(): void {
+  daemonArtifactActive = true;
 }
 
 /**
@@ -160,12 +192,18 @@ export async function removePidFile(
 }
 
 /**
- * Returns true when the HTTP server is currently listening (bound to a port).
- * Returns false when the server failed to start (e.g., EADDRINUSE) or has not
- * been started yet.
+ * Returns true when the HTTP server is currently listening (bound to a port),
+ * OR when the HTTP daemon is actively serving artifacts (DEC-05).
+ *
+ * Returns false when neither the sidecar nor the daemon is running.
+ *
+ * DEC-05: In daemon mode, `httpServer` stays null (the sidecar never starts),
+ * but `daemonArtifactActive` is set by `markDaemonArtifactActive()` from
+ * `daemon.ts startDaemon()`. This enables present_artifact / open_artifact
+ * to resolve artifact URLs without returning UNEXPECTED.
  */
 export function isHttpServerRunning(): boolean {
-  return httpServer !== null;
+  return httpServer !== null || daemonArtifactActive;
 }
 
 /**
@@ -268,11 +306,18 @@ export function stopHttpServer(): Promise<void> {
  * Clears all registered artifacts and module state.
  * Intended for test isolation only — do not call in production code.
  *
+ * Resets: registered routes/artifacts, resolvedProjectDir, and daemonArtifactActive
+ * (DEC-05 daemon signal). Does NOT reset serverPort — that is server-lifecycle state
+ * managed by startHttpServer / stopHttpServer, not per-test state. Resetting it here
+ * would break sidecar tests that start a server on a test port and call
+ * resetStateForTesting() between tests to clear artifacts.
+ *
  * @internal
  */
 export function resetStateForTesting(): void {
   resetRoutesStateForTesting();
   resolvedProjectDir = null;
+  daemonArtifactActive = false;
 }
 
 // ---------------------------------------------------------------------------

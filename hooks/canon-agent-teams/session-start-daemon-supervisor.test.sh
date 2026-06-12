@@ -443,6 +443,152 @@ fi
 rm -rf "$TMPDATA" "$TMPROOT"
 
 # ---------------------------------------------------------------------------
+# Test 10: CANON_HTTP_DAEMON=1, no-op boot cmd, short timeout, unused port →
+# LOUD recovery block emitted, exit 0
+#
+# This is the critical risk-mitigation test: when the daemon cannot be reached
+# after the supervisor's best-effort start attempt (poll timeout reached), the
+# hook must print a LOUD actionable error — not a quiet warning.
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"10.0.0-test"}' > "$TMPROOT/mcp-server/package.json"
+
+# Find an unused port via python3 (daemon will never start on it)
+FREE_PORT10=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+# Use ':' (no-op shell builtin) as the boot command — it exits immediately
+# without starting any daemon. The health poll will time out.
+OUTPUT10=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORT10" \
+  CANON_SUPERVISOR_BOOT_CMD=":" \
+  CANON_SUPERVISOR_START_TIMEOUT=1 \
+  bash "$HOOK" 2>&1)
+EXIT_CODE10=$?
+
+# Assert: exit 0 (advisory hook never blocks session startup)
+EXIT_OK10=no
+[[ $EXIT_CODE10 -eq 0 ]] && EXIT_OK10=yes
+
+# Assert: output contains the loud recovery markers
+CONTAINS_FAIL_MSG10=no
+CONTAINS_BOOTSH10=no
+CONTAINS_KILLSWITCH10=no
+echo "$OUTPUT10" | grep -q "tools will FAIL" && CONTAINS_FAIL_MSG10=yes
+echo "$OUTPUT10" | grep -q "boot.sh --daemon" && CONTAINS_BOOTSH10=yes
+echo "$OUTPUT10" | grep -q "unset CANON_HTTP_DAEMON" && CONTAINS_KILLSWITCH10=yes
+
+if [[ "$EXIT_OK10" == "yes" ]] && [[ "$CONTAINS_FAIL_MSG10" == "yes" ]] && \
+   [[ "$CONTAINS_BOOTSH10" == "yes" ]] && [[ "$CONTAINS_KILLSWITCH10" == "yes" ]]; then
+  pass "Daemon unreachable after start attempt: LOUD recovery block emitted, exit 0"
+else
+  fail "Daemon unreachable after start attempt: exit=${EXIT_CODE10}, fail_msg=${CONTAINS_FAIL_MSG10}, boot_sh=${CONTAINS_BOOTSH10}, killswitch=${CONTAINS_KILLSWITCH10}, output=$(echo "$OUTPUT10" | head -10)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT"
+
+# ---------------------------------------------------------------------------
+# Test 11a: CANON_HTTP_DAEMON=0 (flag off) → recovery block NOT printed
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"11.0.0-test"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORT11=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+OUTPUT11=$(CANON_HTTP_DAEMON=0 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORT11" \
+  CANON_SUPERVISOR_BOOT_CMD=":" \
+  CANON_SUPERVISOR_START_TIMEOUT=1 \
+  bash "$HOOK" 2>&1)
+EXIT_CODE11=$?
+
+RECOVERY_BLOCK_PRINTED11=no
+echo "$OUTPUT11" | grep -q "tools will FAIL" && RECOVERY_BLOCK_PRINTED11=yes
+
+if [[ $EXIT_CODE11 -eq 0 ]] && [[ "$RECOVERY_BLOCK_PRINTED11" == "no" ]]; then
+  pass "Flag off (CANON_HTTP_DAEMON=0): recovery block NOT printed, exit 0"
+else
+  fail "Flag off: exit=${EXIT_CODE11}, recovery_block_printed=${RECOVERY_BLOCK_PRINTED11}, output=$(echo "$OUTPUT11" | head -5)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT"
+
+# ---------------------------------------------------------------------------
+# Test 11b: CANON_HTTP_DAEMON=1, healthy daemon → recovery block NOT printed
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"11b.0.0-test"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORT11B=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+# Start a healthy daemon mock
+python3 -c "
+import http.server, json
+
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            body = json.dumps({'ok': True, 'port': ${FREE_PORT11B}, 'version': '11b.0.0-test', 'transport': 'http'}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(body)
+    def log_message(self, *a): pass
+
+http.server.HTTPServer(('127.0.0.1', ${FREE_PORT11B}), H).serve_forever()
+" &
+FAKE_SERVER_PID11B=$!
+disown "$FAKE_SERVER_PID11B" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown prevents bash job-tracking; cleanup via explicit kill below
+sleep 0.5
+
+BOOT_MARKER11B="$TMPDATA/boot_called11b"
+OUTPUT11B=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORT11B" \
+  CANON_SUPERVISOR_BOOT_CMD="touch $BOOT_MARKER11B" \
+  CANON_SUPERVISOR_START_TIMEOUT=3 \
+  bash "$HOOK" 2>&1)
+EXIT_CODE11B=$?
+
+kill "$FAKE_SERVER_PID11B" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- cleanup only; process may have already exited
+
+RECOVERY_BLOCK_PRINTED11B=no
+echo "$OUTPUT11B" | grep -q "tools will FAIL" && RECOVERY_BLOCK_PRINTED11B=yes
+
+if [[ $EXIT_CODE11B -eq 0 ]] && [[ "$RECOVERY_BLOCK_PRINTED11B" == "no" ]]; then
+  pass "Healthy daemon (same version): recovery block NOT printed, exit 0"
+else
+  fail "Healthy daemon: exit=${EXIT_CODE11B}, recovery_block_printed=${RECOVERY_BLOCK_PRINTED11B}, output=$(echo "$OUTPUT11B" | head -5)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
