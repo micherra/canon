@@ -494,11 +494,13 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Loop Framework <!-- last-updated: 2026-06-09 -->
+## Loop Framework <!-- last-updated: 2026-06-11 -->
 
 Loops are Canon's managed periodic-observation artifact class. A loop is authored as
 `loops/<id>.md` (YAML frontmatter + action-prompt body), registered via `list_loops`,
 and dispatched by the orchestrator via `CronCreate`.
+
+**Command registration:** `/canon:loop-tick` (and all `/canon:*` slash commands under `skills/canon/commands/`) are registered as harness plugin commands via the `commands` field in `.claude-plugin/plugin.json` (`"commands": ["./skills/canon/commands/"]`). Before this was added, NO `/canon:*` command was a registered harness slash command — they only worked as Read-and-execute runner bodies. Registration (via the manifest) is distinct from scheduling (via `CronCreate`); dc-06 is preserved.
 
 **Lifecycle-hook vocabulary:** `post-ship` | `on-long-dispatch` | `session-start`.
 At such a moment, the orchestrator calls:
