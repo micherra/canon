@@ -17,8 +17,8 @@ import { cpSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { sanitizeBranch } from "../../../domains/workspaces/workspace.ts";
-import type { ArchiveManifestEntry } from "../../../platform/storage/drift/drift-analytics-types.ts";
-import { getDriftDb } from "../../../platform/storage/drift/drift-db-cache.ts";
+import type { ArchiveManifestEntry } from "../drift/drift-analytics-types.ts";
+import { getDriftDb } from "../drift/drift-db-cache.ts";
 import { CANON_DIR, CANON_FILES } from "../../../shared/constants.ts";
 import { generateId } from "../../../shared/lib/id.ts";
 import { buildRunSummary } from "./run-summary-builder.ts";

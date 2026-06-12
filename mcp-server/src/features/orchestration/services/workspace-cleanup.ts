@@ -1,7 +1,7 @@
 import { existsSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
-import { archiveWorkspace } from "@features/history/services/archive-service.ts";
+import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
 import { gitDiff, gitExec } from "@platform/adapters/git-adapter.ts";
 import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
 import { releaseClaims } from "@shared/lib/file-claims.ts";

@@ -11,7 +11,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { buildRunSummary } from "../services/run-summary-builder.ts";
+import { buildRunSummary } from "@platform/storage/archive/run-summary-builder.ts";
 
 // ---- Helpers ----
 
