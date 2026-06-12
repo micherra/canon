@@ -47,4 +47,5 @@ Use `docs/adr/TEMPLATE.md` as the starting point for every new ADR. Copy it, fil
 | # | Title | Status | Date | Build |
 |---|-------|--------|------|-------|
 | [0001](0001-adr-template-placement.md) | ADR template lives at docs/adr/TEMPLATE.md and coexists with templates/design-decision.md | accepted | 2026-06-09 | close-the-adr-gap-the-architect-currently-writes-rich-design-decision |
-| [0002](0002-deterministic-gates-as-bash-scripts.md) | Deterministic verification gates are bash scripts invoked by the verify contract, not MCP tools | accepted | 2026-06-11 | deterministic-verification-hardening-batch-a-1-dead-wire-reachability |
+| [0002](0002-loop-first-tick-baseline-semantics.md) | Loop first-tick is baseline-capture-only — transition rules never fire against an empty prior | accepted | 2026-06-11 | loop-framework-phase-c-self-paced-mode-schedulewakeup-adapter-session |
+| [0003](0003-deterministic-gates-as-bash-scripts.md) | Deterministic verification gates are bash scripts invoked by the verify contract, not MCP tools | accepted | 2026-06-11 | deterministic-verification-hardening-batch-a-1-dead-wire-reachability |
