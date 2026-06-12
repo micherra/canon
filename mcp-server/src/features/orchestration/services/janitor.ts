@@ -20,7 +20,15 @@
  *   - subprocess-isolation: git commands via gitExec (spawnSync, shell never true)
  */
 
-import { existsSync, lstatSync, readdirSync, rmdirSync, rmSync, statSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readdirSync,
+  rmdirSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import { archiveWorkspace } from "@features/history/services/archive-service.ts";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
@@ -388,6 +396,22 @@ function removeWorktreeRegistration(worktreeSubPath: string, candidate: PruneCan
 }
 
 /**
+ * Guard 1 (deletion safety): explicitly unlink the node_modules symlink inside a
+ * worktree before `git worktree remove`. Uses lstatSync (does not follow symlinks)
+ * to confirm the path IS a symlink before unlinking — prevents accidental deletion
+ * of the real main node_modules directory.
+ * Best-effort — never throws.
+ */
+function unlinkWorktreeNodeModulesSymlink(worktreeSubPath: string): void {
+  try {
+    const nmLink = join(worktreeSubPath, "mcp-server", "node_modules");
+    if (lstatSync(nmLink).isSymbolicLink()) unlinkSync(nmLink);
+  } catch {
+    // best-effort: link absent or not a symlink — nothing to unlink
+  }
+}
+
+/**
  * Archive a workspace slug (best-effort) and then remove it.
  * Returns true when the slug directory was successfully deleted.
  */
@@ -410,6 +434,7 @@ async function archiveAndRemoveSlug(candidate: PruneCandidate, errors: string[])
   // any remaining metadata.
   const worktreeSubPath = join(slugPath, "worktree");
   if (existsSync(worktreeSubPath)) {
+    unlinkWorktreeNodeModulesSymlink(worktreeSubPath); // Guard 1: unlink symlink before worktree remove
     removeWorktreeRegistration(worktreeSubPath, candidate);
   }
 

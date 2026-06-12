@@ -4,7 +4,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync, symlinkSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
@@ -278,6 +278,38 @@ async function buildCachePrefix(
   return prefixParts.join("\n\n---\n\n");
 }
 
+/**
+ * Best-effort: symlink the worktree's mcp-server/node_modules to the main checkout's
+ * resolved mcp-server/node_modules so the agent LSP tool resolves zod/vitest/.ts imports.
+ * Lives in gitignored .canon/** — never enters the package (see ADR-0003). Non-blocking:
+ * on any failure the build proceeds (LSP degrades). Skips if main node_modules is absent
+ * or a node_modules already exists at the link site.
+ *
+ * Guard 2 (non-circular): target is realpathSync(main node_modules), which resolves to
+ * an absolute path outside the worktree subtree — never circular.
+ */
+export function linkWorktreeNodeModules(worktreePath: string, projectDir: string): void {
+  try {
+    const mainNm = join(projectDir, "mcp-server", "node_modules");
+    if (!existsSync(mainNm)) return; // main deps not installed → no-op
+    const target = realpathSync(mainNm); // resolved, outside the worktree → non-circular (Guard 2)
+    const linkSite = join(worktreePath, "mcp-server", "node_modules");
+    try {
+      // lstatSync does not follow symlinks — check if anything already exists at link site
+      lstatSync(linkSite);
+      return; // already present → do not clobber
+    } catch {
+      // ENOENT — link site does not exist, safe to create
+    }
+    symlinkSync(target, linkSite, "dir");
+  } catch (err) {
+    console.warn(
+      "[init-workspace] node_modules symlink skipped:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 /** Build a unique session branch name for the build worktree. */
 function buildSessionBranchName(session: Session): string {
   return `canon/${session.slug}`;
@@ -297,6 +329,7 @@ function createAndPersistWorktree(
     branchName: worktreeBranch,
   });
   if (!wtResult.ok) return {};
+  linkWorktreeNodeModules(worktreePath, projectDir); // Guard 2 non-circular by construction
 
   session.worktree_path = worktreePath;
   session.worktree_branch = worktreeBranch;

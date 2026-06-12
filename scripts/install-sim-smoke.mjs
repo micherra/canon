@@ -40,11 +40,109 @@
  */
 
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync as rmSyncFs, symlinkSync as symlinkSyncFs, writeFileSync } from "node:fs";
 import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// ── Guard 3: release containment ────────────────────────────────────────────
+
+/**
+ * Containment tripwire (Guard 3): the packaged/archived tree must never contain a
+ * node_modules symlink. git archive is tracked-only so this should always pass —
+ * the assertion makes a future regression (symlink into a tracked path) fail loudly
+ * instead of leaking into a release.
+ *
+ * Note: `.canon/` contains tracked config files (config.json, principle-overrides.yaml,
+ * CONVENTIONS.md) that are INTENTIONALLY part of the release. Runtime state directories
+ * (.canon/workspaces/, databases, etc.) are gitignored and thus absent from archives.
+ * We do NOT assert on .canon/ presence — only on node_modules symlinks.
+ *
+ * Does NOT follow symlinks — we intentionally scan at the directory-entry level using
+ * readdirSync with { withFileTypes: true } and lstatSync. We skip following into
+ * node_modules dirs (even non-symlink ones) to keep scan time O(non-dep-tree).
+ *
+ * @param {string} archiveRoot - The root directory of the extracted archive
+ */
+function assertNoLeakedArtifacts(archiveRoot) {
+  const stack = [archiveRoot];
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue; // unreadable dir — skip
+    }
+    for (const e of entries) {
+      const full = join(dir, e.name);
+      if (e.name === "node_modules") {
+        // Check whether this specific entry is a symlink — lstatSync does not follow
+        let stat;
+        try {
+          stat = lstatSync(full);
+        } catch {
+          continue;
+        }
+        if (stat.isSymbolicLink()) {
+          throw new Error(
+            `[install-sim] CONTAINMENT BREACH: node_modules symlink in archive at ${full}`,
+          );
+        }
+        // Real node_modules dir — don't recurse into it (not our concern and very slow)
+        continue;
+      }
+      // Only recurse into real directories (not symlinks to dirs)
+      if (e.isDirectory()) stack.push(full);
+    }
+  }
+}
+
+/**
+ * Self-test for assertNoLeakedArtifacts: verifies that the containment tripwire
+ * correctly fires on synthetic violations and passes on a clean tree.
+ * All operations are synchronous — no async/await needed.
+ */
+function selfTestContainmentTripwire() {
+  const tmpRoot = mkdtempSync(join(tmpdir(), "guard3-self-test-"));
+  try {
+    // Test 1: clean tree passes
+    const cleanDir = join(tmpRoot, "clean");
+    mkdirSync(join(cleanDir, "src"), { recursive: true });
+    writeFileSync(join(cleanDir, "src", "index.ts"), "");
+    assertNoLeakedArtifacts(cleanDir); // must not throw
+
+    // Test 2: .canon/ with only tracked config files does NOT trigger (it's intentional content)
+    const canonDir = join(tmpRoot, "with-canon");
+    mkdirSync(join(canonDir, ".canon"), { recursive: true });
+    writeFileSync(join(canonDir, ".canon", "config.json"), "{}");
+    assertNoLeakedArtifacts(canonDir); // must NOT throw (.canon config is legitimate release content)
+
+    // Test 3: node_modules symlink is caught
+    const nmDir = join(tmpRoot, "with-nm-symlink");
+    mkdirSync(nmDir, { recursive: true });
+    mkdirSync(join(tmpRoot, "real-nm"), { recursive: true });
+    symlinkSyncFs(join(tmpRoot, "real-nm"), join(nmDir, "node_modules"), "dir");
+    let caught = false;
+    try {
+      assertNoLeakedArtifacts(nmDir);
+    } catch (err) {
+      if (!err.message.includes("CONTAINMENT BREACH")) throw err;
+      caught = true;
+    }
+    if (!caught) throw new Error("[guard3-self-test] Expected node_modules symlink breach to be caught");
+
+    // Test 4: real node_modules dir (not symlink) does NOT throw
+    const realNmDir = join(tmpRoot, "with-real-nm");
+    mkdirSync(join(realNmDir, "node_modules"), { recursive: true });
+    assertNoLeakedArtifacts(realNmDir); // must not throw
+
+    console.log("[install-sim] Guard 3 self-test: all containment assertions passed.");
+  } finally {
+    rmSyncFs(tmpRoot, { recursive: true, force: true });
+  }
+}
 
 // ── Repo root resolution ────────────────────────────────────────────────────
 
@@ -372,6 +470,11 @@ async function setupInstallEnv() {
   });
   console.log(`[install-sim] Archived HEAD to ${archivePath}`);
 
+  // Guard 3 containment check: assert the archived tree has no node_modules symlink
+  // and no .canon/ content. Runs BEFORE the intentional test symlink is created below.
+  assertNoLeakedArtifacts(archivePath);
+  console.log("[install-sim] Guard 3 containment check passed (no leaked artifacts in archive).");
+
   // Deps: symlink the repo's installed node_modules into the archive's mcp-server/.
   // This mirrors the CLAUDE_PLUGIN_DATA symlink that boot.sh creates in plugin context.
   // Without this, boot.sh can't find tsx and fails. We use the repo's installed
@@ -505,6 +608,11 @@ async function runNormalMode() {
 async function runSelfCheck() {
   console.log("\n[install-sim] === SELF-CHECK MODE ===");
   console.log("[install-sim] Verifying the harness correctly catches and passes the #356 forms...");
+
+  // Guard 3 self-test: verify the containment tripwire fires correctly before proceeding.
+  console.log("\n[install-sim][self-check/guard3] Running Guard 3 containment tripwire self-test...");
+  selfTestContainmentTripwire();
+  console.log("[install-sim][self-check/guard3] PASS.");
 
   const { archivePath, userProjectDir, cleanup } = await setupInstallEnv();
 

@@ -47,3 +47,4 @@ Use `docs/adr/TEMPLATE.md` as the starting point for every new ADR. Copy it, fil
 | # | Title | Status | Date | Build |
 |---|-------|--------|------|-------|
 | [0001](0001-adr-template-placement.md) | ADR template lives at docs/adr/TEMPLATE.md and coexists with templates/design-decision.md | accepted | 2026-06-09 | close-the-adr-gap-the-architect-currently-writes-rich-design-decision |
+| [0003](0003-worktree-node-modules-symlink-containment.md) | Worktree node_modules via gitignored symlink with containment gate (not npm-install, not NODE_PATH) | accepted | 2026-06-11 | worktree-dev-environment-fixes-symlink-mcp-servernodemodules-into |
