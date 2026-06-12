@@ -729,6 +729,76 @@ rm -rf "$TMPDIR_SPACE_PARENT" "$TMPDIR_SPACE_CWD"
 
 echo ""
 # ---------------------------------------------------------------------------
+# watch_GGGGGGGG1 fix: PASSTHROUGH-set (false-positives now fixed — exit 0)
+# Non-git, non-wrapper segments containing $(...) / backticks / pipes / redirects
+# must pass through the hook without blocking (they cannot be a disguised git push).
+# ---------------------------------------------------------------------------
+echo "-- watch_GGGGGGGG1 FIX: non-git metachar commands must pass (should allow, exit 0) --"
+# NOTE: commands containing $(...) / backticks / $ must NOT use make_input (which
+# embeds the value in printf's format arg — shell expansion would fire or quoting
+# would be wrong). Use printf directly with single-quote literals so the JSON
+# payload reaches the hook literally without further shell interpretation.
+_echo_date_input='{"command":"echo \"$(date)\""}'
+run_test 'echo "$(date)" (command substitution — not git, must pass)' \
+  0 "$_echo_date_input"
+run_test 'grep -rn foo src | head -5 (pipe — not git, must pass)' \
+  0 "$(make_input 'grep -rn foo src | head -5')"
+run_test 'npm run build > /tmp/out.txt 2>&1 (redirect — not git, must pass)' \
+  0 "$(make_input 'npm run build > /tmp/out.txt 2>&1')"
+_ls_pwd_input='{"command":"ls $(pwd)"}'
+run_test 'ls $(pwd) (command-sub arg to non-git cmd — must pass)' \
+  0 "$_ls_pwd_input"
+_printf_var_input='{"command":"printf \"%s\" \"$VAR\""}'
+run_test 'printf "%s" "$VAR" (no git token — must pass)' \
+  0 "$_printf_var_input"
+_node_symlink_input='{"command":"node -e \"require('"'"'fs'"'"').symlinkSync(require('"'"'fs'"'"').realpathSync('"'"'/a'"'"'),'"'"'/b'"'"','"'"'dir'"'"')\""}'
+run_test 'node -e symlinkSync(realpathSync(...)) (node symlink — must pass)' \
+  0 "$_node_symlink_input"
+
+echo ""
+# ---------------------------------------------------------------------------
+# watch_GGGGGGGG1 NO-REGRESSION: obfuscated-push vector still blocked
+# The disguised-push path (bash -c "$(echo git push ...)") must still exit 2.
+# This is caught by the post-unwrap guard (inner_cmd starts with '$(' → block),
+# NOT by the removed pre-git-token metachar scan.
+# ---------------------------------------------------------------------------
+echo "-- watch_GGGGGGGG1 NO-REGRESSION: obfuscated push still blocked (should block, exit 2) --"
+run_test 'bash -c "$(echo git push origin main)" (cmd-sub inner — obfuscated, still blocked)' \
+  2 "$(make_input 'bash -c "$(echo git push origin main)"')"
+run_test 'git push origin main (direct push — unchanged, still blocked)' \
+  2 "$(make_input 'git push origin main')"
+run_test 'git push --all origin (push-everything — unchanged, still blocked)' \
+  2 "$(make_input 'git push --all origin')"
+
+echo ""
+# ---------------------------------------------------------------------------
+# UNBOUND-VAR: assert no "unbound variable" text on stderr (set -u safety)
+# Both the git_dir_args and _gda_head arrays can be empty when no -C flag and
+# no CANON_GUARD_CWD is set. The ${arr[@]+"${arr[@]}"} idiom must suppress the
+# bash 3.2 "unbound variable" error that "${arr[@]}" produces on empty arrays.
+# ---------------------------------------------------------------------------
+echo "-- UNBOUND-VAR: no 'unbound variable' on stderr under set -u --"
+
+_unbound_bare=$(printf '{"command":"git push"}' | bash "$HOOK" 2>&1 >/dev/null || true)
+if printf '%s' "$_unbound_bare" | grep -q "unbound variable"; then
+  echo "  FAIL: bare 'git push' produced 'unbound variable' on stderr"
+  FAIL=$((FAIL + 1))
+else
+  echo "  PASS: bare 'git push' — no 'unbound variable' on stderr"
+  PASS=$((PASS + 1))
+fi
+
+_unbound_nonpush=$(printf '{"command":"echo \\"$(date)\\""}' | bash "$HOOK" 2>&1 >/dev/null || true)
+if printf '%s' "$_unbound_nonpush" | grep -q "unbound variable"; then
+  echo "  FAIL: non-git command produced 'unbound variable' on stderr"
+  FAIL=$((FAIL + 1))
+else
+  echo "  PASS: non-git metachar command — no 'unbound variable' on stderr"
+  PASS=$((PASS + 1))
+fi
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
