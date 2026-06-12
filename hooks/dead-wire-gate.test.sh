@@ -739,6 +739,297 @@ DIFF
 }
 
 # ---------------------------------------------------------------------------
+# Tests 28-30: Merge-aware scoping (fork-point effective base)
+#
+# These tests verify the fix for the dogfood-found scoping defect:
+# when origin/main is merged into a build branch mid-build, the gate must
+# scope to the branch's fork point (merge-base) rather than raw base..HEAD
+# so that main's pre-existing unwired exports are not flagged.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Test 28: Merged-main unwired export NOT flagged
+#
+# Setup: repo with two branches (main + feature).
+#   - main adds an unwired export BEFORE the feature branch forks
+#   - feature branch adds NO unwired exports
+#   - feature branch then merges main
+#   - Gate is run with base = the feature branch's original fork point
+# Expected: exit 0 (main's unwired export is not from this build)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- Merged-main unwired export NOT flagged (fork-point scoping) --"
+{
+  REPO=$(mktemp -d)
+  git -C "$REPO" init -q
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test"
+  git -C "$REPO" config commit.gpgsign false
+
+  # Create mcp-server/src layout
+  mkdir -p "$REPO/mcp-server/src/features" "$REPO/mcp-server/src/app"
+  printf '// placeholder\n' > "$REPO/mcp-server/src/features/placeholder.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "init"
+
+  # Simulate origin/main: add an unwired export to main (before feature branches)
+  FORK_POINT=$(git -C "$REPO" rev-parse HEAD)
+
+  # Feature branch forks here; add a wired export (so it has something)
+  mkdir -p "$REPO/mcp-server/src/features"
+  printf 'export function featureWiredFn(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/feature.ts"
+  printf 'import { featureWiredFn } from "./feature"; featureWiredFn();\n' \
+    > "$REPO/mcp-server/src/features/consumer.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "feature: add wired export"
+
+  # Simulate merging main into the feature branch: main added an unwired export
+  # We add it as a new commit on top (simulating a merge commit bringing it in)
+  printf 'export function mainDeadFn(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/main-export.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "merge: bring in main (includes mainDeadFn)"
+
+  # Set up a fake origin/main pointing at the last commit on main before feature
+  # Since this is a single-branch repo, we use a local ref as "origin/main"
+  # pointing to the last "main" commit (which includes the merge content).
+  # The effective base should be git merge-base origin/main HEAD.
+  # Here we simulate this by adding the unwired export to a ref named origin/main.
+  # The key: origin/main ref = commit that brought in mainDeadFn.
+  # merge-base(origin/main, HEAD) = HEAD (since origin/main == HEAD in this single-branch scenario).
+  # Let's instead set origin/main to the fork point — simulating the real scenario
+  # where origin/main was at FORK_POINT before this build and was later merged in.
+  git -C "$REPO" update-ref refs/remotes/origin/main "$FORK_POINT"
+
+  # With origin/main at FORK_POINT and HEAD = feature+merge,
+  # merge-base(origin/main, HEAD) = FORK_POINT.
+  # So effective_base = FORK_POINT.
+  # diff FORK_POINT..HEAD includes: featureWiredFn (wired) + mainDeadFn (unwired from merge).
+  # BUT the correct scope is: mainDeadFn was NOT introduced by this branch.
+  # The fix: use merge-base(origin/main, HEAD) as effective base... but wait,
+  # that's still FORK_POINT which includes mainDeadFn.
+  #
+  # The REAL fix is: the effective base = merge-base(origin/main, HEAD).
+  # After merging origin/main into the branch, origin/main ref points to a commit
+  # that includes mainDeadFn. If we run: git merge-base origin/main HEAD,
+  # in a repo where origin/main has the mainDeadFn commit, the result is that
+  # origin/main IS an ancestor of HEAD, so merge-base = origin/main = mainDeadFn commit.
+  # That means diff(origin/main, HEAD) excludes mainDeadFn. Correct!
+  #
+  # Let's rebuild with the right topology:
+  rm -rf "$REPO"
+  REPO=$(mktemp -d)
+  git -C "$REPO" init -q
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test"
+  git -C "$REPO" config commit.gpgsign false
+  mkdir -p "$REPO/mcp-server/src/features" "$REPO/mcp-server/src/app"
+  printf '// placeholder\n' > "$REPO/mcp-server/src/features/placeholder.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "init"
+
+  # Common ancestor commit (before both feature and main diverge)
+  COMMON=$(git -C "$REPO" rev-parse HEAD)
+
+  # === Simulate "main" side: add unwired export ===
+  printf 'export function mainDeadExport(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/main-dead.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "main: add mainDeadExport (unwired)"
+  MAIN_COMMIT=$(git -C "$REPO" rev-parse HEAD)
+
+  # === Go back to common ancestor, simulate feature branch ===
+  git -C "$REPO" checkout -q "$COMMON" 2>/dev/null
+  git -C "$REPO" checkout -q -b feature 2>/dev/null || git -C "$REPO" switch -c feature 2>/dev/null
+
+  # Record fork point (base_commit for the gate)
+  FEATURE_BASE="$COMMON"
+
+  # Feature branch adds a wired export
+  printf 'export function featureWiredFn2(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/feature.ts"
+  printf 'import { featureWiredFn2 } from "./feature"; featureWiredFn2();\n' \
+    > "$REPO/mcp-server/src/features/consumer.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "feature: add wired export"
+
+  # === Merge main into feature (simulating mid-build origin/main merge) ===
+  git -C "$REPO" merge "$MAIN_COMMIT" -q --no-edit 2>/dev/null || true
+
+  # Set origin/main ref to point at the "main" commit
+  git -C "$REPO" update-ref refs/remotes/origin/main "$MAIN_COMMIT"
+
+  # Now run the gate with FEATURE_BASE as base_commit.
+  # merge-base(origin/main, HEAD) = MAIN_COMMIT (since main is ancestor of HEAD after merge).
+  # So diff(MAIN_COMMIT..HEAD) = only the feature branch commits.
+  # mainDeadExport was in MAIN_COMMIT, not in the feature commits. Should exit 0.
+
+  actual_exit=0
+  output=$(cd "$REPO" && bash "$GATE" "$FEATURE_BASE" 2>&1) || actual_exit=$?
+
+  if [[ "$actual_exit" -eq 0 ]]; then
+    echo "  PASS: merged-main unwired export NOT flagged (fork-point scoping)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: merged-main unwired export NOT flagged"
+    echo "        expected exit=0, got exit=$actual_exit"
+    echo "        output: $output"
+    FAIL=$((FAIL + 1))
+  fi
+
+  # Also verify mainDeadExport is NOT in the output (not flagged)
+  if ! echo "$output" | grep -q "mainDeadExport"; then
+    echo "  PASS: mainDeadExport from main NOT mentioned in output"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: mainDeadExport from main was flagged (should not be)"
+    echo "        output: $output"
+    FAIL=$((FAIL + 1))
+  fi
+
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# Test 29: This-build's genuinely-unwired export STILL flagged after merge
+#
+# Same topology but the feature branch itself adds an unwired export.
+# Gate must still catch it even after origin/main was merged.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- This-build unwired export STILL flagged after merge-aware scoping --"
+{
+  REPO=$(mktemp -d)
+  git -C "$REPO" init -q
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test"
+  git -C "$REPO" config commit.gpgsign false
+  mkdir -p "$REPO/mcp-server/src/features" "$REPO/mcp-server/src/app"
+  printf '// placeholder\n' > "$REPO/mcp-server/src/features/placeholder.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "init"
+
+  COMMON=$(git -C "$REPO" rev-parse HEAD)
+
+  # Simulate main: add an unwired export
+  printf 'export function mainExportForTest29(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/main-export.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "main: add mainExportForTest29"
+  MAIN_COMMIT=$(git -C "$REPO" rev-parse HEAD)
+
+  # Feature branch
+  git -C "$REPO" checkout -q "$COMMON" 2>/dev/null
+  git -C "$REPO" checkout -q -b feature2 2>/dev/null || git -C "$REPO" switch -c feature2 2>/dev/null
+
+  FEATURE_BASE="$COMMON"
+
+  # Feature branch adds its OWN unwired export
+  printf 'export function featureDeadExport(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/feature-dead.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "feature: add featureDeadExport (unwired — THIS build's defect)"
+
+  # Merge main into feature
+  git -C "$REPO" merge "$MAIN_COMMIT" -q --no-edit 2>/dev/null || true
+
+  # Set origin/main ref
+  git -C "$REPO" update-ref refs/remotes/origin/main "$MAIN_COMMIT"
+
+  # Gate must flag featureDeadExport (from this build) but not mainExportForTest29
+  actual_exit=0
+  output=$(cd "$REPO" && bash "$GATE" "$FEATURE_BASE" 2>&1) || actual_exit=$?
+
+  if [[ "$actual_exit" -eq 2 ]]; then
+    echo "  PASS: this-build unwired export still flagged (exit 2)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: this-build unwired export not flagged"
+    echo "        expected exit=2, got exit=$actual_exit"
+    echo "        output: $output"
+    FAIL=$((FAIL + 1))
+  fi
+
+  if echo "$output" | grep -q "featureDeadExport"; then
+    echo "  PASS: featureDeadExport named in DEAD-WIRE output"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: featureDeadExport not named in output"
+    echo "        output: $output"
+    FAIL=$((FAIL + 1))
+  fi
+
+  if ! echo "$output" | grep -q "mainExportForTest29"; then
+    echo "  PASS: mainExportForTest29 (from main) NOT flagged"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: mainExportForTest29 from main was flagged (should not be)"
+    echo "        output: $output"
+    FAIL=$((FAIL + 1))
+  fi
+
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# Test 30: origin/main unavailable — fallback to passed base_commit
+#
+# When there is no origin/main ref (offline, fresh clone, no remote),
+# the gate must fall back to base_commit and still flag the branch's own
+# unwired export. Detection must NOT be silently disabled.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- origin/main unavailable: fallback to base_commit still detects unwired export --"
+{
+  REPO=$(mktemp -d)
+  git -C "$REPO" init -q
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test"
+  git -C "$REPO" config commit.gpgsign false
+  mkdir -p "$REPO/mcp-server/src/features" "$REPO/mcp-server/src/app"
+  printf '// placeholder\n' > "$REPO/mcp-server/src/features/placeholder.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "init"
+
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  # Feature branch adds an unwired export (no origin/main remote at all)
+  printf 'export function noOriginDeadFn(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/no-origin.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "feature: add noOriginDeadFn (unwired)"
+
+  # Confirm there is no origin/main ref
+  if git -C "$REPO" rev-parse --verify "origin/main" >/dev/null 2>&1; then
+    echo "  SKIP: origin/main ref unexpectedly exists; test precondition not met"
+  else
+    actual_exit=0
+    output=$(cd "$REPO" && bash "$GATE" "$BASE" 2>&1) || actual_exit=$?
+
+    if [[ "$actual_exit" -eq 2 ]]; then
+      echo "  PASS: no origin/main fallback still detects unwired export (exit 2)"
+      PASS=$((PASS + 1))
+    else
+      echo "  FAIL: no origin/main fallback — expected exit 2, got $actual_exit"
+      echo "        output: $output"
+      FAIL=$((FAIL + 1))
+    fi
+
+    if echo "$output" | grep -q "noOriginDeadFn"; then
+      echo "  PASS: noOriginDeadFn named in DEAD-WIRE output (fallback path)"
+      PASS=$((PASS + 1))
+    else
+      echo "  FAIL: noOriginDeadFn not named (fallback may be silently disabled)"
+      echo "        output: $output"
+      FAIL=$((FAIL + 1))
+    fi
+  fi
+
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

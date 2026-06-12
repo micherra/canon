@@ -12,6 +12,22 @@
 # Suppression: add an inline comment on the export line or the line directly above:
 #   // canon:allow-unwired: <non-empty reason>
 # Audit all suppressions: grep -rn 'canon:allow-unwired' mcp-server/src
+#
+# Merge-aware scoping
+# -------------------
+# The gate computes an effective diff base to avoid flagging exports that were
+# introduced by a mid-build merge of origin/main (not by this build's commits).
+#
+# effective_base = git merge-base origin/main HEAD
+#   → after merging origin/main, this equals origin/main, so the diff range
+#     excludes main's commits and covers only commits unique to this branch.
+#   → with no merge and origin/main at or behind HEAD, merge-base ≤ <base_commit>,
+#     which is further guarded by the max() below.
+#
+# Fallback (fail-safe, NOT fail-open):
+#   If origin/main does not exist (offline, fresh clone, no remote), the gate
+#   falls back to <base_commit>. Detection is preserved; only base selection
+#   changes. Internal errors (failed grep, malformed diff) still fail closed.
 
 set -euo pipefail
 
@@ -31,12 +47,40 @@ if ! git rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
+# Compute effective diff base (merge-aware scoping)
+#
+# Use git merge-base(origin/main, HEAD) so that exports merged in from
+# origin/main (e.g. during a mid-build doc-file pre-check merge) are not
+# in the diff range and cannot be flagged as this-build dead wires.
+#
+# If origin/main is unavailable, fall back to BASE_COMMIT (passed arg).
+# The effective base must not be older than BASE_COMMIT — take the more
+# recent of the two so we never scope earlier than the caller intended.
+# ---------------------------------------------------------------------------
+EFFECTIVE_BASE="$BASE_COMMIT"
+if git rev-parse --verify "origin/main" >/dev/null 2>&1; then
+  MERGE_BASE=""
+  if MERGE_BASE=$(git merge-base "origin/main" HEAD 2>/dev/null); then
+    # Guard: effective_base must be at least as recent as BASE_COMMIT.
+    # If merge-base is an ancestor of BASE_COMMIT, BASE_COMMIT is more recent — keep it.
+    if git merge-base --is-ancestor "$MERGE_BASE" "$BASE_COMMIT" 2>/dev/null; then
+      # merge-base ≤ BASE_COMMIT; use BASE_COMMIT (more restrictive diff)
+      EFFECTIVE_BASE="$BASE_COMMIT"
+    else
+      # merge-base is more recent than BASE_COMMIT; use merge-base
+      EFFECTIVE_BASE="$MERGE_BASE"
+    fi
+  fi
+  # If git merge-base itself fails (unusual), EFFECTIVE_BASE stays as BASE_COMMIT
+fi
+
+# ---------------------------------------------------------------------------
 # Collect new TS export symbols from the diff
 # Pattern: export (async function|function|const|class|type|interface|enum) <NAME>
 # Exclude: export { ... } from (re-exports are wiring, not candidates)
 # ---------------------------------------------------------------------------
 TS_DIFF=""
-if ! TS_DIFF=$(git diff "${BASE_COMMIT}..HEAD" -- 'mcp-server/src/**/*.ts' 2>&1); then
+if ! TS_DIFF=$(git diff "${EFFECTIVE_BASE}..HEAD" -- 'mcp-server/src/**/*.ts' 2>&1); then
   echo "CANON: dead-wire-gate failed-closed — git diff failed for TS files: $TS_DIFF" >&2
   exit 1
 fi
@@ -45,7 +89,7 @@ fi
 # Collect new MCP tool registrations from register-*.ts diff
 # ---------------------------------------------------------------------------
 REG_DIFF=""
-if ! REG_DIFF=$(git diff "${BASE_COMMIT}..HEAD" -- 'mcp-server/src/app/register-*.ts' 2>&1); then
+if ! REG_DIFF=$(git diff "${EFFECTIVE_BASE}..HEAD" -- 'mcp-server/src/app/register-*.ts' 2>&1); then
   echo "CANON: dead-wire-gate failed-closed — git diff failed for register files: $REG_DIFF" >&2
   exit 1
 fi
