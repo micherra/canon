@@ -33,9 +33,7 @@ describe("validateAndPersistCraftProfile", () => {
   });
 
   it("undefined craft_profile → no rows inserted, no error", () => {
-    expect(() =>
-      validateAndPersistCraftProfile(undefined, ["src/foo.ts"], tmpDir),
-    ).not.toThrow();
+    expect(() => validateAndPersistCraftProfile(undefined, ["src/foo.ts"], tmpDir)).not.toThrow();
 
     const rows = getDriftDb(tmpDir).getCraftProfiles().getRecentProfiles(10);
     expect(rows).toHaveLength(0);
@@ -44,11 +42,7 @@ describe("validateAndPersistCraftProfile", () => {
   it("invalid craft_profile → throws with informative message", () => {
     // A profile missing the required 'ratings' field is invalid
     expect(() =>
-      validateAndPersistCraftProfile(
-        { ratings: "not-an-array" } as never,
-        ["src/foo.ts"],
-        tmpDir,
-      ),
+      validateAndPersistCraftProfile({ ratings: "not-an-array" } as never, ["src/foo.ts"], tmpDir),
     ).toThrow(/Invalid craft_profile/);
   });
 
@@ -66,7 +60,7 @@ describe("validateAndPersistCraftProfile", () => {
   it("valid profile + one file → one row with correct subsystem_key and source=review", () => {
     validateAndPersistCraftProfile(
       { ratings: [{ dimension: "cohesion", band: "strong" }] },
-      ["src/features/orchestration/tools/report.ts"],
+      ["mcp-server/src/features/orchestration/tools/report.ts"],
       tmpDir,
     );
 
@@ -80,7 +74,10 @@ describe("validateAndPersistCraftProfile", () => {
     // Both files derive to the same subsystem_key
     validateAndPersistCraftProfile(
       { ratings: [{ dimension: "naming", band: "weak" }] },
-      ["src/features/orchestration/tools/report.ts", "src/features/orchestration/tools/init-workspace.ts"],
+      [
+        "mcp-server/src/features/orchestration/tools/report.ts",
+        "mcp-server/src/features/orchestration/tools/init-workspace.ts",
+      ],
       tmpDir,
     );
 
@@ -91,7 +88,10 @@ describe("validateAndPersistCraftProfile", () => {
   it("valid profile + two files with different subsystem_keys → two rows", () => {
     validateAndPersistCraftProfile(
       { ratings: [{ dimension: "predictability", band: "adequate" }] },
-      ["src/features/orchestration/tools/report.ts", "src/platform/storage/drift/store.ts"],
+      [
+        "mcp-server/src/features/orchestration/tools/report.ts",
+        "mcp-server/src/platform/storage/drift/store.ts",
+      ],
       tmpDir,
     );
 
@@ -99,13 +99,13 @@ describe("validateAndPersistCraftProfile", () => {
     expect(rows).toHaveLength(2);
     const keys = rows.map((r) => r.subsystem_key);
     expect(keys).toContain("features/orchestration");
-    expect(keys).toContain("platform/storage");
+    expect(keys).toContain("platform/storage/drift");
   });
 
   it("rollup is persisted when present in profile", () => {
     validateAndPersistCraftProfile(
       { ratings: [{ dimension: "cohesion", band: "strong" }], rollup: 0.75 },
-      ["src/features/orchestration/tools/report.ts"],
+      ["mcp-server/src/features/orchestration/tools/report.ts"],
       tmpDir,
     );
 

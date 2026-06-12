@@ -16,7 +16,7 @@ import {
   extractFilesFromRun,
   formatHotFileSection,
   type HotFileEntry,
-} from "../services/hot-file-detection.ts";
+} from "../../orchestration/services/hot-file-detection.ts";
 
 // ---- Setup helpers ----
 

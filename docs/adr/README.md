@@ -47,3 +47,5 @@ Use `docs/adr/TEMPLATE.md` as the starting point for every new ADR. Copy it, fil
 | # | Title | Status | Date | Build |
 |---|-------|--------|------|-------|
 | [0001](0001-adr-template-placement.md) | ADR template lives at docs/adr/TEMPLATE.md and coexists with templates/design-decision.md | accepted | 2026-06-09 | close-the-adr-gap-the-architect-currently-writes-rich-design-decision |
+| [0002](0002-knowledge-graph-is-a-foundational-service.md) | knowledge-graph is a foundational service features may depend on | accepted | 2026-06-12 | enforce-ai-navigability-canon-already-preaches-name-the-grey-box-model |
+| [0003](0003-relocate-cross-feature-shared-surfaces.md) | Relocate cross-feature shared surfaces to their correct architectural homes | accepted | 2026-06-12 | enforce-ai-navigability-canon-already-preaches-name-the-grey-box-model |
