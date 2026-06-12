@@ -19,8 +19,8 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { PresentArtifactResult } from "@features/orchestration/tools/present-artifact.ts";
-import { presentArtifact } from "@features/orchestration/tools/present-artifact.ts";
+import type { PresentArtifactResult } from "@app/artifact-presentation.ts";
+import { presentArtifact } from "@app/artifact-presentation.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError } from "@shared/lib/tool-result.ts";
 import { showPrImpact } from "./show-pr-impact.ts";

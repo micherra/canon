@@ -7,7 +7,7 @@
  * All functions are pure (no I/O) and never throw — parse errors return partial/empty data.
  */
 
-import type { ReviewResult, ReviewViolation, RunbookStep } from "../history-types.ts";
+import type { ReviewResult, ReviewViolation, RunbookStep } from "./archive-types.ts";
 
 // ---- Planning brief ----
 

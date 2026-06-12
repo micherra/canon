@@ -35,7 +35,7 @@ vi.mock("@platform/adapters/git-adapter.ts", async (importOriginal) => {
   };
 });
 
-vi.mock("@features/history/services/archive-service.ts", () => ({
+vi.mock("@platform/storage/archive/archive-service.ts", () => ({
   archiveWorkspace: vi.fn().mockResolvedValue({
     archive_path: "/tmp/archive",
     archived: true,
@@ -44,9 +44,9 @@ vi.mock("@features/history/services/archive-service.ts", () => ({
   }),
 }));
 
-// Import after mocks are set up
-import { archiveWorkspace } from "@features/history/services/archive-service.ts";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
+// Import after mocks are set up
+import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
 import { loadJanitorConfig } from "@shared/lib/config.ts";
 import {
   acquireJanitorLock,

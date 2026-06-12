@@ -44,7 +44,7 @@ import {
   formatPitfallsSection,
   queryDriftSignalPitfalls,
   queryErrorFixPitfalls,
-} from "../services/pitfall-enrichment.ts";
+} from "../../orchestration/services/pitfall-enrichment.ts";
 
 // ---- Setup helpers ----
 
@@ -358,7 +358,7 @@ describe("formatPitfallsSection", () => {
       violation_count: 5,
     };
     const result = formatPitfallsSection([driftPitfall, second], []);
-    const lines = result.split("\n").filter((l) => l.startsWith("- **"));
+    const lines = result.split("\n").filter((l: string) => l.startsWith("- **"));
     expect(lines).toHaveLength(2);
   });
 
@@ -371,7 +371,7 @@ describe("formatPitfallsSection", () => {
       principle_id: "bounded-context",
     };
     const result = formatPitfallsSection([], [errorFixPitfall, second]);
-    const lines = result.split("\n").filter((l) => l.startsWith("- **"));
+    const lines = result.split("\n").filter((l: string) => l.startsWith("- **"));
     expect(lines).toHaveLength(2);
   });
 });

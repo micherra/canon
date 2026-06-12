@@ -556,6 +556,8 @@ script in Step 4.5 is a separate, page-embedded function and is unaffected.)
 
 ## Step 6 — Write output
 
+NEVER echo the HTML or large content into your response — compose it and write directly to the output path; if large, write then Edit-append. Echoing the artifact will exceed the output-token limit and fail the render.
+
 Write the complete, self-contained HTML to:
   ${WORKSPACE}/artifacts/codebase-graph.html
 
