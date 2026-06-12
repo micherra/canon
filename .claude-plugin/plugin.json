@@ -12,5 +12,6 @@
     "architecture",
     "code-review",
     "standards"
-  ]
+  ],
+  "commands": ["./skills/canon/commands/"]
 }
