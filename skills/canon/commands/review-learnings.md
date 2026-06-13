@@ -21,10 +21,15 @@ Sort directories by timestamp (newest first). If `--all` is passed, show all pro
 
 ### Step 2: Present proposals
 
-For each proposal directory, read all `.md` files within it (excluding any files inside `applied/`, `rejected/`, or `dismissed/` subdirectories). Parse the YAML frontmatter for `proposal_id`, `type`, `confidence`, and `target`.
+For each proposal directory, read all `.md` files within it (excluding any files inside `applied/`, `rejected/`, or `dismissed/` subdirectories). Parse the YAML frontmatter reading `id` first (preferred field), falling back to `proposal_id` for legacy files that predate the `id:` field. Also parse `type`, `confidence`, and `target`. The resolved identifier (whichever field was found) is referred to as `{proposal_id}` in the steps below; when logging to `learning.jsonl`, always use the log key `proposal_id` for backward compatibility regardless of which source field was found.
 
 If a target principle or convention referenced by a proposal no longer exists in its expected location, inform the user and skip the proposal:
 "Proposal {proposal_id} references {target} which no longer exists. Skipping."
+
+**Prune-type handling**: Before including a proposal in the summary table, check its `type` field:
+- `type: prune-watch` — the proposal is in cooling-off (below the 2-run threshold); it is NOT surfaced for Accept/Reject. List it in the summary table with a note "(in cooling-off; not yet actionable)" and skip its interactive prompt entirely.
+- `type: prune-candidate` — the proposal has passed the cooling-off threshold and IS surfaced for Accept/Reject/Dismiss/Skip.
+- All other types — surfaced normally.
 
 Present a summary table:
 
@@ -35,9 +40,10 @@ Present a summary table:
 |---|------|--------|------------|------------------------|
 | 1 | new-convention | — | 0.85 | Error boundaries missing in 8/12 API handlers |
 | 2 | severity-change | no-silent-failures | 0.72 | 15 violations in last 10 reviews suggest promotion |
+| 3 | prune-watch | some-principle | 0.60 | Never triggered across 10 reviews (in cooling-off; not yet actionable) |
 ```
 
-Then for each proposal, show the full content and ask:
+Then for each proposal (excluding `prune-watch` which is informational only), show the full content and ask:
 
 **"Accept / Reject / Dismiss / Skip?"**
 
@@ -51,13 +57,25 @@ For any proposal that would demote a rule-severity principle, show an extra conf
 If the principle is tagged as security-related, refuse the demotion entirely:
 "Demotion of security-tagged rules is not permitted. Rejecting this proposal."
 
+For any `prune-candidate` proposal, apply the following checks before showing Accept/Reject:
+
+1. **Security-tagged or never-pruneable allowlist check**: If the target is security-tagged OR on the never-pruneable allowlist (`fail-closed-by-default`, `hooks-fail-closed`, `least-privilege-access`, `secrets-never-in-code`, `validate-at-trust-boundaries`, `agent-artifact-write-before-return`, `agent-template-required`), refuse entirely:
+   "Retirement of security-tagged or pipeline-integrity artifacts is not permitted. Rejecting this proposal."
+
+2. **Rule-tier `superseded_by` check**: If `artifact_tier: rule` and `superseded_by` is null or absent, refuse:
+   "Rule-tier retirement requires a superseded_by link. Rejecting."
+
+3. **Rule-tier CAUTION confirmation**: If `artifact_tier: rule` (and passes checks 1 and 2), show a CAUTION confirmation before Accept:
+   "CAUTION: This proposal RETIRES a rule-severity principle — a hard, pre-commit-enforced constraint. Retiring it means pre-commit hooks will no longer block this violation. A non-null superseded_by link is required. Are you sure? (yes/no)"
+   If the user answers anything other than "yes", reject the proposal.
+
 ### Step 3: Apply accepted proposals
 
 Spawn the **writer agent** in `apply-proposal` mode for each accepted proposal. The writer handles conflict detection, format validation, and the actual edit — this command does not modify principle files directly.
 
 For each accepted proposal:
 1. Spawn the writer agent with: `"Mode: apply-proposal. PROPOSAL=${proposal_file_path}"`. If a workspace is active, include `WORKSPACE=<path>` and `SLUG=<slug>`.
-2. The writer reads the proposal, maps the type to the appropriate action (create, edit severity, revise, graduate, archive), runs its quality pipeline, and saves.
+2. The writer reads the proposal, maps the type to the appropriate action (create, edit severity, revise, graduate, archive, **retire** for `prune-candidate`), runs its quality pipeline, and saves. For `prune-candidate` proposals, the writer follows Mode: retire in the `canon:write-principle` skill.
 3. After the writer completes, move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` (create subdirectory if needed).
 4. Append an entry to `.canon/learning.jsonl`:
    ```json
@@ -92,4 +110,5 @@ If any proposals were accepted, suggest the user run `/canon:check` to verify th
 - Proposal files are moved (not deleted) to preserve audit trail
 - `learning.jsonl` is append-only
 - Never demote security-tagged rules; show extra confirmation for any rule demotion
+- Never retire security-tagged or never-pruneable artifacts (`fail-closed-by-default`, `hooks-fail-closed`, `least-privilege-access`, `secrets-never-in-code`, `validate-at-trust-boundaries`, `agent-artifact-write-before-return`, `agent-template-required`); show a rule-tier CAUTION confirmation for any rule-tier `prune-candidate`; rule-tier retirement requires a non-null `superseded_by`
 - If a target principle or convention no longer exists, inform the user and skip rather than failing silently

@@ -279,6 +279,7 @@ Determine whether the proposal describes:
 - A **new principle** → follow Mode: new-principle (skip interview, use proposal content)
 - A **new agent-rule** → follow Mode: new-agent-rule (skip interview, use proposal content)
 - An **edit to an existing entry** → follow Mode: edit (skip interview, apply proposed changes)
+- A **retirement** (`type: prune-candidate`) → follow Mode: retire (below)
 
 ### Step 3: Skip interview
 
@@ -298,6 +299,53 @@ Run the same quality checks as other modes (see Quality Checks section below). G
 Follow the save and validate steps from the appropriate mode (new-principle, new-agent-rule, or edit). After saving, confirm to the lead:
 - The file path where the entry was saved
 - Any significant changes made to the proposal content during assembly
+
+---
+
+## Mode: retire
+
+This mode is reached ONLY when the writer is spawned via the `apply-proposal` path after a human has explicitly accepted a `prune-candidate` proposal in `/canon:review-learnings`. The human Accept gate is the authoritative HITL checkpoint; the writer must NOT re-prompt, but it MUST perform the defense-in-depth re-checks below before proceeding.
+
+**NEVER auto-delete.** Retirement applies only post-Accept. Do not proceed without the human-confirmed Apply context.
+
+### Step 1: Defense-in-depth re-check (performed even though the learner pre-filtered and review-learnings confirmed)
+
+Re-read the never-pruneable allowlist. If the proposal's `target` is any of the following, or if the artifact's frontmatter `tags:` contains `security`, **ABORT immediately** with a refusal message — do not remove the artifact:
+
+- `fail-closed-by-default`
+- `hooks-fail-closed`
+- `least-privilege-access`
+- `secrets-never-in-code`
+- `validate-at-trust-boundaries`
+- Any artifact whose frontmatter `tags:` contains `security`
+- `agent-artifact-write-before-return`
+- `agent-template-required`
+
+Refusal message: "Retirement of security-tagged or pipeline-integrity artifacts is not permitted. Aborting."
+
+### Step 2: Rule-tier superseded_by gate
+
+If the proposal's `artifact_tier` is `rule`, verify the `superseded_by` field is non-null and references a live artifact. If `superseded_by` is null or absent, **ABORT**:
+"Rule-tier retirement requires a non-null superseded_by link. Aborting."
+
+### Step 3: Perform retirement
+
+Proceed only after Steps 1 and 2 pass. Use the existing toolset (no new tool required):
+
+1. Remove the artifact file using `Bash` (`git rm <path>`) to stage the deletion.
+2. Sweep for references using the dead-code-removal discipline (same method as CLAUDE.md's dead-code-removal enrichment):
+   - Grep the artifact `id` as a string literal across the full codebase (catches constant arrays, config entries, index files).
+   - Grep the type name (catches orphan type declarations).
+   - Grep any index/directory-path strings (catches docstrings and CLAUDE.md entries).
+   - Clean up each hit found: remove index entries, cross-references, and citations.
+3. Stage all reference-cleanup edits with `git add`.
+
+### Step 4: Write the apply-proposal summary
+
+Write the `*-SUMMARY.md` (per `agent-template-required`) documenting:
+- The removed artifact file path
+- Each reference-cleanup edit (file, line, what was removed)
+- Confirmation that the never-pruneable allowlist check and rule-tier gate passed
 
 ---
 

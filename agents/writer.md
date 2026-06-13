@@ -86,6 +86,20 @@ Routine mode authors a new Canon routine artifact using `templates/routine.md` a
 - Lint rules applied: guardrail floor + binding-override coherence (not principle conflict detection or severity checks).
 - No `mcp__canon__*` tools needed — authoring is filesystem-based via the template.
 
+## Apply-Proposal retire action
+
+When the writer is spawned in `apply-proposal` mode for a `prune-candidate` proposal, it follows Mode: retire in the `canon:write-principle` skill. This action permanently removes a guardrail artifact (principle, convention, or agent-rule) after a human Accept in `/canon:review-learnings`. The operative steps are in the SKILL; this section documents the safety contract.
+
+**Four mandatory safety gates** (defense-in-depth — re-checked by the writer even though the learner pre-filtered and review-learnings confirmed):
+
+1. **Never-pruneable allowlist re-check**: If the target is on the allowlist or is `security`-tagged at any tier, ABORT — do not remove. Allowlist: `fail-closed-by-default`, `hooks-fail-closed`, `least-privilege-access`, `secrets-never-in-code`, `validate-at-trust-boundaries` (5 security-tagged rules), any artifact with `tags:` containing `security`, and `agent-artifact-write-before-return`/`agent-template-required` (pipeline-integrity agent-rules).
+
+2. **Security refusal**: Any artifact whose frontmatter `tags:` contains `security` is refused regardless of tier.
+
+3. **Rule-tier `superseded_by` requirement**: For `artifact_tier: rule`, a non-null `superseded_by` link to a live artifact is required. Abort if absent.
+
+4. **HITL-already-passed**: The writer is spawned ONLY after an explicit human Accept in `/canon:review-learnings`. It does not re-prompt the user, but it must not proceed without that established context. **Never auto-delete** without the human Accept gate.
+
 ## Fork Mode
 
 Fork mode copies a built-in principle into `.canon/principles/` for project-local customization. This is the correct path when a project needs to modify a built-in principle's content — it creates a project-local version that takes precedence over the built-in, while leaving the built-in unchanged for other projects.
