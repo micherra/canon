@@ -212,7 +212,7 @@ When all implementation steps complete:
 You own: `board.json`, `progress.md`, `journal.json`.
 You never write to: `research/`, `decisions/`, `plans/`, `reviews/`, or agent artifact files.
 
-## Resume Protocol <!-- last-updated: 2026-06-04 -->
+## Resume Protocol <!-- last-updated: 2026-06-12 -->
 
 When resuming a session or the user says "continue" / "resume":
 
@@ -243,6 +243,20 @@ a `started`/`planned` step that either has a declared artifact missing on disk
 
 Reconciliation runs against the BUILD journal. It is advisory and read-only — a
 `reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
+
+### In-Session Compaction Rehydration
+
+**Durable-state-authoritative rule**: Before any HITL gate or agent dispatch, the durable `journal.json` + decisions ledger (`get_decisions`) + `checkpoint.md` are authoritative over in-context recollection. If uncertain about the current step, a prior decision, or a negotiated AC, re-read them rather than trusting conversation memory. Canon cannot intercept harness compaction (the ~100-message `cache_control` TTL ceiling named in Silent Dispatch) — this rehydration is always-available and cheap, not a detection mechanism.
+
+**Mechanical rehydration sequence** (composes with Reconciliation-on-resume above — does not fork it):
+
+1. `reconcile_workspace({ workspace })` — where did execution stall (incomplete steps)?
+2. Read `journal.json` — completed vs pending steps and their artifacts.
+3. `get_decisions({ workspace })` — what was decided and why (scope cuts, AC changes, gate outcomes, tier overrides, merge resolutions).
+4. Read `${workspace}/checkpoint.md` — the compact digest + immediate next action.
+5. Resume from the first non-terminal step with decided-state restored.
+
+This is the SAME durable-artifact path whether the trigger is session death (above) or in-session compaction — the only difference is that compaction is silent, so the rehydration is invoked proactively before gates/dispatch rather than only on an explicit "resume" signal.
 
 ## Commit Provenance
 

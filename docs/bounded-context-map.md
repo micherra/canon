@@ -20,7 +20,7 @@ The Flows Context is the shared vocabulary of the system. Every other context im
 ### 2. Orchestration Context
 
 - **Directories**: `mcp-server/src/features/orchestration/`, `mcp-server/src/domains/workspaces/`, `mcp-server/src/domains/board/`
-- **Responsibility**: Flow execution engine, state transitions, effects, convergence detection, board persistence, session management, spawn request assembly, HITL breakpoints, domain events, gate execution, DAG-based parallel task dispatch
+- **Responsibility**: Flow execution engine, state transitions, effects, convergence detection, board persistence, session management, spawn request assembly, HITL breakpoints, domain events, gate execution, DAG-based parallel task dispatch, decisions ledger (`log_decision`/`get_decisions`), orchestrator checkpoint (`write_orchestrator_checkpoint`)
 - **Key types**: `SpawnRequest`, `HitlBreakpoint`, `ExecutionStore`, `FlowEventBus`, `EffectResult`, `BoardStateEntry`
 - **Depends on**: Flows Context (type imports), Messages Context (messaging coordination), Shared Kernel
 

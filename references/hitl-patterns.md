@@ -8,9 +8,11 @@ description: >-
   conversation.
 ---
 
-# HITL Patterns <!-- last-updated: 2026-06-09 -->
+# HITL Patterns <!-- last-updated: 2026-06-12 -->
 
 Read this file BEFORE presenting any HITL checkpoint. See `CLAUDE.md` for the stub pointer.
+
+- **Decision logging at every gate**: After the user responds to any gate below, call `log_decision({ workspace, decision_type, gate: "<gate-name>", summary: "<outcome>", outcome? })` to record the decision durably, then call `write_orchestrator_checkpoint({ workspace })` to refresh the resume snapshot. These calls are a behavioral obligation — see `CLAUDE.md` § Decisions Ledger & Checkpoint honesty clause.
 
 - **PM Triage**: (1) Refine: classify trivial/clear/fuzzy; produce `sharpened-request.md` for non-trivial tiers. (2) Scope check: 1-2 MCP calls → trivial → engineer, non-trivial → architect. Fully-specified requests skip the requirements conversation.
 - **Requirement coverage check**: After architect returns, surface any `descoped`/`partial`/missing requirements before runbook approval. Proceed silently if all are `covered` with owning steps.

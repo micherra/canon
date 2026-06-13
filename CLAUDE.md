@@ -202,6 +202,8 @@ before producing or finishing its artifact. For each entry:
 Reconciliation runs against the BUILD journal. It is advisory and read-only — a
 `reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
 
+**In-session compaction uses the same durable artifacts.** Before any HITL gate or dispatch, durable `journal.json` + `get_decisions` + `checkpoint.md` are authoritative over in-context recollection. Full rehydration sequence: `references/canon-orchestrator.md` § In-Session Compaction Rehydration.
+
 ### Skill Preloading
 
 Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include returned `preload_prompt` verbatim at top of spawn prompt. For task-specific domain primers, name them in the spawn prompt body: `"Relevant domain primers: <name>. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
@@ -302,6 +304,14 @@ log_step({ workspace, step_id, status: "skipped", outcome: { skip_reason: "<valu
 Accepted values: `"fix-type build, no contract-level changes"` | `"markdown-only change, no context drift"` | `"session timeout"` | `"no new patterns observed"` | `"documentation-only diff, verify produces zero signal"` | `"context-sync targets are build artifacts"`
 
 An empty `skip_reason` is a protocol violation. If no accepted value fits, the step should not be skipped — run it or report BLOCKED.
+
+### Decisions Ledger & Checkpoint <!-- last-updated: 2026-06-12 -->
+
+At each consequential decision, call `log_decision({ workspace, decision_type, summary, rationale?, outcome?, gate? })`. Named decision points: plan-approval outcome, review-verdict acceptance/override, scope cuts, AC changes, tier overrides, merge-conflict resolutions, and manual-verification confirmations. The `log_decision` write is **authoritative** — store failure surfaces as a `ToolResult` error (NOT fail-open).
+
+After each completed step (alongside `log_step(...completed)`) and at each HITL gate, call `write_orchestrator_checkpoint({ workspace })` to refresh `${workspace}/checkpoint.md`. That write is **best-effort-observable** — failure returns a `ToolResult` error but never throws or silently succeeds.
+
+**Honesty clause (behavioral, not mechanical)**: these call sites are a behavioral obligation. The *tool* is deterministic and durable; Canon cannot intercept harness compaction and mechanically force the orchestrator to call these tools at every gate. `write_orchestrator_checkpoint` and `get_decisions` are the safety net — rehydration (see Resume Protocol + `references/canon-orchestrator.md` In-Session Compaction Rehydration) works regardless of how many gates were missed under compaction.
 
 ### Post-Subagent Artifact Check
 
@@ -576,7 +586,7 @@ NEVER silently run plugin-update; the ask-first/confirm requirement is non-optio
 
 ```
 canon/
-├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (23 terms)
+├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (25 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── docs/
 │   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
