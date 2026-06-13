@@ -406,8 +406,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
    - **One-time user setup**: Desktop push works by default in the Claude.ai/API runtime — no setup needed. Phone push requires connecting **Remote Control** (optional one-time step). Not available on Bedrock/Vertex/Foundry — Canon runs on the Claude.ai/API path, so this is informational only.
    - **LSP prerequisite**: The `LSP` tool (granted to reviewer, engineer, architect) requires `typescript-language-server` installed globally: `npm install -g typescript-language-server typescript`. Without it the tool will fail to return results.
 5. Verify file claims released.
-6. Run `.canon/learn.sh` if it exists.
-7. Record final flow metrics.
+6. Record final flow metrics.
 
 ### Commit Provenance
 
