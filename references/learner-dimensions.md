@@ -212,6 +212,102 @@ Action: {no write needed | annotated with reinforcement | annotated with decay m
 
 ---
 
+## Dimension: artifact-retirement <!-- last-updated: 2026-06-12 -->
+
+**Goal**: Survey the live guardrail corpus (principles across all three tiers, conventions, agent-rules) and emit evidence-backed, cooling-off-gated, HITL-gated retirement proposals for dead-weight artifacts. Propose-only; never delete.
+
+**Non-overlap note**: This dimension is distinct from two adjacent passes:
+- `principle-health` *demotion* downgrades severity (rule → strong-opinion → convention) on a still-useful-but-mis-tiered principle. `artifact-retirement` proposes *removal* of a principle that is dead weight at any tier. A principle can be a demotion candidate (low compliance, still firing) without being a prune candidate (never firing at all). The prune dimension's gate explicitly DEFERS to demotion: if a principle is firing (non-zero honored or violation count), it is NOT a prune candidate.
+- `convention-lifecycle` Sub-analysis C (*staleness*) proposes "update / remove / investigate" for a convention whose codebase pattern drifted. `artifact-retirement` reuses the same adherence scan, but adds the cooling-off and never-pruneable gating and routes the result into the unified prune proposal schema. To avoid double-emission, the prune dimension only surfaces a convention that Sub-analysis C has ALREADY flagged "remove" across the cooling-off window — it is the multi-observation aggregator on top of C, not a second scanner.
+- `convention-lifecycle` Sub-analysis D (CONSOLIDATE) decays *pending* watch proposals. `artifact-retirement` operates only on *live, promoted* artifacts. Disjoint inputs.
+
+### Data source
+
+All sources are existing stores — no new producer (AC#6; empirically confirmed in PROBE-FINDINGS.md):
+
+1. `get_drift_report` → `never_triggered: string[]` — principles never honored or violated across reviews; computed in `mcp-server/src/platform/storage/drift/analyzer.ts` at line 260. Primary deadness signal for principles.
+2. `get_drift_report` → `most_violated[]` + per-principle compliance — used as a **NEGATIVE gate**: a principle still firing is NOT a prune candidate (may be a demotion case instead).
+3. `get_drift_report` → `reviews.honored[]` aggregation — per-principle citation count, confirming firing or silence.
+4. Grep/Glob adherence scan + `git log` age — for conventions and agent-rules (which never appear in review `honored`/`violations` signals, as reviews are principle-id keyed), reusing `convention-lifecycle` Sub-analysis C's method.
+5. `.canon/proposed-learnings/` — read prior prune-candidate observations to apply the cooling-off (N-of-M) count across learn runs.
+
+**Minimum threshold**: Principle path requires ≥ 10 reviews (inherits `principle-health` minimum). Below threshold → emit "Skipped: artifact-retirement (principles) — requires 10 reviews, have {current}." Convention/agent-rule adherence path has no review-count floor but still requires the 2-run cooling-off.
+
+### Prune-candidate signals
+
+Any one of the following makes an artifact a candidate; the cooling-off threshold then gates whether it is surfaced as a proposal:
+
+| Signal | Applies to | Evidence bar |
+|--------|-----------|--------------|
+| never-triggered | principle (any tier) | appears in `never_triggered` across ≥ 10 reviews (inherits principle-health minimum) |
+| superseded-by | any artifact | another live artifact demonstrably covers the same scope (explicit `supersedes`/overlap link); REQUIRED for rule-tier |
+| dead-pattern | convention, agent-rule | Sub-analysis C flagged "remove" (referenced tool/pattern absent from codebase, or adherence not measurable because the pattern no longer exists) |
+| never-cited | convention, agent-rule | adherence scan finds zero current instances AND no contradicting pattern (the guardrail guards nothing) |
+
+### Cooling-off threshold
+
+A candidate is only SURFACED as a proposal after it has been independently observed as a candidate in **≥ 2 distinct learn runs** (`watch_threshold: 2` — symmetric with the proposed-learnings promotion discipline), OR — for the strongest single signal — when a valid `superseded-by` link exists (a superseded artifact needs no cooling-off because the evidence is structural, not statistical).
+
+**Lifecycle**: First observation writes a `prune-watch` entry (`status: watch`, `evidence_count: 1`). The second confirming observation promotes it to a surfaced `prune-candidate` proposal (`evidence_count: 2`, `status: candidate`). This reuses the exact watch→promote lifecycle and `computeWatchConfidence` decay already in the CONSOLIDATE pass (`mcp-server/src/platform/storage/drift/watch-staleness-adapter.ts`) — a `prune-watch` that stops recurring decays and archives like any other watch.
+
+### Safety gates
+
+All five gates must pass before a candidate is surfaced:
+
+1. **Never-pruneable allowlist** — NEVER propose retiring any of the following:
+   - Security-tagged rule-tier principles: `fail-closed-by-default`, `hooks-fail-closed`, `least-privilege-access`, `secrets-never-in-code`, `validate-at-trust-boundaries` (5 of 7 rules; frontmatter `tags:` contains `security`). Mirrors the existing `principle-health` "never demote security-tagged rules" safety.
+   - Any artifact tagged `security` at any tier.
+   - Always-on pipeline-integrity agent-rules: `agent-artifact-write-before-return` and `agent-template-required` class — these guard the artifact lifecycle and must never be silenced.
+
+2. **Rule-tier requires superseded-by** — a `rule`-severity principle is a candidate ONLY if a valid, explicit `superseded-by` link to another live artifact exists. Never on `never-triggered` alone; a rule may be silent precisely because it is working (pre-commit hooks block the violation before review). Include `CAUTION: retiring a rule removes a hard constraint; pre-commit hooks will no longer block this violation.` in any rule-tier prune proposal.
+
+3. **Never-auto-act** — output is a proposal only. The learner has no delete or edit capability over the guardrail corpus and this design adds none. Acceptance routes through the PM → writer content flow. This invariant is non-negotiable.
+
+4. **Defer-to-demotion** — if a principle is still firing (non-zero honored or violation count), it is NOT a prune candidate. Route to `principle-health` demotion instead. Deadness requires zero firing across the review corpus.
+
+5. **Minimum data** — the principle `never-triggered` path requires ≥ 10 reviews. Below threshold → emit the explicit skip line, never a speculative retirement. Absence of evidence below threshold is NOT evidence of deadness. The convention/agent-rule adherence path has no review-count floor, but the 2-run cooling-off still applies.
+
+### Output per suggestion
+
+Proposal files are written to `.canon/proposed-learnings/` (for the N-of-M cooling-off count) AND summarized in the `### Prune Candidates (artifact-retirement)` section of `.canon/LEARNING-REPORT.md`. The frontmatter reuses the existing proposed-learnings shape:
+
+```
+---
+id: prune_{deterministic_hash}
+type: prune-candidate          # prune-watch on first observation; prune-candidate after cooling-off
+dimension: artifact-retirement
+target: {principle-id | convention text | agent-rule-id}
+artifact_tier: {rule | strong-opinion | convention | agent-rule}
+status: candidate              # watch -> candidate (after cooling-off)
+confidence: {high | medium}
+evidence_count: {2..}          # cooling-off observation count
+watch_threshold: 2
+superseded_by: {artifact-id | null}   # REQUIRED non-null for rule-tier
+created: {YYYY-MM-DD}
+last_updated: {YYYY-MM-DD}
+consolidate_disposition: {reinforce | decay | archive}
+---
+
+# prune_{hash} — Retire {target}
+
+## Signal
+{which prune-candidate signal(s) fired}
+
+## Evidence
+- never_triggered across {N} reviews / adherence {A}% across {M} files / superseded by {artifact}
+- observed as prune candidate in {evidence_count} learn runs: {run-id-1}, {run-id-2}
+
+## Safety gates passed
+- never-pruneable allowlist: PASS (not security-tagged / not on allowlist)
+- rule-tier superseded-by: {N/A | satisfied by {artifact}}
+- defer-to-demotion: PASS (zero firing)
+
+## Proposed action
+Retire {target} via PM -> writer flow. {CAUTION note if rule-tier.}
+```
+
+---
+
 ## Dimension: process-health
 
 **Goal**: Detect flow execution problems — churn, duration outliers, skipped states, and declining pass rates — that suggest principles or flow definitions need revision.
@@ -622,6 +718,9 @@ Delta: {delta}pp | Context cost: {lines} lines, ~{tokens} tokens/build
 Signal: {signal type}
 Suggest: {action}
 
+### Prune Candidates (artifact-retirement)
+{prune-candidate proposals, or "No retirement candidates meet the cooling-off threshold." if none}
+
 ### Recurring Suggestions
 {Suggestions that appeared in 3+ previous learning runs but were never acted on — flag these prominently}
 
@@ -643,7 +742,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
 {
   "run_id": "learn_{YYYYMMDD}_{random_hex}",
   "timestamp": "{ISO-8601}",
-  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "process-health", "agent-effectiveness", "retrieval-effectiveness", "rule-compliance-measurement"],
+  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "artifact-retirement", "process-health", "agent-effectiveness", "retrieval-effectiveness", "rule-compliance-measurement", "cliff-rate"],
   "data_summary": {
     "reviews_analyzed": 0,
     "source_files_scanned": 0,
@@ -654,7 +753,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
     {
       "id": "sug_{deterministic_hash}",
       "dimension": "principle-health",
-      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend|tool-retry-pattern|iteration-outlier|role-boundary-violation|unused-tool|token-cost-outlier|error-recovery-anti-pattern|semantic-for-identifier|grep-for-conceptual|search-refinement-chain|tool-switch-pattern|grep-dominance-ratio|retirement-candidate|investment-candidate|high-value-rule|context-cost-outlier|compliance-variance",
+      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend|tool-retry-pattern|iteration-outlier|role-boundary-violation|unused-tool|token-cost-outlier|error-recovery-anti-pattern|semantic-for-identifier|grep-for-conceptual|search-refinement-chain|tool-switch-pattern|grep-dominance-ratio|retirement-candidate|investment-candidate|high-value-rule|context-cost-outlier|compliance-variance|prune-watch|prune-candidate",
       "target": "principle-id or convention text or state name",
       "summary": "One-line description of what's suggested",
       "confidence": "high|medium",
