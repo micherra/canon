@@ -171,6 +171,7 @@ export const AUDITED_STALE_2026_06: ReadonlyArray<StaleViolationSpec> = [
 // Audit commit: 051a49e2. Liveness method: human HEAD inspection / file-absent
 // confirmation — NOT a programmatic re-check (decision closure-03/closure-04).
 // All 20 rows audited STALE; full evidence in DESIGN.md.
+// canon:allow-unwired: one-shot audited-stale backfill seed; consumed by a throwaway runner per closure-04 Option A — no durable caller by design (mirrors AUDITED_STALE_2026_06).
 export const AUDITED_STALE_2026_06_13: ReadonlyArray<StaleViolationSpec> = [
   // 1. hooks/destructive-guard.test.sh — build-verification (both suites green at HEAD: 86/0, 31/0)
   { file_path: "hooks/destructive-guard.test.sh", principle_id: "build-verification" },
