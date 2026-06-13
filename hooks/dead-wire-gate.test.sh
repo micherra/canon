@@ -1029,6 +1029,120 @@ echo "-- origin/main unavailable: fallback to base_commit still detects unwired 
   rm -rf "$REPO"
 }
 
+
+# ---------------------------------------------------------------------------
+# Test 31: Defect 1 — top-level src file (mcp-server/src/*.ts) excluded from TS diff
+#
+# A new unwired export added directly under mcp-server/src/ (e.g. src/index.ts,
+# src/server-state.ts) must be caught. The original pathspec 'mcp-server/src/**/*.ts'
+# requires at least one intervening directory, silently skipping top-level files.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- Defect 1: top-level mcp-server/src/*.ts unwired export MUST be flagged --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  # Add a new unwired export directly under mcp-server/src/ (not in a subdirectory)
+  printf 'export const topLevelOrphanConst = 42;
+' \
+    > "$REPO/mcp-server/src/server-state.ts"
+  git -C "$REPO" add "mcp-server/src/server-state.ts"
+  git -C "$REPO" commit -q -m "add top-level src file with unwired export"
+
+  run_gate_with_output 2 "topLevelOrphanConst" "$REPO" "$BASE" \
+    "top-level src/*.ts unwired export => exit 2 and names symbol"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# Test 32: Defect 2 — export let not extracted as a candidate
+#
+# An export let declaration must be caught by the gate.
+# The original extraction only matched export const, not export let or export var.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- Defect 2: export let unwired export MUST be flagged --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  # Add an unwired export let in a nested src file (server-state.ts is the real-world case)
+  printf 'export let orphanLetVar = "initial";
+' \
+    > "$REPO/mcp-server/src/features/orphan-let.ts"
+  git -C "$REPO" add "mcp-server/src/features/orphan-let.ts"
+  git -C "$REPO" commit -q -m "add export let that is unwired"
+
+  run_gate_with_output 2 "orphanLetVar" "$REPO" "$BASE" \
+    "export let unwired => exit 2 and names symbol"
+  rm -rf "$REPO"
+}
+
+# Test 33: export var also extracted
+echo ""
+echo "-- Defect 2 (var variant): export var unwired export MUST be flagged --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  printf 'export var orphanVarDecl = true;
+' \
+    > "$REPO/mcp-server/src/features/orphan-var.ts"
+  git -C "$REPO" add "mcp-server/src/features/orphan-var.ts"
+  git -C "$REPO" commit -q -m "add export var that is unwired"
+
+  run_gate_with_output 2 "orphanVarDecl" "$REPO" "$BASE" \
+    "export var unwired => exit 2 and names symbol"
+  rm -rf "$REPO"
+}
+
+# Test 34: export let that IS wired -> exit 0
+echo ""
+echo "-- export let that IS wired => exit 0 --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  printf 'export let wiredLetVar = "value";
+' \
+    > "$REPO/mcp-server/src/features/wired-let.ts"
+  printf 'import { wiredLetVar } from "./wired-let"; console.log(wiredLetVar);
+' \
+    > "$REPO/mcp-server/src/features/wired-let-consumer.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "add wired export let"
+
+  run_gate 0 "$REPO" "$BASE" "wired export let => exit 0"
+  rm -rf "$REPO"
+}
+
+# Test 35: top-level src/*.ts with export that IS wired -> exit 0 (no regression on nested)
+echo ""
+echo "-- Defect 1 regression: top-level src/*.ts wired export => exit 0 --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  # Add a wired const at top-level src/
+  printf 'export const topLevelWiredConst = 99;
+' \
+    > "$REPO/mcp-server/src/index.ts"
+  printf 'import { topLevelWiredConst } from "./index"; console.log(topLevelWiredConst);
+' \
+    > "$REPO/mcp-server/src/features/consumer-top.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "add wired export at top-level src/"
+
+  run_gate 0 "$REPO" "$BASE" "wired top-level src/*.ts export => exit 0"
+  rm -rf "$REPO"
+}
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

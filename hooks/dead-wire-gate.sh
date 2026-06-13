@@ -76,11 +76,11 @@ fi
 
 # ---------------------------------------------------------------------------
 # Collect new TS export symbols from the diff
-# Pattern: export (async function|function|const|class|type|interface|enum) <NAME>
+# Pattern: export (async function|function|const|let|var|class|type|interface|enum) <NAME>
 # Exclude: export { ... } from (re-exports are wiring, not candidates)
 # ---------------------------------------------------------------------------
 TS_DIFF=""
-if ! TS_DIFF=$(git diff "${EFFECTIVE_BASE}..HEAD" -- 'mcp-server/src/**/*.ts' 2>&1); then
+if ! TS_DIFF=$(git diff "${EFFECTIVE_BASE}..HEAD" -- 'mcp-server/src/**/*.ts' 'mcp-server/src/*.ts' 2>&1); then
   echo "CANON: dead-wire-gate failed-closed — git diff failed for TS files: $TS_DIFF" >&2
   exit 1
 fi
@@ -137,12 +137,12 @@ extract_ts_symbols() {
 
       # Match export patterns and extract symbol name
       # Handles: export function, export async function, export const, export class,
-      #          export type, export interface, export enum
+      #          export type, export interface, export enum, export let, export var
       local symbol=""
       if echo "$content" | grep -qE '^[[:space:]]*export[[:space:]]+(async[[:space:]]+)?function[[:space:]]+[A-Za-z_$][A-Za-z0-9_$]*'; then
         symbol=$(echo "$content" | sed -E 's/^[[:space:]]*export[[:space:]]+(async[[:space:]]+)?function[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*).*/\2/')
-      elif echo "$content" | grep -qE '^[[:space:]]*export[[:space:]]+const[[:space:]]+[A-Za-z_$][A-Za-z0-9_$]*'; then
-        symbol=$(echo "$content" | sed -E 's/^[[:space:]]*export[[:space:]]+const[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*).*/\1/')
+      elif echo "$content" | grep -qE '^[[:space:]]*export[[:space:]]+(const|let|var)[[:space:]]+[A-Za-z_$][A-Za-z0-9_$]*'; then
+        symbol=$(echo "$content" | sed -E 's/^[[:space:]]*export[[:space:]]+(const|let|var)[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*).*/\2/')
       elif echo "$content" | grep -qE '^[[:space:]]*export[[:space:]]+class[[:space:]]+[A-Za-z_$][A-Za-z0-9_$]*'; then
         symbol=$(echo "$content" | sed -E 's/^[[:space:]]*export[[:space:]]+class[[:space:]]+([A-Za-z_$][A-Za-z0-9_$]*).*/\1/')
       elif echo "$content" | grep -qE '^[[:space:]]*export[[:space:]]+type[[:space:]]+[A-Za-z_$][A-Za-z0-9_$]*'; then
