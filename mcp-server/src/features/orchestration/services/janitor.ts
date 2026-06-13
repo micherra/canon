@@ -20,7 +20,15 @@
  *   - subprocess-isolation: git commands via gitExec (spawnSync, shell never true)
  */
 
-import { existsSync, lstatSync, readdirSync, readFileSync, rmdirSync, rmSync, statSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  rmdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { join } from "node:path";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
@@ -337,9 +345,7 @@ async function pruneWorkspacesTask(
  * ship step would silently disable post-ship reclaim (orphans accumulate). This
  * function is exported so tests can pin the literal and catch any such rename.
  */
-export function isShipComplete(
-  steps: ReadonlyArray<{ step_id: string; status: string }>,
-): boolean {
+export function isShipComplete(steps: ReadonlyArray<{ step_id: string; status: string }>): boolean {
   return steps.some((s) => s.step_id === "ship" && s.status === "completed");
 }
 
