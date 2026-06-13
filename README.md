@@ -102,7 +102,7 @@ Canon also includes background agents (evaluator, janitor) for quality gates and
 
 ## Principles
 
-Principles are the core of Canon. They are markdown files with YAML frontmatter that tell agents what rules, preferences, and conventions to apply. Canon ships with 82 built-in principles (7 rules, 35 strong-opinions, 40 conventions) covering security, architecture, testing, and code design. Your active principles live in `.canon/principles/` after init.
+Principles are the core of Canon. They are markdown files with YAML frontmatter that tell agents what rules, preferences, and conventions to apply. Canon ships with 85 built-in principles (7 rules, 35 strong-opinions, 43 conventions) covering security, architecture, testing, and code design. Your active principles live in `.canon/principles/` after init.
 
 ```yaml
 ---

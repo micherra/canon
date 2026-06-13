@@ -1,12 +1,12 @@
 ---
-adr: "0004"
+adr: "0007"
 title: "portable: frontmatter flag is the tier signal; physical location is authoritative for shipping"
 status: accepted
 date: "2026-06-11"
 build: "separate-canon-internal-conventions-from-the-universalshipped-principle"
 ---
 
-# ADR-0004: portable: frontmatter flag is the tier signal; physical location is authoritative for shipping
+# ADR-0007: portable: frontmatter flag is the tier signal; physical location is authoritative for shipping
 
 ## Context
 

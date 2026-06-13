@@ -49,8 +49,11 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | explicit-transaction-boundaries.md | Define Transaction Boundaries Explicitly |
 | externalize-configuration.md | Externalize Environment-Specific Configuration |
 | fail-closed-by-default.md | Fail Closed by Default |
+| fail-closed-scan-scope.md | A Fail-Closed Scan Must Be Scoped to Its Threat Model |
 | functions-do-one-thing.md | Functions Do One Thing |
+| grey-box-module.md | Grey-Box Modules — Human Owns the Interface, AI Fills the Body |
 | handle-partial-failure.md | Handle Partial Failure in Distributed Calls |
+| harness-tool-invocation-check.md | A Harness Built-In Capability Grant Requires Runtime Invocation Verification |
 | hooks-fail-closed.md | Safety Hooks Must Fail Closed |
 | idempotent-operations.md | Retryable Operations Must Be Idempotent |
 | immutable-infrastructure.md | Infrastructure Components Are Immutable After Deployment |
@@ -68,6 +71,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | observable-best-effort.md | Best-Effort Operations Must Be Observable |
 | one-behavior-per-test.md | One Behavior Per Test |
 | patterns-need-justification.md | Every Pattern Must Justify Its Complexity |
+| per-folder-public-interface.md | One Public Interface Per Module Folder |
 | prefer-async-between-services.md | Prefer Asynchronous Communication Between Services |
 | prefer-browser-native-integration.md | Prefer Browser-Native APIs for Cross-Module Communication |
 | prefer-composition-over-inheritance.md | Prefer Composition Over Inheritance |
@@ -101,20 +105,20 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 - Principles may declare `scope.tags` in frontmatter for tag-based matching; OR semantics with `layers` (added 2026-05-02)
 
 ## Conventions
-<!-- last-updated: 2026-06-11 -->
+<!-- last-updated: 2026-06-12 -->
 
 - Each principle has a unique `id` used for compliance tracking
 - Principles should be specific and actionable — not aspirational
 - Rules (6): `secrets-never-in-code`, `least-privilege-access`, `fail-closed-by-default`, `validate-at-trust-boundaries`, `refactoring-integrity`, `hooks-fail-closed` (added 2026-05-29 — safety/guard hooks must fail closed on extraction failure or missing tooling; scoped to `hooks/**`). Note: `no-llm-calls-in-mcp-tools` relocated to `.canon/principles/rules/` (Canon-internal, portable: false).
 - Strong opinions cover architecture, testing, error handling, data flow
-- Conventions cover naming, file organization, test structure (17 total as of 2026-06-11 — 24 Canon-internal conventions in `.canon/principles/conventions/`)
+- Conventions cover naming, file organization, test structure (20 total in `principles/conventions/`; 24 Canon-internal conventions in `.canon/principles/conventions/`, portable: false)
 - `accumulator-test-coverage` (added 2026-05-16) — accumulator functions in `mcp-server/**` require at least one test case with N>1 input and exact numeric assertion; capped accumulators require below-cap, at-cap, and above-cap cases
 - `source-shared-hook-helpers` (added 2026-05-29) — hooks that parse Claude Code `tool_input` JSON must source `hooks/lib/canon-hook-lib.sh` and use `canon_extract_command`; no inlined extraction expressions; scoped to `hooks/**`
 - `hooks-observable-failures` (added 2026-05-29) — bare silent swallows (`|| true`, `2>/dev/null`) in `hooks/**` must carry a justifying comment, emit `CANON WARNING:` to stderr, or exit non-zero; the `hooks/**`-scoped sibling of `observable-best-effort` at convention severity (see decision quality-coverage-01); scoped to `hooks/**`
 - `verification-grep-minimum-scope` (added 2026-06-07) — grep/awk patterns in mechanical verification commands must be minimum-sufficient: tool-name greps must be `$`-anchored to prevent prefix-family false positives; awk `tools:` block extractor must use `/^[^ \t]/` terminator to prevent leaking post-`tools:` blocks
-- `probe-before-build-invoke-not-infer` (added 2026-06-10) — when a design ASSUMPTIONS entry carries `confidence: medium` or `confidence: unknown` about external SDK behavior, protocol timing, or hook/script behavior, an empirical probe must run before design freeze; probe must invoke the capability (not infer from environment); if the probing agent cannot run the probe, the orchestrator takes over
-- `mechanism-ships-first-instance` (added 2026-06-09) — a build that introduces a new artifact class, registry, tracked template system, or workflow gate MUST ship at least one real, minimal, tracked instance in the same PR; no-instance mechanisms are considered incomplete
-- `scanner-avoids-its-own-pattern` (added 2026-06-09) — a hook, script, grep, or verification step designed to detect pattern S must not contain S verbatim in any intercepted position; use character-class split, token break, indirect variable, or temp wrapper; scoped to `hooks/**`, `scripts/**`, and agent/rule verification commands
+- `probe-before-build-invoke-not-infer` (added 2026-06-10) — **Canon-internal** (relocated to `.canon/principles/conventions/`, portable: false); when a design ASSUMPTIONS entry carries `confidence: medium` or `confidence: unknown` about external SDK behavior, protocol timing, or hook/script behavior, an empirical probe must run before design freeze
+- `mechanism-ships-first-instance` (added 2026-06-09) — **Canon-internal** (relocated to `.canon/principles/conventions/`, portable: false); a build that introduces a new artifact class, registry, tracked template system, or workflow gate MUST ship at least one real, minimal, tracked instance in the same PR
+- `scanner-avoids-its-own-pattern` (added 2026-06-09) — **Canon-internal** (relocated to `.canon/principles/conventions/`, portable: false); a hook, script, grep, or verification step designed to detect pattern S must not contain S verbatim in any intercepted position
 - `disk-is-source-of-truth-on-resume` (added 2026-06-11) — **Canon-internal** (relocated to `.canon/principles/conventions/`, portable: false); scoped to `agents/**`, `rules/**`, `principles/**`, `references/**`, `CLAUDE.md`
 
 ## Anti-Rationalization

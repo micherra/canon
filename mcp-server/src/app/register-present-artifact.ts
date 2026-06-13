@@ -1,4 +1,4 @@
-import { presentArtifact } from "@features/orchestration/tools/present-artifact.ts";
+import { presentArtifact } from "@app/artifact-presentation.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { gatedWrapHandler } from "./server-state.ts";

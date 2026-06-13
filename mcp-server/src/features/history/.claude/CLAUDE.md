@@ -18,7 +18,7 @@ Cross-run analysis tools for the Canon learner: archived build history, historic
 
 **`history-types.ts`** — shared types for cross-run analysis (imported by `tools/` and `services/`).
 
-**`services/`** — See `services/.claude/CLAUDE.md` for `cross-run-analyzer.ts`, `cross-run-craft-drift.ts`, `cross-run-patterns.ts`, `judge-weight.ts`, `consolidate-policy.ts`.
+**`services/`** — See `services/.claude/CLAUDE.md` for `cross-run-analyzer.ts`, `cross-run-craft-drift.ts`, `cross-run-patterns.ts`, `judge-weight.ts`, `consolidate-policy.ts`. Note: `archive-service.ts`, `run-summary-builder.ts`, and `run-summary-extractors.ts` relocated to `platform/storage/archive/` (ADR-0003).
 
 ## Contracts
 <!-- last-updated: 2026-06-08 -->

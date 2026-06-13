@@ -6,7 +6,9 @@ Standalone maintainer tools run directly via `bash`. No Canon-runtime coupling â
 
 ## Architecture
 
-- Scripts in this directory are single-file bash scripts with no external dependencies beyond `gh`, `jq`, `awk`, `xargs`, `grep`, `sed`
+<!-- last-updated: 2026-06-12 -->
+- Bash scripts in this directory are single-file, no external dependencies beyond `gh`, `jq`, `awk`, `xargs`, `grep`, `sed`
+- `scripts/lib/` â€” Node.js ES-module helpers imported by `install-sim-smoke.mjs`; not standalone executables
 - Each script is designed to be re-runnable and idempotent
 - Output artifacts go to `docs/reference/` (persisted, committed)
 
@@ -29,10 +31,14 @@ Print progress and error tallies to stderr so re-runs are auditable. Never silen
 
 ## Scripts
 
+<!-- last-updated: 2026-06-12 -->
 | Script | Purpose |
 |--------|---------|
 | `mine-codex-comments.sh` | Mine Codex bot PR review comments, cluster into 9 defect classes, write ranked artifact |
 | `baseline-orientation-metrics.sh` | Collect session-start metrics (PR count, drift violations, archives) |
+| `install-sim-smoke.mjs` | HTTP install-sim smoke test: boots `boot.sh --daemon` on an ephemeral port + throwaway token, connects via `StreamableHTTPClientTransport`, asserts `initialize` + non-empty `listTools`, tears down; `--self-check` runs BROKEN/FIXED/WRONG-PORT sub-tests; Node version guard (#361) retained |
+| `lib/install-sim-daemon.mjs` | Daemon lifecycle helpers for install-sim: `pickEphemeralPort`, `startTestDaemon`, `waitForHealth`, `teardownDaemon`, temp-dir/token management |
+| `lib/install-sim-http.mjs` | HTTP handshake helpers for install-sim: `resolveHeadersHelper`, `runHeadersHelper`, `attemptHttpHandshake` (StreamableHTTPClientTransport + Client) |
 
 ## Testing
 

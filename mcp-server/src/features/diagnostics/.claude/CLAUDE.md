@@ -28,9 +28,6 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `index-inventory.ts` | `toDescriptors`, `renderInventoryBlock`, `rewriteManagedBlock`, `extractManagedBlock`, `diffIndex` (pure); `checkIndexDrift` (I/O boundary); sentinel constants `INVENTORY_START`/`INVENTORY_END`; types `ArtifactClass`, `ArtifactDescriptor`, `IndexDriftFinding`, `CLASS_DIRS` |
 | `doc-gap-detect.ts` | `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)` |
 | `signal-compiler.ts` | `compileSignals(filePaths, driftDbSignals)` — read-only; scores by priority within per-file token budget |
-| `pitfall-enrichment.ts` | `queryDriftSignalPitfalls`, `queryErrorFixPitfalls`, `formatPitfallsSection`, `countPitfalls` |
-| `area-memory-enrichment.ts` | `queryAreaObservations`, `formatAreaMemorySection`, `buildAreaMemorySection`; fail-open |
-| `hot-file-detection.ts` | `detectHotFiles`, `formatHotFileSection`, `buildHotFileSection`; threshold ≥ 3 appearances |
 | `doc-freshness.ts` | `computeDocFreshness` — enumerates `docs/*.md` (excludes `docs/reference/`); ENOENT → `[]` |
 | `backfill-error-fixes.ts` | One-off script; mines `file_violation_history` to seed `error_fixes` table |
 | `craft-audit-service.ts` | Pure audit area selector + profile persistence; see Contracts below |
