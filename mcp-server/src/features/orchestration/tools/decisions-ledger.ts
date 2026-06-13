@@ -119,9 +119,9 @@ function readStrArr(payload: Record<string, unknown>, key: string): string[] | u
   return arr.length > 0 ? arr : undefined;
 }
 
-/** Escape pipe characters in a markdown table cell value. */
+/** Escape backslashes and pipe characters in a markdown table cell value. */
 function escapePipe(s: string): string {
-  return s.replace(/\|/g, "\\|");
+  return s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 
 /** Truncate a string to at most `max` chars, appending "..." if truncated. */
