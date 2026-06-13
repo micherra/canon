@@ -1,12 +1,12 @@
 ---
-adr: "0005"
+adr: "0007"
 title: "Worktree node_modules via gitignored symlink with containment gate (not npm-install, not NODE_PATH)"
 status: accepted
 date: "2026-06-11"
 build: "worktree-dev-environment-fixes-symlink-mcp-servernodemodules-into"
 ---
 
-# ADR-0005: Worktree node_modules via gitignored symlink with containment gate
+# ADR-0007: Worktree node_modules via gitignored symlink with containment gate
 
 ## Context
 

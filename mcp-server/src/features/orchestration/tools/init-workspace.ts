@@ -281,7 +281,7 @@ async function buildCachePrefix(
 /**
  * Best-effort: symlink the worktree's mcp-server/node_modules to the main checkout's
  * resolved mcp-server/node_modules so the agent LSP tool resolves zod/vitest/.ts imports.
- * Lives in gitignored .canon/** — never enters the package (see ADR-0005). Non-blocking:
+ * Lives in gitignored .canon/** — never enters the package (see ADR-0007). Non-blocking:
  * on any failure the build proceeds (LSP degrades). Skips if main node_modules is absent
  * or a node_modules already exists at the link site.
  *

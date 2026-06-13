@@ -1,12 +1,12 @@
 ---
-adr: "0006"
+adr: "0008"
 title: "Push-guard uses fail-closed command-substitution span predicate instead of transparent-exec denylist"
 status: accepted
 date: "2026-06-12"
 build: "address-pr-386-codex-p1-push-guard-bypass-resolve-merge-conflicts-with"
 ---
 
-# ADR-0006: Push-guard uses fail-closed command-substitution span predicate instead of transparent-exec denylist
+# ADR-0008: Push-guard uses fail-closed command-substitution span predicate instead of transparent-exec denylist
 
 ## Context
 
