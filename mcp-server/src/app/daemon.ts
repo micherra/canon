@@ -53,6 +53,7 @@ import { cleanupAllJobManagers } from "@platform/jobs/job-manager.ts";
 import { handleArtifactRoutes, respondJson } from "./http-routes.ts";
 import {
   markDaemonArtifactActive,
+  reclaimStalePidFile,
   removePidFile,
   setHttpPort,
   writePidFile,
@@ -494,6 +495,14 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<void> {
 
   // Resolve PID dir
   daemonPidDir = resolveDaemonPidDir(opts.pidDir);
+
+  // F2a: Reclaim a stale daemon pidfile from a previous (dead) process before
+  // attempting to bind, so a dead-PID file from a prior run doesn't block or
+  // mislead the supervisor. Only removes the file when the recorded PID is dead
+  // (ESRCH) or malformed; a live non-owned PID (EPERM) is preserved (F4-safe).
+  if (daemonPidDir) {
+    await reclaimStalePidFile(daemonPidDir, DAEMON_PID_FILENAME);
+  }
 
   // Resolve token
   const tokenPath = opts.tokenPath ?? resolveTokenPath();

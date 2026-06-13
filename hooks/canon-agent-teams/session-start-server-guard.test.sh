@@ -128,6 +128,77 @@ fi
 rm -rf "$TMPDIR_TEST"
 
 # ---------------------------------------------------------------------------
+# F2b Test 6: CANON_DAEMON_PORT set → curl probes that port, not :3141
+# ---------------------------------------------------------------------------
+TMPDIR_TEST=$(mktemp -d)
+FAKE_BIN=$(mktemp -d)
+PROBE_URL_FILE="$TMPDIR_TEST/probe_url"
+
+cat > "$FAKE_BIN/curl" <<CURLSTUB6
+#!/usr/bin/env bash
+# Record the URL curl was called with
+echo "\$*" >> "${PROBE_URL_FILE}"
+exit 1  # simulate unhealthy so WARN is emitted
+CURLSTUB6
+chmod +x "$FAKE_BIN/curl"
+
+OUTPUT=$(CANON_PROJECT_DIR="$TMPDIR_TEST" \
+  CLAUDE_PLUGIN_DATA="" \
+  CANON_DAEMON_PORT=3142 \
+  PATH="$FAKE_BIN:$PATH" \
+  bash "$HOOK" 2>&1)
+EXIT_CODE=$?
+
+PROBE_URL=""
+if [[ -f "$PROBE_URL_FILE" ]]; then
+  PROBE_URL=$(cat "$PROBE_URL_FILE")
+fi
+
+if [[ $EXIT_CODE -eq 0 ]] \
+   && echo "$PROBE_URL" | grep -q ":3142/health" \
+   && ! echo "$PROBE_URL" | grep -q ":3141/health" \
+   && echo "$OUTPUT" | grep -q ":3142"; then
+  pass "F2b: CANON_DAEMON_PORT=3142 → curl targets :3142 and WARN mentions :3142"
+else
+  fail "F2b: CANON_DAEMON_PORT=3142: exit=$EXIT_CODE probe_url='${PROBE_URL}' warn_output='$(echo "$OUTPUT" | grep -i warn || echo none)'"
+fi
+rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
+
+# ---------------------------------------------------------------------------
+# F2b Test 7: CANON_DAEMON_PORT unset → curl probes default :3141
+# ---------------------------------------------------------------------------
+TMPDIR_TEST=$(mktemp -d)
+FAKE_BIN=$(mktemp -d)
+PROBE_URL_FILE="$TMPDIR_TEST/probe_url"
+
+cat > "$FAKE_BIN/curl" <<CURLSTUB7
+#!/usr/bin/env bash
+echo "\$*" >> "${PROBE_URL_FILE}"
+exit 1
+CURLSTUB7
+chmod +x "$FAKE_BIN/curl"
+
+OUTPUT=$(CANON_PROJECT_DIR="$TMPDIR_TEST" \
+  CLAUDE_PLUGIN_DATA="" \
+  PATH="$FAKE_BIN:$PATH" \
+  bash "$HOOK" 2>&1)
+EXIT_CODE=$?
+
+PROBE_URL=""
+if [[ -f "$PROBE_URL_FILE" ]]; then
+  PROBE_URL=$(cat "$PROBE_URL_FILE")
+fi
+
+if [[ $EXIT_CODE -eq 0 ]] \
+   && echo "$PROBE_URL" | grep -q ":3141/health" \
+   && echo "$OUTPUT" | grep -q ":3141"; then
+  pass "F2b: CANON_DAEMON_PORT unset → curl targets default :3141 and WARN mentions :3141"
+else
+  fail "F2b: CANON_DAEMON_PORT unset: exit=$EXIT_CODE probe_url='${PROBE_URL}' warn_output='$(echo "$OUTPUT" | grep -i warn || echo none)'"
+fi
+rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

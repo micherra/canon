@@ -106,7 +106,19 @@ fi
 # ---------------------------------------------------------------------------
 if [[ $DAEMON_HEALTHY -eq 1 ]]; then
   if [[ -n "$PLUGIN_VERSION" ]] && [[ "$DAEMON_VERSION" == "$PLUGIN_VERSION" ]]; then
-    # Same version — healthy, nothing to do
+    # Same version — healthy. Reconcile recorded port in PID file if it diverges
+    # from the live PORT so that future probes and session-start-server-guard.sh
+    # both target the correct port (F2c).
+    if [[ -f "$PID_FILE" ]]; then
+      _recorded_port=$(sed -n '2p' "$PID_FILE" 2>/dev/null | tr -d '[:space:]') || _recorded_port="" # DOCUMENTED FAIL-OPEN -- unreadable PID file; skip reconcile
+      if [[ -n "$_recorded_port" ]] && [[ "$_recorded_port" != "$PORT" ]]; then
+        _pid_line=$(sed -n '1p' "$PID_FILE" 2>/dev/null | tr -d '[:space:]') || _pid_line="" # DOCUMENTED FAIL-OPEN -- unreadable PID line; skip reconcile
+        if [[ -n "$_pid_line" ]]; then
+          printf '%s\n%s\n' "$_pid_line" "$PORT" > "$PID_FILE" || true # DOCUMENTED FAIL-OPEN -- write failure is non-fatal; recorded port stays stale but daemon is healthy
+          echo "CANON NOTE: reconciled recorded port in canon-daemon.pid (was :${_recorded_port}, now :${PORT})"
+        fi
+      fi
+    fi
     echo "CANON NOTE: daemon healthy (v${DAEMON_VERSION})"
     exit 0
   fi
