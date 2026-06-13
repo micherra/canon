@@ -151,10 +151,10 @@ export async function writeOrchestratorCheckpoint(
     .filter((s) => s.status === "started" || s.status === "planned")
     .map((s) => ({ status: s.status, step_id: s.step_id }));
 
-  // Current = last completed, or first started, or "none"
+  // Current = first in-progress step, falling back to last completed, or "none"
   const lastCompleted = [...steps].reverse().find((s) => s.status === "completed");
   const firstStarted = steps.find((s) => s.status === "started");
-  const current = (lastCompleted ?? firstStarted)?.step_id ?? "none";
+  const current = (firstStarted ?? lastCompleted)?.step_id ?? "none";
 
   // Next step = first non-terminal step
   const nextStep = steps.find((s) => s.status === "started" || s.status === "planned")?.step_id;

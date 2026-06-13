@@ -92,6 +92,26 @@ describe("writeOrchestratorCheckpoint", () => {
     expect(content).toContain("# Orchestrator Checkpoint");
   });
 
+  it("current step is the in-progress (started) step, not the last completed step", async () => {
+    // Regression: when implement=completed and verify=started, current must be "verify"
+    await logStep({
+      agent_id: "agent-001",
+      status: "completed",
+      step_id: "implement",
+      workspace,
+      projectDir: process.cwd(),
+    });
+    await logStep({ status: "started", step_id: "verify", workspace, projectDir: process.cwd() });
+
+    const result = await writeOrchestratorCheckpoint({ workspace });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+
+    const content = await readFile(join(workspace, "checkpoint.md"), "utf-8");
+    // "verify" must appear as the current step, not "implement"
+    expect(content).toMatch(/## Current step\nverify\n/);
+  });
+
   it("reflects decisions in checkpoint", async () => {
     // Use the execution-store-shaped workspace path (PROBE A: store requires .canon/workspaces/ path)
     // For this test we just need a valid workspace — decisions are in-memory via mock store
