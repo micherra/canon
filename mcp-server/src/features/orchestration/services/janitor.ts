@@ -20,7 +20,7 @@
  *   - subprocess-isolation: git commands via gitExec (spawnSync, shell never true)
  */
 
-import { existsSync, lstatSync, readdirSync, rmdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, rmdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
@@ -330,11 +330,52 @@ async function pruneWorkspacesTask(
   );
 }
 
+/**
+ * True when the workspace's journal records a completed "ship" step.
+ *
+ * The step_id literal "ship" is intentional (finalize-04). A future rename of the
+ * ship step would silently disable post-ship reclaim (orphans accumulate). This
+ * function is exported so tests can pin the literal and catch any such rename.
+ */
+export function isShipComplete(
+  steps: ReadonlyArray<{ step_id: string; status: string }>,
+): boolean {
+  return steps.some((s) => s.step_id === "ship" && s.status === "completed");
+}
+
+/**
+ * Read the workspace journal and check whether the ship step has completed.
+ *
+ * Reads journal.json LOCALLY (do NOT import readJournal from orchestration-journal.ts —
+ * that would deepen the existing workspace-cleanup ↔ orchestration-journal cycle).
+ * Fail-closed: absent/malformed journal or no completed ship step → returns false.
+ */
+function readShipComplete(slugPath: string): boolean {
+  const p = join(slugPath, "journal.json");
+  if (!existsSync(p)) return false; // fail-closed: no journal → not post-ship
+  try {
+    const j = JSON.parse(readFileSync(p, "utf-8")) as {
+      steps?: { step_id: string; status: string }[];
+    };
+    return Array.isArray(j.steps) ? isShipComplete(j.steps) : false;
+  } catch {
+    return false; // malformed → fail-closed, skip candidate
+  }
+}
+
 type PruneCandidate = { slugPath: string; branchEntry: string; slug: string; projectDir: string };
 
 /**
  * Scan a branch directory for workspace slugs eligible for pruning.
- * A slug is eligible when it has no .lock file and is older than the abandoned age threshold.
+ *
+ * A slug is eligible when ALL conditions hold (AND, cheapest-first):
+ *   1. No .lock file (not an active workspace)
+ *   2. journal.json records a completed "ship" step (post-ship proof; fail-closed)
+ *   3. mtime exceeds max_abandoned_workspace_age_hours (secondary age buffer)
+ *
+ * The ship-completed gate (condition 2) is the primary safety guard (finalize-04):
+ * it prevents reaping in-flight builds that happen to be idle past the age threshold.
+ * Age alone is NOT sufficient — see PROBE-FINDINGS Finding 6.
  */
 function findPruneCandidates(
   branchDir: string,
@@ -347,8 +388,15 @@ function findPruneCandidates(
   const candidates: PruneCandidate[] = [];
   for (const slug of slugEntries) {
     const slugPath = join(branchDir, slug);
+
+    // Gate 1: .lock present → active workspace, skip (unchanged)
     if (existsSync(join(slugPath, ".lock"))) continue;
 
+    // Gate 2: ship-completed check (primary post-ship proof; fail-closed)
+    // A workspace without a completed ship step is in-flight — never reap it.
+    if (!readShipComplete(slugPath)) continue;
+
+    // Gate 3: age check (secondary buffer — AND with gate 2, never sole key)
     let mtimeMs: number;
     try {
       mtimeMs = statSync(slugPath).mtimeMs;

@@ -264,15 +264,19 @@ export type JanitorConfig = {
   enabled: boolean;
   min_hours_between_runs: number;
   /**
-   * Age threshold (hours) for pruning abandoned workspaces (no active lock).
-   * When null, abandoned workspaces are never pruned by age alone. Default: null.
+   * Secondary age threshold (hours) for reclaiming post-ship workspaces.
+   * A workspace is reclaim-eligible only when BOTH conditions hold:
+   *   (1) its journal.json records a completed "ship" step (primary gate), AND
+   *   (2) its directory mtime exceeds this age threshold (secondary buffer).
+   * When null, post-ship workspaces are never automatically reclaimed.
+   * Default: 24 (reclaim post-ship workspaces after 24h). (finalize-04)
    */
   max_abandoned_workspace_age_hours: number | null;
 };
 
 const DEFAULT_JANITOR_CONFIG: JanitorConfig = {
   enabled: true,
-  max_abandoned_workspace_age_hours: null,
+  max_abandoned_workspace_age_hours: 24,
   min_hours_between_runs: 1,
 };
 

@@ -54,7 +54,7 @@ import {
   getLastJanitorTimestamp,
   releaseJanitorLock,
 } from "@shared/lib/janitor-lock.ts";
-import { runJanitor } from "../janitor.ts";
+import { isShipComplete, runJanitor } from "../janitor.ts";
 
 const mockLoadJanitorConfig = loadJanitorConfig as ReturnType<typeof vi.fn>;
 const mockAcquireJanitorLock = acquireJanitorLock as ReturnType<typeof vi.fn>;
@@ -88,6 +88,17 @@ function makeGitWorktreeListResult(lines: string[]): GitResult {
 function setMtime(p: string, ms: number): void {
   const secs = ms / 1000;
   utimesSync(p, secs, secs);
+}
+
+/** Create a journal.json at slugPath with the given steps (for ship-gate testing). */
+async function writeJournal(
+  slugPath: string,
+  steps: Array<{ step_id: string; status: string }>,
+): Promise<void> {
+  await writeFile(
+    join(slugPath, "journal.json"),
+    JSON.stringify({ version: 1, workspace: slugPath, steps }),
+  );
 }
 
 let tmpDir: string;
@@ -175,7 +186,8 @@ describe("prune_workspaces task", () => {
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "stale-build");
     await mkdir(slugDir, { recursive: true });
-    // No .completed, no .lock — abandoned workspace
+    // No .lock — post-ship workspace with completed ship step
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     // Set mtime to 72h ago (past the 48h threshold)
     setMtime(slugDir, Date.now() - 72 * 60 * 60 * 1000);
@@ -222,7 +234,8 @@ describe("prune_workspaces task", () => {
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "abandoned-build");
     await mkdir(slugDir, { recursive: true });
-    // No .completed marker — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     // Make it old enough (100h > 72h threshold)
     setMtime(slugDir, Date.now() - 100 * 60 * 60 * 1000);
@@ -285,7 +298,8 @@ describe("prune_workspaces task", () => {
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "only-slug");
     await mkdir(slugDir, { recursive: true });
-    // No .completed, no .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     // Make it stale
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
@@ -310,7 +324,9 @@ describe("prune_workspaces task", () => {
     const recentSlug = join(branchDir, "recent-slug");
     await mkdir(staleSlug, { recursive: true });
     await mkdir(recentSlug, { recursive: true });
-    // Both abandoned (no .completed, no .lock)
+    // stale-slug: post-ship + old → eligible; recent-slug: post-ship but recent → not eligible
+    await writeJournal(staleSlug, [{ step_id: "ship", status: "completed" }]);
+    await writeJournal(recentSlug, [{ step_id: "ship", status: "completed" }]);
 
     // Make stale-slug old, recent-slug fresh
     setMtime(staleSlug, Date.now() - (ABANDONED_AGE_MS + 1000));
@@ -335,7 +351,8 @@ describe("prune_workspaces task", () => {
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "stale-main-build");
     await mkdir(slugDir, { recursive: true });
-    // No .completed, no .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
@@ -354,7 +371,8 @@ describe("prune_workspaces task", () => {
     const branchDir = join(canonWorkspacesDir, "feat--some-feature");
     const slugDir = join(branchDir, "build-001");
     await mkdir(slugDir, { recursive: true });
-    // No .completed, no .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
@@ -375,7 +393,8 @@ describe("prune_workspaces task", () => {
     const slugDir = join(branchDir, "worktree-build");
     const worktreeSubDir = join(slugDir, "worktree");
     await mkdir(worktreeSubDir, { recursive: true });
-    // No .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
@@ -412,7 +431,8 @@ describe("prune_workspaces task", () => {
     const slugDir = join(branchDir, "worktree-fail-build");
     const worktreeSubDir = join(slugDir, "worktree");
     await mkdir(worktreeSubDir, { recursive: true });
-    // No .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
@@ -451,7 +471,8 @@ describe("prune_workspaces task", () => {
     const slugDir = join(branchDir, "no-worktree-build");
     // Create slug dir WITHOUT a worktree/ subdirectory
     await mkdir(slugDir, { recursive: true });
-    // No .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
@@ -541,5 +562,152 @@ describe("prune_husk_dirs task", () => {
     // The file is not a directory — should not be removed
     expect(existsSync(aFile)).toBe(true);
     expect(result.tasks.prune_husk_dirs.status).toBe("skipped");
+  });
+});
+
+// ─── isShipComplete — pure helper unit tests ─────────────────────────────────
+
+describe("isShipComplete", () => {
+  test("returns true when steps contain a completed ship step", () => {
+    const steps = [
+      { step_id: "implement", status: "completed" },
+      { step_id: "ship", status: "completed" }, // finalize-04: literal "ship" pinned here
+    ];
+    expect(isShipComplete(steps)).toBe(true);
+  });
+
+  test("returns false when ship step is present but not completed (started)", () => {
+    const steps = [
+      { step_id: "implement", status: "completed" },
+      { step_id: "ship", status: "started" },
+    ];
+    expect(isShipComplete(steps)).toBe(false);
+  });
+
+  test("returns false when ship step is absent", () => {
+    const steps = [
+      { step_id: "implement", status: "completed" },
+      { step_id: "review", status: "completed" },
+    ];
+    expect(isShipComplete(steps)).toBe(false);
+  });
+
+  test("returns false for empty steps array", () => {
+    expect(isShipComplete([])).toBe(false);
+  });
+});
+
+// ─── Reclaim-gate: ship-completed journal signal (finalize-04) ───────────────
+//
+// A workspace is reclaim-eligible ONLY when:
+//   (1) No .lock file (unchanged)
+//   (2) journal.json has a completed "ship" step (new ship-gate)
+//   (3) mtime > max_abandoned_workspace_age_hours (secondary buffer)
+//
+// Test (b) MUST fail if the ship-gate is removed (i.e. reverting to age-only).
+
+const SHIP_GATE_AGE_HOURS = 24;
+
+describe("reclaim-gate: ship-completed journal signal", () => {
+  const configWithAge = {
+    enabled: true,
+    max_abandoned_workspace_age_hours: SHIP_GATE_AGE_HOURS,
+    min_hours_between_runs: 1,
+  };
+
+  beforeEach(() => {
+    mockLoadJanitorConfig.mockResolvedValue(configWithAge);
+  });
+
+  // (a) shipped + old + unlocked → REAPED
+  test("(a) shipped + old + unlocked: workspace is reaped", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "shipped-old-build");
+    await mkdir(slugDir, { recursive: true });
+
+    // Journal has a completed ship step
+    await writeJournal(slugDir, [
+      { step_id: "implement", status: "completed" },
+      { step_id: "ship", status: "completed" },
+    ]);
+
+    // Set mtime well past the age threshold (48h > 24h)
+    setMtime(slugDir, Date.now() - 48 * 60 * 60 * 1000);
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces.status).toBe("success");
+    expect(existsSync(slugDir)).toBe(false);
+  });
+
+  // (b) in-flight (no completed ship step) + old → NOT reaped
+  // CRITICAL: this test MUST fail if the ship-gate is removed (age-only reaping)
+  test("(b) in-flight (no completed ship step) + old: workspace is NOT reaped", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "inflight-old-build");
+    await mkdir(slugDir, { recursive: true });
+
+    // Journal has implement completed but NO completed ship step
+    await writeJournal(slugDir, [
+      { step_id: "implement", status: "completed" },
+      { step_id: "ship", status: "started" }, // ship not completed → in-flight
+    ]);
+
+    // Set mtime well past the age threshold (48h > 24h)
+    setMtime(slugDir, Date.now() - 48 * 60 * 60 * 1000);
+
+    const result = await runJanitor(tmpDir);
+
+    // Must NOT be reaped — ship-gate protects in-flight builds
+    expect(result.tasks.prune_workspaces.status).toBe("skipped");
+    expect(existsSync(slugDir)).toBe(true);
+  });
+
+  // (c) shipped + locked → NOT reaped (.lock check unchanged)
+  test("(c) shipped + locked: workspace is NOT reaped", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "shipped-locked-build");
+    await mkdir(slugDir, { recursive: true });
+    await writeFile(join(slugDir, ".lock"), "pid=9999");
+
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
+    setMtime(slugDir, Date.now() - 48 * 60 * 60 * 1000);
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces.status).toBe("skipped");
+    expect(existsSync(slugDir)).toBe(true);
+  });
+
+  // (d) shipped + recent (under age threshold) → NOT reaped (age buffer holds)
+  test("(d) shipped + recent: workspace is NOT reaped (age buffer)", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "shipped-recent-build");
+    await mkdir(slugDir, { recursive: true });
+
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
+
+    // Set mtime to only 1h ago (well under 24h threshold)
+    setMtime(slugDir, Date.now() - 1 * 60 * 60 * 1000);
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces.status).toBe("skipped");
+    expect(existsSync(slugDir)).toBe(true);
+  });
+
+  // Fail-closed: no journal → not reaped
+  test("absent journal → fail-closed (not reaped)", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "no-journal-build");
+    await mkdir(slugDir, { recursive: true });
+    // No journal.json written
+
+    setMtime(slugDir, Date.now() - 48 * 60 * 60 * 1000);
+
+    const result = await runJanitor(tmpDir);
+
+    expect(result.tasks.prune_workspaces.status).toBe("skipped");
+    expect(existsSync(slugDir)).toBe(true);
   });
 });
