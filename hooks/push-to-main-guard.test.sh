@@ -989,6 +989,144 @@ run_test 'FOO=bar ls $(pwd) (assignment prefix + final sub — V2 allows, exit 0
 
 echo ""
 # ---------------------------------------------------------------------------
+# R1 — GLUED command-substitution command-word bypass (must block, exit 2)
+#
+# A substitution glued to a literal prefix (gi$(echo t)) concatenates at runtime
+# to `git`, then `push origin main` follows → real push. The V1 span-start test
+# only matched substitutions that STARTED a token; a literal prefix defeated it.
+# The R1 widening (CONTAINS-test) closes this. scanner-avoids-its-own-pattern:
+# the trigger command word is assembled from fragments via printf, never written
+# as a literal self-matching string.
+# ---------------------------------------------------------------------------
+echo "-- R1: glued command-substitution command-word (must block, exit 2) --"
+
+# Assemble the glued forms from fragments (scanner-avoids-its-own-pattern).
+_sub='$(echo '   # opens a command-substitution span
+_glued_a="gi${_sub}t) push origin main"          # gi + sub + t)  → git push origin main
+_glued_b="g${_sub}i)t push origin main"          # g  + sub + i)t → git push origin main
+_glued_pfx="env gi${_sub}t) push origin main"    # transparent-exec prefix + glued
+run_test 'gi$(echo t) push origin main (R1 glued cmdsub — must block, exit 2)' \
+  2 "$(printf '{"command":"%s"}' "$_glued_a")"
+run_test 'g$(echo i)t push origin main (R1 glued cmdsub — must block, exit 2)' \
+  2 "$(printf '{"command":"%s"}' "$_glued_b")"
+run_test 'env gi$(echo t) push origin main (R1 prefix-stacked glue — must block, exit 2)' \
+  2 "$(printf '{"command":"%s"}' "$_glued_pfx")"
+
+echo ""
+# ---------------------------------------------------------------------------
+# R1 — clause-final glued substitution stays ALLOW (false-positive lock, exit 0)
+#
+# echo hi$(whoami): the substitution-bearing token is itself the clause-final
+# non-punctuation token (no further command token) → inert argument-position
+# data → ALLOW. The R1 contains-test must preserve this.
+# ---------------------------------------------------------------------------
+echo "-- R1: clause-final glued substitution stays ALLOW (exit 0) --"
+
+_hi="hi${_sub}whoami)"
+run_test 'echo hi$(whoami) (R1 clause-final glued sub — must stay exit 0)' \
+  0 "$(printf '{"command":"echo %s"}' "$_hi")"
+
+echo ""
+# ---------------------------------------------------------------------------
+# R2 — BACKSLASH-escaped git command-word bypass (must block, exit 2)
+#
+# \git resolves to the real git binary (\ only suppresses alias/function lookup).
+# The guard's no-git-token branch missed it: \git != git, not a wrapper, not an
+# ambiguous git-prefixed token, carries no $( → fell through to ALLOW.
+# R2 detects \git at command-word position, de-escapes, and reuses the existing
+# push policy. JSON-escape: a single backslash in the command is "\\" in JSON.
+# ---------------------------------------------------------------------------
+echo "-- R2: backslash-escaped git command-word (must block, exit 2) --"
+
+run_test '\git push origin main (R2 backslash-git — must block, exit 2)' \
+  2 '{"command":"\\git push origin main"}'
+run_test 'FOO=1 \git push origin main (R2 assignment + backslash-git — must block, exit 2)' \
+  2 '{"command":"FOO=1 \\git push origin main"}'
+# \git -C <main-repo> push origin main — backslash-git with a -C global option.
+# Self-contained throwaway main repo (the space-path repos were already cleaned up).
+TMPDIR_BSLASH_C=$(mktemp -d)
+setup_repo "$TMPDIR_BSLASH_C"
+git -C "$TMPDIR_BSLASH_C" branch -m main
+_bslash_C_input="$(printf '{"command":"\\\\git -C %s push origin main"}' "$TMPDIR_BSLASH_C")"
+_exit_bslash_C=0
+echo "$_bslash_C_input" | CANON_GUARD_CWD="/home/user/project" bash "$HOOK" >/dev/null 2>&1 || _exit_bslash_C=$?
+if [[ "$_exit_bslash_C" -eq 2 ]]; then
+  echo "  PASS: \\git -C '<main repo>' push origin main (R2 backslash-git + -C — blocks, exit 2)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: \\git -C '<main repo>' push origin main should block, got exit=$_exit_bslash_C"
+  FAIL=$((FAIL + 1))
+fi
+rm -rf "$TMPDIR_BSLASH_C"
+
+echo ""
+# ---------------------------------------------------------------------------
+# R2 — DOUBLE-backslash empirical finding (documented harmless ALLOW, exit 0)
+#
+# EMPIRICAL (implement-step probe): bash quote-removal turns `\\git` into the
+# literal command name `\git`, which is NOT a path → "command not found" at
+# runtime — it never invokes real git. Confirmed: `\\git --version` →
+# "\git: command not found". So the correct behavior is a documented HARMLESS
+# ALLOW (exit 0), never a silent real-git ALLOW. R2 only de-escapes when the
+# post-single-strip command word equals exactly `git`; `\\git` strips to `\git`
+# (≠ git) → predicate false → ALLOW. This row locks that finding.
+# ---------------------------------------------------------------------------
+echo "-- R2: double-backslash \\\\git is a documented harmless ALLOW (exit 0) --"
+
+run_test '\\git push origin main (R2 double-backslash — harmless: \\git not a real cmd, exit 0)' \
+  0 '{"command":"\\\\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# R2 — backslash false-positive locks (must stay ALLOW, exit 0)
+#
+# - echo \git push: \git is an ARGUMENT to echo, not the command word → ALLOW.
+# - \echo hello: command word \echo normalises to echo (≠ git) → ALLOW.
+# - \git status: backslash-git but subcommand is status (not push) → ALLOW.
+# ---------------------------------------------------------------------------
+echo "-- R2: backslash false-positive locks (must stay exit 0) --"
+
+run_test 'echo \git push origin main (R2 backslash in arg position — must stay exit 0)' \
+  0 '{"command":"echo \\git push origin main"}'
+run_test '\echo hello (R2 backslash non-git command word — must stay exit 0)' \
+  0 '{"command":"\\echo hello"}'
+run_test '\git status (R2 backslash-git non-push subcommand — must stay exit 0)' \
+  0 '{"command":"\\git status"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# R5 — termination / forward-progress (malformed inputs must NOT hang)
+#
+# The R1 widening and R2 prefix-skip loops must guarantee forward progress.
+# A timeout wrapper around malformed inputs (unterminated cmdsub, unterminated
+# quote) must return (exit != 124). Fail-closed (exit 2) is acceptable;
+# the assertion is purely "did not hang".
+# ---------------------------------------------------------------------------
+echo "-- R5: malformed inputs return within timeout (no hang, exit != 124) --"
+
+_unterm_sub="gi${_sub}t push origin main"   # unterminated $(  (no closing paren)
+_term_rc=0
+printf '{"command":"%s"}' "$_unterm_sub" | CANON_GUARD_CWD="/home/user/project" timeout 5 bash "$HOOK" >/dev/null 2>&1 || _term_rc=$?
+if [[ "$_term_rc" -ne 124 ]]; then
+  echo "  PASS: unterminated command-substitution returns within timeout (exit=$_term_rc, no hang)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: unterminated command-substitution HUNG (exit=124)"
+  FAIL=$((FAIL + 1))
+fi
+
+_term_rc2=0
+printf '{"command":"echo %sunterminated quote"}' "'" | CANON_GUARD_CWD="/home/user/project" timeout 5 bash "$HOOK" >/dev/null 2>&1 || _term_rc2=$?
+if [[ "$_term_rc2" -ne 124 ]]; then
+  echo "  PASS: unterminated single-quote returns within timeout (exit=$_term_rc2, no hang)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: unterminated single-quote HUNG (exit=124)"
+  FAIL=$((FAIL + 1))
+fi
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
