@@ -34,6 +34,16 @@ tests-failed: {N}
 |------|-------------|------------|---------------|
 | `path/to/source.ts` | `test description` | {root cause analysis} | {suggested fix approach} |
 
+### Acceptance Criteria Traceability
+<!-- REQUIRED. One row per acceptance criterion. Written BEFORE coverage-gap work (agents/tester.md Step 4.5). -->
+<!-- A mechanically-verifiable AC with no mapped test is a defect — status NO_TEST and fill the gap. -->
+<!-- Scoping: this table proves a test EXISTS per mechanically-verifiable AC at authoring time. -->
+<!-- It does NOT replace the reviewer Stage 5 pass/fail verification or ## Manual Verification Needed. -->
+<!-- Manual ACs are status MANUAL here and detailed in ## Manual Verification Needed. -->
+| AC # | Criterion | Mechanically-verifiable? | Test(s) mapped | Status |
+|------|-----------|--------------------------|----------------|--------|
+| {AC#} | {criterion text} | {yes/no} | `{test name or file}` | {COVERED / NO_TEST / MANUAL} |
+
 ### Coverage Gaps Filled
 <!-- Which gaps from implementor Coverage Notes were addressed. -->
 - {function/endpoint}: {gap} — now tested via `{test name}`
@@ -74,3 +84,4 @@ tests-failed: {N}
 
 - Issues Found table is mandatory when status is IMPLEMENTATION_ISSUE — the fix-impl state reads it
 - Manual Verification Needed table is populated from planning-brief ACs with `type: manual`. Each row corresponds to one manual AC. The orchestrator detects this section and presents it to the user as a HITL gate before ship. When no manual ACs exist, omit the section entirely.
+- `### Acceptance Criteria Traceability` is REQUIRED. One row per AC. An empty table, or any `yes`-mechanically-verifiable AC with status `NO_TEST`, is a detectable defect the reviewer flags (parallels the engineer Criteria Coverage / task-plan Brief Coverage enforcement). Manual ACs are status `MANUAL` here and detailed in `## Manual Verification Needed`.
