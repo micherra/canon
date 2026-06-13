@@ -204,6 +204,8 @@ before producing or finishing its artifact. For each entry:
 Reconciliation runs against the BUILD journal. It is advisory and read-only — a
 `reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
 
+**In-session compaction uses the same durable artifacts.** Before any HITL gate or dispatch, durable `journal.json` + `get_decisions` + `checkpoint.md` are authoritative over in-context recollection. Full rehydration sequence: `references/canon-orchestrator.md` § In-Session Compaction Rehydration.
+
 ### Skill Preloading
 
 Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include returned `preload_prompt` verbatim at top of spawn prompt. For task-specific domain primers, name them in the spawn prompt body: `"Relevant domain primers: <name>. Load from ${CLAUDE_PLUGIN_ROOT}/primers/<domain>.md."`
@@ -305,6 +307,14 @@ Accepted values: `"fix-type build, no contract-level changes"` | `"markdown-only
 
 An empty `skip_reason` is a protocol violation. If no accepted value fits, the step should not be skipped — run it or report BLOCKED.
 
+### Decisions Ledger & Checkpoint <!-- last-updated: 2026-06-12 -->
+
+At each consequential decision, call `log_decision({ workspace, decision_type, summary, rationale?, outcome?, gate? })`. Named decision points: plan-approval outcome, review-verdict acceptance/override, scope cuts, AC changes, tier overrides, merge-conflict resolutions, and manual-verification confirmations. The `log_decision` write is **authoritative** — store failure surfaces as a `ToolResult` error (NOT fail-open).
+
+After each completed step (alongside `log_step(...completed)`) and at each HITL gate, call `write_orchestrator_checkpoint({ workspace })` to refresh `${workspace}/checkpoint.md`. That write is **best-effort-observable** — failure returns a `ToolResult` error but never throws or silently succeeds.
+
+**Honesty clause (behavioral, not mechanical)**: these call sites are a behavioral obligation. The *tool* is deterministic and durable; Canon cannot intercept harness compaction and mechanically force the orchestrator to call these tools at every gate. `write_orchestrator_checkpoint` and `get_decisions` are the safety net — rehydration (see Resume Protocol + `references/canon-orchestrator.md` In-Session Compaction Rehydration) works regardless of how many gates were missed under compaction.
+
 ### Post-Subagent Artifact Check
 
 After each agent returns, verify `artifacts_expected` paths exist. If missing: re-spawn with explicit instruction to write the missing paths (cite `agent-artifact-write-before-return`). On second failure: HITL. Derive the implement-summary path from `write_implementation_summary`'s returned `path` field; never a guessed stem.
@@ -394,8 +404,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
    - **One-time user setup**: Desktop push works by default in the Claude.ai/API runtime — no setup needed. Phone push requires connecting **Remote Control** (optional one-time step). Not available on Bedrock/Vertex/Foundry — Canon runs on the Claude.ai/API path, so this is informational only.
    - **LSP prerequisite**: The `LSP` tool (granted to reviewer, engineer, architect) requires `typescript-language-server` installed globally: `npm install -g typescript-language-server typescript`. Without it the tool will fail to return results.
 5. Verify file claims released.
-6. Run `.canon/learn.sh` if it exists.
-7. Record final flow metrics.
+6. Record final flow metrics.
 
 ### Commit Provenance
 
@@ -482,7 +491,7 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Loop Framework <!-- last-updated: 2026-06-11 -->
+## Loop Framework <!-- last-updated: 2026-06-12 -->
 
 Loops are Canon's managed periodic-observation artifact class. A loop is authored as
 `loops/<id>.md` (YAML frontmatter + action-prompt body), registered via `list_loops`,
@@ -536,11 +545,36 @@ Discovery: `list_loops`.
 NOT start the loop. No manifest field, hook script, or command frontmatter can trigger
 scheduling automatically.
 
-## Project Structure <!-- last-updated: 2026-06-11 -->
+**Consuming `orchestrator_action` (Phase B+):** When a `/canon:loop-tick` run surfaces a line
+`ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>`, the orchestrator (which is allowed to
+mutate — the loop is not) consumes it. The loop/runner only declared and surfaced the signal;
+acting is the orchestrator's job. dc-06 holds: `orchestrator_action` is a declarative signal the
+orchestrator consumes, NOT something the loop or the loop-tick runner executes. The loop's
+`guardrails.mutates_build` stays `false`.
+
+**`auto-triage-fix`** (fires on the `external_review_comment_ids` transition and the CI
+`pending → failure` transition):
+1. Reads the trigger source — the new PR comment(s) for the comment transition, or the failing
+   CI job logs (`gh pr checks` / run logs) for the CI transition.
+2. If a CLEAR actionable defect → dispatches a fix flow (engineer → re-run verify gates → push
+   to the build branch) WITHOUT asking first.
+3. If AMBIGUOUS / a question / design-level pushback → surfaces with a proposed approach and
+   ASKS first.
+4. NEVER auto-merges the PR.
+
+**`auto-plugin-update`** (fires on the `release_tag` transition): **ASK-FIRST, never unattended.**
+On a release tag being cut:
+1. Fire a `PushNotification` that a release tag was cut.
+2. ASK the user to confirm before running `plugin-update` (this is a mutating local action that
+   must not happen unattended — it swaps the installed plugin version mid-session).
+3. Run `plugin-update` + confirm the new version is active ONLY after explicit user confirmation.
+NEVER silently run plugin-update; the ask-first/confirm requirement is non-optional.
+
+## Project Structure <!-- last-updated: 2026-06-12 -->
 
 ```
 canon/
-├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (23 terms)
+├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (25 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── docs/
 │   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
@@ -564,7 +598,7 @@ canon/
 ├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase C: _probe + ship-watch + session-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
-├── principles/           # Built-in principles (83 total: 7 rules, 35 strong-opinions, 41 conventions)
+├── principles/           # Built-in principles (61 total: 6 rules, 36 strong-opinions, 19 conventions); 26 Canon-internal principles in .canon/principles/ (portable: false)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/

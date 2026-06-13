@@ -2,6 +2,7 @@
 id: compose-from-small-to-large
 title: Compose UI from Small to Large
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - ui

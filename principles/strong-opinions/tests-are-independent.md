@@ -2,6 +2,7 @@
 id: tests-are-independent
 title: Tests Must Be Independent
 severity: strong-opinion
+portable: true
 scope:
   layers: []
   file_patterns:

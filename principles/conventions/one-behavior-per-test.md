@@ -2,6 +2,7 @@
 id: one-behavior-per-test
 title: One Behavior Per Test
 severity: convention
+portable: true
 scope:
   layers: []
   file_patterns:

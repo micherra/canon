@@ -2,6 +2,7 @@
 id: explicit-transaction-boundaries
 title: Define Transaction Boundaries Explicitly
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - domain

@@ -2,6 +2,7 @@
 id: single-source-of-component-styles
 title: One Component, One Style Source
 severity: convention
+portable: true
 scope:
   layers:
     - ui

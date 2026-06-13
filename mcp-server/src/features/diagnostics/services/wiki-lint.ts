@@ -20,9 +20,13 @@
 import type { Principle } from "@shared/parser.ts";
 import type { IndexDriftFinding } from "./index-inventory.ts";
 import type { GlossaryConsistencyFinding } from "./wiki-lint-glossary.ts";
+import type {
+  DuplicateTitleFinding,
+  MisroutedPrincipleFinding,
+} from "./wiki-lint-principle-tier.ts";
 
-// Re-export the type so callers can use it without depending on the sub-module directly.
-export type { GlossaryConsistencyFinding };
+// Re-export the types so callers can use them without depending on sub-modules directly.
+export type { DuplicateTitleFinding, GlossaryConsistencyFinding, MisroutedPrincipleFinding };
 
 // ---- Types ----
 
@@ -78,8 +82,10 @@ export type { IndexDriftFinding };
 export type WikiLintOutput = {
   cited_paths: CitedPathFinding[];
   contradictions: ContradictionFinding[];
+  duplicate_titles: DuplicateTitleFinding[];
   glossary_consistency: import("./wiki-lint-glossary.ts").GlossaryConsistencyFinding[];
   missing_examples: MissingExampleFinding[];
+  misrouted_principles: MisroutedPrincipleFinding[];
   orphan_principles: OrphanPrincipleFinding[];
   scope_layers: ScopeLayerFinding[];
   scope_tags: ScopeTagFinding[];
@@ -95,9 +101,11 @@ export type WikiLintOutput = {
 export type AssembleWikiLintInput = {
   citedPaths: CitedPathFinding[];
   contradictions: ContradictionFinding[];
+  duplicateTitles: DuplicateTitleFinding[];
   filesScanned: number;
   glossaryConsistency: import("./wiki-lint-glossary.ts").GlossaryConsistencyFinding[];
   missingExamples: MissingExampleFinding[];
+  misroutedPrinciples: MisroutedPrincipleFinding[];
   orphans: OrphanPrincipleFinding[];
   principlesChecked: number;
   scopeLayers: ScopeLayerFinding[];
@@ -570,9 +578,11 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
   const {
     citedPaths,
     contradictions,
+    duplicateTitles,
     filesScanned,
     glossaryConsistency,
     missingExamples,
+    misroutedPrinciples,
     orphans,
     principlesChecked,
     scopeLayers,
@@ -583,8 +593,10 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
   return {
     cited_paths: citedPaths,
     contradictions,
+    duplicate_titles: duplicateTitles,
     glossary_consistency: glossaryConsistency,
     index_drift: indexDrift,
+    misrouted_principles: misroutedPrinciples,
     missing_examples: missingExamples,
     orphan_principles: orphans,
     scope_layers: scopeLayers,
@@ -602,7 +614,9 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
         scopeLayers.length +
         scopeTags.length +
         indexDrift.length +
-        glossaryConsistency.length,
+        glossaryConsistency.length +
+        misroutedPrinciples.length +
+        duplicateTitles.length,
     },
   };
 }

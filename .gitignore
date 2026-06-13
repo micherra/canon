@@ -1,4 +1,7 @@
+node_modules
 node_modules/
+# Symlinked node_modules in subdirectories (trailing-slash pattern above misses symlinks)
+mcp-server/node_modules
 dist/
 canon-cursor-cli/bundle/
 canon-cursor-cli/bundle/*.tgz
@@ -31,6 +34,11 @@ mcp-server/.claude/agent-memory/
 # the negation pattern !.canon/principle-overrides.yaml works reliably.
 **/.canon/**
 !.canon/principle-overrides.yaml
+# Canon-internal principles (portable: false) — tracked in the repo but excluded
+# from plugin installs via the loader's projectDir-vs-pluginDir path resolution.
+# The negations below are explicit so force-add is not required.
+!.canon/principles/
+!.canon/principles/**
 .env
 
 # Ephemeral workspace artifacts (covered by .canon/** above)

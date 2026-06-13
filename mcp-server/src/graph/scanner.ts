@@ -2,8 +2,16 @@ import { readdir, realpath } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { SCANNABLE_EXTENSIONS } from "@shared/constants.ts";
 
+// Guard 4 (symlinked node_modules): directories named "node_modules" are excluded
+// regardless of whether the entry is a real directory or a symlink-to-dir.
+// A symlink-to-dir dirent reports isDirectory() === false (Dirent reflects the
+// link, not the target), so processEntry's `entry.isDirectory()` gate naturally
+// skips symlinks before the excludeDirs check even fires. The name exclusion here
+// is defense-in-depth: if the implementation ever calls realpath before checking
+// type (Guard 4 design invariant: never follow symlinks during the primary scan),
+// the name exclusion still prevents traversal.
 const DEFAULT_EXCLUDE_DIRS = new Set([
-  "node_modules",
+  "node_modules", // name-excluded (see Guard 4 comment above); also skipped by isDirectory() gate for symlinks
   ".git",
   ".canon",
   "dist",

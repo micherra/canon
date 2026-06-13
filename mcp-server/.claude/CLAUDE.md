@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-06-10 -->
+<!-- last-updated: 2026-06-12 -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -43,6 +43,7 @@ src/
 - **Boot / server scope** (`app/`) — `boot.sh` launcher, per-connection scope, per-project `JobManager`. See `src/app/.claude/CLAUDE.md`.
 - **HTTP auth + sessions** (`app/mcp-http/`) — token auth, per-session McpServer, scope handshake, idle reaper. See `src/app/mcp-http/.claude/CLAUDE.md`.
 - **Drift storage** (`platform/storage/drift/`) — SQLite drift DB, DAO inventory, confidence-decay adapters. See `src/platform/storage/drift/.claude/CLAUDE.md`.
+- **Archive storage** (`platform/storage/archive/`) — build-archive persistence (ADR-0006 relocation from `features/history/services/`): `archiveWorkspace`, `buildRunSummary`, pure extractors, shared archive types. See `src/platform/storage/archive/.claude/CLAUDE.md`.
 - **Orchestration tools** (`features/orchestration/`) — workspace lifecycle, artifact writing, agent skill resolution. See `src/features/orchestration/.claude/CLAUDE.md`.
 - **Diagnostics tools** (`features/diagnostics/`) — drift reports, wiki lint, signal compiler, area memory, doc freshness. See `src/features/diagnostics/.claude/CLAUDE.md`.
 - **History tools + RecurringViolation types** → `src/features/history/.claude/CLAUDE.md`.
@@ -56,7 +57,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect
 
 ## Contracts
-<!-- last-updated: 2026-06-09 -->
+<!-- last-updated: 2026-06-12 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -99,6 +100,8 @@ src/
 
 **`get_compliance` tool** — returns `confidence: ConfidenceAnnotation`; uses per-principle confidence from `analyzeDrift` when available, falls back to drift confidence adapter.
 
+**`presentArtifact` function** — canonical implementation lives in `src/app/artifact-presentation.ts` (moved from `features/orchestration/tools/present-artifact.ts`, ADR-0006); `features/orchestration/tools/present-artifact.ts` is now a thin re-export shim; `features/pr-review` and `app/register-present-artifact.ts` import from `@app/artifact-presentation.ts` directly.
+
 **`present_artifact` MCP tool** — `html` parameter required; serves HTML via HTTP server; returns `{ url: string }` fire-and-forget.
 
 **`present_review` MCP tool** — `showPrImpact` → read pre-rendered `review.html` → `presentArtifact`; `INVALID_INPUT` when `review.html` missing or `has_review === false`.
@@ -107,7 +110,7 @@ src/
 
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`.
 
-**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks plus `checkGlossaryConsistency` in sibling `wiki-lint-glossary.ts` and `checkIndexDrift` in `index-inventory.ts` (8 total checks in service layer + index_drift as 9th, though wiki_lint registers 8 via CheckName): `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `checkGlossaryConsistency`, `checkIndexDrift`; both `checkScopeLayers` and `checkScopeTags` guard scalar (non-array) input with a "must be a YAML list" finding; `stale_refs` and `cited_paths` now include the DDD doc set (`docs/**/*.md` excl. `docs/explore/`, `mcp-server/src/domains/*/README.md`, `CONTEXT.md`); `checkGlossaryConsistency` parses CONTEXT.md H2 headings, flags exact-duplicate and naked-vs-qualified collisions; see `src/features/diagnostics/.claude/CLAUDE.md` for `CheckName` details.
+**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks plus `checkGlossaryConsistency` in sibling `wiki-lint-glossary.ts`, `checkIndexDrift` in `index-inventory.ts`, and `checkMisroutedPrinciples`/`checkDuplicateTitles` in new sibling `wiki-lint-principle-tier.ts` (10 DEFAULT_CHECKS + `index_drift` = 11 total `CheckName` values; `WIKI_LINT_CHECK_NAMES` const exported from `register-knowledge.ts` with schema-parity enforcement): `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `checkGlossaryConsistency`, `checkIndexDrift`, `checkMisroutedPrinciples`, `checkDuplicateTitles`; `wiki-lint-principle-tier.ts` is a pure sibling split per `line-limit-split-into-siblings`; both `checkScopeLayers` and `checkScopeTags` guard scalar (non-array) input with a "must be a YAML list" finding; `stale_refs` and `cited_paths` now include the DDD doc set (`docs/**/*.md` excl. `docs/explore/`, `mcp-server/src/domains/*/README.md`, `CONTEXT.md`); `checkGlossaryConsistency` parses CONTEXT.md H2 headings, flags exact-duplicate and naked-vs-qualified collisions; see `src/features/diagnostics/.claude/CLAUDE.md` for `CheckName` details.
 
 **Agent Provenance** (`src/shared/lib/commit-trailers.ts`, `src/shared/lib/file-claims.ts`) — `formatCommitTrailers`/`buildCommitMessage` produce Canon trailer blocks; `ClaimsFile` persisted to `.canon/claims.json`; 24h-TTL file ownership claims. See `src/shared/.claude/CLAUDE.md`.
 
@@ -139,6 +142,9 @@ src/
 | `compute_autonomy_tier` | autonomous/light-touch/supervised from build history + blast radius + compliance; fail-safe: defaults to supervised on error; logs `auto_decision`; returns `{ tier, score, reasoning, signals_used }` |
 | `get_next_escalation_strategy` | Next fallback strategy on agent failure; cascade: add_primer → increase_budget → escalate_model → narrow_scope → hitl; 2-minute cumulative timeout; `skip_strategies` per-flow config; logs `auto_decision`; returns `EscalationResult` with `strategy`, `is_terminal` |
 | `reconcile_workspace` | Cliff detection; `{ workspace, emit_telemetry?, source?, projectDir? }`; `source` accepts `"resume" \| "post_subagent" \| "loop"` (pass `"loop"` when called from loop runner); returns `{ incomplete_steps[], needs_recovery }`; flags `started`/`planned` steps with missing or partial-skeleton artifacts; `completed` and empty-`artifacts_expected` planned steps never flagged; `emit_telemetry: true` appends fail-open `cliff_detected` event to orchestration.db AND upserts rows to drift.db `cliff_events` table via `CliffEventsDao` (dual fail-open write-through; `projectDir` required for drift.db write, injected by `register-journal.ts` via `resolveScope`); `WORKSPACE_NOT_FOUND` when journal absent — added 2026-05-29, dual-write 2026-06-08, `source:"loop"` 2026-06-11 |
+| `log_decision` | Append a timestamped orchestrator decision to the durable event log (`orchestrator_decision` event type). **Authoritative write** — returns a `ToolResult` error on store failure (NOT fail-open). Call at each consequential decision: plan-approval outcome, review-verdict acceptance/override, scope cuts, AC changes, tier overrides, merge-conflict resolutions, manual-verification confirmations. |
+| `get_decisions` | Read the orchestrator decisions ledger (`getEventsByType("orchestrator_decision")`); returns `{ decisions: DecisionRecord[], rendered: string }` — structured array + rendered markdown table. Use before HITL gates and on resume to rehydrate decided state. |
+| `write_orchestrator_checkpoint` | Write a derived compact resume-state snapshot to `${workspace}/checkpoint.md` (current/completed/pending steps + recent decisions + next action). **Best-effort-observable** — write failure returns a `ToolResult` error (never silent success). Refresh per completed step (alongside `log_step(...completed)`) and at each HITL gate. |
 
 **Text-only principle/review tools:**
 
@@ -151,7 +157,7 @@ src/
 | `store_summaries` | Persist file summaries to SQLite KG DB (DB-only since ADR-005 2026-04-01) |
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews, doc freshness |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
-| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions, orphan principles, stale file refs, missing examples, cited-path accuracy in `references/**/*.md` and DDD doc set, invalid `scope.layers` values, invalid `scope.tags` values, CONTEXT.md glossary self-consistency, index inventory drift; optional `checks` array selects subset (default: 8 checks, `index_drift` excluded — pass explicitly to run it); returns `WikiLintOutput` |
+| `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions, orphan principles, stale file refs, missing examples, cited-path accuracy in `references/**/*.md` and DDD doc set, invalid `scope.layers` values, invalid `scope.tags` values, CONTEXT.md glossary self-consistency, index inventory drift, misrouted principles (`portable:false` in shipped tree), duplicate titles across both principle tiers; optional `checks` array selects subset (default: 10 checks, `index_drift` excluded — pass explicitly to run it); returns `WikiLintOutput` |
 | `sync_indexes` | Regenerate sentinel-delimited `## Artifact Inventory` blocks in the 5 sibling artifact-class indexes (`rules/`, `principles/`, `agents/`, `templates/`, `references/`); skips indexes without sentinels; returns `{ synced[], skipped[] }` |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result; accepts optional `craft_profile` (persists one row per distinct subsystem area to `craft_profiles` with `source:"review"`) |
@@ -192,8 +198,9 @@ src/
 | `vitest` | Unit testing (dev) |
 
 ## Invariants
-<!-- last-updated: 2026-05-27 -->
+<!-- last-updated: 2026-06-12 -->
 
+- **no-cross-feature-internal-import** (ADR-0005, ADR-0006): Features must not import internal modules from other features; enforced by `mcp-server/.dependency-cruiser.cjs` `no-cross-feature-internal-import` rule (error severity, 0 violations); sole exception: `^src/features/knowledge-graph/` is a designated foundational service features may depend on (see `docs/adr/0005-knowledge-graph-is-a-foundational-service.md`). Added 2026-06-12.
 - **ADR-002 subprocess isolation**: Only files in `src/platform/adapters/` may import `node:child_process`; all `features/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
 - **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors caught as `UNEXPECTED` by `gatedWrapHandler` or `wrapHandler`; tools never throw for expected conditions — added 2026-03-31
 - **ADR-002 security boundary**: `git-adapter.ts` never sets `shell: true`; `process-adapter.ts` sets `shell: true`; the two adapters must not be interchanged for git operations — added 2026-03-31

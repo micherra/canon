@@ -1,9 +1,9 @@
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, rmSync, unlinkSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
-import { archiveWorkspace } from "@features/history/services/archive-service.ts";
 import { gitDiff, gitExec } from "@platform/adapters/git-adapter.ts";
+import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
 import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
 import { releaseClaims } from "@shared/lib/file-claims.ts";
 import { generateId } from "@shared/lib/id.ts";
@@ -156,12 +156,29 @@ function tryDeleteBranch(slug: string, projectDir: string): void {
 }
 
 /**
+ * Guard 1 (deletion safety): explicitly unlink the node_modules symlink inside a worktree
+ * before `git worktree remove`. We use lstatSync (does not follow symlinks) to confirm the
+ * path IS a symlink before unlinking — this ensures we never accidentally remove the real
+ * main node_modules directory even if the paths are somehow confused.
+ * Best-effort — never throws.
+ */
+function unlinkWorktreeNodeModulesSymlink(worktreeSubPath: string): void {
+  try {
+    const link = join(worktreeSubPath, "mcp-server", "node_modules");
+    if (lstatSync(link).isSymbolicLink()) unlinkSync(link); // unlink the LINK, never follow it
+  } catch {
+    // best-effort: link absent or not a symlink — nothing to unlink
+  }
+}
+
+/**
  * Deregister the worktree at `{workspace}/worktree` from git before deletion.
  * Best-effort — never throws. Warns on failure so the caller can still proceed.
  */
 function tryDeregisterWorktree(workspace: string, slug: string, projectDir: string): void {
   const worktreeSubPath = join(workspace, "worktree");
   if (!existsSync(worktreeSubPath)) return;
+  unlinkWorktreeNodeModulesSymlink(worktreeSubPath); // Guard 1: unlink symlink before worktree remove
   try {
     const result = gitExec(["worktree", "remove", "--force", worktreeSubPath], projectDir);
     if (!result.ok) {

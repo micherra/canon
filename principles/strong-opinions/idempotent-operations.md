@@ -2,6 +2,7 @@
 id: idempotent-operations
 title: Retryable Operations Must Be Idempotent
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - api
