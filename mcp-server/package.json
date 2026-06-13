@@ -44,5 +44,8 @@
     "vite": "^8.0.16",
     "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^4.1.8"
+  },
+  "overrides": {
+    "esbuild": "0.28.1"
   }
 }
