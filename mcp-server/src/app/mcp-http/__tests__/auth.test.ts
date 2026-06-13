@@ -5,6 +5,8 @@
  * All fs tests use real tmp dirs on disk (no mocks) to catch real permission behavior.
  */
 
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import type { Socket } from "node:net";
@@ -12,6 +14,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { authenticate, loadOrCreateToken, rereadToken, resolveTokenPath } from "../auth.js";
+
+// ---------------------------------------------------------------------------
+// Path to the headersHelper shell script (relative to mcp-server root)
+// ---------------------------------------------------------------------------
+const HEADERS_HELPER = join(
+  import.meta.dirname,
+  // from __tests__/ → mcp-http/ → app/ → src/ → mcp-server/mcp-auth-headers.sh
+  "..",
+  "..",
+  "..",
+  "..",
+  "mcp-auth-headers.sh",
+);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -44,10 +59,12 @@ describe("resolveTokenPath", () => {
     expect(resolveTokenPath(env)).toBe("/custom/path/token");
   });
 
-  it("returns CLAUDE_PLUGIN_DATA join when CLAUDE_PLUGIN_DATA is set", () => {
+  it("ignores CLAUDE_PLUGIN_DATA and returns homedir fallback", () => {
+    // After ADR-0007 collapse: CLAUDE_PLUGIN_DATA is no longer consulted.
     const env = { CLAUDE_PLUGIN_DATA: "/data/dir" };
     const result = resolveTokenPath(env);
-    expect(result).toBe("/data/dir/canon-mcp-token");
+    // Must end with the home-dir canonical path, NOT a CLAUDE_PLUGIN_DATA join.
+    expect(result).toMatch(/\.claude[/\\]canon[/\\]canon-mcp-token$/);
   });
 
   it("returns homedir fallback when neither env var is set", () => {
@@ -63,6 +80,111 @@ describe("resolveTokenPath", () => {
       CLAUDE_PLUGIN_DATA: "/data/dir",
     };
     expect(resolveTokenPath(env)).toBe("/explicit/token");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// env-divergence regression (auth-token-determinism-01) — RED before the fix
+// ---------------------------------------------------------------------------
+
+describe("env-divergence regression (auth-token-determinism-01)", () => {
+  let tmpDir: string;
+  beforeEach(async () => {
+    tmpDir = join(tmpdir(), `auth-regression-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(tmpDir, { recursive: true });
+  });
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resolveTokenPath ignores CLAUDE_PLUGIN_DATA — with and without it resolve identically", () => {
+    // Incident: daemon (CLAUDE_PLUGIN_DATA set) resolved tier-2, helper (unset) resolved tier-3 home.
+    expect(resolveTokenPath({ CLAUDE_PLUGIN_DATA: "/data/dir" })).toBe(resolveTokenPath({}));
+  });
+
+  it("TS↔shell parity: resolveTokenPath and mcp-auth-headers.sh resolve the same token (CANON_MCP_TOKEN_FILE pinned)", () => {
+    const placeholder = "a".repeat(64);
+    const tokenFile = join(tmpDir, "canon-mcp-token");
+    writeFileSync(tokenFile, placeholder, { mode: 0o600 });
+    const tsPath = resolveTokenPath({ CANON_MCP_TOKEN_FILE: tokenFile });
+    const jsonOutput = execFileSync("bash", [HEADERS_HELPER], {
+      env: {
+        ...process.env,
+        CANON_MCP_TOKEN_FILE: tokenFile,
+        HOME: tmpDir,
+        CLAUDE_PLUGIN_DATA: join(tmpDir, "decoy"),
+      },
+      encoding: "utf8",
+    });
+    const helperToken = (JSON.parse(jsonOutput) as { Authorization: string }).Authorization.replace(
+      "Bearer ",
+      "",
+    );
+    expect(tsPath).toBe(tokenFile);
+    expect(helperToken).toBe(placeholder);
+  });
+
+  it("incident reproduction: helper with CLAUDE_PLUGIN_DATA set resolves the SAME HOME token as without it", () => {
+    const dataDir = join(tmpDir, "data-dir");
+    const homeDir = join(tmpDir, "fake-home");
+    mkdirSync(dataDir, { recursive: true });
+    mkdirSync(join(homeDir, ".claude", "canon"), { recursive: true });
+    const tokenA = "a".repeat(64); // data-dir token (old tier-2)
+    const tokenB = "b".repeat(64); // home token (the canonical path after fix)
+    writeFileSync(join(dataDir, "canon-mcp-token"), tokenA, { mode: 0o600 });
+    writeFileSync(join(homeDir, ".claude", "canon", "canon-mcp-token"), tokenB, { mode: 0o600 });
+    const runHelper = (extraEnv: Record<string, string>) =>
+      execFileSync("bash", [HEADERS_HELPER], {
+        env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: homeDir, ...extraEnv },
+        encoding: "utf8",
+      });
+    const withData = runHelper({ CLAUDE_PLUGIN_DATA: dataDir });
+    const withoutData = runHelper({});
+    const parsedWith = (JSON.parse(withData) as { Authorization: string }).Authorization;
+    const parsedWithout = (JSON.parse(withoutData) as { Authorization: string }).Authorization;
+    expect(parsedWith).toBe(parsedWithout); // both resolve same token
+    expect(parsedWith).toBe(`Bearer ${tokenB}`); // the home token, not data-dir
+  });
+
+  it("e2e auth: token emitted by helper authenticates via authenticate()", () => {
+    const placeholder = "c".repeat(64);
+    const tokenFile = join(tmpDir, "e2e-token");
+    writeFileSync(tokenFile, placeholder, { mode: 0o600 });
+    const helperOut = execFileSync("bash", [HEADERS_HELPER], {
+      env: { ...process.env, CANON_MCP_TOKEN_FILE: tokenFile, HOME: tmpDir },
+      encoding: "utf8",
+    });
+    const helperToken = (JSON.parse(helperOut) as { Authorization: string }).Authorization.replace(
+      "Bearer ",
+      "",
+    );
+    const authResult = authenticate(
+      makeReq({
+        remoteAddress: "127.0.0.1",
+        host: "127.0.0.1",
+        authorization: `Bearer ${helperToken}`,
+      }),
+      placeholder,
+    );
+    expect(authResult.ok).toBe(true);
+  });
+
+  it("fail-closed preserved: helper exits non-zero when token file is absent", () => {
+    let threw = false;
+    try {
+      execFileSync("bash", [HEADERS_HELPER], {
+        env: {
+          PATH: process.env.PATH ?? "/usr/bin:/bin",
+          HOME: tmpDir,
+          CANON_MCP_TOKEN_FILE: join(tmpDir, "no-such-token"),
+        },
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(true);
   });
 });
 
