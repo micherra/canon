@@ -274,4 +274,23 @@ describe("reclaim-gate: ship-completed journal signal", () => {
     expect(result.tasks.prune_workspaces.status).toBe("skipped");
     expect(existsSync(slugDir)).toBe(true);
   });
+
+  // Fail-closed: malformed JSON in journal → not reaped (exercises catch path in readShipComplete)
+  test("malformed journal JSON → fail-closed (not reaped)", async () => {
+    const branchDir = join(canonWorkspacesDir, "main");
+    const slugDir = join(branchDir, "malformed-journal-build");
+    await mkdir(slugDir, { recursive: true });
+
+    // Write a journal.json that is not valid JSON
+    await writeFile(join(slugDir, "journal.json"), "{ this is not valid JSON }}}");
+
+    // Set mtime well past the age threshold
+    setMtime(slugDir, Date.now() - 48 * 60 * 60 * 1000);
+
+    const result = await runJanitor(tmpDir);
+
+    // Malformed journal must be treated as fail-closed → not reaped
+    expect(result.tasks.prune_workspaces.status).toBe("skipped");
+    expect(existsSync(slugDir)).toBe(true);
+  });
 });
