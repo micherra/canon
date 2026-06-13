@@ -269,7 +269,7 @@ All five gates must pass before a candidate is surfaced:
 
 ### Output per suggestion
 
-Proposal files are written to `.canon/proposed-learnings/` (for the N-of-M cooling-off count) AND summarized in the `### Prune Candidates` section of `.canon/LEARNING-REPORT.md`. The frontmatter reuses the existing proposed-learnings shape:
+Proposal files are written to `.canon/proposed-learnings/` (for the N-of-M cooling-off count) AND summarized in the `### Prune Candidates (artifact-retirement)` section of `.canon/LEARNING-REPORT.md`. The frontmatter reuses the existing proposed-learnings shape:
 
 ```
 ---
