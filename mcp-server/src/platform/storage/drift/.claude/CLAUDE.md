@@ -6,7 +6,7 @@
 SQLite-backed drift storage: violation history, path effects, error fixes, area observations, craft profiles, and confidence-decay adapters. All DAO classes are synchronous (better-sqlite3). This layer is imported by `features/diagnostics/` and `features/orchestration/` but must not import from features.
 
 ## Architecture
-<!-- last-updated: 2026-06-12 -->
+<!-- last-updated: 2026-06-13 -->
 
 **Schema / migration:**
 
@@ -34,6 +34,12 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 | File | Key export | Notes |
 |------|-----------|-------|
 | `craft-persistence.ts` | `validateAndPersistCraftProfile(craft_profile, files, projectDir)` | Extracted from `features/pr-review` (ADR-0003); validates via `CraftProfileSchema`, persists one row per distinct subsystem area to `craft_profiles` via `getDriftDb`; pure platform layer — no `@features` imports |
+
+**Backfill seeds:**
+
+| File | Key export | Notes |
+|------|-----------|-------|
+| `reconcile-violations.ts` | `AUDITED_STALE_2026_06`, `AUDITED_STALE_2026_06_13`, `reconcileStaleViolations` | Two human-audited stale-violation seed sets (epoch 1: 2026-06; epoch 2: 2026-06-13, 20 pairs); `reconcileStaleViolations(db, seed)` closes open rows for each pair — idempotent, run once per epoch; no lifecycle wiring (decision closure-04 Option A) |
 
 **Confidence / analytics:**
 
