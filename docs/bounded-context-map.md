@@ -88,7 +88,7 @@ Diagnostics wraps Drift/Review storage with domain logic for flow analytics. It 
 - **Key types**: `LoopDefinition`, `ParseLoopResult` (from `loop-schema.ts`); `loadLoopsFromDir` returns `{ valid, invalid, validBodies }`
 - **Depends on**: Shared Kernel (`ToolResult<T>`, `CanonErrorCode`) only; no dependency on other contexts
 
-Phase A shipped the schema, loader, and both MCP tools. Phase B (current) added `loops/ship-watch.md` — the first real loop — and introduced the `observe.shell_commands` read-only-shell carve-out (decision loops-phase-b-01). The `loops/` registry directory is read at query time (directory-as-registry, mirrors `principles/`). dc-05 guardrails enforced at parse time by `parseLoopDefinition`. The non-declarative constraint (dc-06): authoring a `loops/*.md` file registers a loop definition; it does NOT start the loop — only the orchestrator initiates `CronCreate` at a named lifecycle moment.
+Phase A shipped the schema, loader, and both MCP tools. Phase B added `loops/ship-watch.md` — the first real loop — and introduced the `observe.shell_commands` read-only-shell carve-out (decision loops-phase-b-01). Phase C (current) ships session-watch + self-paced mode (`ScheduleWakeup`) and resilient inline dispatch (ADR-0008). The `loops/` registry directory is read at query time (directory-as-registry, mirrors `principles/`). dc-05 guardrails enforced at parse time by `parseLoopDefinition`. The non-declarative constraint (dc-06): authoring a `loops/*.md` file registers a loop definition; it does NOT start the loop — only the orchestrator initiates `CronCreate` (interval) or `ScheduleWakeup` (self-paced) at a named lifecycle moment.
 
 ### 10. Shared Kernel
 
