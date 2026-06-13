@@ -91,7 +91,7 @@ rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
 # ---------------------------------------------------------------------------
 # Test 4: Health probe failure → WARN printed mentioning /mcp
 # ---------------------------------------------------------------------------
-# Don't run on 127.0.0.1:3141 at all — stub curl to fail
+# Don't run on 127.0.0.1:3142 at all — stub curl to fail
 TMPDIR_TEST=$(mktemp -d)
 FAKE_BIN=$(mktemp -d)
 cat > "$FAKE_BIN/curl" <<'CURLSTUB'
@@ -128,7 +128,7 @@ fi
 rm -rf "$TMPDIR_TEST"
 
 # ---------------------------------------------------------------------------
-# F2b Test 6: CANON_DAEMON_PORT set → curl probes that port, not :3141
+# F2b Test 6: CANON_DAEMON_PORT set → curl probes that port, not the default :3142
 # ---------------------------------------------------------------------------
 TMPDIR_TEST=$(mktemp -d)
 FAKE_BIN=$(mktemp -d)
@@ -165,7 +165,7 @@ fi
 rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
 
 # ---------------------------------------------------------------------------
-# F2b Test 7: CANON_DAEMON_PORT unset → curl probes default :3141
+# F2b Test 7: CANON_DAEMON_PORT unset → curl probes default :3142 (matches supervisor)
 # ---------------------------------------------------------------------------
 TMPDIR_TEST=$(mktemp -d)
 FAKE_BIN=$(mktemp -d)
@@ -190,9 +190,9 @@ if [[ -f "$PROBE_URL_FILE" ]]; then
 fi
 
 if [[ $EXIT_CODE -eq 0 ]] \
-   && echo "$PROBE_URL" | grep -q ":3141/health" \
-   && echo "$OUTPUT" | grep -q ":3141"; then
-  pass "F2b: CANON_DAEMON_PORT unset → curl targets default :3141 and WARN mentions :3141"
+   && echo "$PROBE_URL" | grep -q ":3142/health" \
+   && echo "$OUTPUT" | grep -q ":3142"; then
+  pass "F2b: CANON_DAEMON_PORT unset → curl targets default :3142 (matches supervisor) and WARN mentions :3142"
 else
   fail "F2b: CANON_DAEMON_PORT unset: exit=$EXIT_CODE probe_url='${PROBE_URL}' warn_output='$(echo "$OUTPUT" | grep -i warn || echo none)'"
 fi

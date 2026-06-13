@@ -111,3 +111,26 @@ At every `learn` step, after running dimension analyses and before writing the f
 **Scope: `.canon/proposed-learnings/` only. Never write to `~/.claude/MEMORY.md` or any user memory store.**
 
 Full algorithm details: `references/learner-dimensions.md` → convention-lifecycle → Sub-analysis D.
+
+## Prune dimension (artifact-retirement)
+
+At every `learn` step, run the `artifact-retirement` dimension alongside the other dimensions, before report compilation. This dimension surveys the live guardrail corpus (principles, conventions, agent-rules) and emits evidence-backed retirement proposals for dead-weight artifacts.
+
+**Load-bearing invariant: propose-only, HITL-gated, NEVER auto-delete.** The learner emits a retirement *proposal* only. It has no delete or edit capability over the guardrail corpus. Acceptance routes through the PM → writer content flow. This invariant is non-negotiable and must not be weakened.
+
+**What to check**:
+- Principles: read `never_triggered` from `get_drift_report`. Below 10 reviews → emit "Skipped: artifact-retirement (principles) — requires 10 reviews, have {current}" and stop the principle path.
+- Conventions and agent-rules: run the adherence scan (same method as convention-lifecycle Sub-analysis C). To avoid double-emission, only surface a convention that Sub-analysis C has ALREADY flagged "remove" across the cooling-off window — aggregate C's output, do not re-scan independently.
+
+**Never-pruneable allowlist (skip these always)**:
+- Security-tagged rules: `fail-closed-by-default`, `hooks-fail-closed`, `least-privilege-access`, `secrets-never-in-code`, `validate-at-trust-boundaries`
+- Any artifact with `tags:` containing `security`
+- Pipeline-integrity agent-rules: `agent-artifact-write-before-return`, `agent-template-required`
+
+**Rule-tier requirement**: a `rule`-severity principle is a candidate only if it has an explicit `superseded-by` link to another live artifact. Never on `never-triggered` alone.
+
+**Cooling-off**: a candidate is surfaced only after ≥ 2 distinct learn runs observe it (`watch_threshold: 2`), except when a valid `superseded-by` link exists (single-shot allowed). Write a `prune-watch` to `.canon/proposed-learnings/` on first observation; promote to `prune-candidate` on the second.
+
+**Output**: write proposals to `.canon/proposed-learnings/` (for cooling-off tracking) and summarize in the `### Prune Candidates (artifact-retirement)` section of `.canon/LEARNING-REPORT.md`.
+
+Full algorithm, safety gates, output schema, and non-overlap explanation: `references/learner-dimensions.md` → `## Dimension: artifact-retirement`.

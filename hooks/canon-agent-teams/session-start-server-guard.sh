@@ -19,7 +19,7 @@ set -uo pipefail
 # ---------------------------------------------------------------------------
 DATA="${CLAUDE_PLUGIN_DATA:-}"
 PROJECT_DIR="${CANON_PROJECT_DIR:-.}"
-PORT="${CANON_DAEMON_PORT:-3141}"
+PORT="${CANON_DAEMON_PORT:-3142}"
 
 if [[ -n "$DATA" ]]; then
   PID_FILE="$DATA/canon-server.pid"

@@ -1,12 +1,12 @@
 ---
-adr: "0014"
+adr: "0015"
 title: "Canon MCP auth token resolves to a single env-independent canonical path"
 status: accepted
 date: "2026-06-12"
 build: "durable-fix-for-canon-mcp-clientdaemon-auth-token-path-nondeterminism"
 ---
 
-# ADR-0014: Canon MCP auth token resolves to a single env-independent canonical path
+# ADR-0015: Canon MCP auth token resolves to a single env-independent canonical path
 
 ## Context
 

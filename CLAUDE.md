@@ -434,7 +434,7 @@ See Agent Spawn Error Handling below. For transient errors (429, auth, TTL), ret
 | Security | `canon:security` | Security states |
 | Scribe | `canon:scribe` | Context sync states |
 | Shipper | `canon:shipper` | Ship states |
-| Writer | `canon:writer` | Principle authoring |
+| Writer | `canon:writer` | Principle authoring and artifact retirement (HITL-gated) |
 | Learner | `canon:learner` | Pattern analysis |
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
