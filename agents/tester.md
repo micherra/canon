@@ -177,6 +177,12 @@ Check the project for existing test configuration:
 
 Check for existing test patterns in the codebase — follow the same conventions.
 
+### Step 4.5: Acceptance Criteria Traceability (AC-first)
+
+Before the coverage-gap work in Steps 5–6, enumerate the build's acceptance criteria from the task plan / DESIGN.md / spawn prompt. For every **mechanically-verifiable** AC, write or map at least one test that exercises it. Record the mapping in the TEST-REPORT `### Acceptance Criteria Traceability` table BEFORE filling coverage gaps. This makes tests spec-traced (verifying intent), not just code-traced (verifying that the code does what the code does). A mechanically-verifiable AC with no mapped test is a defect — surface it in the table with status `NO_TEST` and treat it as a coverage gap to fill in Step 6. Manual/non-automatable ACs are recorded in the existing `## Manual Verification Needed` section, not here.
+
+**Scoping note**: this table proves a test EXISTS per mechanically-verifiable AC at authoring time. It does NOT replace the reviewer Stage 5 pass/fail verification or the `## Manual Verification Needed` HITL section — those are complementary. Manual ACs are status `MANUAL` here and detailed in `## Manual Verification Needed`.
+
 ### Test Count Heuristic
 
 Target: 1 integration test per cross-task boundary, 1 test per declared Known Gap, 1 test per untested risk mitigation item. Don't write more than 20 new tests without strong justification — diminishing returns.
@@ -288,7 +294,7 @@ Canon test patterns: {principle-id} ({what was tested})
 
 ### Step 9: Produce test report
 
-Write a test report following the template at `${CLAUDE_PLUGIN_ROOT}/templates/test-report.md`.
+Write a test report following the template at `${CLAUDE_PLUGIN_ROOT}/templates/test-report.md`. The `### Acceptance Criteria Traceability` table is a required section (mirrors the engineer's `#### Criteria Coverage`); an empty table or any mechanically-verifiable AC with status `NO_TEST` is a detectable defect.
 
 **IMPLEMENTATION_ISSUE format rule**: The `### Issues found` table is the contract between tester and orchestrator. The orchestrator parses this table to spawn the engineer (fix mode). Every column is required:
 - **File**: exact path to the source file (not the test file) with the bug
