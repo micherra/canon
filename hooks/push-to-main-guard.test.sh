@@ -729,6 +729,266 @@ rm -rf "$TMPDIR_SPACE_PARENT" "$TMPDIR_SPACE_CWD"
 
 echo ""
 # ---------------------------------------------------------------------------
+# watch_GGGGGGGG1 fix: PASSTHROUGH-set (false-positives now fixed — exit 0)
+# Non-git, non-wrapper segments containing $(...) / backticks / pipes / redirects
+# must pass through the hook without blocking (they cannot be a disguised git push).
+# ---------------------------------------------------------------------------
+echo "-- watch_GGGGGGGG1 FIX: non-git metachar commands must pass (should allow, exit 0) --"
+# NOTE: commands containing $(...) / backticks / $ must NOT use make_input (which
+# embeds the value in printf's format arg — shell expansion would fire or quoting
+# would be wrong). Use printf directly with single-quote literals so the JSON
+# payload reaches the hook literally without further shell interpretation.
+_echo_date_input='{"command":"echo \"$(date)\""}'
+run_test 'echo "$(date)" (command substitution — not git, must pass)' \
+  0 "$_echo_date_input"
+run_test 'grep -rn foo src | head -5 (pipe — not git, must pass)' \
+  0 "$(make_input 'grep -rn foo src | head -5')"
+run_test 'npm run build > /tmp/out.txt 2>&1 (redirect — not git, must pass)' \
+  0 "$(make_input 'npm run build > /tmp/out.txt 2>&1')"
+_ls_pwd_input='{"command":"ls $(pwd)"}'
+run_test 'ls $(pwd) (command-sub arg to non-git cmd — must pass)' \
+  0 "$_ls_pwd_input"
+_printf_var_input='{"command":"printf \"%s\" \"$VAR\""}'
+run_test 'printf "%s" "$VAR" (no git token — must pass)' \
+  0 "$_printf_var_input"
+_node_symlink_input='{"command":"node -e \"require('"'"'fs'"'"').symlinkSync(require('"'"'fs'"'"').realpathSync('"'"'/a'"'"'),'"'"'/b'"'"','"'"'dir'"'"')\""}'
+run_test 'node -e symlinkSync(realpathSync(...)) (node symlink — must pass)' \
+  0 "$_node_symlink_input"
+# dc-03: VAR=val prefix + real cmd + arg-pos substitution must pass (no false positive)
+_foo_ls_pwd_input='{"command":"FOO=bar ls $(pwd)"}'
+run_test 'FOO=bar ls $(pwd) (VAR=val prefix + real cmd + arg-pos sub — must pass, dc-03)' \
+  0 "$_foo_ls_pwd_input"
+
+echo ""
+# ---------------------------------------------------------------------------
+# watch_GGGGGGGG1 NO-REGRESSION: obfuscated-push vector still blocked
+# The disguised-push path (bash -c "$(echo git push ...)") must still exit 2.
+# This is caught by the post-unwrap guard (inner_cmd starts with '$(' → block),
+# NOT by the removed pre-git-token metachar scan.
+# ---------------------------------------------------------------------------
+echo "-- watch_GGGGGGGG1 NO-REGRESSION: obfuscated push still blocked (should block, exit 2) --"
+run_test 'bash -c "$(echo git push origin main)" (cmd-sub inner — obfuscated, still blocked)' \
+  2 "$(make_input 'bash -c "$(echo git push origin main)"')"
+run_test 'git push origin main (direct push — unchanged, still blocked)' \
+  2 "$(make_input 'git push origin main')"
+run_test 'git push --all origin (push-everything — unchanged, still blocked)' \
+  2 "$(make_input 'git push --all origin')"
+# dc-01: command-NAME-position $(...) bypass — Codex P1 fix
+# NOTE: payload contains $( literally — must NOT use make_input (shell would expand).
+# Use direct printf with single-quote literals.
+_echo_git_input='{"command":"$(echo git) push origin main"}'
+run_test '$(echo git) push origin main (cmd-name-position $() bypass — must block, dc-01)' \
+  2 "$_echo_git_input"
+# dc-02: backtick command-name-position form (lock-in; already blocked incidentally via
+# ambiguous-git-token, this test locks in the guarantee explicitly)
+_backtick_git_input='{"command":"`echo git` push origin main"}'
+run_test '`echo git` push origin main (cmd-name-position backtick — must block, dc-02)' \
+  2 "$_backtick_git_input"
+# dc-01 extended: VAR=val prefix before command-name-position substitution — still blocked
+_foo_echo_git_input='{"command":"FOO=bar $(echo git) push origin main"}'
+run_test 'FOO=bar $(echo git) push origin main (VAR=val prefix + cmd-name-pos $() — must block)' \
+  2 "$_foo_echo_git_input"
+
+echo ""
+# ---------------------------------------------------------------------------
+# UNBOUND-VAR: assert no "unbound variable" text on stderr (set -u safety)
+# Both the git_dir_args and _gda_head arrays can be empty when no -C flag and
+# no CANON_GUARD_CWD is set. The ${arr[@]+"${arr[@]}"} idiom must suppress the
+# bash 3.2 "unbound variable" error that "${arr[@]}" produces on empty arrays.
+# ---------------------------------------------------------------------------
+echo "-- UNBOUND-VAR: no 'unbound variable' on stderr under set -u --"
+
+_unbound_bare=$(printf '{"command":"git push"}' | bash "$HOOK" 2>&1 >/dev/null || true)
+if printf '%s' "$_unbound_bare" | grep -q "unbound variable"; then
+  echo "  FAIL: bare 'git push' produced 'unbound variable' on stderr"
+  FAIL=$((FAIL + 1))
+else
+  echo "  PASS: bare 'git push' — no 'unbound variable' on stderr"
+  PASS=$((PASS + 1))
+fi
+
+_unbound_nonpush=$(printf '{"command":"echo \\"$(date)\\""}' | bash "$HOOK" 2>&1 >/dev/null || true)
+if printf '%s' "$_unbound_nonpush" | grep -q "unbound variable"; then
+  echo "  FAIL: non-git command produced 'unbound variable' on stderr"
+  FAIL=$((FAIL + 1))
+else
+  echo "  PASS: non-git metachar command — no 'unbound variable' on stderr"
+  PASS=$((PASS + 1))
+fi
+
+echo ""
+# ---------------------------------------------------------------------------
+# P1-SECURITY (CRITICAL): transparent-exec prefix + group-opener bypass
+#
+# These 8 payloads all pass the current guard (exit 0) but invoke
+# `git push origin main` at runtime. After the normalization fix they MUST
+# exit 2. Payloads contain $( literals — use direct printf/single-quotes,
+# NOT make_input, so the JSON reaches the hook without shell expansion.
+# ---------------------------------------------------------------------------
+echo "-- P1-SECURITY: transparent-exec + group-opener bypass (must block, exit 2) --"
+
+run_test 'env $(echo git) push origin main (transparent-exec — must block)' \
+  2 '{"command":"env $(echo git) push origin main"}'
+
+run_test 'command $(echo git) push origin main (transparent-exec — must block)' \
+  2 '{"command":"command $(echo git) push origin main"}'
+
+run_test 'exec $(echo git) push origin main (transparent-exec — must block)' \
+  2 '{"command":"exec $(echo git) push origin main"}'
+
+run_test 'nice $(echo git) push origin main (transparent-exec — must block)' \
+  2 '{"command":"nice $(echo git) push origin main"}'
+
+run_test 'timeout 5 $(echo git) push origin main (timeout+arg — must block)' \
+  2 '{"command":"timeout 5 $(echo git) push origin main"}'
+
+run_test 'stdbuf -o0 $(echo git) push origin main (stdbuf+flag — must block)' \
+  2 '{"command":"stdbuf -o0 $(echo git) push origin main"}'
+
+run_test '( $(echo git) push origin main ) (subshell group — must block)' \
+  2 '{"command":"( $(echo git) push origin main )"}'
+
+run_test '{ $(echo git) push origin main ; } (brace group — must block)' \
+  2 '{"command":"{ $(echo git) push origin main ; }"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# P1-SECURITY: FALSE-POSITIVE regression locks for transparent-exec fix
+#
+# These must stay exit 0 — they are inert commands (no git push) and must
+# not be broken by the V2 span predicate (PR #386 V2, ADR-0012).
+# ---------------------------------------------------------------------------
+echo "-- P1-SECURITY PASSTHROUGH: false-positive regression locks (must pass, exit 0) --"
+
+# ls $(pwd) — ordinary non-git cmd with arg-position substitution (clause-final → inert)
+run_test 'ls $(pwd) (arg-pos sub behind real cmd — must stay exit 0)' \
+  0 '{"command":"ls $(pwd)"}'
+
+# a=$(echo git) push origin main — substitution is the assignment VALUE; command
+# word is empty → runtime rc=127 (no push). Keep current behavior (not forced-blocked).
+run_test 'a=$(echo git) push origin main (assignment value, empty cmd word — must stay exit 0)' \
+  0 '{"command":"a=$(echo git) push origin main"}'
+
+# ${x} push — parameter expansion (not cmd-sub); V2 does not touch it.
+run_test '${x} push (param expansion, not cmd-sub — must stay exit 0)' \
+  0 '{"command":"${x} push"}'
+
+# "$(echo git)" push origin main — quoted form; already blocks via ambiguous-token
+# path (SECURITY.md LOW finding). Keep blocked — this is a regression lock.
+run_test '"$(echo git)" push origin main (quoted-cmdsub — already blocked via ambiguous-token, keep exit 2)' \
+  2 '{"command":"\"$(echo git)\" push origin main"}'
+
+# env non-git-cmd — transparent-exec prefix behind a real non-git command name
+# must NOT be false-blocked (env only becomes dangerous when paired with cmd-sub).
+run_test 'env ls /tmp (transparent-exec + real cmd, no cmd-sub — must stay exit 0)' \
+  0 '{"command":"env ls /tmp"}'
+
+# env VAR=val cmd — env with assignment prefix before a real literal command
+run_test 'env FOO=bar ls /tmp (env + assignment + real cmd — must stay exit 0)' \
+  0 '{"command":"env FOO=bar ls /tmp"}'
+
+# stacked prefixes with real command — env command ls (no cmd-sub)
+run_test 'env command ls /tmp (stacked prefixes + real cmd — must stay exit 0)' \
+  0 '{"command":"env command ls /tmp"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# V2 PREDICATE (ADR-0012): denylist-omitted wrapper BLOCK cases
+#
+# These were NOT blocked by the V1 denylist (nohup/time/setsid/ionice/taskset/
+# chrt/unbuffer/doas/env -i) but ARE blocked by the V2 span-final predicate.
+# The substitution is FOLLOWED BY further command tokens in every case → BLOCK.
+# DEC-386-guard-v2-fail-closed-span: denylist-free, fail-closed on ambiguity.
+# ---------------------------------------------------------------------------
+echo "-- V2 PREDICATE: denylist-omitted wrappers BLOCK (exit 2) --"
+
+run_test 'nohup $(echo git) push origin main (nohup — V2 blocks, exit 2)' \
+  2 '{"command":"nohup $(echo git) push origin main"}'
+
+run_test 'time $(echo git) push origin main (time — V2 blocks, exit 2)' \
+  2 '{"command":"time $(echo git) push origin main"}'
+
+run_test 'setsid $(echo git) push origin main (setsid — V2 blocks, exit 2)' \
+  2 '{"command":"setsid $(echo git) push origin main"}'
+
+run_test 'ionice $(echo git) push origin main (ionice — V2 blocks, exit 2)' \
+  2 '{"command":"ionice $(echo git) push origin main"}'
+
+run_test 'taskset -c 0 $(echo git) push origin main (taskset — V2 blocks, exit 2)' \
+  2 '{"command":"taskset -c 0 $(echo git) push origin main"}'
+
+run_test 'chrt -b 0 $(echo git) push origin main (chrt — V2 blocks, exit 2)' \
+  2 '{"command":"chrt -b 0 $(echo git) push origin main"}'
+
+run_test 'unbuffer $(echo git) push origin main (unbuffer — V2 blocks, exit 2)' \
+  2 '{"command":"unbuffer $(echo git) push origin main"}'
+
+run_test 'doas $(echo git) push origin main (doas — V2 blocks, exit 2)' \
+  2 '{"command":"doas $(echo git) push origin main"}'
+
+run_test 'env -i $(echo git) push origin main (env -i — V2 blocks, exit 2)' \
+  2 '{"command":"env -i $(echo git) push origin main"}'
+
+run_test 'env -i nohup $(echo git) push origin main (stacked env+nohup — V2 blocks, exit 2)' \
+  2 '{"command":"env -i nohup $(echo git) push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# V2 PREDICATE (ADR-0012): nested / complex forms
+#
+# A nested substitution like $(echo $(echo git)) also has a non-final sub-span
+# (the outer span is followed by "push") → BLOCK.
+# ---------------------------------------------------------------------------
+echo "-- V2 PREDICATE: nested/complex BLOCK forms (exit 2) --"
+
+run_test '$(echo $(echo git)) push origin main (nested sub — V2 blocks, exit 2)' \
+  2 '{"command":"$(echo $(echo git)) push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# V2 PREDICATE (ADR-0012): SACRIFICED FALSE-POSITIVE (intentional over-block)
+#
+# ln -s "$(realpath x)" mcp-server/node_modules — the substitution $(realpath x)
+# is NOT clause-final (mcp-server/node_modules follows it) → V2 BLOCKS.
+#
+# Per DEC-386-guard-v2-fail-closed-span: this form is intentionally fail-closed.
+# The motivating Canon command (worktree node_modules symlink) is created via
+# TypeScript symlinkSync (init-workspace.ts), NOT shell ln; so no real Canon
+# command path regresses. Any genuine need rewrites to put the substitution last
+# or uses a VAR=$(…) assignment (which the V2 predicate skips).
+#
+# This test documents the sacrificed FP — do NOT revert it to exit 0 without
+# re-opening the entire denylist-vs-span tradeoff (see ADR-0012).
+# ---------------------------------------------------------------------------
+echo "-- V2 PREDICATE: sacrificed false-positive is now BLOCK (exit 2) --"
+
+run_test 'ln -s "$(realpath x)" mcp-server/node_modules (sacrificed FP — DEC-386 fail-closed, exit 2)' \
+  2 '{"command":"ln -s \"$(realpath x)\" mcp-server/node_modules"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# V2 PREDICATE (ADR-0012): ALLOW cases — substitution in clause-FINAL position
+#
+# These forms have the substitution as the LAST element of their clause.
+# A clause-final substitution is inert (argument-position data, cannot forward
+# to push argv) → ALLOW. This is the key watch_GGGGGGGG1 false-positive fix.
+# ---------------------------------------------------------------------------
+echo "-- V2 PREDICATE: clause-final substitution ALLOW cases (exit 0) --"
+
+run_test 'ls $(pwd) (final sub — V2 allows, exit 0)' \
+  0 '{"command":"ls $(pwd)"}'
+
+run_test 'echo $(date) (final sub — V2 allows, exit 0)' \
+  0 '{"command":"echo $(date)"}'
+
+run_test 'cat $(ls foo) (final sub — V2 allows, exit 0)' \
+  0 '{"command":"cat $(ls foo)"}'
+
+run_test 'FOO=bar ls $(pwd) (assignment prefix + final sub — V2 allows, exit 0)' \
+  0 '{"command":"FOO=bar ls $(pwd)"}'
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
