@@ -45,11 +45,11 @@ const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 /**
  * Resolves the token file path from the environment.
  *
- * Resolution order (2-tier, per ADR-0007):
+ * Resolution order (2-tier, per ADR-0014):
  * 1. `env.CANON_MCP_TOKEN_FILE` — explicit override
  * 2. `${os.homedir()}/.claude/canon/canon-mcp-token` — canonical home path
  *
- * `CLAUDE_PLUGIN_DATA` is intentionally NOT consulted (ADR-0007).
+ * `CLAUDE_PLUGIN_DATA` is intentionally NOT consulted (ADR-0014).
  * The daemon binds a single fixed port — per-install isolation via the data-dir
  * tier is moot. Removing that tier ensures the daemon and every headersHelper
  * invocation always resolve the same file, regardless of whether

@@ -45,6 +45,24 @@ When authoring or editing a principle's `scope.layers`, only these 7 values are 
 
 When authoring or editing a principle's `scope.tags`, every value must be in the KG computed-tag vocabulary (`VALID_COMPUTED_TAGS` in `mcp-server/src/graph/kg-tags.ts`): `graph-infrastructure`, `orchestration`, `principles`, `pr-review`, `file-context`, `knowledge-graph`, `diagnostics`, `infrastructure`, `shared-kernel`, `frontend`, `error-handling`, `observability`, `hub`, `entry-point`, `leaf`. Any other value is flagged by `wiki_lint` (`scope_tags` check) and makes the principle silently unmatchable when `scope.layers` is empty — the layer gate fails before `file_patterns` is ever evaluated. For path-based applicability, prefer `scope.file_patterns` (works regardless of KG indexing state); if no computed tag genuinely applies, omit `scope.tags` entirely.
 
+## Tier flag + dedup obligations <!-- last-updated: 2026-06-11 -->
+
+Three mandatory obligations apply to every principle the writer creates or edits. The authoritative rule is in `references/principle-tier-routing.md`.
+
+**(a) Portable flag is mandatory.** Every principle file MUST carry a `portable: true|false` frontmatter field. Set it in Step 6 of the `write-principle` SKILL, consistent with the save destination:
+- Saving to `.canon/principles/` → `portable: false`
+- Saving to `principles/` → `portable: true`
+
+A missing `portable` field is surfaced by `wiki_lint misrouted_principles`. The flag and physical location must agree.
+
+**(b) Pre-write normalized-title/id/scope dedup check.** Before creating a principle with a NEW `id`, call `mcp__canon__list_principles` (metadata only — both tiers merged) and compare the proposed title in normalized form (lowercase, collapsed whitespace, stripped trailing punctuation) against all existing titles. On a normalized-title match against a **different** `id`, STOP and redirect:
+
+> "A principle with an equivalent title already exists: `{existing-id}`. Edit or fork that one instead of minting a new ID."
+
+Do NOT mint a parallel `id` over a title collision. The `wiki_lint duplicate_titles` check is the mechanical backstop, but this behavioral gate runs first. Note: `semantic_search` indexes code, not principle prose — it is NOT a valid substitute for `list_principles` here (see decision dedup-01).
+
+**(c) Route `portable: false` principles to `.canon/principles/`.** A `portable: false` file placed under the shipped `principles/` tree is a `wiki_lint misrouted_principles` failure. The `.canon/` subtree is gitignored and never ships with the plugin; `principles/` ships via release. Location is authoritative for what ships.
+
 ## Routine Mode
 
 Routine mode authors a new Canon routine artifact using `templates/routine.md` as the source-of-truth shape. The output is saved to `routines/<name>.md` (tracked, shared with the repo) or `.canon/routines/<name>.md` (private, gitignored).

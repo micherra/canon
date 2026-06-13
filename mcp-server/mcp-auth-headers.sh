@@ -7,11 +7,11 @@
 # On failure (absent, empty, or unreadable token), emits NOTHING to stdout and
 # exits non-zero so the connection fails honestly (fail-closed-by-default).
 #
-# Token path resolution mirrors auth.ts resolveTokenPath — two tiers (ADR-0007):
+# Token path resolution mirrors auth.ts resolveTokenPath — two tiers (ADR-0014):
 #   1. $CANON_MCP_TOKEN_FILE   — explicit override
 #   2. $HOME/.claude/canon/canon-mcp-token — canonical home path
 #
-# $CLAUDE_PLUGIN_DATA is intentionally NOT consulted (ADR-0007): the daemon binds
+# $CLAUDE_PLUGIN_DATA is intentionally NOT consulted (ADR-0014): the daemon binds
 # a single fixed port, so per-install isolation via the data-dir tier is moot.
 # Removing it ensures both the daemon and this helper always resolve the same file.
 

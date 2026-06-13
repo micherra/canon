@@ -60,7 +60,7 @@ describe("resolveTokenPath", () => {
   });
 
   it("ignores CLAUDE_PLUGIN_DATA and returns homedir fallback", () => {
-    // After ADR-0007 collapse: CLAUDE_PLUGIN_DATA is no longer consulted.
+    // After ADR-0014 collapse: CLAUDE_PLUGIN_DATA is no longer consulted.
     const env = { CLAUDE_PLUGIN_DATA: "/data/dir" };
     const result = resolveTokenPath(env);
     // Must end with the home-dir canonical path, NOT a CLAUDE_PLUGIN_DATA join.

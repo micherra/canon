@@ -2,6 +2,7 @@
 id: information-hiding
 title: Each Module Hides a Design Decision
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:

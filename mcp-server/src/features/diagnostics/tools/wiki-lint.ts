@@ -31,14 +31,20 @@ import {
   type WikiLintOutput,
 } from "../services/wiki-lint.ts";
 import { checkGlossaryConsistency } from "../services/wiki-lint-glossary.ts";
+import {
+  checkDuplicateTitles,
+  checkMisroutedPrinciples,
+} from "../services/wiki-lint-principle-tier.ts";
 
 // ---- Types ----
 
 type CheckName =
   | "cited_paths"
   | "contradictions"
+  | "duplicate_titles"
   | "glossary_consistency"
   | "missing_examples"
+  | "misrouted_principles"
   | "orphan_principles"
   | "scope_layers"
   | "scope_tags"
@@ -305,13 +311,19 @@ async function runEnabledChecks(
   const glossaryConsistency = enabled.has("glossary_consistency")
     ? runGlossaryCheck(projectDir)
     : [];
+  const misroutedPrinciples = enabled.has("misrouted_principles")
+    ? checkMisroutedPrinciples(principles)
+    : [];
+  const duplicateTitles = enabled.has("duplicate_titles") ? checkDuplicateTitles(principles) : [];
 
   return {
     citedPaths,
     contradictions,
+    duplicateTitles,
     filesScanned: claudeMdFiles.length + agentFiles.length + dddDocFiles.length,
     glossaryConsistency,
     indexDrift,
+    misroutedPrinciples,
     missingExamples,
     orphans,
     principlesChecked: principles.length,
@@ -340,8 +352,10 @@ export async function wikiLint(
   const DEFAULT_CHECKS: CheckName[] = [
     "cited_paths",
     "contradictions",
+    "duplicate_titles",
     "glossary_consistency",
     "missing_examples",
+    "misrouted_principles",
     "orphan_principles",
     "scope_layers",
     "scope_tags",

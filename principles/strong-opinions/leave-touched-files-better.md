@@ -2,6 +2,7 @@
 id: leave-touched-files-better
 title: Leave Touched Files Better Than You Found Them
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:

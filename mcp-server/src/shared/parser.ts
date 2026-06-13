@@ -16,6 +16,7 @@ export type Principle = {
   scope: PrincipleScope;
   tags: string[];
   archived: boolean;
+  portable?: boolean;
   body: string;
   filePath: string;
   anti_rationalization?: string;
@@ -119,6 +120,13 @@ export function parseFrontmatter(content: string): {
   };
 }
 
+/** Map a raw frontmatter `portable` value to `true`, `false`, or `undefined`. */
+function parsePortable(value: unknown): boolean | undefined {
+  if (value === true) return true;
+  if (value === false) return false;
+  return undefined;
+}
+
 export function parsePrinciple(content: string, filePath: string): Principle {
   const { frontmatter, body: rawBody } = parseFrontmatter(content);
   const { sections, remainder } = extractSections(rawBody);
@@ -130,6 +138,7 @@ export function parsePrinciple(content: string, filePath: string): Principle {
     body: remainder,
     filePath,
     id: (frontmatter.id as string) || "",
+    portable: parsePortable(frontmatter.portable),
     scope: {
       file_patterns: (scope.file_patterns as string[]) || [],
       layers: (scope.layers as string[]) || [],

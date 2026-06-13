@@ -2,6 +2,7 @@
 id: handle-partial-failure
 title: Handle Partial Failure in Distributed Calls
 severity: strong-opinion
+portable: true
 scope:
   layers: []
   tags:

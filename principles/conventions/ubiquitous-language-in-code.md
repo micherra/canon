@@ -2,6 +2,7 @@
 id: ubiquitous-language-in-code
 title: Code Uses the Domain's Ubiquitous Language
 severity: convention
+portable: true
 scope:
   layers:
     - domain
