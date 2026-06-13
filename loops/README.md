@@ -42,7 +42,7 @@ CronCreate({ schedule: "<interval>", command: "<inline tick prompt for <id>>", m
 ```
 
 The `command` / `prompt` value is the **self-contained inline tick prompt** (see CLAUDE.md
-§Loop Framework "Resilient dispatch" and ADR-0008). This form depends only on
+§Loop Framework "Resilient dispatch" and ADR-0007). This form depends only on
 `get_loop_definition` — an always-available MCP tool — and therefore works on both fresh and
 stale plugin installs. `/canon:loop-tick <id>` is the registered-install convenience form
 (available when the slash command is live), but the inline prompt is the default dispatch.

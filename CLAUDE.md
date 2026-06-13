@@ -503,7 +503,7 @@ and dispatched by the orchestrator via `CronCreate` (interval loops) or `Schedul
 
 **Command registration:** `/canon:loop-tick` (and all `/canon:*` slash commands under `skills/canon/commands/`) are registered as harness plugin commands via the `commands` field in `.claude-plugin/plugin.json` (`"commands": ["./skills/canon/commands/"]`). `/canon:loop-tick` is the **registered-install convenience form** of the tick — it works when the command is live in the running session. The default documented dispatch is the self-contained inline prompt (see Resilient dispatch below), which works on both fresh and stale installs. Registration (via the manifest) is distinct from scheduling (via `CronCreate`); dc-06 is preserved.
 
-**Resilient dispatch (ADR-0008):** The canonical tick prompt for loop `<id>` is:
+**Resilient dispatch (ADR-0007):** The canonical tick prompt for loop `<id>` is:
 ```
 Run one tick of Canon loop "<id>": call get_loop_definition({ id: "<id>" }) to load its
 definition + body, then execute that body's observe → diff → surface → write → evaluate
@@ -513,7 +513,7 @@ pipeline (the steps in skills/canon/commands/loop-tick.md), using the loop's sta
 This inline prompt depends only on `get_loop_definition` — an always-available registered MCP
 tool — and therefore works on both fresh and stale plugin installs. There is no
 orchestrator-side probe for command registration, and no check-first branch is used; the
-inline form works uniformly, so no fallback logic is needed (Q1 inline-only decision, ADR-0008).
+inline form works uniformly, so no fallback logic is needed (Q1 inline-only decision, ADR-0007).
 `/canon:loop-tick <id>` (the slash command) is the registered-install convenience form;
 contributors must not "simplify" the inline dispatch back to a bare slash call.
 

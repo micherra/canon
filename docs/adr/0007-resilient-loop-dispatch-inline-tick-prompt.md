@@ -1,12 +1,12 @@
 ---
-adr: "0008"
+adr: "0007"
 title: "Loop dispatch uses a self-contained inline tick prompt, not the /canon:loop-tick slash command"
 status: accepted
 date: "2026-06-12"
 build: "make-the-canon-loop-framework-croncreateschedulewakeup-dispatch"
 ---
 
-# ADR-0008: Loop dispatch uses a self-contained inline tick prompt, not the /canon:loop-tick slash command
+# ADR-0007: Loop dispatch uses a self-contained inline tick prompt, not the /canon:loop-tick slash command
 
 ## Context
 

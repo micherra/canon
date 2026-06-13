@@ -25,7 +25,7 @@ CronCreate({
 ```
 
 The `command` value is the **self-contained inline tick prompt** (CLAUDE.md §Loop Framework
-"Resilient dispatch", ADR-0008) — not the `/canon:loop-tick <id>` slash call. The inline
+"Resilient dispatch", ADR-0007) — not the `/canon:loop-tick <id>` slash call. The inline
 form depends only on `get_loop_definition` (always-available MCP tool) and works on both
 fresh and stale installs. `/canon:loop-tick` is the registered-install convenience form.
 

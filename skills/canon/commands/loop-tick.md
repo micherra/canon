@@ -22,7 +22,7 @@ session. The orchestrator's default dispatch is the equivalent self-contained in
 (calls `get_loop_definition({ id })` and runs this body), which works even when this command
 is not registered in the running plugin (stale-install class). This runner body IS the
 canonical step source that the inline prompt refers to. See CLAUDE.md §Loop Framework
-"Resilient dispatch" for the canonical inline prompt text and ADR-0008 for the decision.
+"Resilient dispatch" for the canonical inline prompt text and ADR-0007 for the decision.
 
 **Non-declarative constraint (dc-06, decision loops-phase-a-04):** This runner is the
 per-tick body. The orchestrator made the initial scheduling call (`CronCreate` for interval
