@@ -2,6 +2,7 @@
 id: harness-tool-invocation-check
 title: A Harness Built-In Capability Grant Requires Runtime Invocation Verification
 severity: convention
+portable: false
 scope:
   layers: []
   file_patterns:
