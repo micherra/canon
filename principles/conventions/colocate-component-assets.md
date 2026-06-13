@@ -2,6 +2,7 @@
 id: colocate-component-assets
 title: Colocate Component Assets
 severity: convention
+portable: true
 scope:
   layers:
     - ui

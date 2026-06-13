@@ -539,9 +539,11 @@ describe("assembleWikiLintOutput", () => {
     const output = assembleWikiLintOutput({
       citedPaths: [citedPath],
       contradictions: [contradiction],
+      duplicateTitles: [],
       filesScanned: 10,
       glossaryConsistency: [glossaryFinding],
       missingExamples: [missingExample],
+      misroutedPrinciples: [],
       orphans: [orphan],
       principlesChecked: 20,
       scopeLayers: [scopeLayer],

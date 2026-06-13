@@ -2,6 +2,7 @@
 id: least-privilege-access
 title: Grant Only the Minimum Access Required
 severity: rule
+portable: true
 scope:
   layers: []
   file_patterns:

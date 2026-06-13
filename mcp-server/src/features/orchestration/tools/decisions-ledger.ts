@@ -11,7 +11,7 @@
  *   - getDecisions (query): reads all orchestrator_decision events from the store;
  *     returns the structured array + a human-readable rendered markdown table.
  *
- * ADR-0007 settles the substrate choice: execution-store event log (appendEvent /
+ * ADR-0010 settles the substrate choice: execution-store event log (appendEvent /
  * getEventsByType), NOT cliff-ledger (wrong shape) and NOT a new table.
  *
  * See DESIGN.md Workstream A and ledger-01-PLAN.md for rationale.

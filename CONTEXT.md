@@ -26,7 +26,7 @@ A directed acyclic graph of task dependencies, stored in `task-dag.yaml` under t
 
 ## Decisions Ledger
 
-The durable record of consequential orchestrator decisions (HITL gate outcomes, scope cuts, AC changes, tier overrides, merge-conflict resolutions) stored as `orchestrator_decision` events on the execution-store event log. Written via `log_decision` (authoritative — store failure surfaces as error, not silently swallowed) and read via `get_decisions` (returns structured `DecisionRecord[]` + rendered markdown table). Used during in-session compaction rehydration and explicit resume to restore decided state without relying on conversation memory. Built on the event log per ADR-0007 — not on `cliff-ledger.ts`, which is a `Set<string>` de-dupe ledger for a different purpose.
+The durable record of consequential orchestrator decisions (HITL gate outcomes, scope cuts, AC changes, tier overrides, merge-conflict resolutions) stored as `orchestrator_decision` events on the execution-store event log. Written via `log_decision` (authoritative — store failure surfaces as error, not silently swallowed) and read via `get_decisions` (returns structured `DecisionRecord[]` + rendered markdown table). Used during in-session compaction rehydration and explicit resume to restore decided state without relying on conversation memory. Built on the event log per ADR-0010 — not on `cliff-ledger.ts`, which is a `Set<string>` de-dupe ledger for a different purpose.
 
 ## Drift
 

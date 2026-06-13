@@ -2,6 +2,7 @@
 id: law-of-demeter
 title: Talk to Neighbors, Not Strangers
 severity: convention
+portable: true
 scope:
   layers: []
 tags:

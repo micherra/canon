@@ -2,6 +2,7 @@
 id: command-query-separation
 title: Commands and Queries Don't Mix
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:

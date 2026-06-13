@@ -2,6 +2,7 @@
 id: unidirectional-data-flow
 title: Data Flows Down, Events Flow Up
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - ui

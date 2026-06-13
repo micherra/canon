@@ -48,10 +48,23 @@ Enforced at parse time in `parseLoopDefinition`:
 This guardrail predates the first self-paced loop (Phase C) — it's encoded in Phase A
 so future authors cannot bypass it by omission.
 
+## `orchestrator_action` on `TransitionRuleSchema` (Phase B+)
+
+`orchestrator_action` — optional `z.enum(ORCHESTRATOR_ACTIONS)` field on a transition rule.
+Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-update"] as const`
+(exported from `loop-schema.ts`). `OrchestratorAction` type derived from the same const.
+
+- **Omitted** → `undefined` (backward compat; existing loops parse unchanged)
+- **Unknown value** → Zod rejection, flows through `parseLoopDefinition` `{ ok: false }` path into `invalid[]` (fail-closed)
+- **Orchestrator-consumed signal** — the loop/runner NEVER executes the action; the runner
+  surfaces a structured `ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>` line in Step 6
+  when the transition fires; the orchestrator reads and acts on it
+- See CLAUDE.md § Loop Framework, "Consuming `orchestrator_action`" for both consumption contracts
+
 ## Phase Boundary
 
 Phase A: schema + loader + tools + `_probe` demo loop; no production loop fires.
-Phase B: `loops/ship-watch.md` added — first real loop, dispatched post-ship.
+Phase B: `loops/ship-watch.md` added — first real loop, dispatched post-ship; `orchestrator_action` directive added (Phase B+) with two-member derive-from-const vocabulary (`auto-triage-fix`, `auto-plugin-update`) wired on three ship-watch transitions.
 Phase C (current): self-paced mode + ScheduleWakeup + `loops/session-watch.md`; `BUILTIN_FORBIDDEN_MCP` denylist + `max_wall` schedule field added to schema (ADR-0002 first-tick-baseline invariant formalised).
 
 ## Non-Declarative Constraint (dc-06)

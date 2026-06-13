@@ -2,6 +2,7 @@
 id: resilient-frontend-composition
 title: A Failing Module Must Not Break the Page
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - ui

@@ -2,6 +2,7 @@
 id: immutable-infrastructure
 title: Infrastructure Components Are Immutable After Deployment
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - infra

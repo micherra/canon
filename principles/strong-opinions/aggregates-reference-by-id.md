@@ -2,6 +2,7 @@
 id: aggregates-reference-by-id
 title: Aggregates Reference Other Aggregates by ID Only
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - domain

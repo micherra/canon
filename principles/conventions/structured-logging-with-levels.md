@@ -2,6 +2,7 @@
 id: structured-logging-with-levels
 title: Log Structured Events at the Right Level
 severity: convention
+portable: true
 scope:
   layers: []
   tags:
