@@ -2,6 +2,7 @@
 id: snippet-design-system-co-update
 title: New Snippet Files Require Corresponding DESIGN-SYSTEM.md Section
 severity: convention
+portable: false
 scope:
   file_patterns:
     - "mcp-server/src/ui/snippets/**"

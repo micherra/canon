@@ -2,6 +2,7 @@
 id: compute-effect-separation
 title: Extract Pure Computation from Effect-Bearing Functions
 severity: convention
+portable: false
 scope:
   layers:
     - shared

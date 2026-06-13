@@ -2,6 +2,7 @@
 id: prefer-composition-over-inheritance
 title: Prefer Composition Over Inheritance
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:

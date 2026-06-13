@@ -2,6 +2,7 @@
 id: accumulator-test-coverage
 title: Accumulator Functions Require Multi-Event Test Cases
 severity: convention
+portable: false
 scope:
   layers: []
   file_patterns:

@@ -2,6 +2,7 @@
 id: design-tokens-as-style-contract
 title: Design Tokens Are the Style Contract
 severity: convention
+portable: true
 scope:
   layers:
     - ui

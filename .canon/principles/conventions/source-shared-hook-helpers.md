@@ -2,6 +2,7 @@
 id: source-shared-hook-helpers
 title: Hooks Must Source Shared Helper Library for JSON Extraction
 severity: convention
+portable: false
 scope:
   layers:
     - hooks

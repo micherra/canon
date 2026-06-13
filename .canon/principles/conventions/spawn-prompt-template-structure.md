@@ -2,6 +2,7 @@
 id: spawn-prompt-template-structure
 title: Spawn-Prompt Templates Use Variables-Prompt Structure
 severity: convention
+portable: false
 tags: [templates, orchestrator, agent-spawn]
 scope:
   file_patterns:

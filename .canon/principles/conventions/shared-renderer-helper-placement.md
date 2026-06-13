@@ -2,6 +2,7 @@
 id: shared-renderer-helper-placement
 title: Shared Renderer Helpers — Build-Time Logic in DESIGN-SYSTEM.md, Runtime Scripts in Snippet Files
 severity: convention
+portable: false
 scope:
   file_patterns:
     - "templates/renderer-*.md"

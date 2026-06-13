@@ -2,6 +2,7 @@
 id: backward-compatible-schema-changes
 title: Schema Changes Must Be Backward Compatible
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - data

@@ -2,6 +2,7 @@
 id: probe-before-build-invoke-not-infer
 title: Probe External Contracts Before Design Freeze — Invoke, Don't Infer
 severity: convention
+portable: false
 scope:
   layers: []
   file_patterns:

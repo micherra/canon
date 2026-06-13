@@ -2,6 +2,7 @@
 id: doc-trim-fact-preservation
 title: Doc-Trim Builds Require a Reviewer Fact-Preservation Audit
 severity: convention
+portable: false
 scope:
   file_patterns:
     - "CLAUDE.md"
