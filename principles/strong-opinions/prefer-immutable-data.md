@@ -2,6 +2,7 @@
 id: prefer-immutable-data
 title: Prefer Immutable Data by Default
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - domain

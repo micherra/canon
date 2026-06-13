@@ -534,7 +534,7 @@ process_segment() {
         echo "CANON: ambiguous git-prefixed token detected — blocking fail-closed." >&2
         exit 2
       fi
-      # DURABLE PREDICATE (PR #386 V2, ADR-0008, supersedes the transparent-exec denylist).
+      # DURABLE PREDICATE (PR #386 V2, ADR-0012, supersedes the transparent-exec denylist).
       # Fail-closed-on-ambiguity (dc-05): a command-substitution that is FOLLOWED BY another
       # command token can occupy/forward-to a command-name slot and expand to `git push` at
       # runtime — through ANY chain of wrappers/assignments/group-openers — so block it. A

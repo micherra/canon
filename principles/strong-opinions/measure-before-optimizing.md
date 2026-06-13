@@ -2,6 +2,7 @@
 id: measure-before-optimizing
 title: Measure Before Optimizing
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:

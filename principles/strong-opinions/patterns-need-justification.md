@@ -2,6 +2,7 @@
 id: patterns-need-justification
 title: Every Pattern Must Justify Its Complexity
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:

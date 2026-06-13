@@ -154,9 +154,11 @@ describe("assembleWikiLintOutput with scope_tags", () => {
     const output = assembleWikiLintOutput({
       citedPaths: [],
       contradictions: [],
+      duplicateTitles: [],
       filesScanned: 1,
       glossaryConsistency: [],
       missingExamples: [],
+      misroutedPrinciples: [],
       orphans: [],
       principlesChecked: 1,
       scopeLayers: [],
@@ -175,9 +177,11 @@ describe("assembleWikiLintOutput with scope_tags", () => {
     const output = assembleWikiLintOutput({
       citedPaths: [],
       contradictions: [],
+      duplicateTitles: [],
       filesScanned: 0,
       glossaryConsistency: [],
       missingExamples: [],
+      misroutedPrinciples: [],
       orphans: [],
       principlesChecked: 0,
       scopeLayers: [],

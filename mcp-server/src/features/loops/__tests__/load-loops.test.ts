@@ -280,3 +280,53 @@ describe("loadLoopsFromDir — real loops/ directory (session-watch smoke test)"
     expect(parseResult.ok).toBe(false);
   });
 });
+
+// ── Phase B+: ship-watch orchestrator_action directives (AC3) ────────────────
+describe("loadLoopsFromDir — ship-watch orchestrator_action directives", () => {
+  it("external_review_comment_ids transition carries orchestrator_action: auto-triage-fix", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const shipWatch = result.valid.find((d) => d.id === "ship-watch");
+    expect(shipWatch).toBeDefined();
+    if (!shipWatch) return;
+    const rule = shipWatch.surface.on_transition.find(
+      (r) => r.field === "external_review_comment_ids",
+    );
+    expect(rule).toBeDefined();
+    expect(rule?.orchestrator_action).toBe("auto-triage-fix");
+  });
+
+  it("ci_conclusion transition carries orchestrator_action: auto-triage-fix", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const shipWatch = result.valid.find((d) => d.id === "ship-watch");
+    expect(shipWatch).toBeDefined();
+    if (!shipWatch) return;
+    const rule = shipWatch.surface.on_transition.find((r) => r.field === "ci_conclusion");
+    expect(rule).toBeDefined();
+    expect(rule?.orchestrator_action).toBe("auto-triage-fix");
+  });
+
+  it("ci_conclusion transition retains terminate: true (AC3 regression guard)", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const shipWatch = result.valid.find((d) => d.id === "ship-watch");
+    expect(shipWatch).toBeDefined();
+    if (!shipWatch) return;
+    const rule = shipWatch.surface.on_transition.find((r) => r.field === "ci_conclusion");
+    expect(rule?.terminate).toBe(true);
+  });
+
+  it("release_tag transition carries orchestrator_action: auto-plugin-update", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const shipWatch = result.valid.find((d) => d.id === "ship-watch");
+    expect(shipWatch).toBeDefined();
+    if (!shipWatch) return;
+    const rule = shipWatch.surface.on_transition.find((r) => r.field === "release_tag");
+    expect(rule).toBeDefined();
+    expect(rule?.orchestrator_action).toBe("auto-plugin-update");
+  });
+
+  it("ship-watch still parses cleanly with all three directives (no invalid[] entry)", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const invalidShipWatch = result.invalid.find((e) => e.file.includes("ship-watch"));
+    expect(invalidShipWatch).toBeUndefined();
+  });
+});

@@ -2,6 +2,7 @@
 id: minimize-attack-surface
 title: Minimize the Attack Surface
 severity: strong-opinion
+portable: true
 scope:
   layers: []
   file_patterns:

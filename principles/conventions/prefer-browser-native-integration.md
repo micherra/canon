@@ -2,6 +2,7 @@
 id: prefer-browser-native-integration
 title: Prefer Browser-Native APIs for Cross-Module Communication
 severity: convention
+portable: true
 scope:
   layers:
     - ui

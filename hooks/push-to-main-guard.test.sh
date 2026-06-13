@@ -856,7 +856,7 @@ echo ""
 # P1-SECURITY: FALSE-POSITIVE regression locks for transparent-exec fix
 #
 # These must stay exit 0 — they are inert commands (no git push) and must
-# not be broken by the V2 span predicate (PR #386 V2, ADR-0008).
+# not be broken by the V2 span predicate (PR #386 V2, ADR-0012).
 # ---------------------------------------------------------------------------
 echo "-- P1-SECURITY PASSTHROUGH: false-positive regression locks (must pass, exit 0) --"
 
@@ -893,7 +893,7 @@ run_test 'env command ls /tmp (stacked prefixes + real cmd — must stay exit 0)
 
 echo ""
 # ---------------------------------------------------------------------------
-# V2 PREDICATE (ADR-0008): denylist-omitted wrapper BLOCK cases
+# V2 PREDICATE (ADR-0012): denylist-omitted wrapper BLOCK cases
 #
 # These were NOT blocked by the V1 denylist (nohup/time/setsid/ionice/taskset/
 # chrt/unbuffer/doas/env -i) but ARE blocked by the V2 span-final predicate.
@@ -934,7 +934,7 @@ run_test 'env -i nohup $(echo git) push origin main (stacked env+nohup — V2 bl
 
 echo ""
 # ---------------------------------------------------------------------------
-# V2 PREDICATE (ADR-0008): nested / complex forms
+# V2 PREDICATE (ADR-0012): nested / complex forms
 #
 # A nested substitution like $(echo $(echo git)) also has a non-final sub-span
 # (the outer span is followed by "push") → BLOCK.
@@ -946,7 +946,7 @@ run_test '$(echo $(echo git)) push origin main (nested sub — V2 blocks, exit 2
 
 echo ""
 # ---------------------------------------------------------------------------
-# V2 PREDICATE (ADR-0008): SACRIFICED FALSE-POSITIVE (intentional over-block)
+# V2 PREDICATE (ADR-0012): SACRIFICED FALSE-POSITIVE (intentional over-block)
 #
 # ln -s "$(realpath x)" mcp-server/node_modules — the substitution $(realpath x)
 # is NOT clause-final (mcp-server/node_modules follows it) → V2 BLOCKS.
@@ -958,7 +958,7 @@ echo ""
 # or uses a VAR=$(…) assignment (which the V2 predicate skips).
 #
 # This test documents the sacrificed FP — do NOT revert it to exit 0 without
-# re-opening the entire denylist-vs-span tradeoff (see ADR-0008).
+# re-opening the entire denylist-vs-span tradeoff (see ADR-0012).
 # ---------------------------------------------------------------------------
 echo "-- V2 PREDICATE: sacrificed false-positive is now BLOCK (exit 2) --"
 
@@ -967,7 +967,7 @@ run_test 'ln -s "$(realpath x)" mcp-server/node_modules (sacrificed FP — DEC-3
 
 echo ""
 # ---------------------------------------------------------------------------
-# V2 PREDICATE (ADR-0008): ALLOW cases — substitution in clause-FINAL position
+# V2 PREDICATE (ADR-0012): ALLOW cases — substitution in clause-FINAL position
 #
 # These forms have the substitution as the LAST element of their clause.
 # A clause-final substitution is inert (argument-position data, cannot forward
