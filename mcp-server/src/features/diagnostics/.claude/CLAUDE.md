@@ -48,7 +48,7 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `"duplicate_titles"` | Two or more principles (across both tiers) sharing the same normalized title; normalization: lowercase, collapsed whitespace, stripped trailing punctuation |
 | `"glossary_consistency"` | CONTEXT.md H2 headings — exact-duplicate or naked-vs-qualified collisions; allowed: same base with ≥2 distinct qualifiers |
 | `"missing_examples"` | Principles lacking usage examples |
-| `"misrouted_principles"` | Principles in the shipped `principles/` tree with `portable: false` (explicit) OR with exclusively Canon-internal `scope.file_patterns` and no explicit `portable: true` override |
+| `"misrouted_principles"` | Bidirectional tier mismatch: (A) principles in the shipped `principles/` tree with `portable: false` (explicit) OR with exclusively Canon-internal `scope.file_patterns` and no explicit `portable: true` override; (B) principles outside the shipped tier (e.g. `.canon/principles/`) with `portable: true` |
 | `"orphan_principles"` | Principles not referenced anywhere |
 | `"scope_layers"` | `scope.layers` values in principles outside the valid set (derived from `loadLayerMappings(projectDir)` — project config keys when `.canon/config.json` defines `layers`, otherwise defaults; replaces defaults entirely when config defines any layers) |
 | `"scope_tags"` | `scope.tags` values in principles outside `VALID_COMPUTED_TAGS` (static const from `kg-tags.ts` — 15 values, no I/O); both `scope_tags` and `scope_layers` emit a "must be a YAML list" finding when the field is a scalar string |

@@ -133,6 +133,32 @@ describe("checkMisroutedPrinciples", () => {
     const findings = checkMisroutedPrinciples([p]);
     expect(findings).toHaveLength(0);
   });
+
+  // NEW direction: portable:true stranded outside the shipped tier → 1 finding
+  it("portable:true under .canon/principles/ → 1 finding (stranded outside shipped tier)", () => {
+    const p = makePrinciple({
+      filePath: "/repo/.canon/principles/conventions/universal.md",
+      id: "universal",
+      title: "Universal Principle",
+      portable: true,
+    });
+    const findings = checkMisroutedPrinciples([p]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].principle_id).toBe("universal");
+    expect(findings[0].file_path).toBe("/repo/.canon/principles/conventions/universal.md");
+    expect(findings[0].reason).toContain("portable: true");
+  });
+
+  it("portable:true under principles/ (correct location) → 0 findings", () => {
+    const p = makePrinciple({
+      filePath: "/repo/principles/conventions/correct.md",
+      id: "correct",
+      title: "Correct Principle",
+      portable: true,
+    });
+    const findings = checkMisroutedPrinciples([p]);
+    expect(findings).toHaveLength(0);
+  });
 });
 
 // ---- checkDuplicateTitles ----

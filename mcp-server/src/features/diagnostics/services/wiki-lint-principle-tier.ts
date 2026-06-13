@@ -82,12 +82,15 @@ function isAllCanonInternalScope(p: Principle): boolean {
 // ---- Public API ----
 
 /**
- * Check for misrouted principles: principle files physically under the SHIPPED
- * `principles/` tree that should instead be in `.canon/principles/`.
+ * Check for misrouted principles: flag mismatches between a principle's
+ * `portable` flag and its physical location.
  *
  * A principle is flagged when:
- * 1. It lives in the shipped tier (filePath contains `/principles/` but NOT `/.canon/principles/`), AND
- * 2. Either `portable === false` (explicit flag), OR all `scope.file_patterns` are Canon-internal paths.
+ * 1. (Direction A — Canon-internal in shipped tree)
+ *    It lives in the shipped tier AND either `portable === false` (explicit flag),
+ *    OR all `scope.file_patterns` are Canon-internal paths (with no explicit portable:true override).
+ * 2. (Direction B — Universal stranded in internal tier)
+ *    It lives outside the shipped tier (e.g. `.canon/principles/`) AND `portable === true`.
  *
  * Fail-closed: on ambiguity or parse error in scope.file_patterns, the scope-branch
  * falls back to `false` (not flagged) rather than producing a false positive.
@@ -98,28 +101,39 @@ export function checkMisroutedPrinciples(principles: Principle[]): MisroutedPrin
   const findings: MisroutedPrincipleFinding[] = [];
 
   for (const p of principles) {
-    if (!isShippedTier(p.filePath)) continue;
-
-    if (p.portable === false) {
-      // Explicit portable:false — flag regardless of scope patterns.
+    if (isShippedTier(p.filePath)) {
+      // Direction A: Canon-internal principle living in the shipped tree.
+      if (p.portable === false) {
+        // Explicit portable:false — flag regardless of scope patterns.
+        findings.push({
+          file_path: p.filePath,
+          principle_id: p.id,
+          reason:
+            `Principle '${p.id}' has portable: false but lives in the shipped principles/ tree. ` +
+            `Move it to .canon/principles/${p.severity}/ to exclude it from installs.`,
+          severity: p.severity,
+        });
+      } else if (p.portable === undefined && isAllCanonInternalScope(p)) {
+        // No explicit portable flag AND all scope.file_patterns are Canon-internal.
+        // portable:true is an explicit authorial opt-in that overrides the scope heuristic.
+        findings.push({
+          file_path: p.filePath,
+          principle_id: p.id,
+          reason:
+            `Principle '${p.id}' has scope.file_patterns that are exclusively Canon-internal paths ` +
+            `(${p.scope.file_patterns.join(", ")}), but lives in the shipped principles/ tree. ` +
+            `Move it to .canon/principles/${p.severity}/ or add portable: false to mark it explicitly.`,
+          severity: p.severity,
+        });
+      }
+    } else if (p.portable === true) {
+      // Direction B: Universal (portable:true) principle stranded outside the shipped tier.
       findings.push({
         file_path: p.filePath,
         principle_id: p.id,
         reason:
-          `Principle '${p.id}' has portable: false but lives in the shipped principles/ tree. ` +
-          `Move it to .canon/principles/${p.severity}/ to exclude it from installs.`,
-        severity: p.severity,
-      });
-    } else if (p.portable === undefined && isAllCanonInternalScope(p)) {
-      // No explicit portable flag AND all scope.file_patterns are Canon-internal.
-      // portable:true is an explicit authorial opt-in that overrides the scope heuristic.
-      findings.push({
-        file_path: p.filePath,
-        principle_id: p.id,
-        reason:
-          `Principle '${p.id}' has scope.file_patterns that are exclusively Canon-internal paths ` +
-          `(${p.scope.file_patterns.join(", ")}), but lives in the shipped principles/ tree. ` +
-          `Move it to .canon/principles/${p.severity}/ or add portable: false to mark it explicitly.`,
+          `Principle '${p.id}' has portable: true but lives outside the shipped principles/ tree. ` +
+          `Move it to principles/${p.severity}/ so it is included in installs.`,
         severity: p.severity,
       });
     }
