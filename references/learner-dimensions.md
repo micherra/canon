@@ -248,7 +248,7 @@ Any one of the following makes an artifact a candidate; the cooling-off threshol
 
 A candidate is only SURFACED as a proposal after it has been independently observed as a candidate in **≥ 2 distinct learn runs** (`watch_threshold: 2` — symmetric with the proposed-learnings promotion discipline), OR — for the strongest single signal — when a valid `superseded-by` link exists (a superseded artifact needs no cooling-off because the evidence is structural, not statistical).
 
-**Lifecycle**: First observation writes a `prune_watch` entry (`status: watch`, `evidence_count: 1`). The second confirming observation promotes it to a surfaced `prune-candidate` proposal (`evidence_count: 2`, `status: candidate`). This reuses the exact watch→promote lifecycle and `computeWatchConfidence` decay already in the CONSOLIDATE pass (`mcp-server/src/platform/storage/drift/watch-staleness-adapter.ts`) — a `prune_watch` that stops recurring decays and archives like any other watch.
+**Lifecycle**: First observation writes a `prune-watch` entry (`status: watch`, `evidence_count: 1`). The second confirming observation promotes it to a surfaced `prune-candidate` proposal (`evidence_count: 2`, `status: candidate`). This reuses the exact watch→promote lifecycle and `computeWatchConfidence` decay already in the CONSOLIDATE pass (`mcp-server/src/platform/storage/drift/watch-staleness-adapter.ts`) — a `prune-watch` that stops recurring decays and archives like any other watch.
 
 ### Safety gates
 
@@ -742,7 +742,7 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
 {
   "run_id": "learn_{YYYYMMDD}_{random_hex}",
   "timestamp": "{ISO-8601}",
-  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "artifact-retirement", "process-health", "agent-effectiveness", "retrieval-effectiveness", "rule-compliance-measurement"],
+  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "artifact-retirement", "process-health", "agent-effectiveness", "retrieval-effectiveness", "rule-compliance-measurement", "cliff-rate"],
   "data_summary": {
     "reviews_analyzed": 0,
     "source_files_scanned": 0,

@@ -129,7 +129,7 @@ At every `learn` step, run the `artifact-retirement` dimension alongside the oth
 
 **Rule-tier requirement**: a `rule`-severity principle is a candidate only if it has an explicit `superseded-by` link to another live artifact. Never on `never-triggered` alone.
 
-**Cooling-off**: a candidate is surfaced only after ≥ 2 distinct learn runs observe it (`watch_threshold: 2`), except when a valid `superseded-by` link exists (single-shot allowed). Write a `prune_watch` to `.canon/proposed-learnings/` on first observation; promote to `prune-candidate` on the second.
+**Cooling-off**: a candidate is surfaced only after ≥ 2 distinct learn runs observe it (`watch_threshold: 2`), except when a valid `superseded-by` link exists (single-shot allowed). Write a `prune-watch` to `.canon/proposed-learnings/` on first observation; promote to `prune-candidate` on the second.
 
 **Output**: write proposals to `.canon/proposed-learnings/` (for cooling-off tracking) and summarize in the `### Prune Candidates (artifact-retirement)` section of `.canon/LEARNING-REPORT.md`.
 
