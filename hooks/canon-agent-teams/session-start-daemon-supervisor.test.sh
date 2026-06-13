@@ -589,6 +589,149 @@ fi
 rm -rf "$TMPDATA" "$TMPROOT"
 
 # ---------------------------------------------------------------------------
+# F2c Test 12: Healthy same-version daemon, PID file has WRONG port → port reconciled
+#
+# Scenario: daemon is healthy at CANON_DAEMON_PORT, but canon-daemon.pid records a
+# different (stale) port. After the healthy+same-version branch runs, the PID file's
+# port line must be updated to the live port. PID line must be unchanged.
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"12.0.0-test"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORT12=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+python3 -c "
+import http.server, json
+
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            body = json.dumps({'ok': True, 'port': ${FREE_PORT12}, 'version': '12.0.0-test', 'transport': 'http'}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(body)
+    def log_message(self, *a): pass
+
+http.server.HTTPServer(('127.0.0.1', ${FREE_PORT12}), H).serve_forever()
+" &
+FAKE_SERVER_PID12=$!
+disown "$FAKE_SERVER_PID12" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown prevents bash job-tracking; cleanup via explicit kill below
+sleep 0.5
+
+# Write a PID file with the LIVE pid but a STALE port (9999 instead of $FREE_PORT12)
+FAKE_PID12=99999
+echo "${FAKE_PID12}" > "$TMPDATA/canon-daemon.pid"
+echo "9999" >> "$TMPDATA/canon-daemon.pid"
+
+BOOT_MARKER12="$TMPDATA/boot_called12"
+OUTPUT12=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORT12" \
+  CANON_SUPERVISOR_BOOT_CMD="touch $BOOT_MARKER12" \
+  CANON_SUPERVISOR_START_TIMEOUT=3 \
+  bash "$HOOK" 2>&1)
+EXIT_CODE12=$?
+
+kill "$FAKE_SERVER_PID12" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- cleanup only
+
+# Read the updated PID file
+PID_LINE12=""
+PORT_LINE12=""
+if [[ -f "$TMPDATA/canon-daemon.pid" ]]; then
+  PID_LINE12=$(sed -n '1p' "$TMPDATA/canon-daemon.pid")
+  PORT_LINE12=$(sed -n '2p' "$TMPDATA/canon-daemon.pid")
+fi
+
+if [[ $EXIT_CODE12 -eq 0 ]] \
+   && [[ ! -f "$BOOT_MARKER12" ]] \
+   && [[ "$PID_LINE12" == "${FAKE_PID12}" ]] \
+   && [[ "$PORT_LINE12" == "${FREE_PORT12}" ]]; then
+  pass "F2c: Port reconciled in PID file (stale 9999 → live ${FREE_PORT12}), PID unchanged, no restart"
+else
+  fail "F2c: exit=$EXIT_CODE12, boot_called=$(test -f "$BOOT_MARKER12" && echo yes || echo no), pid_line='${PID_LINE12}', port_line='${PORT_LINE12}' (expected pid=${FAKE_PID12} port=${FREE_PORT12}), output=$(echo "$OUTPUT12" | head -5)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT"
+
+# ---------------------------------------------------------------------------
+# F2c Test 13: Healthy same-version daemon, PID file has CORRECT port → no change
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"13.0.0-test"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORT13=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+python3 -c "
+import http.server, json
+
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            body = json.dumps({'ok': True, 'port': ${FREE_PORT13}, 'version': '13.0.0-test', 'transport': 'http'}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(body)
+    def log_message(self, *a): pass
+
+http.server.HTTPServer(('127.0.0.1', ${FREE_PORT13}), H).serve_forever()
+" &
+FAKE_SERVER_PID13=$!
+disown "$FAKE_SERVER_PID13" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown prevents bash job-tracking; cleanup via explicit kill below
+sleep 0.5
+
+# Write a PID file with the CORRECT port already
+FAKE_PID13=99998
+echo "${FAKE_PID13}" > "$TMPDATA/canon-daemon.pid"
+echo "${FREE_PORT13}" >> "$TMPDATA/canon-daemon.pid"
+
+BOOT_MARKER13="$TMPDATA/boot_called13"
+OUTPUT13=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORT13" \
+  CANON_SUPERVISOR_BOOT_CMD="touch $BOOT_MARKER13" \
+  CANON_SUPERVISOR_START_TIMEOUT=3 \
+  bash "$HOOK" 2>&1)
+EXIT_CODE13=$?
+
+kill "$FAKE_SERVER_PID13" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- cleanup only
+
+PID_LINE13=""
+PORT_LINE13=""
+if [[ -f "$TMPDATA/canon-daemon.pid" ]]; then
+  PID_LINE13=$(sed -n '1p' "$TMPDATA/canon-daemon.pid")
+  PORT_LINE13=$(sed -n '2p' "$TMPDATA/canon-daemon.pid")
+fi
+
+if [[ $EXIT_CODE13 -eq 0 ]] \
+   && [[ ! -f "$BOOT_MARKER13" ]] \
+   && [[ "$PID_LINE13" == "${FAKE_PID13}" ]] \
+   && [[ "$PORT_LINE13" == "${FREE_PORT13}" ]]; then
+  pass "F2c: PID file already correct — no modification, no restart"
+else
+  fail "F2c no-change: exit=$EXIT_CODE13, boot_called=$(test -f "$BOOT_MARKER13" && echo yes || echo no), pid_line='${PID_LINE13}', port_line='${PORT_LINE13}', output=$(echo "$OUTPUT13" | head -5)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

@@ -45,19 +45,21 @@ const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 /**
  * Resolves the token file path from the environment.
  *
- * Resolution order:
+ * Resolution order (2-tier, per ADR-0015):
  * 1. `env.CANON_MCP_TOKEN_FILE` — explicit override
- * 2. `env.CLAUDE_PLUGIN_DATA` → `${CLAUDE_PLUGIN_DATA}/canon-mcp-token`
- * 3. `${os.homedir()}/.claude/canon/canon-mcp-token` — dev fallback
+ * 2. `${os.homedir()}/.claude/canon/canon-mcp-token` — canonical home path
+ *
+ * `CLAUDE_PLUGIN_DATA` is intentionally NOT consulted (ADR-0015).
+ * The daemon binds a single fixed port — per-install isolation via the data-dir
+ * tier is moot. Removing that tier ensures the daemon and every headersHelper
+ * invocation always resolve the same file, regardless of whether
+ * `CLAUDE_PLUGIN_DATA` is present in a given process's environment.
  *
  * @param env - Environment to inspect (default: `process.env`). Injectable for testing.
  */
 export function resolveTokenPath(env: NodeJS.ProcessEnv = process.env): string {
   if (env.CANON_MCP_TOKEN_FILE) {
     return env.CANON_MCP_TOKEN_FILE;
-  }
-  if (env.CLAUDE_PLUGIN_DATA) {
-    return join(env.CLAUDE_PLUGIN_DATA, "canon-mcp-token");
   }
   return join(homedir(), ".claude", "canon", "canon-mcp-token");
 }
