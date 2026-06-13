@@ -36,7 +36,7 @@ import { scanArtifactList, scanArtifacts } from "../services/artifact-matching.t
 import { tryWriteBuildTrendSummary } from "../services/build-trend-summary-writer.ts";
 import { tryWriteBuildDigest } from "../services/digest-writer.ts";
 import {
-  archiveAndDeleteWorkspace,
+  archiveWorkspaceOnly,
   tryAppendAnalytics,
   tryReleaseClaims,
   tryRemoveCliffLedger,
@@ -178,8 +178,18 @@ export type FinalizeWorkspaceResult = {
   steps_ghost: string[];
   /** Present only when complete is true. True when archive succeeded. */
   workspace_archived?: boolean;
-  /** Present only when complete is true. True when workspace directory was deleted. */
-  workspace_deleted?: boolean;
+  /**
+   * Present only when complete is true. True when destructive teardown (worktree
+   * deregistration, branch deletion, workspace directory removal) has been deferred
+   * to the post-ship janitor or a direct-merge workflow. The build branch and
+   * worktree directory remain intact for the shipper to use. (finalize-02, ADR-0011)
+   */
+  teardown_deferred?: boolean;
+  /**
+   * Present only when complete is true and teardown_deferred is true.
+   * Names the post-ship owner responsible for teardown.
+   */
+  teardown_owner?: string;
   /** Present only when complete is true. True when file claims were released successfully. */
   claims_released?: boolean;
   /** Present only when complete is true. True when flow analytics were recorded successfully. */
@@ -567,7 +577,7 @@ function getStepsMissingSkipReason(skipped: readonly JournalStep[]): string[] {
 }
 
 // Best-effort side effects on workspace completion: digest, analytics, trend summary, claims.
-// digest MUST run before archiveAndDeleteWorkspace — it reads workspace files that archive deletes.
+// digest MUST run before archiveWorkspaceOnly — it reads workspace files that archive copies.
 async function runCompletionSideEffects(
   workspace: string,
   steps: JournalStep[],
@@ -620,7 +630,7 @@ export async function finalizeWorkspace(
   const sideEffects = complete
     ? await runCompletionSideEffects(workspace, steps, projectDir)
     : undefined;
-  const cleanup = complete ? await archiveAndDeleteWorkspace(workspace, projectDir) : undefined;
+  const cleanup = complete ? await archiveWorkspaceOnly(workspace, projectDir) : undefined;
 
   return toolOk({
     artifacts_expected: artifacts.expected,
@@ -635,7 +645,12 @@ export async function finalizeWorkspace(
     steps_missing_skip_reason: stepsMissingSkipReason,
     steps_skipped: stepsSkipped,
     ...(cleanup
-      ? { workspace_archived: cleanup.archived, workspace_deleted: cleanup.deleted }
+      ? {
+          teardown_deferred: cleanup.teardown_deferred,
+          teardown_owner:
+            "post-ship: janitor reclaim (gated on completed ship step), or direct-merge git branch -d",
+          workspace_archived: cleanup.archived,
+        }
       : {}),
     ...(sideEffects ?? {}),
   });

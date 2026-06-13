@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
@@ -145,45 +145,18 @@ export function tryComputeDiffStats(
   }
 }
 
-/** Best-effort branch delete after worktree removal. Never throws. */
-function tryDeleteBranch(slug: string, projectDir: string): void {
-  try {
-    const r = gitExec(["branch", "-D", `canon/${slug}`], projectDir);
-    if (!r.ok) console.warn(`[canon] branch -D failed for ${slug}:`, r.stderr.trim());
-  } catch (err: unknown) {
-    console.warn(`[canon] branch -D threw for ${slug}:`, err instanceof Error ? err.message : err);
-  }
-}
-
 /**
- * Deregister the worktree at `{workspace}/worktree` from git before deletion.
- * Best-effort — never throws. Warns on failure so the caller can still proceed.
+ * Archive the workspace metadata (copy artifacts to the archive dir).
+ *
+ * This is an archive-ONLY function — it does NOT deregister worktrees, delete
+ * branches, or remove the workspace directory. Destructive teardown is the
+ * responsibility of the janitor (post-ship) or a direct-merge workflow.
+ * (decision finalize-01, finalize-02; ADR-0011)
  */
-function tryDeregisterWorktree(workspace: string, slug: string, projectDir: string): void {
-  const worktreeSubPath = join(workspace, "worktree");
-  if (!existsSync(worktreeSubPath)) return;
-  try {
-    const result = gitExec(["worktree", "remove", "--force", worktreeSubPath], projectDir);
-    if (!result.ok) {
-      console.warn(
-        `[canon] archiveAndDeleteWorkspace: git worktree remove failed for ${basename(workspace)}:`,
-        result.stderr.trim(),
-      );
-    } else {
-      tryDeleteBranch(slug, projectDir);
-    }
-  } catch (err: unknown) {
-    console.warn(
-      `[canon] archiveAndDeleteWorkspace: git worktree remove threw for ${basename(workspace)}:`,
-      err instanceof Error ? err.message : err,
-    );
-  }
-}
-
-export async function archiveAndDeleteWorkspace(
+export async function archiveWorkspaceOnly(
   workspace: string,
   projectDir: string,
-): Promise<{ archived: boolean; deleted: boolean }> {
+): Promise<{ archived: boolean; teardown_deferred: true }> {
   const session = getExecutionStore(workspace).getSession();
   const slug = session?.slug ?? basename(workspace);
 
@@ -201,16 +174,7 @@ export async function archiveAndDeleteWorkspace(
     console.warn("[canon] workspace archive failed:", err instanceof Error ? err.message : err);
   }
 
-  let deleted = false;
-  try {
-    tryDeregisterWorktree(workspace, slug, projectDir);
-    rmSync(workspace, { force: true, recursive: true });
-    deleted = true;
-  } catch (err: unknown) {
-    console.warn("[canon] workspace deletion failed:", err instanceof Error ? err.message : err);
-  }
-
-  return { archived, deleted };
+  return { archived, teardown_deferred: true };
 }
 
 /**
