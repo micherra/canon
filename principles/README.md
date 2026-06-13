@@ -6,7 +6,7 @@ This directory contains Canon's engineering principles — encoded guidelines th
 
 Principles are organized by enforcement severity into three subdirectories.
 
-**Rules** are non-negotiable. They cover failure modes with no legitimate exceptions in production code: secrets in source files, missing trust-boundary validation, privilege escalation risks. Rules are enforced pre-commit — a rule violation blocks the commit until it's fixed. There are currently four rules in Canon, deliberately few, because if everything is non-negotiable then nothing is.
+**Rules** are non-negotiable. They cover failure modes with no legitimate exceptions in production code: secrets in source files, missing trust-boundary validation, privilege escalation risks. Rules are enforced pre-commit — a rule violation blocks the commit until it's fixed. There are currently six rules in Canon's shipped set, deliberately few, because if everything is non-negotiable then nothing is. (One additional Canon-internal rule, `no-llm-calls-in-mcp-tools`, is scoped to Canon's own MCP server and lives in `.canon/principles/rules/`.)
 
 **Strong opinions** are where most of Canon's design guidance lives. These cover architecture patterns (bounded contexts, command-query separation, error handling), data patterns (schema migrations, normalization strategy), testing patterns (one behavior per test, contract testing), and deployment patterns. Deviating from a strong opinion is not a blocker, but it requires explicit justification — reviewers will flag it and ask why.
 

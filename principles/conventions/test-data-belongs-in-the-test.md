@@ -2,6 +2,7 @@
 id: test-data-belongs-in-the-test
 title: Test Data Belongs in the Test
 severity: convention
+portable: true
 scope:
   layers: []
   file_patterns:

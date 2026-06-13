@@ -2,6 +2,7 @@
 id: isolate-frontend-runtime-state
 title: Isolate Runtime State Between Frontend Modules
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - ui

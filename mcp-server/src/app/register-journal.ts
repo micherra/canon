@@ -1,8 +1,10 @@
+import { getDecisions, logDecision } from "@features/orchestration/tools/decisions-ledger.ts";
 import {
   batchLogSteps,
   finalizeWorkspace,
   logStep,
 } from "@features/orchestration/tools/orchestration-journal.ts";
+import { writeOrchestratorCheckpoint } from "@features/orchestration/tools/orchestrator-checkpoint.ts";
 import { reconcileWorkspace } from "@features/orchestration/tools/reconcile-workspace.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -161,9 +163,96 @@ function registerReconcileWorkspace(server: McpServer): void {
   );
 }
 
+/** Decision type enum values for Zod schema. */
+const DECISION_TYPES = [
+  "hitl_gate",
+  "scope_cut",
+  "ac_change",
+  "tier_override",
+  "merge_resolution",
+  "manual_verification",
+  "other",
+] as const;
+
+function registerLogDecision(server: McpServer): void {
+  server.registerTool(
+    "log_decision",
+    {
+      description:
+        "Append a timestamped orchestrator decision to the durable event log (orchestrator_decision type). " +
+        "This is an AUTHORITATIVE write — returns a ToolResult error on store failure (NOT fail-open). " +
+        "Call at each consequential decision: HITL gate outcomes, scope cuts, AC changes, tier overrides, merge resolutions, manual-verification confirmations.",
+      inputSchema: {
+        decision_type: z.enum(DECISION_TYPES).describe("Category of decision (closed enum)"),
+        gate: z
+          .string()
+          .optional()
+          .describe("HITL gate name, e.g. 'plan_approval', 'review_verdict'"),
+        outcome: z
+          .string()
+          .optional()
+          .describe("Result of the decision, e.g. 'approved', 'overridden', 'descoped'"),
+        rationale: z.string().optional().describe("Why this decision was made"),
+        refs: z.array(z.string()).optional().describe("References, e.g. ['AC#3', 'REVIEW.md']"),
+        summary: z.string().describe("One-line human-readable description of what was decided"),
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    gatedWrapHandler(async (input, extra) =>
+      logDecision({ ...input, projectDir: resolveScope(extra) }),
+    ),
+  );
+}
+
+function registerGetDecisions(server: McpServer): void {
+  server.registerTool(
+    "get_decisions",
+    {
+      description:
+        "Read the orchestrator decisions ledger (getEventsByType('orchestrator_decision')). " +
+        "Returns the structured array of DecisionRecord objects and a rendered markdown table (human-readable view). " +
+        "Use before HITL gates and on resume to rehydrate decided state.",
+      inputSchema: {
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    gatedWrapHandler(async (input, extra) =>
+      getDecisions({ ...input, projectDir: resolveScope(extra) }),
+    ),
+  );
+}
+
+function registerWriteOrchestratorCheckpoint(server: McpServer): void {
+  server.registerTool(
+    "write_orchestrator_checkpoint",
+    {
+      description:
+        "Write a derived compact resume-state snapshot to ${workspace}/checkpoint.md " +
+        "(current/completed/pending steps + recent decisions + next action). " +
+        "Best-effort-observable: returns a ToolResult error on write failure (never silent). " +
+        "Refresh after each completed step (alongside log_step(...completed)) and at each HITL gate.",
+      inputSchema: {
+        next_action: z
+          .string()
+          .optional()
+          .describe(
+            "Explicit next-action hint. If absent, derived from the first non-terminal journal step.",
+          ),
+        workspace: z.string().describe("Workspace directory path"),
+      },
+    },
+    gatedWrapHandler(async (input, extra) =>
+      writeOrchestratorCheckpoint({ ...input, projectDir: resolveScope(extra) }),
+    ),
+  );
+}
+
 export function registerJournalTools(server: McpServer): void {
   registerLogStep(server);
   registerBatchLogSteps(server);
   registerFinalizeWorkspace(server);
   registerReconcileWorkspace(server);
+  registerLogDecision(server);
+  registerGetDecisions(server);
+  registerWriteOrchestratorCheckpoint(server);
 }

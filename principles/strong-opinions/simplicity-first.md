@@ -2,6 +2,7 @@
 id: simplicity-first
 title: The Simplest Thing That Could Work
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:
