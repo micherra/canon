@@ -2,6 +2,7 @@
 id: normalize-first-denormalize-intentionally
 title: Normalize First, Denormalize With Justification
 severity: convention
+portable: true
 scope:
   layers: []
   file_patterns:

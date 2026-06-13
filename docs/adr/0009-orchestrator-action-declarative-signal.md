@@ -1,12 +1,12 @@
 ---
-adr: "0007"
+adr: "0009"
 title: "orchestrator_action is a declarative signal the orchestrator consumes; the loop stays non-mutating"
 status: accepted
 date: "2026-06-12"
 build: "add-a-first-class-orchestratoraction-directive-to-the-canon-loop"
 ---
 
-# ADR-0007: orchestrator_action is a declarative signal the orchestrator consumes; the loop stays non-mutating
+# ADR-0009: orchestrator_action is a declarative signal the orchestrator consumes; the loop stays non-mutating
 
 ## Context
 

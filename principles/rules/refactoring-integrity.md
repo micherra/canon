@@ -2,6 +2,7 @@
 id: refactoring-integrity
 title: Refactoring Must Be Substantive, Not Cosmetic
 severity: rule
+portable: true
 scope:
   layers: []
 tags:

@@ -2,6 +2,7 @@
 id: errors-are-values
 title: Errors Are Values, Not Surprises
 severity: strong-opinion
+portable: true
 scope:
   layers: []
   tags:

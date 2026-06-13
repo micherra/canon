@@ -2,6 +2,7 @@
 id: lazy-freshness-gate
 title: Lazy Freshness Gate for Commit-Granularity Caches
 severity: convention
+portable: false
 scope:
   file_patterns:
     - "mcp-server/src/features/knowledge-graph/**"

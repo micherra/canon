@@ -2,6 +2,7 @@
 id: scanner-avoids-its-own-pattern
 title: A Scanner Must Not Contain the Literal Pattern It Detects
 severity: convention
+portable: false
 scope:
   layers:
     - hooks

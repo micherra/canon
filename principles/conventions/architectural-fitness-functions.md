@@ -2,6 +2,7 @@
 id: architectural-fitness-functions
 title: Enforce Architecture with Automated Tests
 severity: convention
+portable: true
 scope:
   layers:
     - infra

@@ -2,6 +2,7 @@
 id: functions-do-one-thing
 title: Functions Do One Thing
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:

@@ -2,6 +2,7 @@
 id: install-faithful-dev-repo
 title: Plugin-Shipped Runtime Files Must Be Faithful to an Installed Layout
 severity: convention
+portable: false
 scope:
   layers: []
   file_patterns:

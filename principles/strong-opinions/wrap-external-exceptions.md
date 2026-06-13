@@ -2,6 +2,7 @@
 id: wrap-external-exceptions
 title: Wrap External Exceptions at the Boundary
 severity: strong-opinion
+portable: true
 scope:
   layers: []
   tags:

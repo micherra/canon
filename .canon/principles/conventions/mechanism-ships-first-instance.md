@@ -2,6 +2,7 @@
 id: mechanism-ships-first-instance
 title: A New Mechanism Must Ship Its Own First Instance
 severity: convention
+portable: false
 scope:
   layers: []
   file_patterns:

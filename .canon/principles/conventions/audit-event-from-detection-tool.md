@@ -1,7 +1,8 @@
 ---
-id: fail-open-audit-event-emission
+id: audit-event-from-detection-tool
 title: Detection/Compute Tools Emit Fail-Open Audit Events from Inside the Tool
 severity: convention
+portable: false
 scope:
   layers:
     - features

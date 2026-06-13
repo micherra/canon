@@ -2,6 +2,7 @@
 id: hooks-fail-closed
 title: Safety Hooks Must Fail Closed
 severity: rule
+portable: true
 scope:
   layers:
     - hooks

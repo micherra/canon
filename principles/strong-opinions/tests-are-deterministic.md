@@ -2,6 +2,7 @@
 id: tests-are-deterministic
 title: Tests Must Be Deterministic
 severity: strong-opinion
+portable: true
 scope:
   layers: []
   file_patterns:

@@ -2,6 +2,7 @@
 id: disk-is-source-of-truth-on-resume
 title: Unit-Loop Agents Externalize Progress Durably and Reconcile on Resume
 severity: convention
+portable: false
 scope:
   layers: []
   file_patterns:

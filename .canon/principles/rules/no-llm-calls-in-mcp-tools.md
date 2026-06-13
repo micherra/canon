@@ -2,6 +2,7 @@
 id: no-llm-calls-in-mcp-tools
 title: MCP Tools Must Not Make LLM API Calls
 severity: rule
+portable: false
 scope:
   layers:
     - shared
