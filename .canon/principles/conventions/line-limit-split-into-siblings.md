@@ -2,6 +2,7 @@
 id: line-limit-split-into-siblings
 title: Extract Cohesive Siblings When a File Crosses the Line Limit
 severity: convention
+portable: false
 scope:
   layers: []
   file_patterns:

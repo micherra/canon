@@ -2,6 +2,7 @@
 id: enrichment-pipeline-convention
 title: Enrichment Pipeline Follows DAO + Service + Fail-Open Wrapper Shape
 severity: convention
+portable: false
 tags: [architecture, testability, agent-behavior, diagnostics]
 scope:
   file_patterns:

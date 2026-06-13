@@ -2,6 +2,7 @@
 id: infrastructure-tested-like-code
 title: Validate Infrastructure Definitions Before Deployment
 severity: convention
+portable: true
 scope:
   layers: []
   file_patterns:

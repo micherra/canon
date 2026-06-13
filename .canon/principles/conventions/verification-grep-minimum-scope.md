@@ -2,6 +2,7 @@
 id: verification-grep-minimum-scope
 title: Verification Greps Use Minimum-Sufficient Scope
 severity: convention
+portable: false
 scope:
   file_patterns:
     - "agents/*.md"

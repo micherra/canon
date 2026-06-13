@@ -2,6 +2,7 @@
 id: read-only-tool-reuse-over-reimplementation
 title: New MCP Tools Must Reuse Existing Internal Helpers Rather Than Reimplementing Their Logic
 severity: convention
+portable: false
 scope:
   layers:
     - features

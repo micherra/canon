@@ -2,6 +2,7 @@
 id: compute-effect-naming-convention
 title: Pure Functions Use compute* Prefix; Effect Functions Use Effect-Indicating Prefix
 severity: convention
+portable: false
 scope:
   layers: []
   file_patterns:

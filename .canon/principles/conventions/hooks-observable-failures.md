@@ -2,6 +2,7 @@
 id: hooks-observable-failures
 title: Hook Failures Must Be Observable or Explicitly Justified
 severity: convention
+portable: false
 scope:
   layers:
     - hooks

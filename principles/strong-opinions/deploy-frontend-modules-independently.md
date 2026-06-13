@@ -2,6 +2,7 @@
 id: deploy-frontend-modules-independently
 title: Deploy Frontend Modules Independently
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - ui

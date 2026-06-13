@@ -2,6 +2,7 @@
 id: dao-parameter-injection-in-diagnostics-services
 title: DAO Parameter Injection in Diagnostics Services
 severity: convention
+portable: false
 tags: [architecture, testability, diagnostics]
 scope:
   layers: []

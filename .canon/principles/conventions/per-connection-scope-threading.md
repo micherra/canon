@@ -2,6 +2,7 @@
 id: per-connection-scope-threading
 title: MCP Handler Registration Boundaries Thread Project Scope via resolveScope
 severity: convention
+portable: false
 scope:
   layers:
     - features

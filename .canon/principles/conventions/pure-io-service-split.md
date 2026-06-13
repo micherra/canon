@@ -2,6 +2,7 @@
 id: pure-io-service-split
 title: Split Services Into a Pure Entry Point and an I/O Companion
 severity: convention
+portable: false
 scope:
   layers: []
   file_patterns:

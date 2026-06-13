@@ -2,6 +2,7 @@
 id: snippet-docblock-metadata
 title: HTML Snippet Files Require Machine-Readable Docblock
 severity: convention
+portable: false
 scope:
   file_patterns:
     - "mcp-server/src/ui/snippets/*.html"
