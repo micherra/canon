@@ -16,7 +16,7 @@ Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer r
 | `session-manager.ts` | Per-session `McpServer`+`StreamableHTTPServerTransport` registry; scope handshake (header→roots/list capped retry, fail-closed, fs.realpath-normalized); refcount+pending-handshake-guarded eviction in isolation-finish-01 order (server.close first); idle reaper (`CANON_HTTP_SESSION_TTL_MS`, default 30 min); scope immutable after first registration |
 
 ## Contracts
-<!-- last-updated: 2026-06-11 -->
+<!-- last-updated: 2026-06-13 -->
 
 **`loopback-host.ts`**
 - `LOOPBACK_ALLOWED_HOSTS` — `Set<string>` of allowed loopback hostnames: `"127.0.0.1"`, `"localhost"`, `"[::1]"`; single source of truth for all Canon HTTP endpoints
@@ -25,7 +25,7 @@ Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer r
 - `isLoopbackHostRequest(req)` — `boolean`; fail-closed (missing Host header → false → caller returns 403)
 
 **`auth.ts`**
-- `resolveTokenPath(env?)` — 3-tier: `CANON_MCP_TOKEN_FILE` → `${CLAUDE_PLUGIN_DATA}/canon-mcp-token` → `~/.claude/canon/canon-mcp-token`
+- `resolveTokenPath(env?)` — 2-tier (ADR-0007): `CANON_MCP_TOKEN_FILE` → `~/.claude/canon/canon-mcp-token`; `CLAUDE_PLUGIN_DATA` is intentionally NOT consulted
 - `loadOrCreateToken(tokenPath)` — async, fail-closed; parent dir created at `mode:0o700` + explicit `chmod(0o700)` (hardens pre-existing world-traversable dirs); exclusive `writeFile({ flag:"wx" })` (O_EXCL — fails EEXIST, never follows symlinks); on EEXIST re-reads via `rereadToken`, fails closed if invalid; `chmod(0o600)` applied after write (umask-safe); regenerates on empty/whitespace via `unlink`+re-create; returns `TokenResult`
 - `authenticate(req, expectedToken)` — sync; loopback remoteAddress check (403), Host header DNS-rebinding guard (403), Bearer presence (401), `crypto.timingSafeEqual` with length-mismatch short-circuit (401)
 - `rereadToken(tokenPath)` — async; re-reads file for rate-limited background rotation recovery; fail-closed on delete/ENOENT
