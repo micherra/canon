@@ -165,6 +165,63 @@ export async function writePidFile(
 }
 
 /**
+ * Reclaims a stale PID file left by a previous (dead) process.
+ *
+ * Decision logic:
+ * - File absent / unreadable → return (nothing to do; fail-open).
+ * - PID line malformed (NaN) → remove the file (corrupt/stale).
+ * - `process.kill(pid, 0)` throws ESRCH → process is dead → remove.
+ * - `process.kill(pid, 0)` throws EPERM → process is alive but NOT ours → PRESERVE.
+ * - `process.kill(pid, 0)` succeeds → process is alive (same user) → PRESERVE.
+ *
+ * Best-effort: any unexpected error is swallowed so a reclaim failure never
+ * blocks boot. The comment below tags the suppression point per the
+ * hooks-observable-failures convention (TS analogue of DOCUMENTED FAIL-OPEN).
+ *
+ * F4-preservation: this function only removes files for DEAD PIDs. It never
+ * signals, kills, or cedes a port held by a live daemon.
+ *
+ * @param dir - Directory containing the PID file.
+ * @param filename - PID file name.
+ */
+export async function reclaimStalePidFile(dir: string, filename: string): Promise<void> {
+  const pidPath = join(dir, filename);
+  try {
+    let content: string;
+    try {
+      content = await readFile(pidPath, "utf8");
+    } catch {
+      // File absent or unreadable — nothing to reclaim.
+      // DOCUMENTED FAIL-OPEN -- absent pidfile on first boot is expected; continue.
+      return;
+    }
+
+    const pid = Number.parseInt(content.split("\n")[0] ?? "", 10);
+    if (Number.isNaN(pid)) {
+      // Malformed/corrupt pidfile — remove it.
+      await rm(pidPath, { force: true });
+      return;
+    }
+
+    try {
+      process.kill(pid, 0);
+      // No throw → process is alive (ours or same-user) → preserve.
+    } catch (e: unknown) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === "ESRCH") {
+        // Process is dead — reclaim.
+        await rm(pidPath, { force: true });
+      }
+      // EPERM → process is alive but not ours → preserve (fall through).
+      // DOCUMENTED FAIL-OPEN -- EPERM means a live foreign process holds this PID; preserve.
+    }
+  } catch {
+    // Outer catch: any unexpected fs/logic error — swallow so boot is never blocked.
+    // DOCUMENTED FAIL-OPEN -- reclaim failure is non-fatal; a stale pidfile is advisory.
+  }
+}
+
+/**
  * Removes the PID file from `${dir}/${filename}` if and only if its first
  * line matches `process.pid`. This guards against removing another process's PID file
  * in the case of orphaned files from a prior run.
@@ -224,7 +281,7 @@ export function isHttpServerRunning(): boolean {
  * @returns A Promise that resolves when the server is listening (or when an
  *   EADDRINUSE error is detected).
  */
-export function startHttpServer(port?: number, projectDir?: string): Promise<void> {
+export async function startHttpServer(port?: number, projectDir?: string): Promise<void> {
   if (projectDir !== undefined) resolvedProjectDir = projectDir;
 
   // Resolve port: explicit arg → env var → default
@@ -232,6 +289,14 @@ export function startHttpServer(port?: number, projectDir?: string): Promise<voi
 
   if (Number.isNaN(serverPort) || serverPort < 1 || serverPort > 65535) {
     serverPort = DEFAULT_PORT;
+  }
+
+  // F2a: Reclaim a dead-PID pidfile from a prior run before binding, so the new
+  // process can write its own pidfile on successful bind without confusion.
+  // Best-effort: failure is swallowed inside reclaimStalePidFile.
+  const pidDirForReclaim = resolvePidDir();
+  if (pidDirForReclaim) {
+    await reclaimStalePidFile(pidDirForReclaim, DEFAULT_PID_FILENAME);
   }
 
   return new Promise<void>((resolve) => {
