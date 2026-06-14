@@ -1095,6 +1095,128 @@ run_test '\git status (R2 backslash-git non-push subcommand — must stay exit 0
 
 echo ""
 # ---------------------------------------------------------------------------
+# B1 — INTERIOR backslash-escaped git (security CRITICAL fix, must block, exit 2)
+#
+# bash collapses EVERY `\X`→`X` at runtime (pairwise), so `\g\it`, `g\it`,
+# `\gi\t`, `gi\t`, `\g\i\t` all invoke the real git binary. The original R2
+# predicate stripped only ONE leading backslash and required exact `==git`, so
+# these interior forms fell through to ALLOW. The pairwise-collapse de-escaper
+# (_p2m_deescaped_git) closes the class. JSON: one literal backslash = "\\".
+# ---------------------------------------------------------------------------
+echo "-- B1: interior backslash-escaped git (must block, exit 2) --"
+run_test '\g\it push origin main (B1 interior — must block, exit 2)' \
+  2 '{"command":"\\g\\it push origin main"}'
+run_test 'g\it push origin main (B1 interior — must block, exit 2)' \
+  2 '{"command":"g\\it push origin main"}'
+run_test '\gi\t push origin main (B1 interior — must block, exit 2)' \
+  2 '{"command":"\\gi\\t push origin main"}'
+run_test 'gi\t push origin main (B1 interior — must block, exit 2)' \
+  2 '{"command":"gi\\t push origin main"}'
+run_test '\g\i\t push origin main (B1 fully-escaped — must block, exit 2)' \
+  2 '{"command":"\\g\\i\\t push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B2 — ARGUMENT-BEARING transparent prefix + \git (security HIGH fix, exit 2)
+#
+# The original walker skipped exactly ONE prefix WORD but not its ARGS, landing
+# on the prefix argument (5, -oL, -n 5, -i) as the "command word". The fixed
+# walker enters prefix-mode on a recognised transparent prefix and scans ALL
+# remaining tokens for an escaped-git command word (argument-arity-free). The
+# non-escaped `timeout 5 git push` already blocks via the main path; this locks
+# the escaped variants. `nice \git push` (no prefix arg) is a regression lock.
+# ---------------------------------------------------------------------------
+echo "-- B2: argument-bearing transparent prefix + \git (must block, exit 2) --"
+run_test 'timeout 5 \git push origin main (B2 timeout+arg — must block, exit 2)' \
+  2 '{"command":"timeout 5 \\git push origin main"}'
+run_test 'stdbuf -oL \git push origin main (B2 stdbuf+flag — must block, exit 2)' \
+  2 '{"command":"stdbuf -oL \\git push origin main"}'
+run_test 'nice -n 5 \git push origin main (B2 nice+arg — must block, exit 2)' \
+  2 '{"command":"nice -n 5 \\git push origin main"}'
+run_test 'env -i \git push origin main (B2 env+flag — must block, exit 2)' \
+  2 '{"command":"env -i \\git push origin main"}'
+run_test 'timeout 5 git push origin main (B2 non-escaped regression lock — must block, exit 2)' \
+  2 '{"command":"timeout 5 git push origin main"}'
+run_test 'nice \git push origin main (B2 no-prefix-arg regression lock — must block, exit 2)' \
+  2 '{"command":"nice \\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B3 — UPPERCASE backslash-escaped git on macOS case-insensitive FS (HIGH, exit 2)
+#
+# On the macOS default case-insensitive filesystem, `\GIT`/`\Git` resolve and run
+# the real git binary. The de-escaper lowercases the command word before the
+# `== git` comparison, so the escaped uppercase forms block. NOTE: the NON-escaped
+# bare `GIT push` (uppercase, no backslash) is a SEPARATE pre-existing
+# uppercase-git residual and is OUT OF SCOPE — only the escaped forms are covered.
+# ---------------------------------------------------------------------------
+echo "-- B3: uppercase backslash-escaped git (must block, exit 2) --"
+run_test '\GIT push origin main (B3 uppercase escaped — must block, exit 2)' \
+  2 '{"command":"\\GIT push origin main"}'
+run_test '\Git push origin main (B3 mixed-case escaped — must block, exit 2)' \
+  2 '{"command":"\\Git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# FP1 — assignment-prefix VALUE substitution must NOT over-block (must allow, 0)
+#
+# `a=$(echo git) push origin main`: the substitution is in the assignment VALUE;
+# the command word is the bare `push` (command-not-found at runtime, no real git
+# push) → must ALLOW. The R1 contains-test originally seeded a span from the
+# assignment value and over-blocked. The FP1 fix scopes span-start detection to
+# the COMMAND-WORD token (after skipping leading NAME=VALUE assignment prefixes).
+# Regression lock: `FOO=bar $(echo git) push` (substitution IS the command word)
+# must still BLOCK.
+# ---------------------------------------------------------------------------
+echo "-- FP1: assignment-value substitution must allow (exit 0) --"
+run_test 'a=$(echo git) push origin main (FP1 assignment value — must allow, exit 0)' \
+  0 '{"command":"a=$(echo git) push origin main"}'
+run_test 'b=$(echo x) push origin main (FP1 assignment value — must allow, exit 0)' \
+  0 '{"command":"b=$(echo x) push origin main"}'
+run_test 'FOO=bar $(echo git) push origin main (FP1 regression lock: sub IS cmd word — must block, exit 2)' \
+  2 '{"command":"FOO=bar $(echo git) push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B-class — genuine background-watchdog hang-check (forward progress, no hang)
+#
+# The pairwise-collapse de-escaper (char-walk) and the prefix-mode token scan
+# must terminate on malformed inputs. Run the guard in the BACKGROUND with a
+# separate watchdog (NOT a `timeout` wrapper — that produces spurious macOS
+# stdin-EOF rc artifacts). Assert the guard process exits on its own before the
+# watchdog fires. Fail-closed (exit 2) is acceptable; the assertion is "did not
+# hang / was not killed by the watchdog".
+# ---------------------------------------------------------------------------
+echo "-- B-class: background-watchdog hang-check (must complete, not be killed) --"
+
+_hang_inputs=(
+  '{"command":"\\g\\it push origin \"main"}'
+  '{"command":"gi\\t push origin main"}'
+  '{"command":"timeout 5 \\g\\it push origin main"}'
+  '{"command":"env -i \\git push origin '"'"'unterminated"}'
+)
+for _hi in "${_hang_inputs[@]}"; do
+  printf '%s' "$_hi" > /tmp/p2m_hang.$$.json
+  CANON_GUARD_CWD="/home/user/project" bash "$HOOK" < /tmp/p2m_hang.$$.json >/dev/null 2>&1 &
+  _hpid=$!
+  ( sleep 12; kill -9 "$_hpid" 2>/dev/null && touch /tmp/p2m_hang_killed.$$ ) &
+  _wpid=$!
+  wait "$_hpid" 2>/dev/null || true
+  kill "$_wpid" 2>/dev/null || true
+  wait "$_wpid" 2>/dev/null || true
+  if [[ -f /tmp/p2m_hang_killed.$$ ]]; then
+    echo "  FAIL: guard HUNG on malformed input (watchdog killed it): $_hi"
+    FAIL=$((FAIL + 1))
+    rm -f /tmp/p2m_hang_killed.$$
+  else
+    echo "  PASS: guard completed (no hang) on malformed input"
+    PASS=$((PASS + 1))
+  fi
+  rm -f /tmp/p2m_hang.$$.json
+done
+
+echo ""
+# ---------------------------------------------------------------------------
 # R5 — termination / forward-progress (malformed inputs must NOT hang)
 #
 # The R1 widening and R2 prefix-skip loops must guarantee forward progress.

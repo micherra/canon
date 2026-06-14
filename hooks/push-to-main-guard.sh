@@ -558,8 +558,35 @@ process_segment() {
         done <<< "$_tok_str"
         local _n=${#_toks[@]}
         local _i=0
+        # FP1 (DEC-p2m-bypass-fix-01): the R1 contains-test must only seed a span
+        # from the COMMAND-WORD token, not from a leading NAME=VALUE assignment
+        # prefix's VALUE. `a=$(echo git) push origin main` has the substitution in
+        # the assignment value; the command word is the bare `push` (rc=127 at
+        # runtime, no real git push), so it must ALLOW. While still in the leading
+        # assignment-prefix region, skip assignment tokens (and the transparent
+        # prefixes / group-openers the command-word walk already treats as inert)
+        # WITHOUT inspecting them for a span start. The first non-prefix token is the
+        # command word; from there the contains-test proceeds unchanged so that a
+        # glued command-word substitution (gi$(echo t)) and a bare $(echo git)
+        # command word still seed a span and BLOCK.
+        local _seen_cmd_word=false
         while (( _i < _n )); do
           local _tok="${_toks[_i]}"
+          if [[ "$_seen_cmd_word" == false ]]; then
+            # leading group openers attached to the token are inert
+            local _peek="$_tok"
+            while [[ "$_peek" == '('* || "$_peek" == '{'* ]]; do _peek="${_peek:1}"; done
+            if [[ -z "$_peek" ]]; then _i=$(( _i + 1 )); continue; fi
+            # NAME=VALUE assignment prefix → skip without seeding a span from its VALUE
+            if [[ "$_peek" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then _i=$(( _i + 1 )); continue; fi
+            # transparent-exec prefix word (basename-normalised) → skip
+            local _peekbase="${_peek##*/}"
+            case "$_peekbase" in
+              env|command|exec|nohup|nice|timeout|stdbuf) _i=$(( _i + 1 )); continue ;;
+            esac
+            # first non-prefix token: this is the command word — span detection is live from here
+            _seen_cmd_word=true
+          fi
           # R1 (DEC-p2m-bypass-01): widen span-START detection from a starts-with
           # test to a CONTAINS test. A substitution glued to a literal prefix
           # (gi$(echo t), g$(echo i)t) concatenates to `git` at runtime but never
@@ -619,14 +646,61 @@ process_segment() {
         exit 2
       fi
 
-      # R2 (DEC-p2m-bypass-02): backslash-escaped git command-word detection.
-      # `\git` resolves to the real git binary (the backslash only suppresses
-      # alias/function lookup), but it is not a standalone `git` token, not a
+      # R2 (DEC-p2m-bypass-02 + DEC-p2m-bypass-fix-02): backslash-escaped git
+      # command-word detection — DURABLE de-escape closing the whole class.
+      # `\git` (and `\g\it`, `gi\t`, `\GIT`, ...) resolves to the real git binary:
+      # the backslash only suppresses alias/function lookup, and bash collapses
+      # EVERY `\X`→`X` at runtime. The static guard analyses the pre-execution
+      # string (no quote-removal yet), so it must model the collapse itself. A
+      # backslash-escaped git command word is not a standalone `git` token, not a
       # string-executing wrapper, not an ambiguous git-prefixed token, and carries
-      # no command substitution — so it falls through to ALLOW. Detect a
-      # backslash-escaped git at COMMAND-WORD position, de-escape, and re-run the
-      # SAME push policy as the un-escaped form (no new refspec logic). Command-word
-      # scoping is what keeps `echo \git push` (argument position) an ALLOW.
+      # no command substitution — so it falls through to ALLOW. Detect it,
+      # de-escape (remove ALL `\`, compare basename CASE-INSENSITIVELY to git), and
+      # route the de-escaped command through the SAME canon_git_subcommand +
+      # push_updates_protected_branch path the non-escaped form already uses.
+      #
+      # _p2m_deescaped_git: given a single (canon_tokenize-derived) token, return 0
+      # iff (a) the token contains a backslash AND (b) simulating bash's PAIRWISE
+      # backslash collapse (`\X`→`X`, consuming the escaped char) then lowercasing
+      # the basename yields exactly `git`. Closes B1 (interior \g\it / g\it / gi\t)
+      # and B3 (\GIT / \Git on the macOS case-insensitive FS). Pairwise collapse —
+      # NOT "remove all backslashes" — is what keeps the documented double-backslash
+      # ALLOW correct: `\\git` collapses to the literal command name `\git`
+      # (\ escapes \, then g i t) which is command-not-found at runtime and never
+      # invokes real git, so it must NOT match here. (`\git` → git → match;
+      # `\\git` → \git → no match.)
+      _p2m_deescaped_git() {
+        local _tok="$1"
+        [[ "$_tok" == *"\\"* ]] || return 1         # must carry a backslash escape
+        local _base="${_tok##*/}"                   # basename (handles \path/\git etc.)
+        # Pairwise bash backslash collapse over the token characters.
+        local _out="" _i2=0 _ch
+        local _len=${#_base}
+        while (( _i2 < _len )); do
+          _ch="${_base:_i2:1}"
+          if [[ "$_ch" == "\\" ]]; then
+            _i2=$(( _i2 + 1 ))                        # consume the backslash
+            (( _i2 < _len )) && { _out="$_out${_base:_i2:1}"; _i2=$(( _i2 + 1 )); }
+          else
+            _out="$_out$_ch"; _i2=$(( _i2 + 1 ))
+          fi
+        done
+        local _lc                                    # lowercase (B3, macOS case-insensitive FS)
+        _lc=$(printf '%s' "$_out" | tr '[:upper:]' '[:lower:]')
+        [[ "$_lc" == "git" ]] && return 0
+        return 1
+      }
+      # _p2m_backslash_git_command_word: walk tokens to decide whether a
+      # backslash-escaped git occupies the COMMAND-WORD position (directly, or
+      # behind transparent-exec prefixes and THEIR arguments — closing B2). Skips
+      # leading group-openers and NAME=VALUE assignments. When a recognised
+      # transparent prefix (env/command/exec/nohup/nice/timeout/stdbuf) is seen,
+      # enter prefix-mode and scan ALL remaining tokens for an escaped-git form
+      # (fail-closed, argument-arity-free — handles `timeout 5`, `nice -n 5`,
+      # `stdbuf -oL`, `env -i`). A non-prefix, non-escaped-git real command word
+      # (e.g. `echo`) STOPS the walk → return 1, so `echo \git push` (argument
+      # position) stays ALLOW. Prints the matched command-word token on stdout.
+      # One token consumed per iteration over a finite array → bounded.
       _p2m_backslash_git_command_word() {
         local _raw="$1"
         local -a _bt=()
@@ -637,45 +711,50 @@ process_segment() {
         done <<< "$_bt_str"
         local _bn=${#_bt[@]}
         local _bi=0
-        # Walk to the command word: skip transparent prefixes, NAME=VALUE
-        # assignments, and leading group-openers. One token consumed per iteration
-        # over a finite array → bounded (forward progress guaranteed).
+        local _prefix_mode=false
         while (( _bi < _bn )); do
           local _ctok="${_bt[_bi]}"
           # strip leading group openers ( / { from this token
           while [[ "$_ctok" == '('* || "$_ctok" == '{'* ]]; do _ctok="${_ctok:1}"; done
-          [[ -z "$_ctok" ]] && { _bi=$(( _bi + 1 )); continue; }
+          if [[ -z "$_ctok" ]]; then _bi=$(( _bi + 1 )); continue; fi
+          # escaped-git command word (direct or behind prefixes/args) → match
+          if _p2m_deescaped_git "$_ctok"; then printf '%s' "$_ctok"; return 0; fi
           # NAME=VALUE assignment prefix → skip
           if [[ "$_ctok" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then _bi=$(( _bi + 1 )); continue; fi
-          # transparent-exec prefix word (basename-normalised) → skip
           local _cbase="${_ctok##*/}"
           case "$_cbase" in
-            env|command|nohup|nice|timeout|stdbuf) _bi=$(( _bi + 1 )); continue ;;
+            env|command|exec|nohup|nice|timeout|stdbuf)
+              # transparent prefix → scan ALL remaining tokens for escaped-git (B2)
+              _prefix_mode=true; _bi=$(( _bi + 1 )); continue ;;
           esac
-          # first non-prefix token is the command word
-          break
+          if [[ "$_prefix_mode" == true ]]; then
+            # in prefix-mode every non-escaped-git token is a prefix arg/flag → skip
+            _bi=$(( _bi + 1 )); continue
+          fi
+          # first non-prefix, non-escaped real command word (echo, ls, ...) → stop
+          return 1
         done
-        (( _bi >= _bn )) && return 1
-        local _cw="${_bt[_bi]}"
-        # normalise: basename, then strip ONE leading backslash (lib idiom
-        # "${x#\\}" — SC1003-clean, mirrors _do_scan_for_wrapper).
-        local _norm="${_cw##*/}"
-        local _stripped="${_norm#\\}"
-        # original command word must begin with a backslash (so the un-escaped
-        # `git` — already handled by the main path — does not double-fire here).
-        # If stripping one leading backslash changed the string, it was escaped.
-        [[ "$_stripped" != "$_norm" ]] || return 1
-        _norm="$_stripped"
-        # only de-escape when the post-strip command word is EXACTLY git; residual
-        # metachars (e.g. \gi$(echo t)) are left to R1 / ambiguous-token → fail-closed.
-        [[ "$_norm" == "git" ]] && return 0
         return 1
       }
 
-      if _p2m_backslash_git_command_word "$raw_segment"; then
-        # De-escape: remove the single leading backslash that immediately precedes
-        # the git command word, then route through the EXISTING git path.
-        local _deesc_raw="${raw_segment/\\git/git}"
+      local _p2m_bse_cw
+      _p2m_bse_cw=$(_p2m_backslash_git_command_word "$raw_segment" || true) # DOCUMENTED FAIL-OPEN -- empty means no escaped-git command word; skip the R2 branch
+      if [[ -n "$_p2m_bse_cw" ]]; then
+        # De-escape: replace the matched escaped command-word token with the literal
+        # `git` in the raw segment, then route through the EXISTING git path. The
+        # matched token is unquoted (canon_tokenize-derived) so it matches the raw
+        # bytes. ${var/pat/rep} treats `pat` as a GLOB, where a backslash escapes
+        # the next char — so the matched token's backslashes must themselves be
+        # doubled to form a literal-matching pattern (otherwise the pattern `\git`
+        # would match the bare substring `git` inside `\git status`, leaving the
+        # leading backslash and breaking the `\git status` ALLOW). If substitution
+        # does not change the segment, fail closed.
+        local _bse_pat="${_p2m_bse_cw//\\/\\\\}"
+        local _deesc_raw="${raw_segment/$_bse_pat/git}"
+        if [[ "$_deesc_raw" == "$raw_segment" ]]; then
+          echo "CANON: could not de-escape backslash-escaped git command word — blocking fail-closed." >&2
+          exit 2
+        fi
         local _deesc_seg
         _deesc_seg=$(canon_delete_quotes "$_deesc_raw")
         local _deesc_sub
@@ -687,7 +766,7 @@ process_segment() {
         case "$_deesc_sub" in
           push)
             if push_updates_protected_branch "$_deesc_seg" "$_deesc_raw"; then
-              echo "CANON: Blocked a backslash-escaped 'git push' to the protected branch — \\git resolves to real git. Route through a PR branch instead." >&2
+              echo "CANON: Blocked a backslash-escaped 'git push' to the protected branch — the backslash only suppresses alias lookup; it resolves to real git. Route through a PR branch instead." >&2
               exit 2
             fi
             ;;
