@@ -227,7 +227,7 @@ export const AUDITED_STALE_2026_06_13: ReadonlyArray<StaleViolationSpec> = [
   },
   // 15. execution-store.ts — no-hidden-side-effects (bare repo-root path file-absent at HEAD)
   { file_path: "execution-store.ts", principle_id: "no-hidden-side-effects" },
-  // 16. cliff-event-sweep.ts — observable-best-effort (enumerate now warns + records skipped[])
+  // 16. cliff-event-sweep.ts — observable-best-effort (all skip paths now warn: enumerateWorkspaceDbs records skipped[] + warns; findJournalPath + enrichSlug journal-read catches now warn)
   {
     file_path: "mcp-server/src/features/history/services/cliff-event-sweep.ts",
     principle_id: "observable-best-effort",
