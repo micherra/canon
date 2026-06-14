@@ -20,7 +20,7 @@
     "@huggingface/transformers": "^4.2.0",
     "@modelcontextprotocol/ext-apps": "^1.7.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^12.10.1",
     "graphology": "^0.26",
     "graphology-communities-louvain": "^2.0.2",
     "gray-matter": "^4.0.3",
@@ -36,9 +36,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.16",
+    "@biomejs/biome": "2.5.0",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.9.2",
+    "@types/node": "^25.9.3",
     "dependency-cruiser": "^17.4.3",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
