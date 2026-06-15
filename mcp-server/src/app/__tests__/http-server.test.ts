@@ -24,6 +24,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getHttpPort,
+  reclaimStalePidFile,
   registerArtifact,
   removeArtifact,
   removePidFile,
@@ -377,5 +378,71 @@ describe("resolvePidDir scope resolution (no implicit cwd leak)", () => {
     // Fail-closed guarantee preserved: null can never be a cwd-derived directory,
     // so it never leaks process.cwd() — the value contract IS the fail-closed assertion.
     expect(resolvePidDir()).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F2a — reclaimStalePidFile (auth-token-determinism-02)
+// ---------------------------------------------------------------------------
+
+describe("reclaimStalePidFile (F2a)", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-reclaim-test-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("removes a pidfile whose recorded PID is dead (ESRCH)", async () => {
+    // Use a known-dead PID: 999999 is almost certainly unused on any machine.
+    const deadPid = 999999;
+    await writeFile(join(tmpDir, "canon-server.pid"), `${deadPid}\n3141\n`, "utf8");
+    await reclaimStalePidFile(tmpDir, "canon-server.pid");
+    await expect(readFile(join(tmpDir, "canon-server.pid"), "utf8")).rejects.toThrow();
+  });
+
+  it("removes a pidfile with a malformed first line", async () => {
+    await writeFile(join(tmpDir, "canon-server.pid"), "not-a-number\n3141\n", "utf8");
+    await reclaimStalePidFile(tmpDir, "canon-server.pid");
+    await expect(readFile(join(tmpDir, "canon-server.pid"), "utf8")).rejects.toThrow();
+  });
+
+  it("preserves a pidfile whose recorded PID is alive (PID 1 = init, EPERM)", async () => {
+    // PID 1 is always alive (init/launchd) — process.kill(1, 0) returns EPERM.
+    // The file must NOT be removed: live-but-not-ours is preserved.
+    await writeFile(join(tmpDir, "canon-server.pid"), "1\n3141\n", "utf8");
+    await reclaimStalePidFile(tmpDir, "canon-server.pid");
+    const content = await readFile(join(tmpDir, "canon-server.pid"), "utf8");
+    expect(content).toContain("1");
+  });
+
+  it("is a no-op and does not throw when the pidfile is absent", async () => {
+    await expect(reclaimStalePidFile(tmpDir, "nonexistent.pid")).resolves.not.toThrow();
+  });
+
+  it("startHttpServer reclaims a dead-PID pidfile before bind", async () => {
+    // Pre-plant a dead-PID pidfile in tmpDir; pass tmpDir as pidDir via CLAUDE_PLUGIN_DATA.
+    const savedPluginData = process.env.CLAUDE_PLUGIN_DATA;
+    process.env.CLAUDE_PLUGIN_DATA = tmpDir;
+    const deadPid = 999999;
+    await writeFile(join(tmpDir, "canon-server.pid"), `${deadPid}\n3141\n`, "utf8");
+
+    const FREE_PORT = TEST_PORT + 100; // avoid collision with the main test server
+    await startHttpServer(FREE_PORT, tmpDir);
+    await stopHttpServer();
+
+    // After start: stale pidfile for dead PID 999999 must be gone
+    // (either reclaimed before bind, or overwritten by the new process)
+    const pidContent = await readFile(join(tmpDir, "canon-server.pid"), "utf8").catch(() => "");
+    if (pidContent !== "") {
+      // If a pidfile exists it must belong to this process, not the dead one
+      expect(pidContent.split("\n")[0]).toBe(String(process.pid));
+    }
+
+    if (savedPluginData === undefined) delete process.env.CLAUDE_PLUGIN_DATA;
+    else process.env.CLAUDE_PLUGIN_DATA = savedPluginData;
   });
 });

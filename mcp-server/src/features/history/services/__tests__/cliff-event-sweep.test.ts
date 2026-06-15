@@ -502,6 +502,65 @@ describe("sweepCliffEvents", () => {
     },
   );
 
+  // Root can enumerate chmod-000 dirs — skip this test when running as root (euid 0).
+  // The chmod-000 on workspacesRoot triggers the findJournalPath readdirSync catch,
+  // asserting that it emits a console.warn (observable-best-effort).
+  const itUnlessRootFjp = process.getuid?.() === 0 ? it.skip : it;
+
+  itUnlessRootFjp(
+    "warns when findJournalPath cannot enumerate workspaces root (observable-best-effort)",
+    () => {
+      // Step 1: Seed drift.db with a row that has recovery_outcome 'unknown'
+      // by running a sweep with a valid workspace but no journal.
+      const slug = "fjp-warn-slug";
+      const payload = JSON.stringify({
+        workspace: slug,
+        incomplete_step_ids: ["step-1"],
+        needs_recovery: true,
+        timestamp: "2026-06-13T08:00:00.000Z",
+        source: "resume",
+      });
+      createOrchestrationDb(tmpDir, "branch-fjp", slug, [
+        { payload, timestamp: "2026-06-13T08:00:00.000Z" },
+      ]);
+      // No journal — after first sweep the row has recovery_outcome 'unknown'
+      const first = sweepCliffEvents(tmpDir);
+      expect(first.events_ingested).toBe(1);
+
+      // Step 2: Make workspacesRoot unreadable, then sweep again.
+      // enrichOutcomes will call findJournalPath for the 'unknown' row.
+      // findJournalPath: existsSync(workspacesRoot) → true; readdirSync → throws.
+      // Without the fix this catch is silent; with the fix it warns.
+      const workspacesRoot = join(tmpDir, ".canon", "workspaces");
+      chmodSync(workspacesRoot, 0o000);
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {
+        /* suppress console output during test */
+      });
+
+      try {
+        let result: ReturnType<typeof sweepCliffEvents> | undefined;
+        expect(() => {
+          result = sweepCliffEvents(tmpDir);
+        }).not.toThrow();
+
+        // The sweep must still return (fail-open)
+        expect(result).toBeDefined();
+
+        // console.warn must have been called — the findJournalPath catch is now observable
+        expect(warnSpy).toHaveBeenCalled();
+        const warnMessages = warnSpy.mock.calls.map((c) => String(c[0]));
+        const hasFjpWarn = warnMessages.some(
+          (msg) => msg.includes("[canon] cliff-event-sweep:") && msg.includes("workspaces"),
+        );
+        expect(hasFjpWarn).toBe(true);
+      } finally {
+        chmodSync(workspacesRoot, 0o755);
+        warnSpy.mockRestore();
+      }
+    },
+  );
+
   it("recovers agent_type from journal when legacy payload has null agent_type", () => {
     const payload = JSON.stringify({
       workspace: "agenttype-slug",

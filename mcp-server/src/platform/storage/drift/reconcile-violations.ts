@@ -7,6 +7,9 @@
  * - `AUDITED_STALE_2026_06`: the audited stale-(file_path, principle_id) seed set from the
  *   verification sweep build `verify-all-21-recorded-drift-violations-at-head-fix-confirmed-live-ones`
  *   (verification commit 46cc346e). Human-audited liveness — NOT a programmatic re-check.
+ * - `AUDITED_STALE_2026_06_13`: second backfill epoch — 20 open rows audited STALE on 2026-06-13
+ *   in build `audit-the-20-open-violation-rows-in-canondriftdb-against-head-close-the`
+ *   (audit commit 051a49e2). Human HEAD inspection / file-absent confirmation — NOT a programmatic re-check.
  *
  * Canon principles applied:
  * - simplicity-first: thin wrapper over the DAO primitive; no new SQL here.
@@ -160,5 +163,87 @@ export const AUDITED_STALE_2026_06: ReadonlyArray<StaleViolationSpec> = [
   {
     file_path: "mcp-server/src/features/pr-review/__tests__/pr-review-data-worktree-path.test.ts",
     principle_id: "agent-integration-boundary-check",
+  },
+];
+
+// AUDITED_STALE_2026_06_13 — second backfill epoch.
+// Source: build audit-the-20-open-violation-rows-in-canondriftdb-against-head-close-the
+// Audit commit: 051a49e2. Liveness method: human HEAD inspection / file-absent
+// confirmation — NOT a programmatic re-check (decision closure-03/closure-04).
+// All 20 rows audited STALE; full evidence in DESIGN.md.
+// canon:allow-unwired: one-shot audited-stale backfill seed; consumed by a throwaway runner per closure-04 Option A — no durable caller by design (mirrors AUDITED_STALE_2026_06).
+export const AUDITED_STALE_2026_06_13: ReadonlyArray<StaleViolationSpec> = [
+  // 1. hooks/destructive-guard.test.sh — build-verification (both suites green at HEAD: 86/0, 31/0)
+  { file_path: "hooks/destructive-guard.test.sh", principle_id: "build-verification" },
+  // 2. http-server.ts — deep-modules (now imports shared isLoopbackHostRequest; inline dup gone)
+  { file_path: "mcp-server/src/app/http-server.ts", principle_id: "deep-modules" },
+  // 3. board.ts — errors-are-values (bare repo-root path file-absent at HEAD)
+  { file_path: "board.ts", principle_id: "errors-are-values" },
+  // 4. domains/board/board.ts — errors-are-values (pure constructor, no fallible ops at HEAD)
+  { file_path: "mcp-server/src/domains/board/board.ts", principle_id: "errors-are-values" },
+  // 5. postcompact-narrative-capture.sh — fail-closed-by-default (jq path now `|| exit 0` guarded)
+  {
+    file_path: "hooks/canon-agent-teams/postcompact-narrative-capture.sh",
+    principle_id: "fail-closed-by-default",
+  },
+  // 6. simulate-flow-integration.test.ts — fail-closed-by-default (file-absent; drive-flow removed)
+  {
+    file_path: "mcp-server/src/features/orchestration/__tests__/simulate-flow-integration.test.ts",
+    principle_id: "fail-closed-by-default",
+  },
+  // 7. drive-flow.ts — fail-closed-by-default (file-absent; drive_flow runtime removed)
+  {
+    file_path: "mcp-server/src/features/orchestration/tools/drive-flow.ts",
+    principle_id: "fail-closed-by-default",
+  },
+  // 8. inject-coordination.ts — functions-do-one-thing (file-absent; prompt-pipeline/ removed)
+  {
+    file_path: "mcp-server/src/features/prompt-pipeline/services/inject-coordination.ts",
+    principle_id: "functions-do-one-thing",
+  },
+  // 9. archive-service.ts — incomplete-dead-code-removal (file-absent; relocated platform/storage/archive ADR-0006)
+  {
+    file_path: "mcp-server/src/features/history/services/archive-service.ts",
+    principle_id: "incomplete-dead-code-removal",
+  },
+  // 10. run-summary-extractors.ts — incomplete-dead-code-removal (file-absent; relocated ADR-0006)
+  {
+    file_path: "mcp-server/src/features/history/services/run-summary-extractors.ts",
+    principle_id: "incomplete-dead-code-removal",
+  },
+  // 11. kg-adapter-markdown.ts — incomplete-dead-code-removal (no decisions/handoffs/research refs at HEAD)
+  {
+    file_path: "mcp-server/src/graph/kg-adapter-markdown.ts",
+    principle_id: "incomplete-dead-code-removal",
+  },
+  // 12. hooks/.claude/CLAUDE.md — leave-touched-files-better (doc now describes inline annotation standard)
+  { file_path: "hooks/.claude/CLAUDE.md", principle_id: "leave-touched-files-better" },
+  // 13. auth.ts — leave-touched-files-better (no .js relative import at HEAD; converted to .ts)
+  { file_path: "mcp-server/src/app/mcp-http/auth.ts", principle_id: "leave-touched-files-better" },
+  // 14. drift-archive-manifest.test.ts — leave-touched-files-better (asserts schema v11 now, not v6)
+  {
+    file_path: "mcp-server/src/features/history/__tests__/drift-archive-manifest.test.ts",
+    principle_id: "leave-touched-files-better",
+  },
+  // 15. execution-store.ts — no-hidden-side-effects (bare repo-root path file-absent at HEAD)
+  { file_path: "execution-store.ts", principle_id: "no-hidden-side-effects" },
+  // 16. cliff-event-sweep.ts — observable-best-effort (all skip paths now warn: enumerateWorkspaceDbs records skipped[] + warns; findJournalPath + enrichSlug journal-read catches now warn)
+  {
+    file_path: "mcp-server/src/features/history/services/cliff-event-sweep.ts",
+    principle_id: "observable-best-effort",
+  },
+  // 17. outcome-store.ts — observable-best-effort (all 4 catches now console.warn)
+  {
+    file_path: "mcp-server/src/platform/storage/drift/outcome-store.ts",
+    principle_id: "observable-best-effort",
+  },
+  // 18. docs/explore/CLAUDE.md — stage5-acceptance-criteria (now lists both explore entries, lines 10-11)
+  { file_path: "docs/explore/CLAUDE.md", principle_id: "stage5-acceptance-criteria" },
+  // 19. hooks/destructive-guard.test.sh — tests-are-deterministic (PATH=/nonexistent pattern gone)
+  { file_path: "hooks/destructive-guard.test.sh", principle_id: "tests-are-deterministic" },
+  // 20. inject-context.ts — validate-at-trust-boundaries (file-absent at HEAD; service removed)
+  {
+    file_path: "mcp-server/src/features/orchestration/services/inject-context.ts",
+    principle_id: "validate-at-trust-boundaries",
   },
 ];
