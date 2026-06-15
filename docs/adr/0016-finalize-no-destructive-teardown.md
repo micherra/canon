@@ -1,12 +1,12 @@
 ---
-adr: "0011"
+adr: "0016"
 title: "finalize_workspace performs no destructive teardown; teardown is post-merge only"
 status: accepted
 date: "2026-06-13"
 build: "fix-finalizeworkspace-so-it-does-not-delete-the-canonslug-git-branch"
 ---
 
-# ADR-0011: finalize_workspace performs no destructive teardown; teardown is post-merge only
+# ADR-0016: finalize_workspace performs no destructive teardown; teardown is post-merge only
 
 ## Context
 

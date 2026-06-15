@@ -135,7 +135,7 @@ resolve_protected_branch() {
     git_dir_args=(-C "$CANON_GUARD_CWD")
   fi
   local ref
-  ref=$(git "${git_dir_args[@]+"${git_dir_args[@]}"}" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset origin/HEAD falls back to main below
+  ref=$(git ${git_dir_args[@]+"${git_dir_args[@]}"} symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset origin/HEAD falls back to main below
   ref="${ref#refs/remotes/origin/}"
   if [[ -z "$ref" ]]; then
     ref="main"
@@ -220,14 +220,14 @@ bare_push_is_safe() {
     git_dir_args=(-C "$CANON_GUARD_CWD")
   fi
   local cur pd
-  cur=$(git "${git_dir_args[@]+"${git_dir_args[@]}"}" symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- detached HEAD → empty → caller blocks
+  cur=$(git ${git_dir_args[@]+"${git_dir_args[@]}"} symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- detached HEAD → empty → caller blocks
   if [[ -z "$cur" ]]; then
     return 1   # detached HEAD / unresolved → NOT safe → block
   fi
   if [[ "$cur" == "$protected" ]]; then
     return 1   # on the protected branch → bare push targets it → block
   fi
-  pd=$(git "${git_dir_args[@]+"${git_dir_args[@]}"}" config --get push.default 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset → default 'simple' → safe
+  pd=$(git ${git_dir_args[@]+"${git_dir_args[@]}"} config --get push.default 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unset → default 'simple' → safe
   case "$pd" in
     ""|simple|current) ;;   # pushes current branch to same-named ref → safe so far (cur != protected)
     *) return 1 ;;          # matching/upstream/nothing/unknown → cannot prove safe → block
@@ -239,7 +239,7 @@ bare_push_is_safe() {
   # --mirror — pushes ALL refs including the protected branch regardless of
   # push.default or current branch. Block if any remote has mirror=true.
   local mirror_val
-  mirror_val=$(git "${git_dir_args[@]+"${git_dir_args[@]}"}" config --bool --get "remote.${remote}.mirror" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
+  mirror_val=$(git ${git_dir_args[@]+"${git_dir_args[@]}"} config --bool --get "remote.${remote}.mirror" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
   if [[ "$mirror_val" == "true" ]]; then
     return 1   # mirror config → bare push mirrors ALL refs including protected → block
   fi
@@ -250,7 +250,7 @@ bare_push_is_safe() {
   # for the target remote — we cannot cheaply prove a glob doesn't match the
   # protected branch, so fail-closed.
   local configured_push_refspec
-  configured_push_refspec=$(git "${git_dir_args[@]+"${git_dir_args[@]}"}" config --get-all "remote.${remote}.push" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
+  configured_push_refspec=$(git ${git_dir_args[@]+"${git_dir_args[@]}"} config --get-all "remote.${remote}.push" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- absent config → empty → safe
   if [[ -n "$configured_push_refspec" ]]; then
     return 1   # push refspec overrides push.default → cannot prove safe → block
   fi
@@ -471,7 +471,7 @@ push_updates_protected_branch() {
       elif [[ -n "${CANON_GUARD_CWD:-}" ]]; then
         _gda_head=(-C "$CANON_GUARD_CWD")
       fi
-      _head_branch=$(git "${_gda_head[@]+"${_gda_head[@]}"}" symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty on detached HEAD → fail-closed below
+      _head_branch=$(git ${_gda_head[@]+"${_gda_head[@]}"} symbolic-ref --short HEAD 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- empty on detached HEAD → fail-closed below
       if [[ -z "$_head_branch" ]]; then
         echo "CANON: push refspec destination is HEAD but current branch cannot be resolved — blocking fail-closed." >&2
         return 0   # unknown HEAD target → BLOCK (dc-05: fail-closed-on-ambiguity)
@@ -534,14 +534,89 @@ process_segment() {
         echo "CANON: ambiguous git-prefixed token detected — blocking fail-closed." >&2
         exit 2
       fi
-      # F1: Fail-CLOSED when the segment looks like a string-executing wrapper
-      # whose inner command contains shell metacharacters we cannot evaluate
-      # statically (command substitution via $( ) or backticks). We cannot
-      # prove the inner expansion does NOT push to the protected branch → block.
-      if [[ "$raw_segment" == *'$('* || "$raw_segment" == *'`'* ]]; then
-        echo "CANON: segment contains unexpanded command substitution — blocking fail-closed." >&2
+      # DURABLE PREDICATE (PR #386 V2, ADR-0012, supersedes the transparent-exec denylist).
+      # Fail-closed-on-ambiguity (dc-05): a command-substitution that is FOLLOWED BY another
+      # command token can occupy/forward-to a command-name slot and expand to `git push` at
+      # runtime — through ANY chain of wrappers/assignments/group-openers — so block it. A
+      # substitution that is the FINAL element of its clause is inert (argument-position data)
+      # and is allowed, preserving the watch_GGGGGGGG1 false-positive wins.
+      #
+      # Operates on the quote-deleted $segment. canon_tokenize splits on unquoted whitespace, so
+      # a whitespace-bearing substitution spans multiple tokens; we walk paren/backtick balance to
+      # find the span's closing token, then block iff a meaningful token follows it.
+      # DEC-386-guard-v2-fail-closed-span: this replaces the V1 denylist (env/command/exec/nice/
+      # timeout/stdbuf + group-openers). The denylist was open-ended; V2 is denylist-free.
+      _p2m_cmdsub_not_final() {
+        local _clause="$1"
+        local -a _toks=()
+        local _t _tok_str
+        # Use here-string (not process substitution) to avoid fd-inheritance issues
+        # under set -euo pipefail in nested function context.
+        _tok_str=$(canon_tokenize "$_clause") || true
+        while IFS= read -r _t; do
+          [[ -n "$_t" ]] && _toks+=("$_t")
+        done <<< "$_tok_str"
+        local _n=${#_toks[@]}
+        local _i=0
+        while (( _i < _n )); do
+          local _tok="${_toks[_i]}"
+          # strip leading group openers for the substitution-start test
+          local _core="$_tok"
+          while [[ "$_core" == '('* || "$_core" == '{'* ]]; do _core="${_core:1}"; done
+          if [[ "$_core" == '$('* || "$_core" == '`'* ]]; then
+            # found a substitution span start at _i — find its closing token _end
+            local _end=$_i
+            if [[ "$_core" == '$('* ]]; then
+              local _depth=0 _j=$_i
+              while (( _j < _n )); do
+                local _s="${_toks[_j]}"
+                local _opens="${_s//[!(]/}"; local _closes="${_s//[!)]/}"
+                _depth=$(( _depth + ${#_opens} - ${#_closes} ))
+                if (( _depth <= 0 )); then _end=$_j; break; fi
+                _end=$_j; _j=$(( _j + 1 ))
+              done
+            else
+              local _cnt=0 _j=$_i
+              while (( _j < _n )); do
+                local _s="${_toks[_j]}"; local _bt="${_s//[!\`]/}"
+                _cnt=$(( _cnt + ${#_bt} ))
+                if (( _cnt >= 2 && _cnt % 2 == 0 )); then _end=$_j; break; fi
+                _end=$_j; _j=$(( _j + 1 ))
+              done
+            fi
+            # any meaningful token after _end?  (skip pure closers ) } ; )
+            local _k=$(( _end + 1 ))
+            while (( _k < _n )); do
+              local _rest="${_toks[_k]//[(){};]/}"
+              if [[ -n "$_rest" ]]; then return 0; fi   # substitution NOT final → BLOCK
+              _k=$(( _k + 1 ))
+            done
+            _i=$(( _end + 1 )); continue
+          fi
+          _i=$(( _i + 1 ))
+        done
+        return 1   # no non-final substitution → no block from this rule
+      }
+
+      # Re-split defensively on separators (upstream already split, but a stray separator could
+      # survive quote-deletion); evaluate each clause. Use a here-string (not process substitution)
+      # to avoid pipefail / fd-inheritance issues when running deep inside nested functions.
+      local _p2m_block=false
+      local _p2m_clauses
+      _p2m_clauses=$(printf '%s' "$segment" | sed -E 's/(&&|\|\||;|\|)/\n/g') || true
+      while IFS= read -r _clause; do
+        [[ -z "$_clause" ]] && continue
+        if _p2m_cmdsub_not_final "$_clause"; then _p2m_block=true; break; fi
+      done <<< "$_p2m_clauses"
+
+      if [[ "$_p2m_block" == true ]]; then
+        echo "CANON: a command substitution is followed by further command tokens — cannot prove it does not resolve to 'git push' — blocking fail-closed." >&2
         exit 2
       fi
+      # A segment with no git token, no recognised string-executing wrapper, no
+      # ambiguous git token, and no non-final command substitution cannot be a
+      # disguised git push. Command substitution in clause-final position is inert
+      # (argument-position data — watch_GGGGGGGG1 preserved for ls $(pwd) etc.).
       return 0
     fi
 

@@ -7,20 +7,21 @@
 # On failure (absent, empty, or unreadable token), emits NOTHING to stdout and
 # exits non-zero so the connection fails honestly (fail-closed-by-default).
 #
-# Token path resolution mirrors auth.ts resolveTokenPath — three tiers:
+# Token path resolution mirrors auth.ts resolveTokenPath — two tiers (ADR-0014):
 #   1. $CANON_MCP_TOKEN_FILE   — explicit override
-#   2. $CLAUDE_PLUGIN_DATA/canon-mcp-token
-#   3. $HOME/.claude/canon/canon-mcp-token
+#   2. $HOME/.claude/canon/canon-mcp-token — canonical home path
+#
+# $CLAUDE_PLUGIN_DATA is intentionally NOT consulted (ADR-0014): the daemon binds
+# a single fixed port, so per-install isolation via the data-dir tier is moot.
+# Removing it ensures both the daemon and this helper always resolve the same file.
 
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Resolve token path (mirrors auth.ts resolveTokenPath exactly)
+# Resolve token path (mirrors auth.ts resolveTokenPath exactly — 2-tier)
 # ---------------------------------------------------------------------------
 if [[ -n "${CANON_MCP_TOKEN_FILE:-}" ]]; then
   TOKEN_PATH="$CANON_MCP_TOKEN_FILE"
-elif [[ -n "${CLAUDE_PLUGIN_DATA:-}" ]]; then
-  TOKEN_PATH="${CLAUDE_PLUGIN_DATA}/canon-mcp-token"
 else
   TOKEN_PATH="${HOME}/.claude/canon/canon-mcp-token"
 fi

@@ -182,7 +182,7 @@ export type FinalizeWorkspaceResult = {
    * Present only when complete is true. True when destructive teardown (worktree
    * deregistration, branch deletion, workspace directory removal) has been deferred
    * to the post-ship janitor or a direct-merge workflow. The build branch and
-   * worktree directory remain intact for the shipper to use. (finalize-02, ADR-0011)
+   * worktree directory remain intact for the shipper to use. (finalize-02, ADR-0016)
    */
   teardown_deferred?: boolean;
   /**

@@ -15,10 +15,11 @@
 set -uo pipefail
 
 # ---------------------------------------------------------------------------
-# Resolve PID file location
+# Resolve PID file location and probe port
 # ---------------------------------------------------------------------------
 DATA="${CLAUDE_PLUGIN_DATA:-}"
 PROJECT_DIR="${CANON_PROJECT_DIR:-.}"
+PORT="${CANON_DAEMON_PORT:-3142}"
 
 if [[ -n "$DATA" ]]; then
   PID_FILE="$DATA/canon-server.pid"
@@ -40,7 +41,7 @@ if [[ -f "$PID_FILE" ]]; then
       if echo "$CMDLINE" | grep -q "tsx" && echo "$CMDLINE" | grep -q "index.ts\|boot.sh"; then
         # Valid Canon server — kill it (stale from prior session)
         if kill -TERM "$STORED_PID" 2>/dev/null; then
-          echo "CANON NOTE: reaped stale Canon server process $STORED_PID bound to :3141"
+          echo "CANON NOTE: reaped stale Canon server process $STORED_PID bound to :${PORT}"
           rm -f "$PID_FILE"
         fi
       else
@@ -59,12 +60,12 @@ fi
 # ---------------------------------------------------------------------------
 # Part B: Zero-tool observability guard — health probe
 # ---------------------------------------------------------------------------
-if curl -fsS --max-time 2 http://127.0.0.1:3141/health >/dev/null 2>&1; then
+if curl -fsS --max-time 2 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
   # Server is responding — session is healthy
   :
 else
   # Server is not responding. Print loud, actionable warning.
-  echo "CANON WARN: Canon MCP server is not responding on :3141. If mcp__canon__* tools are unavailable, run /mcp to reconnect (stdio servers do not auto-reconnect)."
+  echo "CANON WARN: Canon MCP server is not responding on :${PORT}. If mcp__canon__* tools are unavailable, run /mcp to reconnect (stdio servers do not auto-reconnect)."
 fi
 
 exit 0

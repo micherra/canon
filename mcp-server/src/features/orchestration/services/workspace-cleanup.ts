@@ -151,7 +151,7 @@ export function tryComputeDiffStats(
  * This is an archive-ONLY function — it does NOT deregister worktrees, delete
  * branches, or remove the workspace directory. Destructive teardown is the
  * responsibility of the janitor (post-ship) or a direct-merge workflow.
- * (decision finalize-01, finalize-02; ADR-0011)
+ * (decision finalize-01, finalize-02; ADR-0016)
  */
 export async function archiveWorkspaceOnly(
   workspace: string,
