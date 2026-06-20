@@ -1207,6 +1207,81 @@ run_test 'env command $(echo git) push origin main (B5 regression: sub cmd word 
 
 echo ""
 # ---------------------------------------------------------------------------
+# B6 — UNRECOGNIZED command-executing wrapper + \git → FAIL CLOSED (security, 2)
+#
+# The walker recognises only env/command/exec/nohup/nice/timeout/stdbuf/sudo/doas/
+# time. ANY other leading word is an AMBIGUOUS passthrough-wrapper candidate
+# (setsid, xargs, ionice, runuser, flock, chroot, unbuffer, taskset, caffeinate,
+# torify, proxychains, watch, …) that forwards `\git push …` straight to real git.
+# Treating an unrecognised word as a definitively-non-git command word and ALLOWing
+# is fail-OPEN. Fix: when the resolved command word is UNKNOWN (not a recognised
+# wrapper and not a known-safe terminal command), scan the remaining tokens of the
+# clause — if any de-escapes to `git`, BLOCK. Over-blocking an unknown wrapper that
+# happens to carry a `\git` argument is an ACCEPTED fail-closed false positive.
+# The non-escaped forms (`setsid git push`) already block via canon_git_subcommand.
+# ---------------------------------------------------------------------------
+echo "-- B6: unrecognized wrapper + \git fails closed (must block, exit 2) --"
+run_test 'setsid \git push origin main (B6 unrecognized wrapper — must block, exit 2)' \
+  2 '{"command":"setsid \\git push origin main"}'
+run_test 'xargs \git push origin main (B6 unrecognized wrapper — must block, exit 2)' \
+  2 '{"command":"xargs \\git push origin main"}'
+run_test 'ionice \git push origin main (B6 unrecognized wrapper — must block, exit 2)' \
+  2 '{"command":"ionice \\git push origin main"}'
+run_test 'runuser -u ci \git push origin main (B6 unrecognized wrapper+flag — must block, exit 2)' \
+  2 '{"command":"runuser -u ci \\git push origin main"}'
+run_test 'flock /tmp/x \git push origin main (B6 unrecognized wrapper+arg — must block, exit 2)' \
+  2 '{"command":"flock /tmp/x \\git push origin main"}'
+run_test 'setsid g\it push origin main (B6 unrecognized wrapper + interior-escape — must block, exit 2)' \
+  2 '{"command":"setsid g\\it push origin main"}'
+run_test 'env setsid \git push origin main (B6 stacked recognized+unrecognized — must block, exit 2)' \
+  2 '{"command":"env setsid \\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B7 — clustered short-flag exposes \git as the command word (CRITICAL #2, 2)
+#
+# Real getopt parses `sudo -knu ci \git push` as `-k -n -u=ci` then command word
+# `\git`. The walker matched value-consuming flags by EXACT token only (`-u`), so a
+# clustered form (`-nu`, `-knu`) was treated as self-contained → its value operand
+# (`ci`) became the "command word" → ALLOW, leaving `\git` at the real command-word
+# slot. Fix: for sudo/doas, if a non-`=` dash cluster's LAST char is a value-
+# consuming short flag, consume the next token as its value. Separated `sudo -u ci`
+# already blocks (regression lock). `sudo -u \git push` ALLOWs (sudo parses \git as
+# the -u username; command word `push` runs, no git push).
+# ---------------------------------------------------------------------------
+echo "-- B7: clustered short-flag exposes \git (must block, exit 2) --"
+run_test 'sudo -nu ci \git push origin main (B7 clustered -nu — must block, exit 2)' \
+  2 '{"command":"sudo -nu ci \\git push origin main"}'
+run_test 'sudo -knu ci \git push origin main (B7 clustered -knu — must block, exit 2)' \
+  2 '{"command":"sudo -knu ci \\git push origin main"}'
+run_test 'sudo -u ci \git push origin main (B7 separated regression lock — must block, exit 2)' \
+  2 '{"command":"sudo -u ci \\git push origin main"}'
+run_test 'sudo -u \git push origin main (B7 -u consumes \git as username — must allow, exit 0)' \
+  0 '{"command":"sudo -u \\git push origin main"}'
+run_test 'sudo -- \git push origin main (B7 end-of-options then \git cmd word — must block, exit 2)' \
+  2 '{"command":"sudo -- \\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B8 — timeout DURATION over-block (reviewer WARNING, must allow, exit 0)
+#
+# `timeout -k 1 echo \git push`: `-k 1` consumes `1`, then a blind DURATION counter
+# consumed `echo` as the duration operand, leaving `\git` at command-word position →
+# wrongly BLOCK. Fix: only count timeout's DURATION as a duration-SHAPED positional
+# (^[0-9]+(\.[0-9]+)?[smhd]?$), so a non-numeric command word (`echo`) is never
+# mistaken for DURATION. `--preserve-status` (no value) must likewise not strand the
+# DURATION counter onto `echo`.
+# ---------------------------------------------------------------------------
+echo "-- B8: timeout flag + non-numeric command word must allow (exit 0) --"
+run_test 'timeout -k 1 echo \git push origin main (B8 -k consumes dur, echo cmd word — must allow, exit 0)' \
+  0 '{"command":"timeout -k 1 echo \\git push origin main"}'
+run_test 'timeout --preserve-status echo \git push origin main (B8 flag then echo cmd word — must allow, exit 0)' \
+  0 '{"command":"timeout --preserve-status echo \\git push origin main"}'
+run_test 'timeout -k 1 \git push origin main (B8 regression: \git IS cmd word — must block, exit 2)' \
+  2 '{"command":"timeout -k 1 \\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
 # FP1 — assignment-prefix VALUE substitution must NOT over-block (must allow, 0)
 #
 # `a=$(echo git) push origin main`: the substitution is in the assignment VALUE;

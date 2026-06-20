@@ -669,11 +669,15 @@ process_segment() {
       # (\ escapes \, then g i t) which is command-not-found at runtime and never
       # invokes real git, so it must NOT match here. (`\git` → git → match;
       # `\\git` → \git → no match.)
-      _p2m_deescaped_git() {
+      # _p2m_deescape_basename: simulate bash's PAIRWISE `\X`→`X` collapse over a
+      # token's basename, then lowercase it (B3, macOS case-insensitive FS). This is
+      # the de-escaped command name the shell would actually invoke. Shared by
+      # _p2m_deescaped_git (compare to `git`) and the command-word walker (compare to
+      # the known-safe terminal set). Pairwise collapse — not "remove all
+      # backslashes" — keeps `\\git`→`\git` (a literal command name, not git).
+      _p2m_deescape_basename() {
         local _tok="$1"
-        [[ "$_tok" == *"\\"* ]] || return 1         # must carry a backslash escape
         local _base="${_tok##*/}"                   # basename (handles \path/\git etc.)
-        # Pairwise bash backslash collapse over the token characters.
         local _out="" _i2=0 _ch
         local _len=${#_base}
         while (( _i2 < _len )); do
@@ -685,34 +689,54 @@ process_segment() {
             _out="$_out$_ch"; _i2=$(( _i2 + 1 ))
           fi
         done
-        local _lc                                    # lowercase (B3, macOS case-insensitive FS)
-        _lc=$(printf '%s' "$_out" | tr '[:upper:]' '[:lower:]')
+        printf '%s' "$_out" | tr '[:upper:]' '[:lower:]'
+      }
+      _p2m_deescaped_git() {
+        local _tok="$1"
+        [[ "$_tok" == *"\\"* ]] || return 1         # must carry a backslash escape
+        local _lc
+        _lc=$(_p2m_deescape_basename "$_tok")
         [[ "$_lc" == "git" ]] && return 0
         return 1
       }
       # _p2m_backslash_git_command_word: walk tokens to RESOLVE the COMMAND-WORD
       # position and decide whether a backslash-escaped git occupies it (directly,
-      # or behind one or more command-executing wrappers and THEIR options).
+      # behind RECOGNIZED command-executing wrappers + THEIR options, or behind an
+      # UNRECOGNIZED wrapper that we cannot prove safe). Prints a `\git` token to
+      # MATCH (route through the de-escape + push policy downstream → BLOCK).
       #
-      # UNIFYING PRINCIPLE (Codex P1 B4 + P2 B5): a wrapper word (env/command/exec/
-      # nohup/nice/timeout/stdbuf/sudo/doas/time) consumes ITS OWN options, then the
-      # FIRST non-option token is the COMMAND. Resolve that command word:
-      #   - escaped-git (de-escaped basename == git) → MATCH (print token, return 0);
-      #     it expands to a real git invocation → BLOCK upstream.
-      #   - a NON-git executable (echo, systemctl, …) → STOP the walk (return 1);
-      #     its remaining tokens are ARGUMENTS, not command words, so a later `\git`
-      #     is argument data and stays ALLOW (`timeout 5 echo \git push`,
-      #     `env echo \git push`, `sudo systemctl restart nginx`).
+      # FAIL-CLOSED PRINCIPLE (security re-review CRITICAL #1/#2): an UNRECOGNIZED
+      # leading word (setsid/xargs/ionice/runuser/flock/chroot/unbuffer/taskset/…)
+      # may be a passthrough wrapper that forwards `\git push …` to the real git
+      # binary. Treating it as a definitively-non-git command word and ALLOWing is
+      # fail-OPEN. So:
+      #   - RECOGNIZED wrappers (env/command/exec/nohup/nice/timeout/stdbuf/sudo/
+      #     doas/time) consume their own options, then the resolution continues at
+      #     the next token. This preserves the P2 ALLOW cases: the wrapper's
+      #     trailing command word, when KNOWN-SAFE (echo/printf/…), is terminal so
+      #     `timeout 5 echo \git` / `env echo \git` stay ALLOW.
+      #   - The de-escaped-git basename at any RESOLVED command-word slot → MATCH.
+      #   - A KNOWN-SAFE terminal command word (echo/printf/cat/:/true/false) → its
+      #     trailing tokens are ARGUMENTS → ALLOW (`echo \git push`,
+      #     `sudo systemctl restart nginx` — no \git follows anyway).
+      #   - ANY OTHER (UNKNOWN) command-word token is an ambiguous passthrough-
+      #     wrapper candidate → FAIL CLOSED: scan the remaining tokens; if any
+      #     de-escapes to `git`, print that `\git` token (MATCH) so the push policy
+      #     decides. Over-blocking `someunknownwrapper \git push` is an ACCEPTED
+      #     fail-closed false positive per the threat model. The non-escaped form
+      #     (`setsid git push`) already blocks via canon_git_subcommand.
       #
-      # Option consumption before the command word, per wrapper class:
+      # Option consumption per RECOGNIZED wrapper:
       #   - leading group-openers ( / { and NAME=VALUE assignment prefixes → skip
-      #   - a dash-option token → skip; if it is a known value-consuming flag of the
-      #     CURRENT wrapper (nice -n, sudo -u/-g/-U/-C/-p/-h/-r/-T, doas -u/-C/-a,
-      #     env -u/-S, timeout -s/-k) and its value is not glued (=form), skip the
-      #     NEXT token too. Glued/clustered self-contained dash forms (-oL, -i, -NUM)
-      #     are skipped without consuming a value.
-      #   - `timeout` additionally consumes ONE bare positional operand (DURATION)
-      #     before its COMMAND; no other wrapper consumes a bare positional.
+      #   - `--` end-of-options → the NEXT token is the command word (no more flags)
+      #   - a dash-option token → skip; consume its value when value-bearing:
+      #       nice -n; sudo -u/-g/-U/-C/-p/-h/-r/-T; doas -u/-C/-a; env -u/-S;
+      #       timeout -s/-k. For sudo/doas a CLUSTERED short-flag whose LAST char is
+      #       a value-consuming flag (`-nu`, `-knu`) also consumes the next token
+      #       (getopt parity — CRITICAL #2). `=`-glued forms are self-contained.
+      #   - `timeout` consumes ONE DURATION-SHAPED bare positional
+      #     (^[0-9]+(\.[0-9]+)?[smhd]?$) before its COMMAND; a non-numeric token
+      #     (e.g. `echo`) is the command word, NOT a duration (reviewer WARNING).
       # Bounded: one token consumed per iteration over a finite array.
       _p2m_backslash_git_command_word() {
         local _raw="$1"
@@ -725,44 +749,74 @@ process_segment() {
         local _bn=${#_bt[@]}
         local _bi=0
         local _cur_wrapper=""      # basename of the wrapper whose options we are consuming ("" = none yet)
-        local _pending_operands=0  # bare positional operands the current wrapper still consumes (timeout DURATION)
+        local _pending_duration=0  # 1 while timeout still expects its DURATION-shaped positional
+        local _end_of_opts=false   # set once `--` is seen for the current wrapper
         while (( _bi < _bn )); do
           local _ctok="${_bt[_bi]}"
           # strip leading group openers ( / { from this token
           while [[ "$_ctok" == '('* || "$_ctok" == '{'* ]]; do _ctok="${_ctok:1}"; done
           if [[ -z "$_ctok" ]]; then _bi=$(( _bi + 1 )); continue; fi
-          # NAME=VALUE assignment prefix (env/sudo assignment, or leading env-var) → skip
-          if [[ "$_ctok" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then _bi=$(( _bi + 1 )); continue; fi
-          # dash-option of the current wrapper → skip; consume its value when value-bearing
-          if [[ -n "$_cur_wrapper" && "$_ctok" == -* ]]; then
-            if [[ "$_ctok" != *=* ]]; then
-              local _vc=false
-              case "$_cur_wrapper" in
-                nice)    [[ "$_ctok" == "-n" ]] && _vc=true ;;
-                sudo)    case "$_ctok" in -u|-g|-U|-C|-p|-h|-r|-T) _vc=true ;; esac ;;
-                doas)    case "$_ctok" in -u|-C|-a) _vc=true ;; esac ;;
-                env)     case "$_ctok" in -u|-S) _vc=true ;; esac ;;
-                timeout) case "$_ctok" in -s|-k) _vc=true ;; esac ;;
-              esac
-              [[ "$_vc" == true ]] && _bi=$(( _bi + 2 )) && continue
+          if [[ "$_end_of_opts" == false ]]; then
+            # `--` end-of-options for the current wrapper → next token is the command word
+            if [[ -n "$_cur_wrapper" && "$_ctok" == "--" ]]; then
+              _end_of_opts=true; _bi=$(( _bi + 1 )); continue
             fi
-            _bi=$(( _bi + 1 )); continue
+            # NAME=VALUE assignment prefix (env/sudo assignment, or leading env-var) → skip
+            if [[ "$_ctok" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then _bi=$(( _bi + 1 )); continue; fi
+            # dash-option of the current wrapper → skip; consume its value when value-bearing
+            if [[ -n "$_cur_wrapper" && "$_ctok" == -* ]]; then
+              if [[ "$_ctok" != *=* ]]; then
+                local _vc=false
+                local _last="${_ctok: -1}"   # trailing char of a (possibly clustered) short-flag
+                case "$_cur_wrapper" in
+                  nice)    [[ "$_ctok" == "-n" ]] && _vc=true ;;
+                  # sudo/doas: a cluster whose LAST short flag is value-consuming
+                  # consumes the next token (getopt parity: -knu ci → -u=ci).
+                  sudo)    case "$_last" in u|g|U|C|p|h|r|T) _vc=true ;; esac ;;
+                  doas)    case "$_last" in u|C|a) _vc=true ;; esac ;;
+                  env)     case "$_ctok" in -u|-S) _vc=true ;; esac ;;
+                  timeout) case "$_ctok" in -s|-k) _vc=true ;; esac ;;
+                esac
+                [[ "$_vc" == true ]] && _bi=$(( _bi + 2 )) && continue
+              fi
+              _bi=$(( _bi + 1 )); continue
+            fi
+            # timeout DURATION: a duration-SHAPED bare positional is consumed; a
+            # non-numeric token (echo, ls) is the command word, not the duration.
+            if (( _pending_duration > 0 )) && [[ "$_ctok" =~ ^[0-9]+(\.[0-9]+)?[smhd]?$ ]]; then
+              _pending_duration=0; _bi=$(( _bi + 1 )); continue
+            fi
           fi
-          # escaped-git at the resolved command-word position → MATCH
+          # ---- this token is the RESOLVED command word ----
+          # escaped-git at the command-word slot → MATCH
           if _p2m_deescaped_git "$_ctok"; then printf '%s' "$_ctok"; return 0; fi
-          # bare positional operand the current wrapper still consumes (timeout DURATION) → skip
-          if (( _pending_operands > 0 )); then
-            _pending_operands=$(( _pending_operands - 1 )); _bi=$(( _bi + 1 )); continue
-          fi
-          # command-executing / transparent wrapper word → consume its options next
           local _cbase="${_ctok##*/}"
+          # another RECOGNIZED command-executing wrapper layer → keep resolving
           case "$_cbase" in
             env|command|exec|nohup|nice|timeout|stdbuf|sudo|doas|time)
               _cur_wrapper="$_cbase"
-              [[ "$_cbase" == "timeout" ]] && _pending_operands=1
+              _end_of_opts=false
+              [[ "$_cbase" == "timeout" ]] && _pending_duration=1
               _bi=$(( _bi + 1 )); continue ;;
           esac
-          # first resolved command word that is a NON-git executable (echo, ls, …) → stop
+          # KNOWN-SAFE terminal command word (de-escaped basename) → trailing tokens
+          # are ARGUMENTS → ALLOW (echo \git push, sudo systemctl …). Compare on the
+          # de-escaped basename so `\echo` also counts.
+          local _safe_base
+          _safe_base=$(_p2m_deescape_basename "$_ctok")
+          case "$_safe_base" in
+            echo|printf|cat|true|false|:|systemctl|ls|test) return 1 ;;
+          esac
+          # UNKNOWN command word → ambiguous passthrough-wrapper candidate. FAIL
+          # CLOSED: if any remaining token de-escapes to git, MATCH on it.
+          local _ui=$(( _bi + 1 ))
+          while (( _ui < _bn )); do
+            local _utok="${_bt[_ui]}"
+            while [[ "$_utok" == '('* || "$_utok" == '{'* ]]; do _utok="${_utok:1}"; done
+            if [[ -n "$_utok" ]] && _p2m_deescaped_git "$_utok"; then printf '%s' "$_utok"; return 0; fi
+            _ui=$(( _ui + 1 ))
+          done
+          # unknown command word with no escaped-git anywhere after it → ALLOW
           return 1
         done
         return 1
