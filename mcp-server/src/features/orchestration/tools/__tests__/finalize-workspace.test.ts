@@ -69,6 +69,25 @@ describe("finalizeWorkspace — core completion logic", () => {
     expect(result.steps_missing).toEqual([]);
   });
 
+  test("teardown_owner truthfully describes the age-based reclaim path, not an immediate post-ship trigger", async () => {
+    await logStep({
+      agent_id: "test-agent-teardown",
+      status: "completed",
+      step_id: "step-a",
+      workspace,
+      projectDir: process.cwd(),
+    });
+    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    assertOk(result);
+    expect(result.teardown_deferred).toBe(true);
+    const owner = result.teardown_owner ?? "";
+    // The reclaim path is the AGE-BASED janitor sweep on a SUBSEQUENT run — finalize does
+    // NOT immediately reclaim this workspace post-ship. The message must name the governing
+    // config knob so it does not imply an immediate post-ship janitor trigger that nothing fires.
+    expect(owner).toContain("max_abandoned_workspace_age_hours");
+    expect(owner).not.toContain("post-ship: janitor reclaim");
+  });
+
   test("returns complete: false when steps are missing", async () => {
     await logStep({ projectDir: process.cwd(), status: "started", step_id: "step-a", workspace });
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });

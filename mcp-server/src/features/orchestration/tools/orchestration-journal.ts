@@ -648,7 +648,7 @@ export async function finalizeWorkspace(
       ? {
           teardown_deferred: cleanup.teardown_deferred,
           teardown_owner:
-            "post-ship: janitor reclaim (gated on completed ship step), or direct-merge git branch -d",
+            "age-based janitor sweep on a subsequent finalize/invoke_janitor run (reclaims this workspace once its ship step is completed AND its age exceeds max_abandoned_workspace_age_hours; null disables auto-reclaim), or direct-merge git branch -d",
           workspace_archived: cleanup.archived,
         }
       : {}),
