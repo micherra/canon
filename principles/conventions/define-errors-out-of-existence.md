@@ -2,6 +2,7 @@
 id: define-errors-out-of-existence
 title: Define Errors Out of Existence
 severity: convention
+portable: true
 scope:
   layers:
     - domain

@@ -36,12 +36,15 @@ surface:
     - field: ci_conclusion
       from: pending
       to: failure
+      orchestrator_action: auto-triage-fix
       message: "CI failed — surfacing failing job + log. ship-watch terminating."
       terminate: true
     - field: release_tag
+      orchestrator_action: auto-plugin-update
       message: "Release tag cut — reminder: run plugin-update so the new version goes live."
     - field: external_review_comment_ids
       append: true
+      orchestrator_action: auto-triage-fix
       message: "New external review comment(s) on the PR — surfacing for triage."
 terminate:
   when:
@@ -115,13 +118,20 @@ Apply `surface.on_transition` rules (transition-only — silent on no-op ticks):
 
 1. **`ci_conclusion`: `pending` → `failure`** — emit the failure message and mark for
    termination. Optionally surface the failing job: `gh pr checks <pr-number>` to show
-   which check failed.
+   which check failed. Carries `orchestrator_action: auto-triage-fix` — the ORCHESTRATOR
+   reads the failing CI job logs and dispatches a fix flow (or asks first if ambiguous).
+   The runner only surfaces the signal; it does NOT act on it.
 
 2. **`release_tag` transitions** (null→tag, or tag changes) — emit the plugin-update
-   reminder message.
+   reminder message. Carries `orchestrator_action: auto-plugin-update` — the ORCHESTRATOR
+   asks the user to confirm, then runs plugin-update and confirms the new version is active.
+   The runner only surfaces the signal; it does NOT run plugin-update.
 
 3. **`external_review_comment_ids` gains new IDs** — emit the new-comment message (append
-   mode: prior surfaces remain visible; only new IDs trigger).
+   mode: prior surfaces remain visible; only new IDs trigger). Carries
+   `orchestrator_action: auto-triage-fix` — the ORCHESTRATOR reads the new PR comment(s)
+   and dispatches a fix flow (or asks first if ambiguous). The runner only surfaces the
+   signal; it does NOT act on it.
 
 Ticks where no field changes: emit nothing. Silent on no-op is by construction.
 

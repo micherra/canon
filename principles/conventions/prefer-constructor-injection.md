@@ -2,6 +2,7 @@
 id: prefer-constructor-injection
 title: Prefer Constructor Injection
 severity: convention
+portable: true
 scope:
   layers:
     - domain

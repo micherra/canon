@@ -20,7 +20,7 @@ The Flows Context is the shared vocabulary of the system. Every other context im
 ### 2. Orchestration Context
 
 - **Directories**: `mcp-server/src/features/orchestration/`, `mcp-server/src/domains/workspaces/`, `mcp-server/src/domains/board/`
-- **Responsibility**: Flow execution engine, state transitions, effects, convergence detection, board persistence, session management, spawn request assembly, HITL breakpoints, domain events, gate execution, DAG-based parallel task dispatch
+- **Responsibility**: Flow execution engine, state transitions, effects, convergence detection, board persistence, session management, spawn request assembly, HITL breakpoints, domain events, gate execution, DAG-based parallel task dispatch, decisions ledger (`log_decision`/`get_decisions`), orchestrator checkpoint (`write_orchestrator_checkpoint`)
 - **Key types**: `SpawnRequest`, `HitlBreakpoint`, `ExecutionStore`, `FlowEventBus`, `EffectResult`, `BoardStateEntry`
 - **Depends on**: Flows Context (type imports), Messages Context (messaging coordination), Shared Kernel
 
@@ -85,10 +85,10 @@ Diagnostics wraps Drift/Review storage with domain logic for flow analytics. It 
 
 - **Directories**: `mcp-server/src/features/loops/`, `loops/`
 - **Responsibility**: Loop-as-Artifact framework MCP layer — loop-definition schema, registry loading, `list_loops`/`get_loop_definition` tools; the `loops/` directory at the repo root IS the registry
-- **Key types**: `LoopDefinition`, `ParseLoopResult` (from `loop-schema.ts`); `loadLoopsFromDir` returns `{ valid, invalid, validBodies }`
+- **Key types**: `LoopDefinition`, `ParseLoopResult` (from `loop-schema.ts`); `loadLoopsFromDir` returns `{ valid, invalid, validBodies }`; `ORCHESTRATOR_ACTIONS` const + `OrchestratorAction` type (derive-from-const enum of declarative orchestrator-consumed directives)
 - **Depends on**: Shared Kernel (`ToolResult<T>`, `CanonErrorCode`) only; no dependency on other contexts
 
-Phase A shipped the schema, loader, and both MCP tools. Phase B added `loops/ship-watch.md` — the first real loop — and introduced the `observe.shell_commands` read-only-shell carve-out (decision loops-phase-b-01). Phase C (current) ships session-watch + self-paced mode (`ScheduleWakeup`) and resilient inline dispatch (ADR-0007). The `loops/` registry directory is read at query time (directory-as-registry, mirrors `principles/`). dc-05 guardrails enforced at parse time by `parseLoopDefinition`. The non-declarative constraint (dc-06): authoring a `loops/*.md` file registers a loop definition; it does NOT start the loop — only the orchestrator initiates `CronCreate` (interval) or `ScheduleWakeup` (self-paced) at a named lifecycle moment.
+Phase A shipped the schema, loader, and both MCP tools. Phase B added `loops/ship-watch.md` — the first real loop — and introduced the `observe.shell_commands` read-only-shell carve-out (decision loops-phase-b-01); Phase B+ added `orchestrator_action` on `TransitionRuleSchema` (derive-from-const, two members: `auto-triage-fix`, `auto-plugin-update`). Phase C (current) added self-paced mode + ScheduleWakeup + `loops/session-watch.md`; `BUILTIN_FORBIDDEN_MCP` denylist + `max_wall` schedule field added to schema; and resilient inline dispatch (ADR-0017) — the canonical tick prompt is a self-contained inline prompt depending only on `get_loop_definition`, not the `/canon:loop-tick` slash command, so dispatch works on fresh and stale installs alike. The `loops/` registry directory is read at query time (directory-as-registry, mirrors `principles/`). dc-05 guardrails enforced at parse time by `parseLoopDefinition`. The non-declarative constraint (dc-06): authoring a `loops/*.md` file registers a loop definition; it does NOT start the loop — only the orchestrator initiates `CronCreate` or `ScheduleWakeup` at a named lifecycle moment.
 
 ### 10. Shared Kernel
 

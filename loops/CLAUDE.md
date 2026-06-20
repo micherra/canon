@@ -25,7 +25,7 @@ CronCreate({
 ```
 
 The `command` value is the **self-contained inline tick prompt** (CLAUDE.md §Loop Framework
-"Resilient dispatch", ADR-0007) — not the `/canon:loop-tick <id>` slash call. The inline
+"Resilient dispatch", ADR-0017) — not the `/canon:loop-tick <id>` slash call. The inline
 form depends only on `get_loop_definition` (always-available MCP tool) and works on both
 fresh and stale installs. `/canon:loop-tick` is the registered-install convenience form.
 
@@ -75,6 +75,15 @@ Loops may attach to these named lifecycle moments:
 | **A** | Schema + registry loader + `list_loops`/`get_loop_definition` + `/canon:loop-tick` runner + `_probe` demo; no production loop fires |
 | **B** | Ship-watch definition (`loops/ship-watch.md`) — first real loop; dispatched via post-ship tap; command registration fix (`"commands": ["./skills/canon/commands/"]` in plugin.json) enabling `/canon:loop-tick` to resolve as a real harness slash command |
 | **C (current)** | Self-paced mode + ScheduleWakeup + session-watch + de-dupe ledger; session-start tap wired in CLAUDE.md |
+
+**`orchestrator_action` on a transition rule (Phase B+):** A transition rule may declare an
+optional `orchestrator_action` field (derive-from-const `z.enum(ORCHESTRATOR_ACTIONS)` with
+members `auto-triage-fix` and `auto-plugin-update`). This is an orchestrator-consumed signal —
+the loop/runner NEVER executes it. The runner surfaces a structured
+`ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>` line when the transition fires; the
+orchestrator reads and acts on it. See CLAUDE.md § Loop Framework, "Consuming
+`orchestrator_action`" for the two consumption contracts. dc-06 is preserved — the loop's
+`guardrails.mutates_build` stays `false`.
 
 **First tick is baseline-only — transition rules never fire against an empty prior (ADR-0002).**
 A loop's first tick captures the initial snapshot and surfaces nothing. Transition rules compare

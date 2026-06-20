@@ -2,6 +2,7 @@
 id: minimize-client-side-state
 title: Minimize Client-Side State
 severity: strong-opinion
+portable: true
 scope:
   layers:
     - ui

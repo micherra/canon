@@ -107,8 +107,11 @@ function findJournalPath(projectDir: string, workspaceSlug: string): string | nu
       branchDirs = readdirSync(workspacesRoot, { withFileTypes: true })
         .filter((d) => d.isDirectory())
         .map((d) => d.name);
-    } catch {
-      // Can't enumerate branch dirs — skip live search
+    } catch (err) {
+      console.warn(
+        `[canon] cliff-event-sweep: could not enumerate workspaces root ${workspacesRoot} — skipping live journal search:`,
+        err instanceof Error ? err.message : err,
+      );
     }
 
     for (const branchDir of branchDirs) {

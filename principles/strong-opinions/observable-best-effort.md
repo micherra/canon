@@ -2,6 +2,7 @@
 id: observable-best-effort
 title: Best-Effort Operations Must Be Observable
 severity: strong-opinion
+portable: true
 scope:
   file_patterns:
     - "mcp-server/src/**"

@@ -105,13 +105,15 @@ Ensure the final structure matches the format spec exactly.
 
 Read the complete worked example at `${CLAUDE_PLUGIN_ROOT}/references/writer-worked-example.md` to see a fully assembled principle file.
 
-### Step 5: Check for conflicts
+### Step 5: Check for conflicts (includes hard pre-write dedup gate)
 
 Use the `list_principles` MCP tool to load the index of all existing entries (metadata only — id, title, severity, tags, scope). This avoids loading full bodies into context.
 
 Note: `list_principles` merges both tiers (project-local `.canon/principles/` and the portable `principles/` set). An ID collision against an entry in the *other* tier is an override-precedence situation (project-local always wins, enforced by `loadAllPrinciples` in `mcp-server/src/shared/matcher.ts`), not a true conflict — flag it informatively rather than as a blocking error.
 
 For agent-rules, also glob `.canon/rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/rules/*.md` and read only their frontmatter.
+
+**Important**: The dedup gate uses `list_principles` (title/ID/scope metadata), NOT `semantic_search`. Canon's `semantic_search` indexes code entities, not principle prose — it is not a valid substitute for this check. Deterministic title/ID/scope collision is the correct mechanism (decision dedup-01).
 
 Check for:
 
@@ -120,12 +122,15 @@ Check for:
 2. **Scope overlap with contradictory advice**: Find entries with overlapping `scope.layers` or `scope.file_patterns`. If any give contradictory guidance, flag them:
    "This may conflict with `{other-id}` ({other-title}) — both apply to `{overlapping scope}`. Review them together."
 
-3. **Duplicate coverage**: Same tags AND very similar scope? Flag as potential duplicate:
-   "This looks similar to `{other-id}` ({other-title}). Consider extending that entry instead."
+3. **Duplicate coverage — HARD PRE-WRITE GATE**: Before saving a **new** principle (i.e., a different `id` than any existing entry), compute the proposed title's normalized form: lowercase, collapse whitespace, strip trailing punctuation. Compare the normalized title AND id AND scope against the full `list_principles` result (both tiers merged). On a normalized-title match against a **different** `id`, STOP and surface the collision:
+
+   > "A principle with an equivalent title already exists: `{existing-id}` ({tier}). Edit or fork that one instead of minting a new ID."
+
+   Do NOT save the new principle when a title collision exists against a different id. The mechanical backstop is `wiki_lint duplicate_titles` — this behavioral gate runs first. This gate applies only to new-id creation; editing the **same** id is the normal edit path and is unaffected.
 
 4. **Severity inconsistency**: A `convention`-severity entry overlapping with a `rule`-severity entry on the same topic? Flag the gap.
 
-Present findings and ask whether to proceed, adjust, or cancel.
+Present findings and ask whether to proceed, adjust, or cancel. On a duplicate-title collision (check 3), do NOT ask to proceed — STOP and redirect to the existing entry.
 
 ### Step 5.5: Detect context and determine tier
 
@@ -162,6 +167,13 @@ Save based on the tier resolved in Step 5.5:
   Before writing to `principles/{severity-subdir}/`, record a one-line "applies to unrelated adopters" justification in the SUMMARY artifact. In **apply-proposal mode**, also confirm with the user before writing: "This principle will be saved to the portable `principles/` set and will ship to all adopters. Proceed?" (In interactive modes the classification conversation serves as confirmation — no extra gate needed.)
 
 Where `severity-subdir` is `rules/`, `strong-opinions/`, or `conventions/`. Create the directory if needed.
+
+**Portable flag (mandatory)**: Every principle file saved or edited by the writer MUST carry a `portable:` field in its YAML frontmatter, consistent with the resolved tier:
+
+- Saving to `.canon/principles/` → set `portable: false`
+- Saving to `principles/` → set `portable: true`
+
+A missing `portable` field is a defect that `wiki_lint misrouted_principles` will surface. The flag and location MUST agree — see `references/principle-tier-routing.md` (the Portable flag section) for the authoritative rule.
 
 - **Agent-rules**: Ask the user: plugin-level (`${CLAUDE_PLUGIN_ROOT}/rules/{id}.md`) or project-local (`.canon/rules/{id}.md`)?
 
@@ -267,6 +279,7 @@ Determine whether the proposal describes:
 - A **new principle** → follow Mode: new-principle (skip interview, use proposal content)
 - A **new agent-rule** → follow Mode: new-agent-rule (skip interview, use proposal content)
 - An **edit to an existing entry** → follow Mode: edit (skip interview, apply proposed changes)
+- A **retirement** (`type: prune-candidate`) → follow Mode: retire (below)
 
 ### Step 3: Skip interview
 
@@ -286,6 +299,53 @@ Run the same quality checks as other modes (see Quality Checks section below). G
 Follow the save and validate steps from the appropriate mode (new-principle, new-agent-rule, or edit). After saving, confirm to the lead:
 - The file path where the entry was saved
 - Any significant changes made to the proposal content during assembly
+
+---
+
+## Mode: retire
+
+This mode is reached ONLY when the writer is spawned via the `apply-proposal` path after a human has explicitly accepted a `prune-candidate` proposal in `/canon:review-learnings`. The human Accept gate is the authoritative HITL checkpoint; the writer must NOT re-prompt, but it MUST perform the defense-in-depth re-checks below before proceeding.
+
+**NEVER auto-delete.** Retirement applies only post-Accept. Do not proceed without the human-confirmed Apply context.
+
+### Step 1: Defense-in-depth re-check (performed even though the learner pre-filtered and review-learnings confirmed)
+
+Re-read the never-pruneable allowlist. If the proposal's `target` is any of the following, or if the artifact's frontmatter `tags:` contains `security`, **ABORT immediately** with a refusal message — do not remove the artifact:
+
+- `fail-closed-by-default`
+- `hooks-fail-closed`
+- `least-privilege-access`
+- `secrets-never-in-code`
+- `validate-at-trust-boundaries`
+- Any artifact whose frontmatter `tags:` contains `security`
+- `agent-artifact-write-before-return`
+- `agent-template-required`
+
+Refusal message: "Retirement of security-tagged or pipeline-integrity artifacts is not permitted. Aborting."
+
+### Step 2: Rule-tier superseded_by gate
+
+If the proposal's `artifact_tier` is `rule`, verify the `superseded_by` field is non-null and references a live artifact. If `superseded_by` is null or absent, **ABORT**:
+"Rule-tier retirement requires a non-null superseded_by link. Aborting."
+
+### Step 3: Perform retirement
+
+Proceed only after Steps 1 and 2 pass. Use the existing toolset (no new tool required):
+
+1. Remove the artifact file using `Bash` (`git rm <path>`) to stage the deletion.
+2. Sweep for references using the dead-code-removal discipline (same method as CLAUDE.md's dead-code-removal enrichment):
+   - Grep the artifact `id` as a string literal across the full codebase (catches constant arrays, config entries, index files).
+   - Grep the type name (catches orphan type declarations).
+   - Grep any index/directory-path strings (catches docstrings and CLAUDE.md entries).
+   - Clean up each hit found: remove index entries, cross-references, and citations.
+3. Stage all reference-cleanup edits with `git add`.
+
+### Step 4: Write the apply-proposal summary
+
+Write the `*-SUMMARY.md` (per `agent-template-required`) documenting:
+- The removed artifact file path
+- Each reference-cleanup edit (file, line, what was removed)
+- Confirmation that the never-pruneable allowlist check and rule-tier gate passed
 
 ---
 
@@ -349,3 +409,21 @@ Before saving, verify:
 - [ ] The scope is narrow enough to be useful
 - [ ] For agent-rules: `id` starts with `agent-`, tags include `agent-behavior`
 - [ ] The file structure and section ordering match `principle-format.md`
+- [ ] The frontmatter contains `portable: true` or `portable: false`, consistent with the save destination (see Step 6)
+- [ ] For new-id creation: the pre-write dedup gate (Step 5, check 3) was executed and found no normalized-title collision
+
+## Pre-commit wiki_lint checks
+
+Before committing, run these two `wiki_lint` checks and confirm both pass:
+
+```sh
+# Confirm no misrouted portable-flag / location mismatch
+mcp__canon__wiki_lint --check misrouted_principles
+
+# Confirm no duplicate titles across merged principle set
+mcp__canon__wiki_lint --check duplicate_titles
+```
+
+If `misrouted_principles` fails: the saved file has a `portable` flag that contradicts its location — relocate the file or correct the flag before committing.
+
+If `duplicate_titles` fails: a normalized-title collision exists in the merged set — the pre-write gate should have caught this; merge or retire the duplicate before committing.

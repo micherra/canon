@@ -12,14 +12,20 @@ import {
 // Resolve principles directory relative to the repo root.
 // Path from __tests__: lib/ → shared/ → src/ → mcp-server/ → repo-root → principles/
 // That is 5 levels up from the test file's directory.
-const PRINCIPLES_ROOT = path.resolve(import.meta.dirname, "../../../../../principles");
+const REPO_ROOT = path.resolve(import.meta.dirname, "../../../../..");
+const PRINCIPLES_ROOT = path.join(REPO_ROOT, "principles");
+// Canon-internal principles live in .canon/principles/ (gitignored, portable: false).
+// They are valid principle references even though they are not shipped to adopters.
+const CANON_PRINCIPLES_ROOT = path.join(REPO_ROOT, ".canon", "principles");
 
 const PRINCIPLE_SUBDIRS = ["rules", "strong-opinions", "conventions"];
 
 function principleFileExists(principleId: string): boolean {
   return PRINCIPLE_SUBDIRS.some((subdir) => {
-    const filePath = path.join(PRINCIPLES_ROOT, subdir, `${principleId}.md`);
-    return fs.existsSync(filePath);
+    const shippedPath = path.join(PRINCIPLES_ROOT, subdir, `${principleId}.md`);
+    if (fs.existsSync(shippedPath)) return true;
+    const canonPath = path.join(CANON_PRINCIPLES_ROOT, subdir, `${principleId}.md`);
+    return fs.existsSync(canonPath);
   });
 }
 

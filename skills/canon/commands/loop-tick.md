@@ -22,7 +22,7 @@ session. The orchestrator's default dispatch is the equivalent self-contained in
 (calls `get_loop_definition({ id })` and runs this body), which works even when this command
 is not registered in the running plugin (stale-install class). This runner body IS the
 canonical step source that the inline prompt refers to. See CLAUDE.md §Loop Framework
-"Resilient dispatch" for the canonical inline prompt text and ADR-0007 for the decision.
+"Resilient dispatch" for the canonical inline prompt text and ADR-0017 for the decision.
 
 **Non-declarative constraint (dc-06, decision loops-phase-a-04):** This runner is the
 per-tick body. The orchestrator made the initial scheduling call (`CronCreate` for interval
@@ -110,6 +110,16 @@ Collect all fired rules. If a rule has `terminate: true`, mark the loop for term
 For each fired transition rule (not already surfaced this run):
 - Emit the `rule.message` as a status update (print to output).
 - If `rule.append` is true, append to the surfacing log rather than replacing.
+- If the rule carries an `orchestrator_action` field, in addition to emitting `rule.message`,
+  emit a structured signal line for the orchestrator to consume:
+  ```
+  ORCHESTRATOR_ACTION: <orchestrator_action> field=<rule.field> loop=<id>
+  ```
+  `<orchestrator_action>` is substituted verbatim from `rule.orchestrator_action` — the SAME
+  instruction serves every vocabulary value (`auto-triage-fix`, `auto-plugin-update`, and any
+  future member) with **no per-action branching**. The runner only PRINTS this line — it never
+  performs the action. The orchestrator consumes the signal (see CLAUDE.md § Loop Framework,
+  "Consuming `orchestrator_action`").
 
 Example output line: `[loop: _probe] Probe tick 3 reached — Loop Framework Phase A path proven.`
 

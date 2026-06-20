@@ -19,7 +19,7 @@ This skill defines the full procedural contract for Canon's learning loop. Load 
 
 You receive from the orchestrator:
 
-- Which dimensions to analyze (any of: `principle-health`, `codebase-patterns`, `convention-lifecycle`, `process-health`, `agent-effectiveness`)
+- Which dimensions to analyze (any of: `principle-health`, `codebase-patterns`, `convention-lifecycle`, `process-health`, `agent-effectiveness`, `artifact-retirement`, `retrieval-effectiveness`, `rule-compliance-measurement`, `cliff-rate`)
 - Data availability summary
 - Paths to principles directory, conventions file, project root
 - Previous learning history (`.canon/learning.jsonl`) if it exists — check for suppressed suggestions
@@ -69,6 +69,10 @@ Data sufficiency thresholds:
 - **convention-lifecycle** requires >= 3 builds for promotion sub-analysis; graduation and staleness run regardless
 - **process-health** requires >= 5 flow runs (from `get_history` MCP tool; supplement with `get_build_history` for trend analysis across many builds)
 - **agent-effectiveness** requires >= 3 completed flows with transcript data (read from workspace journals)
+- **artifact-retirement** (principle path) requires >= 10 reviews (inherits principle-health minimum); below threshold → emit "Skipped: artifact-retirement (principles) — requires 10 reviews, have {current}". The convention/agent-rule adherence path has no review-count floor but still requires the 2-run cooling-off (`watch_threshold: 2`).
+- **retrieval-effectiveness** requires >= 3 flows with transcript data (assess whether the right context was loaded for the task).
+- **rule-compliance-measurement** requires >= 10 builds with transcript data (measure whether rule-severity principles are consistently honored).
+- **cliff-rate** uses `get_cross_run_analysis`; sparse-data contract applies (emit partial signal even below the ideal sample count, but note the confidence).
 
 For each dimension:
 1. Run the dimension analysis per the specs in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`.

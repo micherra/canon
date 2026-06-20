@@ -352,3 +352,54 @@ describe("filterBodyBySections", () => {
     expect(result).toContain("## Verification");
   });
 });
+
+// ---- portable field ----
+
+describe("parsePrinciple — portable field", () => {
+  it("portable:false in frontmatter → principle.portable === false", () => {
+    const content = `---
+id: internal-only
+title: Internal Only
+severity: convention
+portable: false
+scope:
+  layers: []
+  file_patterns: []
+---
+
+Body.`;
+    const p = parsePrinciple(content, "principles/conventions/internal-only.md");
+    expect(p.portable).toBe(false);
+  });
+
+  it("portable:true in frontmatter → principle.portable === true", () => {
+    const content = `---
+id: universal
+title: Universal
+severity: rule
+portable: true
+scope:
+  layers: []
+  file_patterns: []
+---
+
+Body.`;
+    const p = parsePrinciple(content, "principles/rules/universal.md");
+    expect(p.portable).toBe(true);
+  });
+
+  it("portable absent in frontmatter → principle.portable === undefined", () => {
+    const content = `---
+id: no-portable
+title: No Portable
+severity: strong-opinion
+scope:
+  layers: []
+  file_patterns: []
+---
+
+Body.`;
+    const p = parsePrinciple(content, "principles/strong-opinions/no-portable.md");
+    expect(p.portable).toBeUndefined();
+  });
+});

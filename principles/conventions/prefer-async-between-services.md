@@ -2,6 +2,7 @@
 id: prefer-async-between-services
 title: Prefer Asynchronous Communication Between Services
 severity: convention
+portable: true
 scope:
   layers:
     - domain

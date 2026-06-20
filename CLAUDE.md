@@ -101,7 +101,7 @@ Every build request goes through PM triage: (1) sharpen requirements, (2) assess
 | **Non-trivial** — 2+ files, cross-layer, design questions, high blast radius | → architect; include sharpened-request.md in spawn prompt |
 
 ### Autonomy Tier Protocol
-<!-- last-updated: 2026-05-21 -->
+<!-- last-updated: 2026-06-11 -->
 
 After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_paths, override_tier? })` to assess build risk.
 
@@ -112,6 +112,8 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 | **supervised** | Current behavior — all HITL gates active. |
 
 **Plan approval and initial review verdict are always mandatory regardless of tier — these are the highest-value checkpoints where wrong assumptions are caught.**
+
+**Deterministic-gate invariant**: deterministic code gates — the verify step (`npm run build`/`lint`/`test`/`bash hooks/lint.sh`), the dead-wire reachability gate (`hooks/dead-wire-gate.sh`), the summary-vs-diff phantom-claim check (`hooks/summary-diff-check.sh`), the post-scribe scope guard (`hooks/scribe-scope-guard.sh`), and contract-checker postconditions — run in **every** tier unconditionally. Only human/model (HITL) supervision may be traded away by higher tiers. No deterministic gate appears among the per-tier skippable items above.
 
 **Fail-safe**: If `compute_autonomy_tier` returns an error or the tool is unavailable, default to "supervised".
 
@@ -150,7 +152,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **Dead-code-removal enrichment**: For builds that delete symbols, functions, types, or directory paths, add to the engineer spawn prompt: "After deleting each symbol, grep the full codebase for: (1) the symbol name as a string literal (catches constant arrays and config entries), (2) the TypeScript type name (catches orphan type declarations whose value-producers were deleted), (3) any directory path strings being removed (catches docstrings and comments). List all additional deletions in the Criteria Coverage table."
 
-**Wiring-task enrichment**: When the build spec requires that agent X calls tool Y (new or pre-existing), add to the engineer spawn prompt: "Before closing any AC that says agent X must call tool Y, verify: (1) `awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/X.md | grep '  - mcp__canon__Y$'` returns a match — this confirms Y is in the `tools:` allowlist, not merely mentioned in the description or body; (2) `grep -rn '"Y"' mcp-server/src/app/register-*.ts` (quoted-string form in registration files) returns a non-empty result — a match only in a doc comment or non-registration file does not satisfy this condition. Both checks are required. List the command output as evidence in the Criteria Coverage table."
+**Wiring-task enrichment**: The standing dead-wire gate (Step Enforcement Contracts → Verify step) now enforces new-export reachability automatically; the manual checks below remain engineer-facing guidance for closing wiring ACs with explicit evidence. When the build spec requires that agent X calls tool Y (new or pre-existing), add to the engineer spawn prompt: "Before closing any AC that says agent X must call tool Y, verify: (1) `awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/X.md | grep '  - mcp__canon__Y$'` returns a match — this confirms Y is in the `tools:` allowlist, not merely mentioned in the description or body; (2) `grep -rn '"Y"' mcp-server/src/app/register-*.ts` (quoted-string form in registration files) returns a non-empty result — a match only in a doc comment or non-registration file does not satisfy this condition. Both checks are required. List the command output as evidence in the Criteria Coverage table."
 
 #### Non-trivial path (PM → architect → execution)
 
@@ -201,6 +203,8 @@ before producing or finishing its artifact. For each entry:
 
 Reconciliation runs against the BUILD journal. It is advisory and read-only — a
 `reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
+
+**In-session compaction uses the same durable artifacts.** Before any HITL gate or dispatch, durable `journal.json` + `get_decisions` + `checkpoint.md` are authoritative over in-context recollection. Full rehydration sequence: `references/canon-orchestrator.md` § In-Session Compaction Rehydration.
 
 ### Skill Preloading
 
@@ -303,6 +307,14 @@ Accepted values: `"fix-type build, no contract-level changes"` | `"markdown-only
 
 An empty `skip_reason` is a protocol violation. If no accepted value fits, the step should not be skipped — run it or report BLOCKED.
 
+### Decisions Ledger & Checkpoint <!-- last-updated: 2026-06-12 -->
+
+At each consequential decision, call `log_decision({ workspace, decision_type, summary, rationale?, outcome?, gate? })`. Named decision points: plan-approval outcome, review-verdict acceptance/override, scope cuts, AC changes, tier overrides, merge-conflict resolutions, and manual-verification confirmations. The `log_decision` write is **authoritative** — store failure surfaces as a `ToolResult` error (NOT fail-open).
+
+After each completed step (alongside `log_step(...completed)`) and at each HITL gate, call `write_orchestrator_checkpoint({ workspace })` to refresh `${workspace}/checkpoint.md`. That write is **best-effort-observable** — failure returns a `ToolResult` error but never throws or silently succeeds.
+
+**Honesty clause (behavioral, not mechanical)**: these call sites are a behavioral obligation. The *tool* is deterministic and durable; Canon cannot intercept harness compaction and mechanically force the orchestrator to call these tools at every gate. `write_orchestrator_checkpoint` and `get_decisions` are the safety net — rehydration (see Resume Protocol + `references/canon-orchestrator.md` In-Session Compaction Rehydration) works regardless of how many gates were missed under compaction.
+
 ### Post-Subagent Artifact Check
 
 After each agent returns, verify `artifacts_expected` paths exist. If missing: re-spawn with explicit instruction to write the missing paths (cite `agent-artifact-write-before-return`). On second failure: HITL. Derive the implement-summary path from `write_implementation_summary`'s returned `path` field; never a guessed stem.
@@ -341,26 +353,10 @@ checkpoint, Incomplete-step surfacing (cliff detected), merge conflict, gate fai
 ### Post-Step Effects
 
 - **After reviewer**: call `store_pr_review` or `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) — renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` → `${WORKSPACE}/artifacts/review.html`. Open in browser before HITL verdict. **Dogfood-render obligation (watch_OOOOO2)**: when `git diff {base_commit}..HEAD --name-only` includes `templates/renderer-*.md` or renderer-consumed snippets (`mcp-server/src/ui/snippets/*.html` or `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`), the mandatory renderer spawn MUST use the changed template/snippet files from the build worktree (not the installed plugin copies) so the build's own review.html is rendered through its own renderer changes before the review step closes; record `dogfood_render: true` in the review step's `log_step` outcome. Builds changing only renderer data inputs (REVIEW.md, DESIGN.md) are exempt.
-- **After engineer (implement)**: Run summary-vs-diff contradiction check before proceeding to review. This is advisory — it does NOT block the build.
-  1. Read the engineer's `*-SUMMARY.md` from `${WORKSPACE}/plans/${slug}/`.
-  2. Run `git diff --name-only ${base_commit}..HEAD` in the worktree to get actual changed files.
-  3. Compare:
-     - **Files claimed vs files changed**: Every file listed in the SUMMARY's `### Files` section should appear in the git diff output. Files in the diff but not in the SUMMARY are "unreported changes." Files in the SUMMARY but not in the diff are "phantom claims."
-     - **Symbols claimed**: For each symbol the SUMMARY claims was added/removed/modified (in `### What Changed`), grep the diff output or the actual file to verify the symbol exists/was removed.
-  4. If discrepancies found, produce a structured advisory warning and present to user:
-     ```
-     Summary-vs-Diff Contradiction Check:
-     - Unreported changes: {files in diff but not in SUMMARY}
-     - Phantom claims: {files in SUMMARY but not in diff}
-     - Unverified symbols: {symbols claimed but not found in diff}
-     ```
-  5. Log the check result in `log_step` outcome as `summary_diff_check: { discrepancies: N, details: [...] }`.
-  6. Proceed to next step regardless of result — this check is advisory only.
-
-  **For multi-task DAG builds**: When multiple `*-SUMMARY.md` files exist, run the check for each summary independently. Aggregate all discrepancies into a single advisory warning.
+- **After engineer (implement)**: Run `bash hooks/summary-diff-check.sh {summary_path} {base_commit}` per `*-SUMMARY.md`. **Phantom claims BLOCK** (non-zero exit) — surface the named phantom claim to the user and do NOT proceed to review until resolved. **Unreported changes are advisory** — surface the `ADVISORY:` lines but proceed. Log the result in `log_step` outcome as `summary_diff_check: { phantom: N, advisory: M }`. For multi-task DAG builds, run per summary; any phantom in any summary blocks.
 - **After architect**: spawn renderer (mandatory) → `${WORKSPACE}/artifacts/design.html`. Open in browser before plan approval HITL.
 - **After scribe**: verify the scribe committed its worktree edits before proceeding to ship. Run `git log --oneline -3` in the worktree and confirm a `docs(context-sync):` commit is present. If absent, recover: `git add -A && git commit -m "docs(context-sync): update CLAUDE.md, context.md, and CONVENTIONS.md" -m "Canon-Workflow: {slug}" -m "Canon-Agent: scribe" -m "Canon-State: context-sync"` in the worktree before proceeding.
-  **Post-scribe scope guard**: run `git diff {base_commit}..HEAD -- CLAUDE.md ':(glob)**/CLAUDE.md' | grep "^-" | grep -v "^---" | wc -l` in the worktree. If the deletion count exceeds the expected count for the build's own diff (e.g., more than ~5 lines deleted across all `CLAUDE.md` files for a build that only updated principle counts), surface a scribe-scope warning to the user and require confirmation before proceeding. A scribe may only delete lines added by the build being context-synced, or lines that are demonstrably stale references to artifacts deleted in the build.
+  **Post-scribe scope guard**: run `bash hooks/scribe-scope-guard.sh {base_commit}` in the worktree. Non-zero exit ⇒ surface the deletion count to the user and require confirmation before proceeding (existing HITL). A scribe may only delete lines added by this build or demonstrably-stale references to artifacts this build deleted.
 - **After each step**: call `record_agent_metrics` if agent didn't. Pass `agent_id` to `log_step` completion (transcript capture is automatic — no separate call needed).
 - Run contract-checker assertions via Bash when postconditions are declared.
 
@@ -381,9 +377,11 @@ MCP requirements: `renderer-design.md` — none; `renderer-review.md` — `show_
 
 When the review step completes and a tester step follows: extract Stage 5 "Acceptance Criteria Verification" from `${WORKSPACE}/reviews/REVIEW.md` and include it (plus the architect design's Acceptance Criteria section) in the tester's spawn prompt. When runbook ACs include verification method/type columns, the tester MUST run after the review step — it consumes the reviewer's Stage 5 output.
 
-### Step Enforcement Contracts <!-- last-updated: 2026-06-05 -->
+### Step Enforcement Contracts <!-- last-updated: 2026-06-12 -->
 
-**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL. For builds with user-observable ACs, the verify step also drives the live app (background-launch + readiness-poll + curl/CLI-invocation, never `sleep N`), distinct from `npm test` — see `agents/tester.md` Live App Smoke. This closes the tests-pass-but-app-doesn't-boot gap.
+**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh` → `bash hooks/dead-wire-gate.sh {base_commit}`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL. For builds with user-observable ACs, the verify step also drives the live app (background-launch + readiness-poll + curl/CLI-invocation, never `sleep N`), distinct from `npm test` — see `agents/tester.md` Live App Smoke. This closes the tests-pass-but-app-doesn't-boot gap.
+
+`→ bash hooks/dead-wire-gate.sh {base_commit}` — standing dead-wire reachability postcondition. Must exit 0. Fails closed on any newly-exported symbol/tool with zero real references (suppress legitimate not-yet-wired exports with an inline `// canon:allow-unwired: <reason>` marker; audit via `grep -rn 'canon:allow-unwired'`). The doc-only verify-skip (`.md`/`.txt` only diffs) also skips this gate.
 
 **Verify skip**: If `git diff {base_commit}..HEAD --name-only` contains only `.md`/`.txt` files, skip with `skip_reason: "documentation-only diff, verify produces zero signal"`.
 
@@ -406,8 +404,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
    - **One-time user setup**: Desktop push works by default in the Claude.ai/API runtime — no setup needed. Phone push requires connecting **Remote Control** (optional one-time step). Not available on Bedrock/Vertex/Foundry — Canon runs on the Claude.ai/API path, so this is informational only.
    - **LSP prerequisite**: The `LSP` tool (granted to reviewer, engineer, architect) requires `typescript-language-server` installed globally: `npm install -g typescript-language-server typescript`. Without it the tool will fail to return results.
 5. Verify file claims released.
-6. Run `.canon/learn.sh` if it exists.
-7. Record final flow metrics.
+6. Record final flow metrics.
 
 ### Commit Provenance
 
@@ -437,7 +434,7 @@ See Agent Spawn Error Handling below. For transient errors (429, auth, TTL), ret
 | Security | `canon:security` | Security states |
 | Scribe | `canon:scribe` | Context sync states |
 | Shipper | `canon:shipper` | Ship states |
-| Writer | `canon:writer` | Principle authoring |
+| Writer | `canon:writer` | Principle authoring and artifact retirement (HITL-gated) |
 | Learner | `canon:learner` | Pattern analysis |
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
@@ -503,7 +500,7 @@ and dispatched by the orchestrator via `CronCreate` (interval loops) or `Schedul
 
 **Command registration:** `/canon:loop-tick` (and all `/canon:*` slash commands under `skills/canon/commands/`) are registered as harness plugin commands via the `commands` field in `.claude-plugin/plugin.json` (`"commands": ["./skills/canon/commands/"]`). `/canon:loop-tick` is the **registered-install convenience form** of the tick — it works when the command is live in the running session. The default documented dispatch is the self-contained inline prompt (see Resilient dispatch below), which works on both fresh and stale installs. Registration (via the manifest) is distinct from scheduling (via `CronCreate`); dc-06 is preserved.
 
-**Resilient dispatch (ADR-0007):** The canonical tick prompt for loop `<id>` is:
+**Resilient dispatch (ADR-0017):** The canonical tick prompt for loop `<id>` is:
 ```
 Run one tick of Canon loop "<id>": call get_loop_definition({ id: "<id>" }) to load its
 definition + body, then execute that body's observe → diff → surface → write → evaluate
@@ -513,7 +510,7 @@ pipeline (the steps in skills/canon/commands/loop-tick.md), using the loop's sta
 This inline prompt depends only on `get_loop_definition` — an always-available registered MCP
 tool — and therefore works on both fresh and stale plugin installs. There is no
 orchestrator-side probe for command registration, and no check-first branch is used; the
-inline form works uniformly, so no fallback logic is needed (Q1 inline-only decision, ADR-0007).
+inline form works uniformly, so no fallback logic is needed (Q1 inline-only decision, ADR-0017).
 `/canon:loop-tick <id>` (the slash command) is the registered-install convenience form;
 contributors must not "simplify" the inline dispatch back to a bare slash call.
 
@@ -562,11 +559,36 @@ Discovery: `list_loops`.
 NOT start the loop. No manifest field, hook script, or command frontmatter can trigger
 scheduling automatically.
 
-## Project Structure <!-- last-updated: 2026-06-11 -->
+**Consuming `orchestrator_action` (Phase B+):** When a `/canon:loop-tick` run surfaces a line
+`ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>`, the orchestrator (which is allowed to
+mutate — the loop is not) consumes it. The loop/runner only declared and surfaced the signal;
+acting is the orchestrator's job. dc-06 holds: `orchestrator_action` is a declarative signal the
+orchestrator consumes, NOT something the loop or the loop-tick runner executes. The loop's
+`guardrails.mutates_build` stays `false`.
+
+**`auto-triage-fix`** (fires on the `external_review_comment_ids` transition and the CI
+`pending → failure` transition):
+1. Reads the trigger source — the new PR comment(s) for the comment transition, or the failing
+   CI job logs (`gh pr checks` / run logs) for the CI transition.
+2. If a CLEAR actionable defect → dispatches a fix flow (engineer → re-run verify gates → push
+   to the build branch) WITHOUT asking first.
+3. If AMBIGUOUS / a question / design-level pushback → surfaces with a proposed approach and
+   ASKS first.
+4. NEVER auto-merges the PR.
+
+**`auto-plugin-update`** (fires on the `release_tag` transition): **ASK-FIRST, never unattended.**
+On a release tag being cut:
+1. Fire a `PushNotification` that a release tag was cut.
+2. ASK the user to confirm before running `plugin-update` (this is a mutating local action that
+   must not happen unattended — it swaps the installed plugin version mid-session).
+3. Run `plugin-update` + confirm the new version is active ONLY after explicit user confirmation.
+NEVER silently run plugin-update; the ask-first/confirm requirement is non-optional.
+
+## Project Structure <!-- last-updated: 2026-06-12 -->
 
 ```
 canon/
-├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (23 terms)
+├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (25 terms)
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── docs/
 │   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
@@ -590,7 +612,7 @@ canon/
 ├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase C: _probe + ship-watch + session-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
-├── principles/           # Built-in principles (87 total: 7 rules, 36 strong-opinions, 44 conventions)
+├── principles/           # Built-in principles (61 total: 6 rules, 36 strong-opinions, 19 conventions); 26 Canon-internal principles in .canon/principles/ (portable: false)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
