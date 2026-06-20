@@ -1158,6 +1158,55 @@ run_test '\Git push origin main (B3 mixed-case escaped — must block, exit 2)' 
 
 echo ""
 # ---------------------------------------------------------------------------
+# B4 — command-EXECUTING wrapper + \git command word (Codex P1, must block, 2)
+#
+# sudo/doas/time are command-EXECUTING wrappers that pass `git push ...` straight
+# through to the real git binary, exactly like the non-escaped `sudo git push`
+# form already blocked by canon_git_subcommand. The original walker only
+# recognised the transparent-exec prefixes (env/command/exec/nohup/nice/timeout/
+# stdbuf) and treated sudo/doas/time as ordinary non-prefix command words → the
+# walk STOPPED at the wrapper and the escaped `\git` behind it fell through to
+# ALLOW. These MUST block.
+#   - sudo consumes its own flags before COMMAND
+#   - doas consumes its own flags before COMMAND
+#   - time is a shell keyword that prefixes a full command
+# ---------------------------------------------------------------------------
+echo "-- B4: command-executing wrapper + \git command word (must block, exit 2) --"
+run_test 'sudo \git push origin main (B4 sudo wrapper — must block, exit 2)' \
+  2 '{"command":"sudo \\git push origin main"}'
+run_test 'doas \git push origin main (B4 doas wrapper — must block, exit 2)' \
+  2 '{"command":"doas \\git push origin main"}'
+run_test 'time \git push origin main (B4 time keyword — must block, exit 2)' \
+  2 '{"command":"time \\git push origin main"}'
+run_test 'sudo -u ci \git push origin main (B4 sudo+flag+arg — must block, exit 2)' \
+  2 '{"command":"sudo -u ci \\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B5 — wrapper whose RESOLVED command word is a NON-git executable (P2, allow, 0)
+#
+# Once the wrapper's own options are consumed, the FIRST non-option token is the
+# COMMAND. If that command resolves to a NON-git executable (echo), its remaining
+# tokens are ARGUMENTS, not command words — so a later `\git` is argument data and
+# must ALLOW. The original prefix-mode scanned ALL remaining tokens for an escaped
+# git and wrongly blocked these.
+#   - timeout 5 echo \git push : after DURATION `5`, command word is `echo` (≠git)
+#   - env echo \git push       : after env's (zero) flags, command word is `echo`
+# Regression-lock the genuine BLOCK that shares the interior shape:
+#   - env command $(echo git) push : substitution command word → V2 span blocks
+# ---------------------------------------------------------------------------
+echo "-- B5: wrapper resolving to a non-git command word (must allow, exit 0) --"
+run_test 'timeout 5 echo \git push origin main (B5 echo is cmd word — must allow, exit 0)' \
+  0 '{"command":"timeout 5 echo \\git push origin main"}'
+run_test 'env echo \git push origin main (B5 echo is cmd word — must allow, exit 0)' \
+  0 '{"command":"env echo \\git push origin main"}'
+run_test 'sudo systemctl restart nginx (B5 sudo non-git cmd — must allow, exit 0)' \
+  0 '{"command":"sudo systemctl restart nginx"}'
+run_test 'env command $(echo git) push origin main (B5 regression: sub cmd word — must block, exit 2)' \
+  2 '{"command":"env command $(echo git) push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
 # FP1 — assignment-prefix VALUE substitution must NOT over-block (must allow, 0)
 #
 # `a=$(echo git) push origin main`: the substitution is in the assignment VALUE;

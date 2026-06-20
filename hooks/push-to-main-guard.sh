@@ -690,17 +690,30 @@ process_segment() {
         [[ "$_lc" == "git" ]] && return 0
         return 1
       }
-      # _p2m_backslash_git_command_word: walk tokens to decide whether a
-      # backslash-escaped git occupies the COMMAND-WORD position (directly, or
-      # behind transparent-exec prefixes and THEIR arguments — closing B2). Skips
-      # leading group-openers and NAME=VALUE assignments. When a recognised
-      # transparent prefix (env/command/exec/nohup/nice/timeout/stdbuf) is seen,
-      # enter prefix-mode and scan ALL remaining tokens for an escaped-git form
-      # (fail-closed, argument-arity-free — handles `timeout 5`, `nice -n 5`,
-      # `stdbuf -oL`, `env -i`). A non-prefix, non-escaped-git real command word
-      # (e.g. `echo`) STOPS the walk → return 1, so `echo \git push` (argument
-      # position) stays ALLOW. Prints the matched command-word token on stdout.
-      # One token consumed per iteration over a finite array → bounded.
+      # _p2m_backslash_git_command_word: walk tokens to RESOLVE the COMMAND-WORD
+      # position and decide whether a backslash-escaped git occupies it (directly,
+      # or behind one or more command-executing wrappers and THEIR options).
+      #
+      # UNIFYING PRINCIPLE (Codex P1 B4 + P2 B5): a wrapper word (env/command/exec/
+      # nohup/nice/timeout/stdbuf/sudo/doas/time) consumes ITS OWN options, then the
+      # FIRST non-option token is the COMMAND. Resolve that command word:
+      #   - escaped-git (de-escaped basename == git) → MATCH (print token, return 0);
+      #     it expands to a real git invocation → BLOCK upstream.
+      #   - a NON-git executable (echo, systemctl, …) → STOP the walk (return 1);
+      #     its remaining tokens are ARGUMENTS, not command words, so a later `\git`
+      #     is argument data and stays ALLOW (`timeout 5 echo \git push`,
+      #     `env echo \git push`, `sudo systemctl restart nginx`).
+      #
+      # Option consumption before the command word, per wrapper class:
+      #   - leading group-openers ( / { and NAME=VALUE assignment prefixes → skip
+      #   - a dash-option token → skip; if it is a known value-consuming flag of the
+      #     CURRENT wrapper (nice -n, sudo -u/-g/-U/-C/-p/-h/-r/-T, doas -u/-C/-a,
+      #     env -u/-S, timeout -s/-k) and its value is not glued (=form), skip the
+      #     NEXT token too. Glued/clustered self-contained dash forms (-oL, -i, -NUM)
+      #     are skipped without consuming a value.
+      #   - `timeout` additionally consumes ONE bare positional operand (DURATION)
+      #     before its COMMAND; no other wrapper consumes a bare positional.
+      # Bounded: one token consumed per iteration over a finite array.
       _p2m_backslash_git_command_word() {
         local _raw="$1"
         local -a _bt=()
@@ -711,27 +724,45 @@ process_segment() {
         done <<< "$_bt_str"
         local _bn=${#_bt[@]}
         local _bi=0
-        local _prefix_mode=false
+        local _cur_wrapper=""      # basename of the wrapper whose options we are consuming ("" = none yet)
+        local _pending_operands=0  # bare positional operands the current wrapper still consumes (timeout DURATION)
         while (( _bi < _bn )); do
           local _ctok="${_bt[_bi]}"
           # strip leading group openers ( / { from this token
           while [[ "$_ctok" == '('* || "$_ctok" == '{'* ]]; do _ctok="${_ctok:1}"; done
           if [[ -z "$_ctok" ]]; then _bi=$(( _bi + 1 )); continue; fi
-          # escaped-git command word (direct or behind prefixes/args) → match
-          if _p2m_deescaped_git "$_ctok"; then printf '%s' "$_ctok"; return 0; fi
-          # NAME=VALUE assignment prefix → skip
+          # NAME=VALUE assignment prefix (env/sudo assignment, or leading env-var) → skip
           if [[ "$_ctok" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then _bi=$(( _bi + 1 )); continue; fi
-          local _cbase="${_ctok##*/}"
-          case "$_cbase" in
-            env|command|exec|nohup|nice|timeout|stdbuf)
-              # transparent prefix → scan ALL remaining tokens for escaped-git (B2)
-              _prefix_mode=true; _bi=$(( _bi + 1 )); continue ;;
-          esac
-          if [[ "$_prefix_mode" == true ]]; then
-            # in prefix-mode every non-escaped-git token is a prefix arg/flag → skip
+          # dash-option of the current wrapper → skip; consume its value when value-bearing
+          if [[ -n "$_cur_wrapper" && "$_ctok" == -* ]]; then
+            if [[ "$_ctok" != *=* ]]; then
+              local _vc=false
+              case "$_cur_wrapper" in
+                nice)    [[ "$_ctok" == "-n" ]] && _vc=true ;;
+                sudo)    case "$_ctok" in -u|-g|-U|-C|-p|-h|-r|-T) _vc=true ;; esac ;;
+                doas)    case "$_ctok" in -u|-C|-a) _vc=true ;; esac ;;
+                env)     case "$_ctok" in -u|-S) _vc=true ;; esac ;;
+                timeout) case "$_ctok" in -s|-k) _vc=true ;; esac ;;
+              esac
+              [[ "$_vc" == true ]] && _bi=$(( _bi + 2 )) && continue
+            fi
             _bi=$(( _bi + 1 )); continue
           fi
-          # first non-prefix, non-escaped real command word (echo, ls, ...) → stop
+          # escaped-git at the resolved command-word position → MATCH
+          if _p2m_deescaped_git "$_ctok"; then printf '%s' "$_ctok"; return 0; fi
+          # bare positional operand the current wrapper still consumes (timeout DURATION) → skip
+          if (( _pending_operands > 0 )); then
+            _pending_operands=$(( _pending_operands - 1 )); _bi=$(( _bi + 1 )); continue
+          fi
+          # command-executing / transparent wrapper word → consume its options next
+          local _cbase="${_ctok##*/}"
+          case "$_cbase" in
+            env|command|exec|nohup|nice|timeout|stdbuf|sudo|doas|time)
+              _cur_wrapper="$_cbase"
+              [[ "$_cbase" == "timeout" ]] && _pending_operands=1
+              _bi=$(( _bi + 1 )); continue ;;
+          esac
+          # first resolved command word that is a NON-git executable (echo, ls, …) → stop
           return 1
         done
         return 1
