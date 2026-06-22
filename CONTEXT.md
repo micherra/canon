@@ -50,7 +50,7 @@ The file `journal.json` in the workspace root. An ordered log of step executions
 
 ## Loop
 
-A Canon-managed periodic-observation artifact authored as `loops/<id>.md` (YAML frontmatter + action-prompt body). The `loops/` directory at the repo root is the loop registry — no hardcoded catalog exists. Loops are discovered via `list_loops` and dispatched by the orchestrator via `CronCreate` at a named lifecycle moment (`post-ship`, `on-long-dispatch`, `session-start`). Nothing auto-starts; authoring a `loops/*.md` registers the definition but does not start the loop (dc-06 non-declarative constraint). Phase A ships the framework spine (schema, registry, MCP tools, `_probe` demo); Phase B adds ship-watch; Phase C adds self-paced mode.
+A Canon-managed periodic-observation artifact authored as `loops/<id>.md` (YAML frontmatter + action-prompt body). The `loops/` directory at the repo root is the loop registry — no hardcoded catalog exists. Loops are discovered via `list_loops` and dispatched by the orchestrator via `CronCreate` at a named lifecycle moment (`post-ship`, `on-long-dispatch`, `session-start`). Nothing auto-starts; authoring a `loops/*.md` registers the definition but does not start the loop (dc-06 non-declarative constraint). Phase A ships the framework spine (schema, registry, MCP tools, `_probe` demo); Phase B adds ship-watch; Phase C adds self-paced mode + session-watch; Phase D adds harness-watch + `run-learner` action.
 
 ## Orchestrator Checkpoint
 
