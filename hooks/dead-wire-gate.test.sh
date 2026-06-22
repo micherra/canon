@@ -1144,6 +1144,164 @@ echo "-- Defect 1 regression: top-level src/*.ts wired export => exit 0 --"
 }
 
 # ---------------------------------------------------------------------------
+# Tests 36-41: same-file internal-use reachability (R1) — the crux of this fix
+#
+# A symbol used inside its own production file but referenced externally only
+# by its test (or not at all) was being mis-flagged. These tests pin the new
+# behavior AND prove R2 (zero-ref) / R3 (test-only) are not weakened.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Test 36 (AC#1, R1): internally-used export with only a test importer → PASSES
+#
+# extractLinks is called by buildGraph in the SAME production file, and also
+# imported by __tests__/links.test.ts. External wired_refs is empty (def file
+# + test file both excluded), but same-file production use ⇒ WIRED.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- R1: internally-used, test-only external ref → exit 0 (no finding) --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  # extractLinks used by buildGraph (same file) ⇒ internally used.
+  # buildGraph is also same-file-only here, but it is wired by being a candidate
+  # whose name appears on a non-decl line? No — buildGraph has no same-file
+  # non-decl occurrence, so to keep this test focused on extractLinks we wire
+  # buildGraph externally via a consumer.
+  printf 'export function extractLinks(s: string): string[] { return [s]; }\nexport function buildGraph(s: string): string[] { return extractLinks(s); }\n' \
+    > "$REPO/mcp-server/src/features/links.ts"
+  mkdir -p "$REPO/mcp-server/src/features/__tests__"
+  printf 'import { extractLinks } from "../links"; extractLinks("x");\n' \
+    > "$REPO/mcp-server/src/features/__tests__/links.test.ts"
+  printf 'import { buildGraph } from "./links"; buildGraph("y");\n' \
+    > "$REPO/mcp-server/src/features/consumer-links.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "add links.ts with same-file internal use"
+
+  run_gate 0 "$REPO" "$BASE" "internally-used export (test-only external ref) ⇒ exit 0"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# Test 37 (AC#2, R2): zero-ref export still FLAGGED (no same-file use)
+#
+# A standalone export with no internal use and no external/test reference must
+# remain DEAD. (Cross-references existing Test 3; restated here as the explicit
+# R2 anchor for this fix so a regression is unambiguous.)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- R2: zero-ref export (no same-file use) still flagged → exit 2 --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  commit_file "$REPO" "mcp-server/src/features/zero-ref.ts" \
+    "export function r2DeadFn(): void { return; }"
+
+  run_gate_with_output 2 "r2DeadFn" "$REPO" "$BASE" "zero-ref export ⇒ exit 2, still flagged (R2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# Test 38 (AC#3, R3): test-only-referenced export (NO internal use) still FLAGGED
+#
+# THE MOST IMPORTANT NEW TEST. entryPoint is exported and imported ONLY by its
+# test; it has NO same-file non-declaration occurrence. It must stay DEAD —
+# a test importer must NOT legitimize an otherwise-unwired entry point.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- R3: test-only export, no same-file use, still flagged → exit 2 --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  printf 'export function entryPoint(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/entry.ts"
+  mkdir -p "$REPO/mcp-server/src/features/__tests__"
+  printf 'import { entryPoint } from "../entry"; entryPoint();\n' \
+    > "$REPO/mcp-server/src/features/__tests__/entry.test.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "add test-only entry point"
+
+  run_gate_with_output 2 "entryPoint" "$REPO" "$BASE" "test-only export (no internal use) ⇒ exit 2 (R3)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# Test 39 (AC#4, R4): marked unwired export still SUPPRESSED → exit 0
+#
+# The suppression branch is unchanged. An internally-unused export that carries
+# a valid canon:allow-unwired marker is suppressed, not flagged.
+# (Cross-references existing Test 4; restated as the R4 anchor for this fix.)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- R4: marked unwired export still suppressed → exit 0 + SUPPRESSED --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  commit_file "$REPO" "mcp-server/src/features/marked.ts" \
+    "export function r4MarkedFn(): void { return; } // canon:allow-unwired: not yet wired, intentional public surface"
+
+  run_gate_with_output 0 "SUPPRESSED" "$REPO" "$BASE" "marked unwired export ⇒ exit 0, suppressed (R4)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# Test 40: type-only export used same-file → WIRED (exit 0)
+#
+# A type used by a same-file function signature is internally used.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- R1 (type): type-only export used same-file → exit 0 --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  # ExtractedLinks used as the return type of same-file make(); make() is wired
+  # externally so the test stays focused on the type.
+  printf 'export type ExtractedLinks = { urls: string[] };\nexport function make(): ExtractedLinks { return { urls: [] }; }\n' \
+    > "$REPO/mcp-server/src/features/typed.ts"
+  printf 'import { make } from "./typed"; make();\n' \
+    > "$REPO/mcp-server/src/features/typed-consumer.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "add type used same-file"
+
+  run_gate 0 "$REPO" "$BASE" "type-only export used same-file ⇒ exit 0"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# Test 41: symbol named ONLY in a // comment → still FLAGGED (exit 2)
+#
+# Comment-only mentions are stripped before the same-file scan, so they cannot
+# legitimize an otherwise-dead export.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- comment-only same-file mention does NOT legitimize → exit 2 --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  printf 'export function commentedOnly(): void { return; }\n// commentedOnly is referenced here in a comment only\nexport function other(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/commented.ts"
+  printf 'import { other } from "./commented"; other();\n' \
+    > "$REPO/mcp-server/src/features/commented-consumer.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "add comment-only mention"
+
+  run_gate_with_output 2 "commentedOnly" "$REPO" "$BASE" "comment-only mention ⇒ exit 2 (not legitimized)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

@@ -237,6 +237,52 @@ check_suppression() {
 }
 
 # ---------------------------------------------------------------------------
+# Check whether a TS symbol is used inside its OWN production source file
+# (same-file internal use ⇒ wired).
+#
+# A symbol is internally used iff its own defining file contains a whole-word
+# occurrence of the symbol on a line that is NOT a pure export-declaration of
+# that symbol. We strip // line-comments first so a comment-only mention does
+# not legitimize an otherwise-dead export.
+#
+# The caller guarantees <file> is NOT a test file (test-file early-out at the
+# call site), so this function never legitimizes a symbol via a test file —
+# R3 (test-only entry points stay flagged) is preserved.
+#
+# Fail-safe toward flagging: any grep/sed error path returns 1 (not used), so
+# the symbol stays a DEAD candidate; the gate never becomes more permissive on
+# internal error.
+#
+# Returns: 0 if internally used, 1 otherwise. Prints nothing.
+# ---------------------------------------------------------------------------
+is_internally_used() {
+  local file="$1"
+  local symbol="$2"
+
+  [[ -f "$file" ]] || return 1
+
+  # Strip // line comments, then find whole-word occurrences of the symbol.
+  local hits
+  # DOCUMENTED FAIL-OPEN -- no-match is the expected path; a sed/grep error leaves
+  # hits empty so we fall through to "not used" (fail toward flagging), never more permissive.
+  hits=$(sed -E 's://.*$::' "$file" 2>/dev/null | grep -nE "\b${symbol}\b" 2>/dev/null || true)
+  [[ -z "$hits" ]] && return 1
+
+  # Drop lines that are an export-declaration of this symbol; any remaining
+  # whole-word occurrence is a genuine same-file use.
+  local non_decl
+  # DOCUMENTED FAIL-OPEN -- grep -v returns non-zero (exit 1) when it filters out every
+  # line; that empty result correctly means "no non-declaration occurrence" ⇒ not used.
+  non_decl=$(printf '%s\n' "$hits" \
+    | grep -vE "export[[:space:]]+(async[[:space:]]+)?function[[:space:]]+${symbol}\b" \
+    | grep -vE "export[[:space:]]+(const|let|var|class|type|interface|enum)[[:space:]]+${symbol}\b" \
+    || true)
+
+  [[ -n "$non_decl" ]] && return 0
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # Main gate logic
 # ---------------------------------------------------------------------------
 
@@ -282,8 +328,17 @@ while IFS= read -r entry; do
   done <<< "$local_refs"
 
   if [[ -n "${local_wired_refs// /}" ]]; then
-    # Symbol is wired
+    # Symbol is wired (external/non-test reference)
     continue
+  fi
+
+  # Same-file production use ⇒ wired (R1), UNLESS the defining file is itself a
+  # test file (defensive early-out so a test-helper export cannot self-legitimize;
+  # this preserves R3). Candidates are production files in practice.
+  if [[ "$local_file" != *.test.ts && "$local_file" != *.spec.ts && "$local_file" != *"/__tests__/"* ]]; then
+    if is_internally_used "$local_file" "$local_symbol"; then
+      continue
+    fi
   fi
 
   # Symbol appears DEAD — check suppression before flagging

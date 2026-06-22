@@ -346,7 +346,6 @@ async function pruneWorkspacesTask(
  * ship step would silently disable post-ship reclaim (orphans accumulate). This
  * function is exported so tests can pin the literal and catch any such rename.
  */
-// canon:allow-unwired: pure ship-gate predicate exported for direct unit testing (janitor-ship-gate.test.ts); invoked internally at janitor.ts readShipComplete
 export function isShipComplete(steps: ReadonlyArray<{ step_id: string; status: string }>): boolean {
   return steps.some((s) => s.step_id === "ship" && s.status === "completed");
 }
