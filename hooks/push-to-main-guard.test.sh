@@ -1433,6 +1433,83 @@ fi
 
 echo ""
 # ---------------------------------------------------------------------------
+# watch_GGGGGGGGGG3 fix: redirect / pipe shell-syntax tokens must NOT be
+# treated as refspecs (AC1: false-positive fix) and main must STILL block
+# when wrapped with redirects/pipes (AC2: no bypass).
+#
+# The bug: when a command is piped (`git push ... 2>&1 | tail`), the guard
+# segments on `|`, leaving `2>&1` attached to the push segment. canon_tokenize
+# emits `2>&1` as a bare word — it is not `-*`, so the parser treats it as a
+# positional. After `remote_seen=true` it lands in refspecs[]. `SAFE_REFSPEC_RE`
+# rejects `2>&1` → false-positive block of a legitimate non-main push.
+#
+# The fix: strip redirect-shaped tokens (`^[0-9]*>>?&?[0-9/dev/null]*$`,
+# `^&>`, etc.) from the token stream inside push_updates_protected_branch
+# BEFORE the refspec loop.  After stripping, remaining tokens are still fully
+# refspec-checked (AC3: fail-closed preserved).
+# ---------------------------------------------------------------------------
+echo "-- watch_GGGGGGGGGG3 AC1: redirect tokens must NOT block a non-main push (should allow, exit 0) --"
+
+# Core production incident form: git push ... 2>&1 | tail
+# The guard sees the segment before `|` which still has `2>&1` in it.
+# Simulate: feed only the pre-pipe segment as the command.
+run_test 'git push origin HEAD:canon/some-branch 2>&1 (AC1 core form — should allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/some-branch 2>&1')"
+
+# Additional redirect forms the fix must handle
+run_test 'git push origin HEAD:canon/foo >file.log (stdout redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo >file.log')"
+run_test 'git push origin HEAD:canon/foo 2>/dev/null (stderr to devnull — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo 2>/dev/null')"
+run_test 'git push origin HEAD:canon/foo &>/dev/null (combined redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo &>/dev/null')"
+run_test 'git push origin HEAD:canon/foo >>out.log (append redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo >>out.log')"
+run_test 'git push origin HEAD:canon/foo 1>&2 (stdout to stderr — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo 1>&2')"
+run_test 'git push origin HEAD:canon/foo 2>&1 1>/dev/null (chained redirects — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo 2>&1 1>/dev/null')"
+# Full pipeline: the segmentor splits on `|`, but we also want the combined form
+run_test 'git push origin HEAD:canon/foo 2>&1 | tail -5 (full pipeline — post-pipe tail is inert)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo 2>&1 | tail -5')"
+
+echo ""
+echo "-- watch_GGGGGGGGGG3 AC2: main push STILL BLOCKED even with redirects (should block, exit 2) --"
+
+# AC2 (critical): stripping redirect tokens must not create a bypass for main.
+# Every form below must still exit 2.
+run_test 'git push origin HEAD:main 2>&1 (AC2 main with redirect — must block)' \
+  2 "$(make_input 'git push origin HEAD:main 2>&1')"
+run_test 'git push origin main >/dev/null (AC2 main with stdout redirect — must block)' \
+  2 "$(make_input 'git push origin main >/dev/null')"
+run_test 'git push origin main 2>/dev/null (AC2 main with stderr redirect — must block)' \
+  2 "$(make_input 'git push origin main 2>/dev/null')"
+run_test 'git push origin main &>/dev/null (AC2 combined redirect — must block)' \
+  2 "$(make_input 'git push origin main &>/dev/null')"
+run_test 'git push origin HEAD:main >>log.txt (AC2 main + append redirect — must block)' \
+  2 "$(make_input 'git push origin HEAD:main >>log.txt')"
+# Piped main push: `git push origin HEAD:main 2>&1 | tail`
+# After segmentation the first segment is `git push origin HEAD:main 2>&1`.
+run_test 'git push origin HEAD:main 2>&1 | tail (AC2 piped main — must block)' \
+  2 "$(make_input 'git push origin HEAD:main 2>&1 | tail')"
+# Bare push with redirect (no refspec — bare_push_is_safe path; CANON_GUARD_CWD is /home/user/project which is non-repo → block)
+run_test 'git push 2>&1 (AC2 bare push + redirect, non-repo cwd — must block)' \
+  2 "$(make_input 'git push 2>&1')"
+
+echo ""
+echo "-- watch_GGGGGGGGGG3 AC3: genuinely non-literal refspecs still fail-closed (should block, exit 2) --"
+
+# Confirm fail-closed is not weakened: a token that looks like a redirect but
+# could also be a real non-provably-literal refspec must still be rejected.
+# The redirect strip ONLY removes tokens matching the redirect regex; any
+# leftover non-literal tokens still hit SAFE_REFSPEC_RE and block.
+run_test 'git push origin HEAD:${BRANCH} 2>&1 (AC3 variable refspec survives redirect strip — must block)' \
+  2 "$(make_input 'git push origin HEAD:${BRANCH} 2>&1')"
+run_test 'git push origin HEAD:$(echo main) (AC3 cmd-sub refspec — must block)' \
+  2 "$(make_input 'git push origin HEAD:$(echo main)')"
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="

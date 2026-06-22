@@ -393,6 +393,23 @@ push_updates_protected_branch() {
       continue
     fi
 
+    # Shell redirect operator: strip before any positional / refspec handling.
+    # When `git push ... 2>&1 | tail` is run, the guard's segmenter splits on `|`,
+    # leaving `2>&1` (and similar redirect tokens) attached to the push segment.
+    # canon_tokenize emits them as bare words that must NOT be treated as refspecs.
+    #
+    # A token is a redirect operator iff it starts with an optional fd number
+    # followed by `>` or `>>` (output redirect), or starts with `&>` (combined
+    # stdout+stderr redirect). These characters (`>`, `&`) are absent from
+    # SAFE_REFSPEC_RE's allowlist, so no valid refspec can ever match this test —
+    # stripping is provably correct and cannot create a bypass gap.
+    #
+    # Covers: `2>&1`, `>/dev/null`, `2>/dev/null`, `&>/dev/null`, `>>log`,
+    #         `1>&2`, `2>>file`, `>file.log`, etc.
+    if [[ "$token" =~ ^[0-9]*\> || "$token" =~ ^\&\> ]]; then
+      continue  # redirect operator token — skip; not a refspec (watch_GGGGGGGGGG3 fix)
+    fi
+
     # Bare token: first is remote, rest are refspecs
     if [[ "$remote_seen" == "false" ]]; then
       remote_seen=true
