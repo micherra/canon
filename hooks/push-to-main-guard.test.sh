@@ -1049,6 +1049,390 @@ run_test 'FOO=bar ls $(pwd) (assignment prefix + final sub — V2 allows, exit 0
 
 echo ""
 # ---------------------------------------------------------------------------
+# R1 — GLUED command-substitution command-word bypass (must block, exit 2)
+#
+# A substitution glued to a literal prefix (gi$(echo t)) concatenates at runtime
+# to `git`, then `push origin main` follows → real push. The V1 span-start test
+# only matched substitutions that STARTED a token; a literal prefix defeated it.
+# The R1 widening (CONTAINS-test) closes this. scanner-avoids-its-own-pattern:
+# the trigger command word is assembled from fragments via printf, never written
+# as a literal self-matching string.
+# ---------------------------------------------------------------------------
+echo "-- R1: glued command-substitution command-word (must block, exit 2) --"
+
+# Assemble the glued forms from fragments (scanner-avoids-its-own-pattern).
+_sub='$(echo '   # opens a command-substitution span
+_glued_a="gi${_sub}t) push origin main"          # gi + sub + t)  → git push origin main
+_glued_b="g${_sub}i)t push origin main"          # g  + sub + i)t → git push origin main
+_glued_pfx="env gi${_sub}t) push origin main"    # transparent-exec prefix + glued
+run_test 'gi$(echo t) push origin main (R1 glued cmdsub — must block, exit 2)' \
+  2 "$(printf '{"command":"%s"}' "$_glued_a")"
+run_test 'g$(echo i)t push origin main (R1 glued cmdsub — must block, exit 2)' \
+  2 "$(printf '{"command":"%s"}' "$_glued_b")"
+run_test 'env gi$(echo t) push origin main (R1 prefix-stacked glue — must block, exit 2)' \
+  2 "$(printf '{"command":"%s"}' "$_glued_pfx")"
+
+echo ""
+# ---------------------------------------------------------------------------
+# R1 — clause-final glued substitution stays ALLOW (false-positive lock, exit 0)
+#
+# echo hi$(whoami): the substitution-bearing token is itself the clause-final
+# non-punctuation token (no further command token) → inert argument-position
+# data → ALLOW. The R1 contains-test must preserve this.
+# ---------------------------------------------------------------------------
+echo "-- R1: clause-final glued substitution stays ALLOW (exit 0) --"
+
+_hi="hi${_sub}whoami)"
+run_test 'echo hi$(whoami) (R1 clause-final glued sub — must stay exit 0)' \
+  0 "$(printf '{"command":"echo %s"}' "$_hi")"
+
+echo ""
+# ---------------------------------------------------------------------------
+# R2 — BACKSLASH-escaped git command-word bypass (must block, exit 2)
+#
+# \git resolves to the real git binary (\ only suppresses alias/function lookup).
+# The guard's no-git-token branch missed it: \git != git, not a wrapper, not an
+# ambiguous git-prefixed token, carries no $( → fell through to ALLOW.
+# R2 detects \git at command-word position, de-escapes, and reuses the existing
+# push policy. JSON-escape: a single backslash in the command is "\\" in JSON.
+# ---------------------------------------------------------------------------
+echo "-- R2: backslash-escaped git command-word (must block, exit 2) --"
+
+run_test '\git push origin main (R2 backslash-git — must block, exit 2)' \
+  2 '{"command":"\\git push origin main"}'
+run_test 'FOO=1 \git push origin main (R2 assignment + backslash-git — must block, exit 2)' \
+  2 '{"command":"FOO=1 \\git push origin main"}'
+# \git -C <main-repo> push origin main — backslash-git with a -C global option.
+# Self-contained throwaway main repo (the space-path repos were already cleaned up).
+TMPDIR_BSLASH_C=$(mktemp -d)
+setup_repo "$TMPDIR_BSLASH_C"
+git -C "$TMPDIR_BSLASH_C" branch -m main
+_bslash_C_input="$(printf '{"command":"\\\\git -C %s push origin main"}' "$TMPDIR_BSLASH_C")"
+_exit_bslash_C=0
+echo "$_bslash_C_input" | CANON_GUARD_CWD="/home/user/project" bash "$HOOK" >/dev/null 2>&1 || _exit_bslash_C=$?
+if [[ "$_exit_bslash_C" -eq 2 ]]; then
+  echo "  PASS: \\git -C '<main repo>' push origin main (R2 backslash-git + -C — blocks, exit 2)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: \\git -C '<main repo>' push origin main should block, got exit=$_exit_bslash_C"
+  FAIL=$((FAIL + 1))
+fi
+rm -rf "$TMPDIR_BSLASH_C"
+
+echo ""
+# ---------------------------------------------------------------------------
+# R2 — DOUBLE-backslash empirical finding (documented harmless ALLOW, exit 0)
+#
+# EMPIRICAL (implement-step probe): bash quote-removal turns `\\git` into the
+# literal command name `\git`, which is NOT a path → "command not found" at
+# runtime — it never invokes real git. Confirmed: `\\git --version` →
+# "\git: command not found". So the correct behavior is a documented HARMLESS
+# ALLOW (exit 0), never a silent real-git ALLOW. R2 only de-escapes when the
+# post-single-strip command word equals exactly `git`; `\\git` strips to `\git`
+# (≠ git) → predicate false → ALLOW. This row locks that finding.
+# ---------------------------------------------------------------------------
+echo "-- R2: double-backslash \\\\git is a documented harmless ALLOW (exit 0) --"
+
+run_test '\\git push origin main (R2 double-backslash — harmless: \\git not a real cmd, exit 0)' \
+  0 '{"command":"\\\\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# R2 — backslash false-positive locks (must stay ALLOW, exit 0)
+#
+# - echo \git push: \git is an ARGUMENT to echo, not the command word → ALLOW.
+# - \echo hello: command word \echo normalises to echo (≠ git) → ALLOW.
+# - \git status: backslash-git but subcommand is status (not push) → ALLOW.
+# ---------------------------------------------------------------------------
+echo "-- R2: backslash false-positive locks (must stay exit 0) --"
+
+run_test 'echo \git push origin main (R2 backslash in arg position — must stay exit 0)' \
+  0 '{"command":"echo \\git push origin main"}'
+run_test '\echo hello (R2 backslash non-git command word — must stay exit 0)' \
+  0 '{"command":"\\echo hello"}'
+run_test '\git status (R2 backslash-git non-push subcommand — must stay exit 0)' \
+  0 '{"command":"\\git status"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B1 — INTERIOR backslash-escaped git (security CRITICAL fix, must block, exit 2)
+#
+# bash collapses EVERY `\X`→`X` at runtime (pairwise), so `\g\it`, `g\it`,
+# `\gi\t`, `gi\t`, `\g\i\t` all invoke the real git binary. The original R2
+# predicate stripped only ONE leading backslash and required exact `==git`, so
+# these interior forms fell through to ALLOW. The pairwise-collapse de-escaper
+# (_p2m_deescaped_git) closes the class. JSON: one literal backslash = "\\".
+# ---------------------------------------------------------------------------
+echo "-- B1: interior backslash-escaped git (must block, exit 2) --"
+run_test '\g\it push origin main (B1 interior — must block, exit 2)' \
+  2 '{"command":"\\g\\it push origin main"}'
+run_test 'g\it push origin main (B1 interior — must block, exit 2)' \
+  2 '{"command":"g\\it push origin main"}'
+run_test '\gi\t push origin main (B1 interior — must block, exit 2)' \
+  2 '{"command":"\\gi\\t push origin main"}'
+run_test 'gi\t push origin main (B1 interior — must block, exit 2)' \
+  2 '{"command":"gi\\t push origin main"}'
+run_test '\g\i\t push origin main (B1 fully-escaped — must block, exit 2)' \
+  2 '{"command":"\\g\\i\\t push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B2 — ARGUMENT-BEARING transparent prefix + \git (security HIGH fix, exit 2)
+#
+# The original walker skipped exactly ONE prefix WORD but not its ARGS, landing
+# on the prefix argument (5, -oL, -n 5, -i) as the "command word". The fixed
+# walker enters prefix-mode on a recognised transparent prefix and scans ALL
+# remaining tokens for an escaped-git command word (argument-arity-free). The
+# non-escaped `timeout 5 git push` already blocks via the main path; this locks
+# the escaped variants. `nice \git push` (no prefix arg) is a regression lock.
+# ---------------------------------------------------------------------------
+echo "-- B2: argument-bearing transparent prefix + \git (must block, exit 2) --"
+run_test 'timeout 5 \git push origin main (B2 timeout+arg — must block, exit 2)' \
+  2 '{"command":"timeout 5 \\git push origin main"}'
+run_test 'stdbuf -oL \git push origin main (B2 stdbuf+flag — must block, exit 2)' \
+  2 '{"command":"stdbuf -oL \\git push origin main"}'
+run_test 'nice -n 5 \git push origin main (B2 nice+arg — must block, exit 2)' \
+  2 '{"command":"nice -n 5 \\git push origin main"}'
+run_test 'env -i \git push origin main (B2 env+flag — must block, exit 2)' \
+  2 '{"command":"env -i \\git push origin main"}'
+run_test 'timeout 5 git push origin main (B2 non-escaped regression lock — must block, exit 2)' \
+  2 '{"command":"timeout 5 git push origin main"}'
+run_test 'nice \git push origin main (B2 no-prefix-arg regression lock — must block, exit 2)' \
+  2 '{"command":"nice \\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B3 — UPPERCASE backslash-escaped git on macOS case-insensitive FS (HIGH, exit 2)
+#
+# On the macOS default case-insensitive filesystem, `\GIT`/`\Git` resolve and run
+# the real git binary. The de-escaper lowercases the command word before the
+# `== git` comparison, so the escaped uppercase forms block. NOTE: the NON-escaped
+# bare `GIT push` (uppercase, no backslash) is a SEPARATE pre-existing
+# uppercase-git residual and is OUT OF SCOPE — only the escaped forms are covered.
+# ---------------------------------------------------------------------------
+echo "-- B3: uppercase backslash-escaped git (must block, exit 2) --"
+run_test '\GIT push origin main (B3 uppercase escaped — must block, exit 2)' \
+  2 '{"command":"\\GIT push origin main"}'
+run_test '\Git push origin main (B3 mixed-case escaped — must block, exit 2)' \
+  2 '{"command":"\\Git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B4 — command-EXECUTING wrapper + \git command word (Codex P1, must block, 2)
+#
+# sudo/doas/time are command-EXECUTING wrappers that pass `git push ...` straight
+# through to the real git binary, exactly like the non-escaped `sudo git push`
+# form already blocked by canon_git_subcommand. The original walker only
+# recognised the transparent-exec prefixes (env/command/exec/nohup/nice/timeout/
+# stdbuf) and treated sudo/doas/time as ordinary non-prefix command words → the
+# walk STOPPED at the wrapper and the escaped `\git` behind it fell through to
+# ALLOW. These MUST block.
+#   - sudo consumes its own flags before COMMAND
+#   - doas consumes its own flags before COMMAND
+#   - time is a shell keyword that prefixes a full command
+# ---------------------------------------------------------------------------
+echo "-- B4: command-executing wrapper + \git command word (must block, exit 2) --"
+run_test 'sudo \git push origin main (B4 sudo wrapper — must block, exit 2)' \
+  2 '{"command":"sudo \\git push origin main"}'
+run_test 'doas \git push origin main (B4 doas wrapper — must block, exit 2)' \
+  2 '{"command":"doas \\git push origin main"}'
+run_test 'time \git push origin main (B4 time keyword — must block, exit 2)' \
+  2 '{"command":"time \\git push origin main"}'
+run_test 'sudo -u ci \git push origin main (B4 sudo+flag+arg — must block, exit 2)' \
+  2 '{"command":"sudo -u ci \\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B5 — wrapper whose RESOLVED command word is a NON-git executable (P2, allow, 0)
+#
+# Once the wrapper's own options are consumed, the FIRST non-option token is the
+# COMMAND. If that command resolves to a NON-git executable (echo), its remaining
+# tokens are ARGUMENTS, not command words — so a later `\git` is argument data and
+# must ALLOW. The original prefix-mode scanned ALL remaining tokens for an escaped
+# git and wrongly blocked these.
+#   - timeout 5 echo \git push : after DURATION `5`, command word is `echo` (≠git)
+#   - env echo \git push       : after env's (zero) flags, command word is `echo`
+# Regression-lock the genuine BLOCK that shares the interior shape:
+#   - env command $(echo git) push : substitution command word → V2 span blocks
+# ---------------------------------------------------------------------------
+echo "-- B5: wrapper resolving to a non-git command word (must allow, exit 0) --"
+run_test 'timeout 5 echo \git push origin main (B5 echo is cmd word — must allow, exit 0)' \
+  0 '{"command":"timeout 5 echo \\git push origin main"}'
+run_test 'env echo \git push origin main (B5 echo is cmd word — must allow, exit 0)' \
+  0 '{"command":"env echo \\git push origin main"}'
+run_test 'sudo systemctl restart nginx (B5 sudo non-git cmd — must allow, exit 0)' \
+  0 '{"command":"sudo systemctl restart nginx"}'
+run_test 'env command $(echo git) push origin main (B5 regression: sub cmd word — must block, exit 2)' \
+  2 '{"command":"env command $(echo git) push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B6 — UNRECOGNIZED command-executing wrapper + \git → FAIL CLOSED (security, 2)
+#
+# The walker recognises only env/command/exec/nohup/nice/timeout/stdbuf/sudo/doas/
+# time. ANY other leading word is an AMBIGUOUS passthrough-wrapper candidate
+# (setsid, xargs, ionice, runuser, flock, chroot, unbuffer, taskset, caffeinate,
+# torify, proxychains, watch, …) that forwards `\git push …` straight to real git.
+# Treating an unrecognised word as a definitively-non-git command word and ALLOWing
+# is fail-OPEN. Fix: when the resolved command word is UNKNOWN (not a recognised
+# wrapper and not a known-safe terminal command), scan the remaining tokens of the
+# clause — if any de-escapes to `git`, BLOCK. Over-blocking an unknown wrapper that
+# happens to carry a `\git` argument is an ACCEPTED fail-closed false positive.
+# The non-escaped forms (`setsid git push`) already block via canon_git_subcommand.
+# ---------------------------------------------------------------------------
+echo "-- B6: unrecognized wrapper + \git fails closed (must block, exit 2) --"
+run_test 'setsid \git push origin main (B6 unrecognized wrapper — must block, exit 2)' \
+  2 '{"command":"setsid \\git push origin main"}'
+run_test 'xargs \git push origin main (B6 unrecognized wrapper — must block, exit 2)' \
+  2 '{"command":"xargs \\git push origin main"}'
+run_test 'ionice \git push origin main (B6 unrecognized wrapper — must block, exit 2)' \
+  2 '{"command":"ionice \\git push origin main"}'
+run_test 'runuser -u ci \git push origin main (B6 unrecognized wrapper+flag — must block, exit 2)' \
+  2 '{"command":"runuser -u ci \\git push origin main"}'
+run_test 'flock /tmp/x \git push origin main (B6 unrecognized wrapper+arg — must block, exit 2)' \
+  2 '{"command":"flock /tmp/x \\git push origin main"}'
+run_test 'setsid g\it push origin main (B6 unrecognized wrapper + interior-escape — must block, exit 2)' \
+  2 '{"command":"setsid g\\it push origin main"}'
+run_test 'env setsid \git push origin main (B6 stacked recognized+unrecognized — must block, exit 2)' \
+  2 '{"command":"env setsid \\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B7 — clustered short-flag exposes \git as the command word (CRITICAL #2, 2)
+#
+# Real getopt parses `sudo -knu ci \git push` as `-k -n -u=ci` then command word
+# `\git`. The walker matched value-consuming flags by EXACT token only (`-u`), so a
+# clustered form (`-nu`, `-knu`) was treated as self-contained → its value operand
+# (`ci`) became the "command word" → ALLOW, leaving `\git` at the real command-word
+# slot. Fix: for sudo/doas, if a non-`=` dash cluster's LAST char is a value-
+# consuming short flag, consume the next token as its value. Separated `sudo -u ci`
+# already blocks (regression lock). `sudo -u \git push` ALLOWs (sudo parses \git as
+# the -u username; command word `push` runs, no git push).
+# ---------------------------------------------------------------------------
+echo "-- B7: clustered short-flag exposes \git (must block, exit 2) --"
+run_test 'sudo -nu ci \git push origin main (B7 clustered -nu — must block, exit 2)' \
+  2 '{"command":"sudo -nu ci \\git push origin main"}'
+run_test 'sudo -knu ci \git push origin main (B7 clustered -knu — must block, exit 2)' \
+  2 '{"command":"sudo -knu ci \\git push origin main"}'
+run_test 'sudo -u ci \git push origin main (B7 separated regression lock — must block, exit 2)' \
+  2 '{"command":"sudo -u ci \\git push origin main"}'
+run_test 'sudo -u \git push origin main (B7 -u consumes \git as username — must allow, exit 0)' \
+  0 '{"command":"sudo -u \\git push origin main"}'
+run_test 'sudo -- \git push origin main (B7 end-of-options then \git cmd word — must block, exit 2)' \
+  2 '{"command":"sudo -- \\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B8 — timeout DURATION over-block (reviewer WARNING, must allow, exit 0)
+#
+# `timeout -k 1 echo \git push`: `-k 1` consumes `1`, then a blind DURATION counter
+# consumed `echo` as the duration operand, leaving `\git` at command-word position →
+# wrongly BLOCK. Fix: only count timeout's DURATION as a duration-SHAPED positional
+# (^[0-9]+(\.[0-9]+)?[smhd]?$), so a non-numeric command word (`echo`) is never
+# mistaken for DURATION. `--preserve-status` (no value) must likewise not strand the
+# DURATION counter onto `echo`.
+# ---------------------------------------------------------------------------
+echo "-- B8: timeout flag + non-numeric command word must allow (exit 0) --"
+run_test 'timeout -k 1 echo \git push origin main (B8 -k consumes dur, echo cmd word — must allow, exit 0)' \
+  0 '{"command":"timeout -k 1 echo \\git push origin main"}'
+run_test 'timeout --preserve-status echo \git push origin main (B8 flag then echo cmd word — must allow, exit 0)' \
+  0 '{"command":"timeout --preserve-status echo \\git push origin main"}'
+run_test 'timeout -k 1 \git push origin main (B8 regression: \git IS cmd word — must block, exit 2)' \
+  2 '{"command":"timeout -k 1 \\git push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# FP1 — assignment-prefix VALUE substitution must NOT over-block (must allow, 0)
+#
+# `a=$(echo git) push origin main`: the substitution is in the assignment VALUE;
+# the command word is the bare `push` (command-not-found at runtime, no real git
+# push) → must ALLOW. The R1 contains-test originally seeded a span from the
+# assignment value and over-blocked. The FP1 fix scopes span-start detection to
+# the COMMAND-WORD token (after skipping leading NAME=VALUE assignment prefixes).
+# Regression lock: `FOO=bar $(echo git) push` (substitution IS the command word)
+# must still BLOCK.
+# ---------------------------------------------------------------------------
+echo "-- FP1: assignment-value substitution must allow (exit 0) --"
+run_test 'a=$(echo git) push origin main (FP1 assignment value — must allow, exit 0)' \
+  0 '{"command":"a=$(echo git) push origin main"}'
+run_test 'b=$(echo x) push origin main (FP1 assignment value — must allow, exit 0)' \
+  0 '{"command":"b=$(echo x) push origin main"}'
+run_test 'FOO=bar $(echo git) push origin main (FP1 regression lock: sub IS cmd word — must block, exit 2)' \
+  2 '{"command":"FOO=bar $(echo git) push origin main"}'
+
+echo ""
+# ---------------------------------------------------------------------------
+# B-class — genuine background-watchdog hang-check (forward progress, no hang)
+#
+# The pairwise-collapse de-escaper (char-walk) and the prefix-mode token scan
+# must terminate on malformed inputs. Run the guard in the BACKGROUND with a
+# separate watchdog (NOT a `timeout` wrapper — that produces spurious macOS
+# stdin-EOF rc artifacts). Assert the guard process exits on its own before the
+# watchdog fires. Fail-closed (exit 2) is acceptable; the assertion is "did not
+# hang / was not killed by the watchdog".
+# ---------------------------------------------------------------------------
+echo "-- B-class: background-watchdog hang-check (must complete, not be killed) --"
+
+_hang_inputs=(
+  '{"command":"\\g\\it push origin \"main"}'
+  '{"command":"gi\\t push origin main"}'
+  '{"command":"timeout 5 \\g\\it push origin main"}'
+  '{"command":"env -i \\git push origin '"'"'unterminated"}'
+)
+for _hi in "${_hang_inputs[@]}"; do
+  printf '%s' "$_hi" > /tmp/p2m_hang.$$.json
+  CANON_GUARD_CWD="/home/user/project" bash "$HOOK" < /tmp/p2m_hang.$$.json >/dev/null 2>&1 &
+  _hpid=$!
+  ( sleep 12; kill -9 "$_hpid" 2>/dev/null && touch /tmp/p2m_hang_killed.$$ ) &
+  _wpid=$!
+  wait "$_hpid" 2>/dev/null || true
+  kill "$_wpid" 2>/dev/null || true
+  wait "$_wpid" 2>/dev/null || true
+  if [[ -f /tmp/p2m_hang_killed.$$ ]]; then
+    echo "  FAIL: guard HUNG on malformed input (watchdog killed it): $_hi"
+    FAIL=$((FAIL + 1))
+    rm -f /tmp/p2m_hang_killed.$$
+  else
+    echo "  PASS: guard completed (no hang) on malformed input"
+    PASS=$((PASS + 1))
+  fi
+  rm -f /tmp/p2m_hang.$$.json
+done
+
+echo ""
+# ---------------------------------------------------------------------------
+# R5 — termination / forward-progress (malformed inputs must NOT hang)
+#
+# The R1 widening and R2 prefix-skip loops must guarantee forward progress.
+# A timeout wrapper around malformed inputs (unterminated cmdsub, unterminated
+# quote) must return (exit != 124). Fail-closed (exit 2) is acceptable;
+# the assertion is purely "did not hang".
+# ---------------------------------------------------------------------------
+echo "-- R5: malformed inputs return within timeout (no hang, exit != 124) --"
+
+_unterm_sub="gi${_sub}t push origin main"   # unterminated $(  (no closing paren)
+_term_rc=0
+printf '{"command":"%s"}' "$_unterm_sub" | CANON_GUARD_CWD="/home/user/project" timeout 5 bash "$HOOK" >/dev/null 2>&1 || _term_rc=$?
+if [[ "$_term_rc" -ne 124 ]]; then
+  echo "  PASS: unterminated command-substitution returns within timeout (exit=$_term_rc, no hang)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: unterminated command-substitution HUNG (exit=124)"
+  FAIL=$((FAIL + 1))
+fi
+
+_term_rc2=0
+printf '{"command":"echo %sunterminated quote"}' "'" | CANON_GUARD_CWD="/home/user/project" timeout 5 bash "$HOOK" >/dev/null 2>&1 || _term_rc2=$?
+if [[ "$_term_rc2" -ne 124 ]]; then
+  echo "  PASS: unterminated single-quote returns within timeout (exit=$_term_rc2, no hang)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: unterminated single-quote HUNG (exit=124)"
+  FAIL=$((FAIL + 1))
+fi
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
