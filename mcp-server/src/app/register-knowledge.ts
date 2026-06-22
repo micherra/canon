@@ -37,6 +37,7 @@ export const WIKI_LINT_CHECK_NAMES = [
   "duplicate_titles",
   "frontmatter_schema",
   "glossary_consistency",
+  "link_integrity",
   "missing_examples",
   "misrouted_principles",
   "orphan_principles",

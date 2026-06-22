@@ -26,6 +26,12 @@ import {
 } from "../services/frontmatter-schema.ts";
 import { checkIndexDrift } from "../services/index-inventory.ts";
 import {
+  buildLinkGraph,
+  type KnownTargets,
+  type LinkGraphInput,
+  type LinkGraphResult,
+} from "../services/link-graph.ts";
+import {
   assembleWikiLintOutput,
   checkCitedPaths,
   checkContradictions,
@@ -50,6 +56,7 @@ type CheckName =
   | "duplicate_titles"
   | "frontmatter_schema"
   | "glossary_consistency"
+  | "link_integrity"
   | "missing_examples"
   | "misrouted_principles"
   | "orphan_principles"
@@ -214,11 +221,18 @@ function collectDddDocPaths(projectDir: string): string[] {
 
 // ---- Check helpers ----
 
+/**
+ * Orphan check. A principle is an orphan iff it has zero DriftStore violations AND
+ * zero inbound `[[ ]]` links in the corpus link graph.
+ *
+ * `referencedIds` comes from the link graph (ADR-0019) — the structurally-correct
+ * inbound-link set that REPLACES the old `allText.includes(p.id)` substring scan
+ * (over-broad: any incidental prose substring suppressed a real orphan).
+ */
 async function runOrphanCheck(
   projectDir: string,
   principles: Principle[],
-  claudeMdFiles: FileRecord[],
-  agentFiles: FileRecord[],
+  referencedIds: Set<string>,
 ): Promise<ReturnType<typeof checkOrphanPrinciples>> {
   let violatedIds = new Set<string>();
   try {
@@ -235,12 +249,6 @@ async function runOrphanCheck(
       err instanceof Error ? err.message : err,
     );
     violatedIds = new Set<string>();
-  }
-
-  const allText = [...claudeMdFiles, ...agentFiles].map((f) => f.content).join("\n");
-  const referencedIds = new Set<string>();
-  for (const p of principles) {
-    if (allText.includes(p.id)) referencedIds.add(p.id);
   }
 
   return checkOrphanPrinciples(principles, violatedIds, referencedIds);
@@ -343,6 +351,71 @@ function runFrontmatterSchemaCheck(
   return checkFrontmatterSchema(inputs);
 }
 
+// ---- Link integrity (R2, ADR-0019) ----
+
+/** Strip the leading `projectDir/` from an absolute path → repo-relative form. */
+function toRepoRel(absPath: string, projectDir: string): string {
+  const prefix = `${projectDir}/`;
+  return absPath.startsWith(prefix) ? absPath.slice(prefix.length) : absPath;
+}
+
+/** File stem without the `.md` extension (e.g. `prd` for `…/templates/prd.md`). */
+function fileStem(absPath: string): string {
+  const base = absPath.slice(absPath.lastIndexOf("/") + 1);
+  return base.replace(/\.md$/, "");
+}
+
+/** ADR number (`0017`) when the filename matches `NNNN-*.md`, else null. */
+function adrNumberOf(absPath: string): string | null {
+  const base = absPath.slice(absPath.lastIndexOf("/") + 1);
+  const m = /^(\d{4})-.+\.md$/.exec(base);
+  return m ? m[1] : null;
+}
+
+/**
+ * Build the corpus link graph once: scan all project `.md` files (standard
+ * exclusions), construct `KnownTargets` (principle ids + file stems + ADR numbers +
+ * file paths), and run the pure graph builder with an injected `existsOnDisk`.
+ *
+ * The single result is shared by both `link_integrity` (broken-link findings) and
+ * `orphan_principles` (inbound-link orphan source-of-truth, ADR-0019) so the corpus
+ * is parsed only once.
+ */
+function buildCorpusLinkGraph(projectDir: string, principles: Principle[]): LinkGraphResult {
+  const mdPaths = findFiles(projectDir, (_fp, name) => name.endsWith(".md"));
+
+  const stems = new Set<string>();
+  const adrNumbers = new Set<string>();
+  const filePaths = new Set<string>();
+  const docs: LinkGraphInput[] = [];
+
+  for (const absPath of mdPaths) {
+    const repoRel = toRepoRel(absPath, projectDir);
+    // Resolution targets (stems / adr numbers / file paths) include EVERY corpus file
+    // so a link into docs/explore/ still resolves — but docs/explore/ files are NOT
+    // scanned as link SOURCES below (frozen, stale-by-design records; mirrors the
+    // docs/explore/ exclusion already applied by stale_refs / cited_paths).
+    filePaths.add(repoRel);
+    stems.add(fileStem(absPath));
+    const adr = adrNumberOf(absPath);
+    if (adr) adrNumbers.add(adr);
+
+    if (repoRel.startsWith("docs/explore/")) continue;
+    const content = readFileSafe(absPath);
+    if (content !== null) docs.push({ content, path: repoRel });
+  }
+
+  const known: KnownTargets = {
+    adrNumbers,
+    filePaths,
+    principleIds: new Set(principles.map((p) => p.id)),
+    stems,
+  };
+
+  const existsOnDisk = (refPath: string): boolean => existsSync(join(projectDir, refPath));
+  return buildLinkGraph(docs, known, existsOnDisk);
+}
+
 // ---- Main tool function ----
 
 type CheckContext = {
@@ -369,9 +442,18 @@ async function runEnabledChecks(
   const gateAsync = async <T>(name: CheckName, fn: () => Promise<T>): Promise<T | []> =>
     enabled.has(name) ? fn() : [];
 
+  // The corpus link graph (R2, ADR-0019) backs BOTH link_integrity (broken-link
+  // findings) and orphan_principles (inbound-link orphan source-of-truth). Build it
+  // once when either check is enabled so the corpus is parsed a single time.
+  const linkGraph =
+    enabled.has("link_integrity") || enabled.has("orphan_principles")
+      ? buildCorpusLinkGraph(projectDir, principles)
+      : null;
+  const linkIntegrity = enabled.has("link_integrity") && linkGraph ? linkGraph.findings : [];
+
   const contradictions = gate("contradictions", () => checkContradictions(claudeMdFiles));
   const orphans = await gateAsync("orphan_principles", () =>
-    runOrphanCheck(projectDir, principles, claudeMdFiles, agentFiles),
+    runOrphanCheck(projectDir, principles, linkGraph?.referencedPrincipleIds ?? new Set<string>()),
   );
   const staleRefs = gate("stale_refs", () =>
     runStaleRefCheck(projectDir, claudeMdFiles, dddDocFiles),
@@ -401,6 +483,7 @@ async function runEnabledChecks(
     frontmatterSchema,
     glossaryConsistency,
     indexDrift,
+    linkIntegrity,
     misroutedPrinciples,
     missingExamples,
     orphans,
@@ -433,6 +516,7 @@ export async function wikiLint(
     "duplicate_titles",
     "frontmatter_schema",
     "glossary_consistency",
+    "link_integrity",
     "missing_examples",
     "misrouted_principles",
     "orphan_principles",
