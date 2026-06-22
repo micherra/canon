@@ -90,18 +90,20 @@ Call `get_cross_run_analysis({ project_dir })`. From the result:
 - Set `top_recurring_principle` = the `principle_id` with the highest `occurrence_count`
   among `recurring_violations`, or `null` if none exist
 
-Respect the confidence annotation: if the cross-run analysis returns
-`confidence: "insufficient"` or an empty `recurring_violations` array, do NOT let the
-recurring-violation path escalate. Only the volume threshold (`builds_since_last_learner`)
-may fire in that case.
+Respect the data-volume floor: if `total_archived_runs < 5` or the
+`recurring_violations` array is empty, do NOT let the recurring-violation path
+escalate. Only the volume threshold (`builds_since_last_learner`) may fire in
+that case. (Five archived runs mirrors the same floor the volume path uses and
+matches the `get_cross_run_analysis` result field `total_archived_runs`.)
 
 ### Threshold → `learner_due`
 
 Set `learner_due = true` when EITHER:
 
 - **(a) Volume threshold:** `builds_since_last_learner >= 5`, OR
-- **(b) Signal threshold:** `recurring_violation_count` rose since the prior snapshot
-  AND `top_recurring_principle` is non-null at ≥ low confidence tier
+- **(b) Signal threshold:** `total_archived_runs >= 5` (sufficient history)
+  AND `recurring_violation_count` rose since the prior snapshot
+  AND `top_recurring_principle` is non-null
 
 Otherwise `learner_due = false`.
 

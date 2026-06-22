@@ -539,12 +539,14 @@ Phase D ships harness-watch — the accumulated-build-signal observer, fired pos
 Discovery: `list_loops`.
 
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
-`list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop:
-- `firing_posture[tier] === "auto"` → call `CronCreate({ schedule: loop.schedule.interval, command: "<inline tick prompt for <id> — see Resilient dispatch above>", max: loop.schedule.max_ticks })` immediately.
-- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; call `CronCreate` only on confirmation.
+`list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop, branch on `loop.mode`:
+- `firing_posture[tier] === "auto"`:
+  - `mode: "interval"` → call `CronCreate({ schedule: loop.schedule.interval, command: "<inline tick prompt for <id> — see Resilient dispatch above>", max: loop.schedule.max_ticks })` immediately.
+  - `mode: "self-paced"` → call `ScheduleWakeup({ delaySeconds: <loop initial cadence>, reason: "Starting <id> at post-ship", prompt: "<inline tick prompt for <id> — see Resilient dispatch above>" })` immediately.
+- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; dispatch by mode on confirmation (CronCreate for interval, ScheduleWakeup for self-paced).
 - `firing_posture[tier] === "disabled"` → skip silently.
 
-`ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in). It demonstrates the resilient inline dispatch form (mechanism-ships-first-instance, dc-06).
+`ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in). It demonstrates the resilient inline dispatch form (mechanism-ships-first-instance, dc-06). `harness-watch` is a self-paced post-ship loop and is dispatched via `ScheduleWakeup`.
 
 **Session-start tap (Phase C+):** At session start, the orchestrator calls
 `list_loops({ lifecycle_hook: "session-start", tier })`. For each returned loop:
