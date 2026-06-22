@@ -46,6 +46,7 @@
     "vitest": "^4.1.8"
   },
   "overrides": {
-    "esbuild": "0.28.1"
+    "esbuild": "0.28.1",
+    "protobufjs": "^7.6.4"
   }
 }
