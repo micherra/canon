@@ -40,7 +40,7 @@ export const BUILTIN_FORBIDDEN_MCP: ReadonlyArray<string> = [
 // the orchestrator (allowed to mutate) CONSUMES the signal and acts. The loop/runner
 // NEVER executes these. Extend by explicit diff only; each entry must ship with a
 // documented orchestrator-consumption contract (see CLAUDE.md § Loop Framework).
-export const ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-update"] as const;
+export const ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-update", "run-learner"] as const;
 export type OrchestratorAction = (typeof ORCHESTRATOR_ACTIONS)[number];
 
 // Read-only gh/git subcommand prefixes admitted under the Bash carve-out (decision loops-phase-b-01).

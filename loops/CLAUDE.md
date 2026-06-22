@@ -78,11 +78,11 @@ Loops may attach to these named lifecycle moments:
 
 **`orchestrator_action` on a transition rule (Phase B+):** A transition rule may declare an
 optional `orchestrator_action` field (derive-from-const `z.enum(ORCHESTRATOR_ACTIONS)` with
-members `auto-triage-fix` and `auto-plugin-update`). This is an orchestrator-consumed signal —
-the loop/runner NEVER executes it. The runner surfaces a structured
-`ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>` line when the transition fires; the
-orchestrator reads and acts on it. See CLAUDE.md § Loop Framework, "Consuming
-`orchestrator_action`" for the two consumption contracts. dc-06 is preserved — the loop's
+members `auto-triage-fix`, `auto-plugin-update`, and `run-learner`). This is an
+orchestrator-consumed signal — the loop/runner NEVER executes it. The runner surfaces a
+structured `ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>` line when the transition
+fires; the orchestrator reads and acts on it. See CLAUDE.md § Loop Framework, "Consuming
+`orchestrator_action`" for the three consumption contracts. dc-06 is preserved — the loop's
 `guardrails.mutates_build` stays `false`.
 
 **First tick is baseline-only — transition rules never fire against an empty prior (ADR-0002).**

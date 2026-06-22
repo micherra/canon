@@ -584,6 +584,14 @@ On a release tag being cut:
 3. Run `plugin-update` + confirm the new version is active ONLY after explicit user confirmation.
 NEVER silently run plugin-update; the ask-first/confirm requirement is non-optional.
 
+**`run-learner`** (fires on the `harness-watch` `learner_due` false→true transition): The
+orchestrator spawns `canon:learner` per the learn-step protocol. Under the `supervised` tier,
+ASK the user first before spawning; under `autonomous` and `light-touch`, spawn the learner
+automatically. The learner pass NEVER mutates the build — it only analyzes patterns and writes
+to `.canon/`. dc-06 holds: the `harness-watch` loop only surfaces the signal via
+`ORCHESTRATOR_ACTION: run-learner field=learner_due loop=harness-watch`; the orchestrator
+spawns the learner.
+
 ## Project Structure <!-- last-updated: 2026-06-12 -->
 
 ```
