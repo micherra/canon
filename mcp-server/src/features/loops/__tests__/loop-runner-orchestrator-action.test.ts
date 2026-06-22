@@ -94,6 +94,17 @@ describe("runner orchestrator_action surfacing (AC4 — value-agnostic)", () => 
     expect(lineB).not.toContain("auto-triage-fix");
   });
 
+  it("rule with run-learner → correct ORCHESTRATOR_ACTION line (learner_due)", () => {
+    const rule: FiredRule = {
+      field: "learner_due",
+      message: "Accumulated build signal crossed the learner threshold — surfacing a learner pass.",
+      orchestrator_action: "run-learner",
+      terminate: true,
+    };
+    const line = surfaceLine(rule, "harness-watch");
+    expect(line).toBe("ORCHESTRATOR_ACTION: run-learner field=learner_due loop=harness-watch");
+  });
+
   it("rule without orchestrator_action → null (no signal line)", () => {
     const rule: FiredRule = {
       field: "ci_conclusion",
