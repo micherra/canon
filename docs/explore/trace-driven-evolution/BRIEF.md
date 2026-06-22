@@ -544,10 +544,13 @@ instrumentation (§3.1) makes mined cases *attributable*, sharpening their value
 > backfill is **AutoForge** (described in Cameron Wolfe's "Agentic RL: Frameworks and Best Practices",
 > https://cameronrwolfe.substack.com/p/agentic-rl). AutoForge generates eval tasks by random-walking
 > a tool-dependency graph and executing a golden final state for ground-truth verification — exactly
-> the kind of `(task, expected)` pair the holdout split needs. Canon already owns the required graph
-> (`codebase_graph` / `graph_query`), so AutoForge-style graph-walk synthesis is the named method for
-> generating synthetic holdout cases when mined volume falls short. This is a reference for *when* to
-> use it, not a near-term build item.
+> the kind of `(task, expected)` pair the holdout split needs. Canon owns a *code* dependency graph
+> (`codebase_graph` / `graph_query`) whose edges connect source symbols, not tool inputs to tool
+> outputs — this is NOT the tool-dependency graph AutoForge requires. AutoForge also needs an
+> executable environment that can run a workflow to a golden final state for ground-truth
+> verification. Both are **gaps Canon would need to build** before AutoForge-style synthesis is
+> usable for holdout generation. This is a reference for *when* to use it (once those
+> prerequisites exist), not a near-term build item.
 
 **8.3 — Cadence = offline batch, hosted by the `loops/` framework.** Not per-build. A Canon-authored
 `loops/evolve.md` dispatched via `CronCreate` at a lifecycle moment (modeled on `loops/ship-watch.md`).
