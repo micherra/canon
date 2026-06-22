@@ -40,7 +40,7 @@ export const BUILTIN_FORBIDDEN_MCP: ReadonlyArray<string> = [
 // the orchestrator (allowed to mutate) CONSUMES the signal and acts. The loop/runner
 // NEVER executes these. Extend by explicit diff only; each entry must ship with a
 // documented orchestrator-consumption contract (see CLAUDE.md § Loop Framework).
-// canon:allow-unwired: derive-from-const pattern; ORCHESTRATOR_ACTIONS consumed internally via z.enum on line 116
+// canon:allow-unwired: derive-from-const pattern; ORCHESTRATOR_ACTIONS consumed internally via z.enum on line 117
 export const ORCHESTRATOR_ACTIONS = [
   "auto-triage-fix",
   "auto-plugin-update",
