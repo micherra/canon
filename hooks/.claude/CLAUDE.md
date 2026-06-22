@@ -18,7 +18,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | Script | Trigger | Purpose |
 |--------|---------|---------|
 | `pre-commit-check.sh` | PreToolUse (Bash) | Detect secrets, validate principle compliance |
-| `dead-wire-gate.sh` | verify contract (CLI arg, not hooks.json) | Standing dead-wire reachability gate — fails closed on unwired new exports/tools |
+| `dead-wire-gate.sh` | verify contract (CLI arg, not hooks.json) | Standing dead-wire reachability gate — fails closed on unwired new exports/tools. Same-file internal production use counts as wired (ADR-0020); no `// canon:allow-unwired:` marker needed for test-exported symbols used within the same file. |
 | `summary-diff-check.sh` | post-engineer (CLI arg, not hooks.json) | Deterministic phantom-claim checker — compares SUMMARY `### Files` + `### What Changed` symbols against `git diff --name-only`; PHANTOM claims exit 2 (block), unreported changes advisory (exit 0) |
 | `scribe-scope-guard.sh` | post-scribe (CLI arg, not hooks.json) | CLAUDE.md over-trim guard — counts deletion lines across all `CLAUDE.md` files in the diff; exceeds threshold (default 5) → exit 2 (surface to user) |
 | `destructive-guard.sh` | PreToolUse (Bash) | Prevent force push, hard reset, and other dangerous git ops |
