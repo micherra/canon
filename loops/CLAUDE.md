@@ -74,7 +74,8 @@ Loops may attach to these named lifecycle moments:
 |-------|-----------|
 | **A** | Schema + registry loader + `list_loops`/`get_loop_definition` + `/canon:loop-tick` runner + `_probe` demo; no production loop fires |
 | **B** | Ship-watch definition (`loops/ship-watch.md`) — first real loop; dispatched via post-ship tap; command registration fix (`"commands": ["./skills/canon/commands/"]` in plugin.json) enabling `/canon:loop-tick` to resolve as a real harness slash command |
-| **C (current)** | Self-paced mode + ScheduleWakeup + session-watch + de-dupe ledger; session-start tap wired in CLAUDE.md |
+| **C** | Self-paced mode + ScheduleWakeup + session-watch + de-dupe ledger; session-start tap wired in CLAUDE.md |
+| **D (current)** | `loops/harness-watch.md` added — third real loop (post-ship, self-paced); `run-learner` added to `ORCHESTRATOR_ACTIONS` as the third vocabulary member |
 
 **`orchestrator_action` on a transition rule (Phase B+):** A transition rule may declare an
 optional `orchestrator_action` field (derive-from-const `z.enum(ORCHESTRATOR_ACTIONS)` with

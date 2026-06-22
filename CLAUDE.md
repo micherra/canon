@@ -491,7 +491,7 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Loop Framework <!-- last-updated: 2026-06-12 -->
+## Loop Framework <!-- last-updated: 2026-06-22 -->
 
 Loops are Canon's managed periodic-observation artifact class. A loop is authored as
 `loops/<id>.md` (YAML frontmatter + action-prompt body), registered via `list_loops`,
@@ -533,6 +533,7 @@ a plugin cannot do this.
 **Phase history:** Phase A shipped the framework spine — schema, registry, MCP tools, `_probe`
 demo; no production loop ran. Phase B ships `loops/ship-watch.md` — the first real loop,
 dispatched via the post-ship tap. Phase C ships session-watch + self-paced mode.
+Phase D ships harness-watch — the accumulated-build-signal observer, fired post-ship, surfaces `run-learner`.
 Discovery: `list_loops`.
 
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
@@ -612,12 +613,12 @@ canon/
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
-│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase C current)
+│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase D current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase C: _probe + ship-watch + session-watch)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase D: _probe + ship-watch + session-watch + harness-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
 ├── principles/           # Built-in principles (61 total: 6 rules, 36 strong-opinions, 19 conventions); 26 Canon-internal principles in .canon/principles/ (portable: false)
