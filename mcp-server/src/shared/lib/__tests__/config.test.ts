@@ -395,4 +395,44 @@ describe("loadJanitorConfig", () => {
     expect(cfg.enabled).toBe(true);
     expect(cfg.min_hours_between_runs).toBe(1);
   });
+
+  describe("max_abandoned_workspace_age_hours opt-out semantics", () => {
+    it("falls back to the 24h default when the key is absent", async () => {
+      await writeConfig({ janitor: { min_hours_between_runs: 2 } });
+      const cfg = await loadJanitorConfig(tmpDir);
+      expect(cfg.max_abandoned_workspace_age_hours).toBe(24);
+    });
+
+    it("preserves an explicit null as the never-reclaim opt-out", async () => {
+      await writeConfig({ janitor: { max_abandoned_workspace_age_hours: null } });
+      const cfg = await loadJanitorConfig(tmpDir);
+      // null is the documented opt-out: post-ship workspaces are never auto-reclaimed.
+      // It must NOT be coerced into the 24h default.
+      expect(cfg.max_abandoned_workspace_age_hours).toBeNull();
+    });
+
+    it("reads an explicit numeric value", async () => {
+      await writeConfig({ janitor: { max_abandoned_workspace_age_hours: 72 } });
+      const cfg = await loadJanitorConfig(tmpDir);
+      expect(cfg.max_abandoned_workspace_age_hours).toBe(72);
+    });
+
+    it("allows max_abandoned_workspace_age_hours = 0 (zero is valid)", async () => {
+      await writeConfig({ janitor: { max_abandoned_workspace_age_hours: 0 } });
+      const cfg = await loadJanitorConfig(tmpDir);
+      expect(cfg.max_abandoned_workspace_age_hours).toBe(0);
+    });
+
+    it("falls back to the default for a non-numeric, non-null value", async () => {
+      await writeConfig({ janitor: { max_abandoned_workspace_age_hours: "soon" } });
+      const cfg = await loadJanitorConfig(tmpDir);
+      expect(cfg.max_abandoned_workspace_age_hours).toBe(24);
+    });
+
+    it("falls back to the default for a negative value", async () => {
+      await writeConfig({ janitor: { max_abandoned_workspace_age_hours: -5 } });
+      const cfg = await loadJanitorConfig(tmpDir);
+      expect(cfg.max_abandoned_workspace_age_hours).toBe(24);
+    });
+  });
 });

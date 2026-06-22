@@ -88,7 +88,7 @@ Write the updated snapshot `{ tick_count: <new_value> }` back to `state.path`.
   ScheduleWakeup({
     delaySeconds: 60,  # active cadence (1m), clamped to runtime minimum [60, 3600]
     reason: "[loop: _probe-self-paced] Tick <N> complete. Re-arming at active cadence.",
-    prompt: "/canon:loop-tick _probe-self-paced"
+    prompt: "Run one tick of Canon loop \"_probe-self-paced\": call get_loop_definition({ id: \"_probe-self-paced\" }) to load its definition + body, then execute that body's observe → diff → surface → write → evaluate pipeline (the steps in skills/canon/commands/loop-tick.md), using the loop's state.path (substitute ${WORKSPACE}) for the prior snapshot. Read-only observation only (dc-06)."
   })
   ```
 

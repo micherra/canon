@@ -16,6 +16,14 @@ Generic, definition-driven loop tick runner. Contains **zero loop-specific logic
 behavior is encoded in the loop's definition file (`loops/<id>.md`). The definition drives
 everything: what to observe, when to surface, when to terminate.
 
+**Registered-install convenience form:** `/canon:loop-tick <id>` is the registered-install
+convenience form of the tick — it is available when this slash command is live in the running
+session. The orchestrator's default dispatch is the equivalent self-contained inline prompt
+(calls `get_loop_definition({ id })` and runs this body), which works even when this command
+is not registered in the running plugin (stale-install class). This runner body IS the
+canonical step source that the inline prompt refers to. See CLAUDE.md §Loop Framework
+"Resilient dispatch" for the canonical inline prompt text and ADR-0017 for the decision.
+
 **Non-declarative constraint (dc-06, decision loops-phase-a-04):** This runner is the
 per-tick body. The orchestrator made the initial scheduling call (`CronCreate` for interval
 loops, `ScheduleWakeup` for self-paced loops) at a named lifecycle moment (`post-ship`,
@@ -157,9 +165,12 @@ Also terminate if any fired transition rule has `terminate: true`.
   ScheduleWakeup({
     delaySeconds: <cadence_hint.active | cadence_hint.idle, parsed to seconds, clamped [60,3600]>,
     reason: "[loop: <id>] Tick <N> complete. Re-arming at <active|idle> cadence.",
-    prompt: "/canon:loop-tick <id>"
+    prompt: "<inline tick prompt for <id> — load def via get_loop_definition, run this body>"
   })
   ```
+  Use the canonical inline tick prompt from CLAUDE.md §Loop Framework "Resilient dispatch"
+  (substituting `<id>`). The re-arm fires unattended on the running install, so it has the
+  same staleness exposure as the initial dispatch — use the inline form, not the slash call.
   Report: `[loop: <id>] Tick <N> complete. Re-armed at <cadence> cadence (<delaySeconds>s).`
 
 ---
@@ -171,7 +182,7 @@ Also terminate if any fired transition rule has `terminate: true`.
 - **Phase boundary.** Phase A: interval-mode only (CronCreate). Phase C adds self-paced mode
   (ScheduleWakeup). Both modes execute the same observe→diff→surface→write→evaluate pipeline.
 - **_probe is the runnable proof.** Invoking `/canon:loop-tick _probe` in the Phase A
-  verify step demonstrates the full schema→registry→runtime path end-to-end.
+  verify step demonstrates the full schema→registry→runtime path end-to-end (registered-install form).
 - **First-tick baseline (ADR-0002).** The first tick captures a baseline snapshot and surfaces
   nothing — transition rules always compare against a known prior value (present from tick 2+).
   This eliminates false-fires from conditions already true at arm time.
