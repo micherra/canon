@@ -29,6 +29,7 @@ import { z } from "zod";
 
 // ---- Class resolution ----
 
+// canon:allow-unwired: artifact-class discriminant — registry key + classifyFmClass return + FrontmatterSchemaInput.fm_class within this module; exported for its unit tests
 export type FmClass = "principle" | "agent" | "template" | "adr";
 
 /**

@@ -31,10 +31,14 @@ import { visit } from "unist-util-visit";
 
 // ---- Extraction ----
 
+// canon:allow-unwired: extracted wiki-link ref shape — fields of ExtractedLinks + helper param types within this module; exported for its unit tests
 export type WikiLinkRef = { target: string; line: number };
+// canon:allow-unwired: extracted md-link ref shape — field of ExtractedLinks + collectMdFindings param within this module; exported for its unit tests
 export type MdLinkRef = { url: string; line: number };
+// canon:allow-unwired: extracted ADR-ref shape — field of ExtractedLinks + collectAdrFindings param within this module; exported for its unit tests
 export type AdrRef = { ref: string; line: number };
 
+// canon:allow-unwired: return type of extractLinks, exported for its unit tests
 export type ExtractedLinks = {
   wikiLinks: WikiLinkRef[];
   mdLinks: MdLinkRef[];
@@ -79,6 +83,7 @@ function matchesInText<T>(
  * by construction — P2). Md links are read from `link` nodes and filtered to relative
  * paths.
  */
+// canon:allow-unwired: pure link extractor exported for direct unit testing (link-graph.test.ts); also used internally by buildLinkGraph in this module
 export function extractLinks(content: string): ExtractedLinks {
   const processor = unified().use(remarkParse).use(remarkFrontmatter).use(remarkGfm);
   const tree = processor.parse(content);
