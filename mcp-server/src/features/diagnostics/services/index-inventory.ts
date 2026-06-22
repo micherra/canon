@@ -257,12 +257,17 @@ async function scanOneDir(fullDir: string): Promise<ScanOneDirResult> {
     (e) => e.endsWith(".md") && e !== "README.md" && !e.startsWith("."),
   );
 
+  const results = await Promise.all(
+    mdFilenames.map(async (filename) => {
+      const fullPath = join(fullDir, filename);
+      const result = await readFrontmatter(fullPath);
+      return { filename, fullPath, result };
+    }),
+  );
+
   const files: Array<{ filename: string; frontmatter: string }> = [];
   const unreadableFiles: Array<{ filePath: string; message: string }> = [];
-
-  for (const filename of mdFilenames) {
-    const fullPath = join(fullDir, filename);
-    const result = await readFrontmatter(fullPath);
+  for (const { filename, fullPath, result } of results) {
     if (!result.ok) {
       unreadableFiles.push({ filePath: fullPath, message: result.error });
     } else {
@@ -299,9 +304,14 @@ async function discoverArtifacts(
   const discoveryErrors: Array<{ dir: string; message: string }> = [];
   const unreadableFiles: Array<{ filePath: string; message: string }> = [];
 
-  for (const dir of CLASS_DIRS[cls]) {
-    const fullDir = join(projectDir, dir);
-    const result = await scanOneDir(fullDir);
+  const scanResults = await Promise.all(
+    CLASS_DIRS[cls].map(async (dir) => {
+      const fullDir = join(projectDir, dir);
+      const result = await scanOneDir(fullDir);
+      return { fullDir, result };
+    }),
+  );
+  for (const { fullDir, result } of scanResults) {
     if (result.discoveryError) {
       discoveryErrors.push({ dir: fullDir, message: result.discoveryError });
     } else {
