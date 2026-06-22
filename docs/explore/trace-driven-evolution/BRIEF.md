@@ -247,9 +247,9 @@ targeting tractable without perfect causal traces.
 > action masking" as the mechanism by which a training system knows *which tokens the agent produced*
 > versus *which the environment injected* — the direct analogue of recording which artifact wording
 > (hash + span) was assembled into each agent's spawn prompt so a failure can be attributed to the
-> specific section in context. The survey's central thesis — that trajectory-handling and
-> infrastructure choices dominate the optimizer choice — is a second, independent argument for funding
-> the provenance plumbing (Phase-1 step 0) before the mutation engine.
+> specific section in context. The survey's emphasis that trajectory-handling and infrastructure choices matter as much as the
+> optimizer choice is a second, independent argument for funding the provenance plumbing
+> (Phase-1 step 0) before the mutation engine.
 
 ### 3.2 Fitness gate — the held-out benchmark
 
