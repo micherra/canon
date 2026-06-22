@@ -19,7 +19,7 @@ An ambient-advisory CI failure — a high or critical severity advisory publishe
 
 When a new high-severity advisory is published against a package already in the dependency tree, the CI gate (`npm audit --omit=dev --audit-level=high`) fails on every open PR at once. The advisory is ambient: it predates the PR diff and exists on `main`. A fix landed inside an unrelated PR is harder to review, creates unnecessary merge pressure, and will need to be rebased by all sibling PRs anyway. A dedicated dep-bump PR to main isolates the supply-chain fix, gives it a clean commit history, and unblocks all other PRs via a single rebase.
 
-Evidence: PRs #368 (fast-uri path traversal), #397 (esbuild GHSA-gv7w-rqvm-qjhr), and #403 (protobufjs GHSA-f38q-mgvj-vph7 / GHSA-wcpc-wj8m-hjx6) all followed this pattern — each required a dedicated dep-bump PR to clear the CI gate for all concurrently blocked PRs.
+Evidence: PR #368 (fast-uri path traversal, high severity) was the first observed instance of the ambient-advisory class — it was cleared bundled inside a broader prod-readiness PR alongside unrelated changes, which is the anti-pattern this convention steers away from. PRs #397 (esbuild GHSA-gv7w-rqvm-qjhr) and #403 (protobufjs GHSA-f38q-mgvj-vph7 / GHSA-wcpc-wj8m-hjx6) established the recommended pattern: each was a dedicated dep-bump PR to main that unblocked all concurrently affected open PRs via a single rebase.
 
 ## Resolution Pattern
 
