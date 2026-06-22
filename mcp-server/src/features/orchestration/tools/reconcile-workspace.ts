@@ -80,17 +80,19 @@ function resolveArtifactFiles(workspace: string, artifact: string): string[] {
 
 /** True when any file the artifact resolves to still carries a skeleton marker. */
 async function isPartialArtifact(workspace: string, artifact: string): Promise<boolean> {
-  for (const file of resolveArtifactFiles(workspace, artifact)) {
-    let content: string;
-    try {
-      content = await readFile(file, "utf-8");
-    } catch {
-      continue; // unreadable → not classifiable as partial here; missing-scan owns absence
-    }
-    const head = content.slice(0, 8192); // markers live in frontmatter / first heading
-    if (PARTIAL_MARKERS.some((re) => re.test(head))) return true;
-  }
-  return false;
+  const files = resolveArtifactFiles(workspace, artifact);
+  const checks = await Promise.all(
+    files.map(async (file) => {
+      try {
+        const content = await readFile(file, "utf-8");
+        const head = content.slice(0, 8192); // markers live in frontmatter / first heading
+        return PARTIAL_MARKERS.some((re) => re.test(head));
+      } catch {
+        return false; // unreadable → not classifiable as partial here; missing-scan owns absence
+      }
+    }),
+  );
+  return checks.some(Boolean);
 }
 
 /** Of the present (non-missing, non-template) artifacts, those still partial. */
@@ -99,14 +101,13 @@ async function scanPartialArtifacts(
   artifacts: readonly string[],
   missing: readonly string[],
 ): Promise<string[]> {
-  const partial: string[] = [];
-  for (const art of artifacts) {
-    if (art.startsWith("outcome:")) continue;
-    if (art.includes("${")) continue;
-    if (missing.includes(art)) continue; // absence is reported via missing_artifacts
-    if (await isPartialArtifact(workspace, art)) partial.push(art);
-  }
-  return partial;
+  const candidates = artifacts.filter(
+    (art) => !art.startsWith("outcome:") && !art.includes("${") && !missing.includes(art),
+  );
+  const partialFlags = await Promise.all(
+    candidates.map((art) => isPartialArtifact(workspace, art)),
+  );
+  return candidates.filter((_, i) => partialFlags[i]);
 }
 
 /** Build an IncompleteStep entry from a journal step, or null if not incomplete. */
