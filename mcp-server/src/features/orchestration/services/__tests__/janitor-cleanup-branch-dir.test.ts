@@ -8,7 +8,7 @@
  */
 
 import { existsSync, rmdirSync, utimesSync } from "node:fs";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -99,6 +99,17 @@ function setMtime(p: string, ms: number): void {
   utimesSync(p, secs, secs);
 }
 
+/** Write a minimal journal.json with the given steps. */
+async function writeJournal(
+  slugPath: string,
+  steps: Array<{ step_id: string; status: string }>,
+): Promise<void> {
+  await writeFile(
+    join(slugPath, "journal.json"),
+    JSON.stringify({ version: 1, workspace: slugPath, steps }),
+  );
+}
+
 let tmpDir: string;
 let canonDir: string;
 let canonWorkspacesDir: string;
@@ -144,6 +155,8 @@ describe("cleanupEmptyBranchDir — TOCTOU guard via atomic rmdirSync", () => {
     const branchDir = join(canonWorkspacesDir, "main");
     const staleSlug = join(branchDir, "stale-slug");
     await mkdir(staleSlug, { recursive: true });
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(staleSlug, [{ step_id: "ship", status: "completed" }]);
     setMtime(staleSlug, Date.now() - (ABANDONED_AGE_MS + 1000));
 
     // new-slug is present alongside stale-slug: after stale-slug is pruned,
@@ -176,6 +189,8 @@ describe("cleanupEmptyBranchDir — TOCTOU guard via atomic rmdirSync", () => {
     const branchDir = join(canonWorkspacesDir, "feat--toctou-branch");
     const staleSlug = join(branchDir, "stale-slug-2");
     await mkdir(staleSlug, { recursive: true });
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(staleSlug, [{ step_id: "ship", status: "completed" }]);
     setMtime(staleSlug, Date.now() - (ABANDONED_AGE_MS + 1000));
 
     const result = await runJanitor(tmpDir);
@@ -205,6 +220,8 @@ describe("cleanupEmptyBranchDir — TOCTOU guard via atomic rmdirSync", () => {
     const branchDir = join(canonWorkspacesDir, "feat--eacces-branch");
     const staleSlug = join(branchDir, "only-stale-slug");
     await mkdir(staleSlug, { recursive: true });
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(staleSlug, [{ step_id: "ship", status: "completed" }]);
     setMtime(staleSlug, Date.now() - (ABANDONED_AGE_MS + 1000));
 
     // Mock rmdirSync to throw EACCES on every call — both cleanupEmptyBranchDir

@@ -90,6 +90,17 @@ function setMtime(p: string, ms: number): void {
   utimesSync(p, secs, secs);
 }
 
+/** Create a journal.json at slugPath with the given steps (for ship-gate testing). */
+async function writeJournal(
+  slugPath: string,
+  steps: Array<{ step_id: string; status: string }>,
+): Promise<void> {
+  await writeFile(
+    join(slugPath, "journal.json"),
+    JSON.stringify({ version: 1, workspace: slugPath, steps }),
+  );
+}
+
 let tmpDir: string;
 let canonDir: string;
 let canonWorkspacesDir: string;
@@ -175,7 +186,8 @@ describe("prune_workspaces task", () => {
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "stale-build");
     await mkdir(slugDir, { recursive: true });
-    // No .completed, no .lock — abandoned workspace
+    // No .lock — post-ship workspace with completed ship step
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     // Set mtime to 72h ago (past the 48h threshold)
     setMtime(slugDir, Date.now() - 72 * 60 * 60 * 1000);
@@ -222,7 +234,8 @@ describe("prune_workspaces task", () => {
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "abandoned-build");
     await mkdir(slugDir, { recursive: true });
-    // No .completed marker — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     // Make it old enough (100h > 72h threshold)
     setMtime(slugDir, Date.now() - 100 * 60 * 60 * 1000);
@@ -285,7 +298,8 @@ describe("prune_workspaces task", () => {
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "only-slug");
     await mkdir(slugDir, { recursive: true });
-    // No .completed, no .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     // Make it stale
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
@@ -310,7 +324,9 @@ describe("prune_workspaces task", () => {
     const recentSlug = join(branchDir, "recent-slug");
     await mkdir(staleSlug, { recursive: true });
     await mkdir(recentSlug, { recursive: true });
-    // Both abandoned (no .completed, no .lock)
+    // stale-slug: post-ship + old → eligible; recent-slug: post-ship but recent → not eligible
+    await writeJournal(staleSlug, [{ step_id: "ship", status: "completed" }]);
+    await writeJournal(recentSlug, [{ step_id: "ship", status: "completed" }]);
 
     // Make stale-slug old, recent-slug fresh
     setMtime(staleSlug, Date.now() - (ABANDONED_AGE_MS + 1000));
@@ -335,7 +351,8 @@ describe("prune_workspaces task", () => {
     const branchDir = join(canonWorkspacesDir, "main");
     const slugDir = join(branchDir, "stale-main-build");
     await mkdir(slugDir, { recursive: true });
-    // No .completed, no .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
@@ -354,7 +371,8 @@ describe("prune_workspaces task", () => {
     const branchDir = join(canonWorkspacesDir, "feat--some-feature");
     const slugDir = join(branchDir, "build-001");
     await mkdir(slugDir, { recursive: true });
-    // No .completed, no .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
@@ -375,7 +393,8 @@ describe("prune_workspaces task", () => {
     const slugDir = join(branchDir, "worktree-build");
     const worktreeSubDir = join(slugDir, "worktree");
     await mkdir(worktreeSubDir, { recursive: true });
-    // No .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
@@ -412,7 +431,8 @@ describe("prune_workspaces task", () => {
     const slugDir = join(branchDir, "worktree-fail-build");
     const worktreeSubDir = join(slugDir, "worktree");
     await mkdir(worktreeSubDir, { recursive: true });
-    // No .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
@@ -451,7 +471,8 @@ describe("prune_workspaces task", () => {
     const slugDir = join(branchDir, "no-worktree-build");
     // Create slug dir WITHOUT a worktree/ subdirectory
     await mkdir(slugDir, { recursive: true });
-    // No .lock — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     setMtime(slugDir, Date.now() - (ABANDONED_AGE_MS + 1000));
 
@@ -543,3 +564,6 @@ describe("prune_husk_dirs task", () => {
     expect(result.tasks.prune_husk_dirs.status).toBe("skipped");
   });
 });
+
+// isShipComplete and reclaim-gate tests are in janitor-ship-gate.test.ts
+// (split to keep files under 600 lines)

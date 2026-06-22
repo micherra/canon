@@ -1,7 +1,7 @@
-/** orchestration-journal — git worktree deregistration tests (line-count split). */
+/** orchestration-journal — archive-only contract tests (no destructive teardown). */
 // Main tests live in orchestration-journal.test.ts
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,11 +32,11 @@ afterEach(async () => {
   await rm(workspace, { force: true, recursive: true });
 });
 
-// ─── archiveAndDeleteWorkspace — git worktree remove ────────────────────────
-describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
+// ─── finalize archives but does not tear down ────────────────────────────────
+describe("finalize archives but does not tear down", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default: git worktree remove succeeds
+    // Default: git would succeed if called (it must NOT be called for teardown)
     mockGitExec.mockReturnValue({
       duration_ms: 5,
       exitCode: 0,
@@ -47,7 +47,7 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
     });
   });
 
-  test("calls git worktree remove --force before rmSync when worktree/ subdirectory exists", async () => {
+  test("does NOT call git worktree remove when worktree/ subdir exists, and worktree survives", async () => {
     // Arrange: create a workspace with a completed step and a worktree/ subdir
     const worktreePath = join(workspace, "worktree");
     mkdirSync(worktreePath, { recursive: true });
@@ -60,26 +60,36 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
       status: "completed",
       step_id: "design",
       workspace,
-
       projectDir: process.cwd(),
     });
 
-    // Act: finalizeWorkspace with complete: true triggers archiveAndDeleteWorkspace
+    // Act: finalizeWorkspace with complete: true must NOT call git worktree remove
     const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
 
-    // Assert: gitExec was called with worktree remove --force args
-    expect(mockGitExec).toHaveBeenCalledWith(
-      ["worktree", "remove", "--force", worktreePath],
+    // Assert: gitExec was NOT called with worktree remove
+    expect(mockGitExec).not.toHaveBeenCalledWith(
+      expect.arrayContaining(["worktree", "remove"]),
       expect.any(String),
     );
-    // gitExec call must appear before rmSync (workspace is gone after complete)
-    expect(result.workspace_deleted).toBe(true);
+    // Assert: gitExec was NOT called with branch -D
+    expect(mockGitExec).not.toHaveBeenCalledWith(
+      expect.arrayContaining(["branch", "-D"]),
+      expect.any(String),
+    );
+    // Assert: the worktree subdir still exists (not deleted)
+    expect(existsSync(worktreePath)).toBe(true);
+    // Assert: the workspace dir still exists (no rmSync)
+    expect(existsSync(workspace)).toBe(true);
+    // Assert: teardown is deferred and observable
+    expect(result.teardown_deferred).toBe(true);
+    // Assert: workspace was archived
+    expect(result.workspace_archived).toBe(true);
   });
 
-  test("rmSync still proceeds (workspace_deleted: true) when gitExec fails for worktree removal", async () => {
-    // Arrange: git worktree remove fails
+  test("does NOT call git worktree remove even when git would fail, and worktree still survives", async () => {
+    // Arrange: even if git would fail (should never be called anyway)
     mockGitExec.mockReturnValue({
       duration_ms: 5,
       exitCode: 128,
@@ -100,7 +110,6 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
       status: "completed",
       step_id: "design",
       workspace,
-
       projectDir: process.cwd(),
     });
 
@@ -109,15 +118,23 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
     assertOk(result);
     expect(result.complete).toBe(true);
 
-    // Assert: gitExec was called (attempted), and workspace was still deleted despite failure
-    expect(mockGitExec).toHaveBeenCalledWith(
-      ["worktree", "remove", "--force", worktreePath],
+    // Assert: gitExec was NOT called for worktree remove or branch -D
+    expect(mockGitExec).not.toHaveBeenCalledWith(
+      expect.arrayContaining(["worktree", "remove"]),
       expect.any(String),
     );
-    expect(result.workspace_deleted).toBe(true);
+    expect(mockGitExec).not.toHaveBeenCalledWith(
+      expect.arrayContaining(["branch", "-D"]),
+      expect.any(String),
+    );
+    // Both the worktree subdir and workspace still exist
+    expect(existsSync(worktreePath)).toBe(true);
+    expect(existsSync(workspace)).toBe(true);
+    // Teardown is deferred
+    expect(result.teardown_deferred).toBe(true);
   });
 
-  test("skips git worktree remove when worktree/ subdirectory does not exist", async () => {
+  test("when worktree/ subdir does not exist, still does NOT call git worktree remove and workspace survives", async () => {
     // Arrange: no worktree/ subdirectory
     mkdirSync(join(workspace, "plans"), { recursive: true });
     writeFileSync(join(workspace, "plans", "DESIGN.md"), "# Design\n");
@@ -128,7 +145,6 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
       status: "completed",
       step_id: "design",
       workspace,
-
       projectDir: process.cwd(),
     });
 
@@ -137,11 +153,18 @@ describe("archiveAndDeleteWorkspace — git worktree deregistration", () => {
     assertOk(result);
     expect(result.complete).toBe(true);
 
-    // Assert: gitExec was NOT called since no worktree/ exists
+    // Assert: gitExec was NOT called for worktree remove (it never should be now)
     expect(mockGitExec).not.toHaveBeenCalledWith(
       expect.arrayContaining(["worktree", "remove"]),
       expect.any(String),
     );
-    expect(result.workspace_deleted).toBe(true);
+    expect(mockGitExec).not.toHaveBeenCalledWith(
+      expect.arrayContaining(["branch", "-D"]),
+      expect.any(String),
+    );
+    // Workspace still exists
+    expect(existsSync(workspace)).toBe(true);
+    // Teardown is deferred
+    expect(result.teardown_deferred).toBe(true);
   });
 });

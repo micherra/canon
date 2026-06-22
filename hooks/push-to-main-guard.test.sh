@@ -729,6 +729,66 @@ rm -rf "$TMPDIR_SPACE_PARENT" "$TMPDIR_SPACE_CWD"
 
 echo ""
 # ---------------------------------------------------------------------------
+# bash 3.2 set -u regression: empty array expansion must not throw
+# "unbound variable". In bash 3.2 (macOS default), "${arr[@]}" with an empty
+# array throws "arr[@]: unbound variable" when set -u is active. The fix is
+# the ${arr[@]+"${arr[@]}"} (+‑guard) idiom applied to every git invocation
+# that passes a potentially-empty array of -C flags or HEAD-resolution args.
+# These tests run the hook through /bin/bash (3.2 on macOS) and verify that:
+#   (a) a normal block-case still exits 2 (not a set -u crash),
+#   (b) a normal allow-case still exits 0 (not a set -u crash),
+#   (c) a bare push with no repo cwd (empty git_dir_args) still exits 2.
+# In all three cases exit code 1 would indicate a bash 3.2 set -u crash
+# rather than the expected policy decision.
+# ---------------------------------------------------------------------------
+echo "-- bash 3.2 set -u: empty-array guard (${arr[@]+...} idiom) must not crash --"
+
+# (a) block-case: git push origin main → must exit 2, NOT 1 (set -u crash)
+_exit_bash32_block=0
+printf '{"command":"git push origin main"}' \
+  | /bin/bash "$HOOK" >/dev/null 2>&1 || _exit_bash32_block=$?
+if [[ "$_exit_bash32_block" -eq 2 ]]; then
+  echo "  PASS: bash 3.2 set-u guard — block-case still exits 2 (not a crash)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: bash 3.2 set-u guard — block-case got exit=$_exit_bash32_block (expected 2; exit 1 = unbound-variable crash)"
+  FAIL=$((FAIL + 1))
+fi
+
+# (b) allow-case: git push origin feature → must exit 0, NOT 1
+_exit_bash32_allow=0
+printf '{"command":"git push origin feature"}' \
+  | /bin/bash "$HOOK" >/dev/null 2>&1 || _exit_bash32_allow=$?
+if [[ "$_exit_bash32_allow" -eq 0 ]]; then
+  echo "  PASS: bash 3.2 set-u guard — allow-case still exits 0 (not a crash)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: bash 3.2 set-u guard — allow-case got exit=$_exit_bash32_allow (expected 0; exit 1 = unbound-variable crash)"
+  FAIL=$((FAIL + 1))
+fi
+
+# (c) bare push from a scratch repo where HEAD is on main (git_dir_args is empty
+# in the hook — no -C in the command; CANON_GUARD_CWD points to the scratch repo).
+# resolve_protected_branch and bare_push_is_safe both receive empty git_dir_args,
+# which previously triggered "arr[@]: unbound variable" in bash 3.2. With the
+# +‑guard idiom they must not crash; the hook sees HEAD=main and must exit 2.
+_TMPDIR_BASH32=$(mktemp -d)
+setup_repo "$_TMPDIR_BASH32"
+git -C "$_TMPDIR_BASH32" branch -m main
+_exit_bash32_bare=0
+printf '{"command":"git push"}' \
+  | CANON_GUARD_CWD="$_TMPDIR_BASH32" /bin/bash "$HOOK" >/dev/null 2>&1 || _exit_bash32_bare=$?
+rm -rf "$_TMPDIR_BASH32"
+if [[ "$_exit_bash32_bare" -eq 2 ]]; then
+  echo "  PASS: bash 3.2 set-u guard — bare-push from main (empty git_dir_args) exits 2 (not a crash)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: bash 3.2 set-u guard — bare-push got exit=$_exit_bash32_bare (expected 2; exit 1 = unbound-variable crash)"
+  FAIL=$((FAIL + 1))
+fi
+
+echo ""
+# ---------------------------------------------------------------------------
 # watch_GGGGGGGG1 fix: PASSTHROUGH-set (false-positives now fixed — exit 0)
 # Non-git, non-wrapper segments containing $(...) / backticks / pipes / redirects
 # must pass through the hook without blocking (they cannot be a disguised git push).
