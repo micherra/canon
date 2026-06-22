@@ -9,8 +9,8 @@ import {
 import { buildHotFileSection } from "@features/orchestration/services/hot-file-detection.ts";
 import { buildPitfallsSection } from "@features/orchestration/services/pitfall-enrichment.ts";
 import { applyAgentSkillsDisclosure } from "@features/orchestration/tools/resolve-agent-skills-disclosure.ts";
+import { splitFrontmatter } from "@shared/lib/frontmatter.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
-import matter from "gray-matter";
 
 /**
  * resolve_agent_skills — Canon's custom skill-preload resolver.
@@ -273,8 +273,8 @@ export async function resolveAgentSkills(
       `Agent file not found: ${agentPath} (${err instanceof Error ? err.message : String(err)})`,
     );
   }
-  const parsed = matter(agentFile);
-  const { skills, unresolved } = resolveSkills(parsed.data as Record<string, unknown>, pluginDir);
+  const { data } = splitFrontmatter(agentFile);
+  const { skills, unresolved } = resolveSkills(data, pluginDir);
 
   const basePrompt = formatPreloadPrompt(skills);
   const correctionsSection = buildCorrectionsSection(projectDir);

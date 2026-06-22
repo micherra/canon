@@ -1,11 +1,12 @@
 /**
  * Markdown Language Adapter
  *
- * Extracts Canon entities from Markdown files using gray-matter for
- * frontmatter parsing and remark for body content analysis.
+ * Extracts Canon entities from Markdown files using the shared frontmatter
+ * splitter (yaml-backed) for frontmatter parsing and remark for body content
+ * analysis.
  */
 
-import matter from "gray-matter";
+import { splitFrontmatter } from "@shared/lib/frontmatter.ts";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
@@ -157,8 +158,7 @@ export const markdownAdapter: LanguageAdapter = {
   extensions: [".md"],
 
   parse(filePath: string, content: string): AdapterResult {
-    const parsed = matter(content);
-    const frontmatterData = parsed.data as Record<string, unknown>;
+    const { data: frontmatterData } = splitFrontmatter(content);
 
     const kind = classifyEntityKind(filePath, frontmatterData);
     const metadata = extractMetadata(kind, frontmatterData);

@@ -11,8 +11,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { ResolveAgentSkillsResult } from "@features/orchestration/tools/resolve-agent-skills.ts";
 import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
+import { splitFrontmatter } from "@shared/lib/frontmatter.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
-import matter from "gray-matter";
 import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = resolve(process.cwd(), "..");
@@ -26,7 +26,7 @@ function listAgents(): string[] {
 
 function agentFrontmatter(agentName: string): Record<string, unknown> {
   const raw = readFileSync(join(AGENTS_DIR, `${agentName}.md`), "utf-8");
-  return matter(raw).data;
+  return splitFrontmatter(raw).data;
 }
 
 function coerceList(value: unknown): string[] {
