@@ -80,5 +80,6 @@ they are surfaced with their filename and error message, never silently dropped.
 | Loop | Mode | Hook | Status | Description |
 |------|------|------|--------|-------------|
 | `_probe` | interval | post-ship | active | Framework runnable proof — proves schema→registry→runtime path. Invoked manually in verify; never fired in production. |
-
-Ship-watch (Phase B) and session-watch (Phase C) will be added here when implemented.
+| `ship-watch` | interval | post-ship | active | Watches PR status after ship — CI results, external review comments, release tags. Surfaces `auto-triage-fix` and `auto-plugin-update` actions. |
+| `session-watch` | self-paced | session-start | active | Cliff + staleness observer — detects backgrounded steps that may have died and surfaces KG/drift staleness. |
+| `harness-watch` | self-paced | post-ship | active | Accumulated-build-signal observer — counts builds since last learner pass and watches for rising recurring violations. Surfaces `run-learner` action when threshold crosses. |

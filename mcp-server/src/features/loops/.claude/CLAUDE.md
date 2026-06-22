@@ -51,7 +51,7 @@ so future authors cannot bypass it by omission.
 ## `orchestrator_action` on `TransitionRuleSchema` (Phase B+)
 
 `orchestrator_action` — optional `z.enum(ORCHESTRATOR_ACTIONS)` field on a transition rule.
-Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-update"] as const`
+Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-update", "run-learner"] as const`
 (exported from `loop-schema.ts`). `OrchestratorAction` type derived from the same const.
 
 - **Omitted** → `undefined` (backward compat; existing loops parse unchanged)
@@ -66,6 +66,7 @@ Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-upda
 Phase A: schema + loader + tools + `_probe` demo loop; no production loop fires.
 Phase B: `loops/ship-watch.md` added — first real loop, dispatched post-ship; `orchestrator_action` directive added (Phase B+) with two-member derive-from-const vocabulary (`auto-triage-fix`, `auto-plugin-update`) wired on three ship-watch transitions.
 Phase C (current): self-paced mode + ScheduleWakeup + `loops/session-watch.md`; `BUILTIN_FORBIDDEN_MCP` denylist + `max_wall` schedule field added to schema (ADR-0002 first-tick-baseline invariant formalised).
+Phase D (current): `loops/harness-watch.md` added — third real loop (post-ship, self-paced); `run-learner` added to `ORCHESTRATOR_ACTIONS` as the third vocabulary member.
 
 ## Non-Declarative Constraint (dc-06)
 

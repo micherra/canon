@@ -493,7 +493,7 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Loop Framework <!-- last-updated: 2026-06-12 -->
+## Loop Framework <!-- last-updated: 2026-06-22 -->
 
 Loops are Canon's managed periodic-observation artifact class. A loop is authored as
 `loops/<id>.md` (YAML frontmatter + action-prompt body), registered via `list_loops`,
@@ -535,15 +535,18 @@ a plugin cannot do this.
 **Phase history:** Phase A shipped the framework spine — schema, registry, MCP tools, `_probe`
 demo; no production loop ran. Phase B ships `loops/ship-watch.md` — the first real loop,
 dispatched via the post-ship tap. Phase C ships session-watch + self-paced mode.
+Phase D ships harness-watch — the accumulated-build-signal observer, fired post-ship, surfaces `run-learner`.
 Discovery: `list_loops`.
 
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
-`list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop:
-- `firing_posture[tier] === "auto"` → call `CronCreate({ schedule: loop.schedule.interval, command: "<inline tick prompt for <id> — see Resilient dispatch above>", max: loop.schedule.max_ticks })` immediately.
-- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; call `CronCreate` only on confirmation.
+`list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop, branch on `loop.mode`:
+- `firing_posture[tier] === "auto"`:
+  - `mode: "interval"` → call `CronCreate({ schedule: loop.schedule.interval, command: "<inline tick prompt for <id> — see Resilient dispatch above>", max: loop.schedule.max_ticks })` immediately.
+  - `mode: "self-paced"` → call `ScheduleWakeup({ delaySeconds: <loop initial cadence>, reason: "Starting <id> at post-ship", prompt: "<inline tick prompt for <id> — see Resilient dispatch above>" })` immediately.
+- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; dispatch by mode on confirmation (CronCreate for interval, ScheduleWakeup for self-paced).
 - `firing_posture[tier] === "disabled"` → skip silently.
 
-`ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in). It demonstrates the resilient inline dispatch form (mechanism-ships-first-instance, dc-06).
+`ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in). It demonstrates the resilient inline dispatch form (mechanism-ships-first-instance, dc-06). `harness-watch` is a self-paced post-ship loop and is dispatched via `ScheduleWakeup`.
 
 **Session-start tap (Phase C+):** At session start, the orchestrator calls
 `list_loops({ lifecycle_hook: "session-start", tier })`. For each returned loop:
@@ -586,6 +589,14 @@ On a release tag being cut:
 3. Run `plugin-update` + confirm the new version is active ONLY after explicit user confirmation.
 NEVER silently run plugin-update; the ask-first/confirm requirement is non-optional.
 
+**`run-learner`** (fires on the `harness-watch` `learner_due` false→true transition): The
+orchestrator spawns `canon:learner` per the learn-step protocol. Under the `supervised` tier,
+ASK the user first before spawning; under `autonomous` and `light-touch`, spawn the learner
+automatically. The learner pass NEVER mutates the build — it only analyzes patterns and writes
+to `.canon/`. dc-06 holds: the `harness-watch` loop only surfaces the signal via
+`ORCHESTRATOR_ACTION: run-learner field=learner_due loop=harness-watch`; the orchestrator
+spawns the learner.
+
 ## Project Structure <!-- last-updated: 2026-06-12 -->
 
 ```
@@ -606,12 +617,12 @@ canon/
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
-│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase C current)
+│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase D current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase C: _probe + ship-watch + session-watch)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase D: _probe + ship-watch + session-watch + harness-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
 ├── principles/           # Built-in principles (61 total: 6 rules, 36 strong-opinions, 19 conventions); 26 Canon-internal principles in .canon/principles/ (portable: false)
