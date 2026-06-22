@@ -398,16 +398,17 @@ push_updates_protected_branch() {
     # leaving `2>&1` (and similar redirect tokens) attached to the push segment.
     # canon_tokenize emits them as bare words that must NOT be treated as refspecs.
     #
-    # A token is a redirect operator iff it starts with an optional fd number
-    # followed by `>` or `>>` (output redirect), or starts with `&>` (combined
-    # stdout+stderr redirect). These characters (`>`, `&`) are absent from
-    # SAFE_REFSPEC_RE's allowlist, so no valid refspec can ever match this test —
-    # stripping is provably correct and cannot create a bypass gap.
-    #
-    # Covers: `2>&1`, `>/dev/null`, `2>/dev/null`, `&>/dev/null`, `>>log`,
-    #         `1>&2`, `2>>file`, `>file.log`, etc.
-    if [[ "$token" =~ ^[0-9]*\> || "$token" =~ ^\&\> ]]; then
-      continue  # redirect operator token — skip; not a refspec (watch_GGGGGGGGGG3 fix)
+    # A token is a redirect operator iff it starts with:
+    #   - `[0-9]*>` — output redirect (optional fd), covers `>file`, `>>log`,
+    #                 `2>/dev/null`, `2>&1`, `1>&2`, `2>>file`, etc.
+    #   - `&>`      — combined stdout+stderr redirect, covers `&>/dev/null`
+    #   - `[0-9]*<` — input redirect (optional fd), covers `<file`, `0<file`,
+    #                 `<<EOF`, `<<<word`, etc.
+    # The characters `>`, `<`, and `&` are ALL absent from SAFE_REFSPEC_RE's
+    # allowlist, so no valid git refspec can ever match these tests — stripping is
+    # provably correct and cannot create a bypass gap. (watch_GGGGGGGGGG3 fix)
+    if [[ "$token" =~ ^[0-9]*\> || "$token" =~ ^\&\> || "$token" =~ ^[0-9]*\< ]]; then
+      continue  # redirect operator token — skip; not a refspec
     fi
 
     # Bare token: first is remote, rest are refspecs

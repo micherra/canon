@@ -1456,7 +1456,7 @@ echo "-- watch_GGGGGGGGGG3 AC1: redirect tokens must NOT block a non-main push (
 run_test 'git push origin HEAD:canon/some-branch 2>&1 (AC1 core form — should allow)' \
   0 "$(make_input 'git push origin HEAD:canon/some-branch 2>&1')"
 
-# Additional redirect forms the fix must handle
+# Additional output-redirect forms
 run_test 'git push origin HEAD:canon/foo >file.log (stdout redirect — allow)' \
   0 "$(make_input 'git push origin HEAD:canon/foo >file.log')"
 run_test 'git push origin HEAD:canon/foo 2>/dev/null (stderr to devnull — allow)' \
@@ -1472,6 +1472,16 @@ run_test 'git push origin HEAD:canon/foo 2>&1 1>/dev/null (chained redirects —
 # Full pipeline: the segmentor splits on `|`, but we also want the combined form
 run_test 'git push origin HEAD:canon/foo 2>&1 | tail -5 (full pipeline — post-pipe tail is inert)' \
   0 "$(make_input 'git push origin HEAD:canon/foo 2>&1 | tail -5')"
+
+# Input-redirect forms (AC1 extension — input redirects must also be stripped)
+run_test 'git push origin HEAD:canon/foo <somefile (input redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo <somefile')"
+run_test 'git push origin HEAD:canon/foo 0<x (fd0 input redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo 0<x')"
+run_test 'git push origin HEAD:canon/foo <<EOF (heredoc redirect token — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo <<EOF')"
+run_test 'git push origin HEAD:canon/foo <<<word (here-string redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo <<<word')"
 
 echo ""
 echo "-- watch_GGGGGGGGGG3 AC2: main push STILL BLOCKED even with redirects (should block, exit 2) --"
@@ -1495,6 +1505,16 @@ run_test 'git push origin HEAD:main 2>&1 | tail (AC2 piped main — must block)'
 # Bare push with redirect (no refspec — bare_push_is_safe path; CANON_GUARD_CWD is /home/user/project which is non-repo → block)
 run_test 'git push 2>&1 (AC2 bare push + redirect, non-repo cwd — must block)' \
   2 "$(make_input 'git push 2>&1')"
+# Input-redirect + main (AC2 extension — input redirect must NOT open a bypass)
+run_test 'git push origin HEAD:main <somefile (AC2 main + input redirect — must block)' \
+  2 "$(make_input 'git push origin HEAD:main <somefile')"
+run_test 'git push origin main 0<x (AC2 main + fd0 input redirect — must block)' \
+  2 "$(make_input 'git push origin main 0<x')"
+# Reviewer-noted missing AC2 explicit cases (refs/heads/ prefix and force-push form)
+run_test 'git push origin refs/heads/main 2>&1 (AC2 refs/heads/ form + redirect — must block)' \
+  2 "$(make_input 'git push origin refs/heads/main 2>&1')"
+run_test 'git push origin +main 2>&1 (AC2 force-push +main + redirect — must block)' \
+  2 "$(make_input 'git push origin +main 2>&1')"
 
 echo ""
 echo "-- watch_GGGGGGGGGG3 AC3: genuinely non-literal refspecs still fail-closed (should block, exit 2) --"
