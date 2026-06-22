@@ -240,6 +240,17 @@ mutation must strictly improve the holdout to be accepted, no matter how confide
 Attribution + transcript propose; the gate disposes. This is the safety chain that makes trace-led
 targeting tractable without perfect causal traces.
 
+> **External corroboration (2026-06-22):** The agentic-RL literature independently validates that
+> credit-assignment/provenance plumbing — not the mutation/evolution engine — is the load-bearing
+> component. Cameron Wolfe's survey "Agentic RL: Frameworks and Best Practices"
+> (https://cameronrwolfe.substack.com/p/agentic-rl) describes "step-level trajectory representation +
+> action masking" as the mechanism by which a training system knows *which tokens the agent produced*
+> versus *which the environment injected* — the direct analogue of recording which artifact wording
+> (hash + span) was assembled into each agent's spawn prompt so a failure can be attributed to the
+> specific section in context. The survey's central thesis — that trajectory-handling and
+> infrastructure choices dominate the optimizer choice — is a second, independent argument for funding
+> the provenance plumbing (Phase-1 step 0) before the mutation engine.
+
 ### 3.2 Fitness gate — the held-out benchmark
 
 The analogue to Hermes's TBLite already exists: **`skills/canon/evals/`**.
@@ -527,6 +538,16 @@ holdout split. Rationale: Canon's traces are real and already captured, so mined
 hallucination risk than synthetic ones — and because the holdout *is* the safety property (§9), its
 provenance must be as trustworthy as possible. Mining is now doubly justified: Phase-1 provenance
 instrumentation (§3.1) makes mined cases *attributable*, sharpening their value as eval material.
+
+> **External corroboration — AutoForge as the named synthetic-backfill method (2026-06-22):**
+> When mined-case volume is too low to fill the holdout split, the concrete method for synthetic
+> backfill is **AutoForge** (described in Cameron Wolfe's "Agentic RL: Frameworks and Best Practices",
+> https://cameronrwolfe.substack.com/p/agentic-rl). AutoForge generates eval tasks by random-walking
+> a tool-dependency graph and executing a golden final state for ground-truth verification — exactly
+> the kind of `(task, expected)` pair the holdout split needs. Canon already owns the required graph
+> (`codebase_graph` / `graph_query`), so AutoForge-style graph-walk synthesis is the named method for
+> generating synthetic holdout cases when mined volume falls short. This is a reference for *when* to
+> use it, not a near-term build item.
 
 **8.3 — Cadence = offline batch, hosted by the `loops/` framework.** Not per-build. A Canon-authored
 `loops/evolve.md` dispatched via `CronCreate` at a lifecycle moment (modeled on `loops/ship-watch.md`).
