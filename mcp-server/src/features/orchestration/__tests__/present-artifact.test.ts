@@ -27,9 +27,9 @@ vi.mock("@platform/adapters/process-adapter.ts", () => ({
   openBrowser: vi.fn(),
 }));
 
+import { presentArtifact } from "@app/artifact-presentation.ts";
 import { getHttpPort, isHttpServerRunning, registerArtifact } from "@app/http-server.ts";
 import { openBrowser } from "@platform/adapters/process-adapter.ts";
-import { presentArtifact } from "../tools/present-artifact.ts";
 
 // ---------------------------------------------------------------------------
 // Tests
