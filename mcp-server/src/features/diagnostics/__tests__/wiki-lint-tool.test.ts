@@ -430,7 +430,9 @@ const x = 1;
     mkdirSync(agentsDir, { recursive: true });
     writeFileSync(
       join(agentsDir, "test-agent.md"),
-      "---\nname: test\n---\n\nApplies clean-principle.\n",
+      // Schema-valid agent frontmatter (name/description/model/rules) so the
+      // frontmatter_schema check stays CLEAN on this minimal fixture.
+      "---\nname: test\ndescription: A test agent.\nmodel: sonnet\nrules: []\n---\n\nApplies clean-principle.\n",
       "utf8",
     );
 

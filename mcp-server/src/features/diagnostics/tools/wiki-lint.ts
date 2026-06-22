@@ -18,6 +18,12 @@ import { DriftStore } from "@platform/storage/drift/store.ts";
 import { loadLayerMappings } from "@shared/lib/config.ts";
 import { loadAllPrinciples } from "@shared/matcher.ts";
 import type { Principle } from "@shared/parser.ts";
+import {
+  checkFrontmatterSchema,
+  classifyFmClass,
+  type FrontmatterSchemaFinding,
+  type FrontmatterSchemaInput,
+} from "../services/frontmatter-schema.ts";
 import { checkIndexDrift } from "../services/index-inventory.ts";
 import {
   assembleWikiLintOutput,
@@ -42,6 +48,7 @@ type CheckName =
   | "cited_paths"
   | "contradictions"
   | "duplicate_titles"
+  | "frontmatter_schema"
   | "glossary_consistency"
   | "missing_examples"
   | "misrouted_principles"
@@ -274,6 +281,68 @@ function runGlossaryCheck(projectDir: string): ReturnType<typeof checkGlossaryCo
   return checkGlossaryConsistency({ content, path: contextMdPath });
 }
 
+/** Matches a leading frontmatter fence and captures the inner YAML block. */
+const FRONTMATTER_FENCE_RE = /^---\r?\n([\s\S]*?)\r?\n---/;
+
+/** Strip a known leading root from an absolute path → repo-relative form. */
+function relativeTo(absPath: string, root: string): string | null {
+  const prefix = `${root}/`;
+  return absPath.startsWith(prefix) ? absPath.slice(prefix.length) : null;
+}
+
+/**
+ * Load one corpus file into a schema-check input, or null when it should be
+ * skipped (unclassified path or unreadable file).
+ */
+function toFrontmatterSchemaInput(
+  absPath: string,
+  projectDir: string,
+  pluginDir: string,
+): FrontmatterSchemaInput | null {
+  // Repo-relative path drives class resolution (mirrors the corpus layout).
+  const repoRel = relativeTo(absPath, projectDir) ?? relativeTo(absPath, pluginDir) ?? absPath;
+  const fmClass = classifyFmClass(repoRel);
+  if (!fmClass) return null;
+
+  const content = readFileSafe(absPath);
+  if (content === null) return null;
+
+  const match = FRONTMATTER_FENCE_RE.exec(content);
+  return { fm_class: fmClass, path: repoRel, rawFrontmatter: match ? match[1] : "" };
+}
+
+/**
+ * Enumerate the schema-bearing corpus (principles, .canon/principles, agents,
+ * templates, docs/adr), slice each file's raw frontmatter block, classify it, and
+ * run the pure per-class schema check (R1, ADR-0018).
+ *
+ * Files that don't classify (index docs, loops/routines — own validation) are
+ * skipped. I/O lives here; computation in services/frontmatter-schema.ts.
+ */
+function runFrontmatterSchemaCheck(
+  projectDir: string,
+  pluginDir: string,
+): FrontmatterSchemaFinding[] {
+  // Class roots: principles ship from pluginDir; .canon/principles is project-local.
+  const roots = [
+    join(pluginDir, "principles"),
+    join(projectDir, ".canon", "principles"),
+    join(pluginDir, "agents"),
+    join(pluginDir, "templates"),
+    join(projectDir, "docs", "adr"),
+  ];
+
+  const inputs: FrontmatterSchemaInput[] = [];
+  for (const root of roots) {
+    for (const absPath of findFiles(root, (_fp, name) => name.endsWith(".md"))) {
+      const input = toFrontmatterSchemaInput(absPath, projectDir, pluginDir);
+      if (input) inputs.push(input);
+    }
+  }
+
+  return checkFrontmatterSchema(inputs);
+}
+
 // ---- Main tool function ----
 
 type CheckContext = {
@@ -281,6 +350,7 @@ type CheckContext = {
   claudeMdFiles: FileRecord[];
   dddDocFiles: FileRecord[];
   enabled: Set<CheckName>;
+  pluginDir: string;
   principles: Principle[];
   projectDir: string;
 };
@@ -289,38 +359,46 @@ type CheckContext = {
 async function runEnabledChecks(
   ctx: CheckContext,
 ): Promise<Parameters<typeof assembleWikiLintOutput>[0]> {
-  const { agentFiles, claudeMdFiles, dddDocFiles, enabled, principles, projectDir } = ctx;
+  const { agentFiles, claudeMdFiles, dddDocFiles, enabled, pluginDir, principles, projectDir } =
+    ctx;
 
-  const contradictions = enabled.has("contradictions") ? checkContradictions(claudeMdFiles) : [];
-  const orphans = enabled.has("orphan_principles")
-    ? await runOrphanCheck(projectDir, principles, claudeMdFiles, agentFiles)
-    : [];
-  const staleRefs = enabled.has("stale_refs")
-    ? runStaleRefCheck(projectDir, claudeMdFiles, dddDocFiles)
-    : [];
-  const missingExamples = enabled.has("missing_examples") ? checkMissingExamples(principles) : [];
-  const citedPaths = enabled.has("cited_paths") ? runCitedPathCheck(projectDir, dddDocFiles) : [];
+  // `gate` runs `fn` only when its check is enabled, else yields []. Collapsing each
+  // per-check `enabled.has(...) ? fn() : []` into one call keeps this assembler below
+  // the cognitive-complexity ceiling as checks are added.
+  const gate = <T>(name: CheckName, fn: () => T): T | [] => (enabled.has(name) ? fn() : []);
+  const gateAsync = async <T>(name: CheckName, fn: () => Promise<T>): Promise<T | []> =>
+    enabled.has(name) ? fn() : [];
+
+  const contradictions = gate("contradictions", () => checkContradictions(claudeMdFiles));
+  const orphans = await gateAsync("orphan_principles", () =>
+    runOrphanCheck(projectDir, principles, claudeMdFiles, agentFiles),
+  );
+  const staleRefs = gate("stale_refs", () =>
+    runStaleRefCheck(projectDir, claudeMdFiles, dddDocFiles),
+  );
+  const missingExamples = gate("missing_examples", () => checkMissingExamples(principles));
+  const citedPaths = gate("cited_paths", () => runCitedPathCheck(projectDir, dddDocFiles));
   const validLayers = enabled.has("scope_layers")
     ? Object.keys(await loadLayerMappings(projectDir))
     : [];
-  const scopeLayers = enabled.has("scope_layers") ? checkScopeLayers(principles, validLayers) : [];
-  const scopeTags = enabled.has("scope_tags")
-    ? checkScopeTags(principles, VALID_COMPUTED_TAGS)
-    : [];
-  const indexDrift = enabled.has("index_drift") ? await checkIndexDrift(projectDir) : [];
-  const glossaryConsistency = enabled.has("glossary_consistency")
-    ? runGlossaryCheck(projectDir)
-    : [];
-  const misroutedPrinciples = enabled.has("misrouted_principles")
-    ? checkMisroutedPrinciples(principles)
-    : [];
-  const duplicateTitles = enabled.has("duplicate_titles") ? checkDuplicateTitles(principles) : [];
+  const scopeLayers = gate("scope_layers", () => checkScopeLayers(principles, validLayers));
+  const scopeTags = gate("scope_tags", () => checkScopeTags(principles, VALID_COMPUTED_TAGS));
+  const indexDrift = await gateAsync("index_drift", () => checkIndexDrift(projectDir));
+  const glossaryConsistency = gate("glossary_consistency", () => runGlossaryCheck(projectDir));
+  const misroutedPrinciples = gate("misrouted_principles", () =>
+    checkMisroutedPrinciples(principles),
+  );
+  const duplicateTitles = gate("duplicate_titles", () => checkDuplicateTitles(principles));
+  const frontmatterSchema = gate("frontmatter_schema", () =>
+    runFrontmatterSchemaCheck(projectDir, pluginDir),
+  );
 
   return {
     citedPaths,
     contradictions,
     duplicateTitles,
     filesScanned: claudeMdFiles.length + agentFiles.length + dddDocFiles.length,
+    frontmatterSchema,
     glossaryConsistency,
     indexDrift,
     misroutedPrinciples,
@@ -353,6 +431,7 @@ export async function wikiLint(
     "cited_paths",
     "contradictions",
     "duplicate_titles",
+    "frontmatter_schema",
     "glossary_consistency",
     "missing_examples",
     "misrouted_principles",
@@ -382,6 +461,7 @@ export async function wikiLint(
     claudeMdFiles,
     dddDocFiles,
     enabled,
+    pluginDir,
     principles,
     projectDir,
   });

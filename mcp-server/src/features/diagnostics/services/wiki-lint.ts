@@ -18,6 +18,7 @@
  */
 
 import type { Principle } from "@shared/parser.ts";
+import type { FrontmatterSchemaFinding } from "./frontmatter-schema.ts";
 import type { IndexDriftFinding } from "./index-inventory.ts";
 import type { GlossaryConsistencyFinding } from "./wiki-lint-glossary.ts";
 import type {
@@ -77,12 +78,13 @@ export type ScopeTagFinding = {
   message: string;
 };
 
-export type { IndexDriftFinding };
+export type { FrontmatterSchemaFinding, IndexDriftFinding };
 
 export type WikiLintOutput = {
   cited_paths: CitedPathFinding[];
   contradictions: ContradictionFinding[];
   duplicate_titles: DuplicateTitleFinding[];
+  frontmatter_schema: FrontmatterSchemaFinding[];
   glossary_consistency: import("./wiki-lint-glossary.ts").GlossaryConsistencyFinding[];
   missing_examples: MissingExampleFinding[];
   misrouted_principles: MisroutedPrincipleFinding[];
@@ -103,6 +105,7 @@ export type AssembleWikiLintInput = {
   contradictions: ContradictionFinding[];
   duplicateTitles: DuplicateTitleFinding[];
   filesScanned: number;
+  frontmatterSchema: FrontmatterSchemaFinding[];
   glossaryConsistency: import("./wiki-lint-glossary.ts").GlossaryConsistencyFinding[];
   missingExamples: MissingExampleFinding[];
   misroutedPrinciples: MisroutedPrincipleFinding[];
@@ -580,6 +583,7 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
     contradictions,
     duplicateTitles,
     filesScanned,
+    frontmatterSchema,
     glossaryConsistency,
     missingExamples,
     misroutedPrinciples,
@@ -594,6 +598,7 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
     cited_paths: citedPaths,
     contradictions,
     duplicate_titles: duplicateTitles,
+    frontmatter_schema: frontmatterSchema,
     glossary_consistency: glossaryConsistency,
     index_drift: indexDrift,
     misrouted_principles: misroutedPrinciples,
@@ -616,7 +621,8 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
         indexDrift.length +
         glossaryConsistency.length +
         misroutedPrinciples.length +
-        duplicateTitles.length,
+        duplicateTitles.length +
+        frontmatterSchema.length,
     },
   };
 }

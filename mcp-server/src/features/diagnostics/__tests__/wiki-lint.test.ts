@@ -541,6 +541,7 @@ describe("assembleWikiLintOutput", () => {
       contradictions: [contradiction],
       duplicateTitles: [],
       filesScanned: 10,
+      frontmatterSchema: [],
       glossaryConsistency: [glossaryFinding],
       missingExamples: [missingExample],
       misroutedPrinciples: [],
