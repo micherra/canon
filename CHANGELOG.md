@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.13.0](https://github.com/micherra/canon/compare/v2.12.0...v2.13.0) (2026-06-22)
+
+
+### Features
+
+* **conventions:** add disk-is-source-of-truth-on-resume (intra-agent checkpointing) ([#383](https://github.com/micherra/canon/issues/383)) ([406b3df](https://github.com/micherra/canon/commit/406b3dfb2fc284eea0a8eb058dbc1796c1831084))
+* **conventions:** promote 3 learner items — fail-closed-scan-scope, harness-tool-invocation-check, renderer write-not-echo ([#388](https://github.com/micherra/canon/issues/388)) ([b691a86](https://github.com/micherra/canon/commit/b691a867bb15bc282f4ba120686b6333b2e16787))
+* enforce feature-boundary invariant — genuine decoupling + grey-box model ([#390](https://github.com/micherra/canon/issues/390)) ([ed7495a](https://github.com/micherra/canon/commit/ed7495ab9feb84925a4202e0b5984c5000456721))
+* **hooks:** deterministic-verification hardening (Batch A) -- dead-wire gate, fail-closed mechanical checks, spec-traced tester ([#389](https://github.com/micherra/canon/issues/389)) ([bedc382](https://github.com/micherra/canon/commit/bedc3822c173d66590b8367fb2b5d42b1a695b7f))
+* **learner:** artifact-retirement (prune) dimension — subtraction discipline (Batch C) ([#396](https://github.com/micherra/canon/issues/396)) ([f52d4b3](https://github.com/micherra/canon/commit/f52d4b333db6fd9d1b75fa7a0997bbd23af1ffa9))
+* **loops:** add orchestrator_action directive — declarative loop-to-orchestrator action signal ([#393](https://github.com/micherra/canon/issues/393)) ([b277c93](https://github.com/micherra/canon/commit/b277c9389d2abc6785dac5008e805ab9f118ab83))
+* **loops:** Phase C — self-paced mode + session-watch + first-tick baseline (ADR-0002) ([#381](https://github.com/micherra/canon/issues/381)) ([cbe60ca](https://github.com/micherra/canon/commit/cbe60cab9b6c11e485dfe59a3a7bfe71146f9be6))
+* **mcp-http:** harden F1/F4, wire DEC-05 sidecar, flip default transport stdio to HTTP daemon ([#382](https://github.com/micherra/canon/issues/382)) ([99c9a04](https://github.com/micherra/canon/commit/99c9a045dc45421b9b83dfb6e72218f887d03b60))
+* **orchestration:** orchestrator memory hardening (Batch B) — decisions ledger + checkpoint + in-session compaction rehydration ([#394](https://github.com/micherra/canon/issues/394)) ([051a49e](https://github.com/micherra/canon/commit/051a49e2aece91db7b086f00edc9471d4c2ec5bd))
+* **principles:** separate Canon-internal conventions from shipped set — portable flag, relocation, dedup + misroute guards ([#387](https://github.com/micherra/canon/issues/387)) ([de2b49f](https://github.com/micherra/canon/commit/de2b49f2a2a955ca95fe9d90c07ef03429f83c55))
+* **worktree:** symlink node_modules into worktrees (LSP) with containment guards + fix push-guard false-positives ([#386](https://github.com/micherra/canon/issues/386)) ([d4b7923](https://github.com/micherra/canon/commit/d4b7923b2decf94f9d849e048fb3fba5d96280c8))
+
+
+### Bug Fixes
+
+* **deps:** override esbuild to 0.28.1 to clear high-sev advisory (GHSA-gv7w-rqvm-qjhr) ([#397](https://github.com/micherra/canon/issues/397)) ([1d360a2](https://github.com/micherra/canon/commit/1d360a29e9692058c1eac2b665c2acdb365d61b2))
+* **deps:** override protobufjs to 7.6.4 — clear high-sev npm-audit advisory blocking CI ([#403](https://github.com/micherra/canon/issues/403)) ([56814eb](https://github.com/micherra/canon/commit/56814eb79cc2a458c05050cecbe711c8a0c39809))
+* **docs:** excise vestigial .canon/learn.sh references + corpus audit ([#392](https://github.com/micherra/canon/issues/392)) ([c94af05](https://github.com/micherra/canon/commit/c94af05226c70390c37db13b4b81e145fc35cce9))
+* **drift-store:** close 20 stale orphaned-branch violation rows via audited seed ([#399](https://github.com/micherra/canon/issues/399)) ([4a7e96c](https://github.com/micherra/canon/commit/4a7e96c41b0894214fc5c2a2af43dcea3c20877f))
+* **finalize:** remove destructive teardown — branch/worktree survive until post-ship ([#401](https://github.com/micherra/canon/issues/401)) ([5be384c](https://github.com/micherra/canon/commit/5be384ce8937a3faccf8238ee96504958bd08a8c))
+* **hooks:** close two push-guard bypass vectors (backslash-escape + glued cmdsub) ([#402](https://github.com/micherra/canon/issues/402)) ([52e7ab3](https://github.com/micherra/canon/commit/52e7ab3428f912ee0703fb73fcc2e80ed597e929))
+* **loops:** register /canon:loop-tick via plugin.json commands field so CronCreate dispatch fires ([#384](https://github.com/micherra/canon/issues/384)) ([aa6afde](https://github.com/micherra/canon/commit/aa6afde25ce669af198d03756771b5c9f3d78310))
+* **loops:** resilient loop dispatch — self-contained inline tick prompt, no /canon:loop-tick slash dependency ([#395](https://github.com/micherra/canon/issues/395)) ([417b850](https://github.com/micherra/canon/commit/417b850af2f51c97365ccf9559b6d05eb4655863))
+* **mcp-auth:** durable MCP client/daemon auth token determinism + pidfile lifecycle ([#398](https://github.com/micherra/canon/issues/398)) ([898eb1c](https://github.com/micherra/canon/commit/898eb1c0b8cba155e0e2c38da3c286b228f9f5e4))
+
 ## [2.12.0](https://github.com/micherra/canon/compare/v2.11.0...v2.12.0) (2026-06-11)
 
 

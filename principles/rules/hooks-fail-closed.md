@@ -81,7 +81,7 @@ fi
 
 The exception requires an explicit `# DOCUMENTED FAIL-OPEN` comment naming the advisory contract. Absence of such a comment means the hook is subject to this rule.
 
-**Related:** `fail-closed-by-default` — the application-layer equivalent this rule operationalizes for shell hooks. `source-shared-hook-helpers` — the convention that mandates using `canon_extract_command` rather than inlining extraction expressions.
+**Related:** `fail-closed-by-default` — the application-layer equivalent this rule operationalizes for shell hooks. `source-shared-hook-helpers` — the convention that mandates using `canon_extract_command` rather than inlining extraction expressions. `security-hook-parser-allowlist-posture` — the convention that sharpens this rule for the parser-posture dimension: a wrapper/prefix/command-word allowlist must fail closed on an unrecognized leading token rather than blocklist over derived substrings.
 
 ## Anti-Rationalization
 

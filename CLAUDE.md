@@ -74,7 +74,7 @@ Do not narrate individual tool calls. One line between state transitions is corr
 |--------|--------|
 | Build, fix, change, improve (any scope) | PM triage → route to `architect` or `engineer` |
 | Review PR or branch | Spawn `reviewer` |
-| Security audit | Spawn `security`, then `reviewer` |
+| Security audit | Spawn `security`, then `reviewer`. Re-verify after a CRITICAL/BLOCKING safety-hook fix MUST dispatch a FRESH (non-author) adversarial agent — the author's "my listed cases are covered" framing structurally cannot hold the adversarial "the list is a hypothesis to attack" framing (watch_CCCCCCCCCCCC1). |
 | Investigate / "how does X work" | Spawn `architect` |
 | Scan for violations (via init) | Spawn `engineer` to scan + fix |
 | Create/edit principle | Route to `writer` via content flow (see `references/content-flow.md`) |
@@ -153,6 +153,8 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 **Dead-code-removal enrichment**: For builds that delete symbols, functions, types, or directory paths, add to the engineer spawn prompt: "After deleting each symbol, grep the full codebase for: (1) the symbol name as a string literal (catches constant arrays and config entries), (2) the TypeScript type name (catches orphan type declarations whose value-producers were deleted), (3) any directory path strings being removed (catches docstrings and comments). List all additional deletions in the Criteria Coverage table."
 
 **Wiring-task enrichment**: The standing dead-wire gate (Step Enforcement Contracts → Verify step) now enforces new-export reachability automatically; the manual checks below remain engineer-facing guidance for closing wiring ACs with explicit evidence. When the build spec requires that agent X calls tool Y (new or pre-existing), add to the engineer spawn prompt: "Before closing any AC that says agent X must call tool Y, verify: (1) `awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/X.md | grep '  - mcp__canon__Y$'` returns a match — this confirms Y is in the `tools:` allowlist, not merely mentioned in the description or body; (2) `grep -rn '"Y"' mcp-server/src/app/register-*.ts` (quoted-string form in registration files) returns a non-empty result — a match only in a doc comment or non-registration file does not satisfy this condition. Both checks are required. List the command output as evidence in the Criteria Coverage table."
+
+**Hook-bypass-fix enrichment**: For safety-hook bypass fixes, add to the engineer spawn prompt: "Prefer a vocabulary-free / fail-closed-on-unrecognized predicate over an enumerated wrapper/token list — each new list item closes one form and opens the next unlisted one. If this fix is the Nth patch of the same bypass class, treat it as a posture rethink, not another enumeration (see `.canon/principles/conventions/security-hook-parser-allowlist-posture.md`, watch_UUUUUUUU2)."
 
 #### Non-trivial path (PM → architect → execution)
 
