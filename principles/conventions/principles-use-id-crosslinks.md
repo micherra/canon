@@ -19,7 +19,7 @@ When a principle has a genuine relationship to another principle — refinement,
 
 `wiki_lint orphan_principles` measures whether each principle in the corpus is the *inbound target* of at least one `[[id]]` link. Without a corpus-wide linking convention, even genuine relationships expressed as `` `id` `` in backticks are invisible to the text-node extractor (PROBE-FINDINGS-R3 P3), and principles that nobody points at remain orphaned even if their authors intended them to be related. An empirical probe confirmed that direction matters: a `## Related` link in principle A de-orphans **A's target B**, not A (PROBE-FINDINGS-R3 P5). When no convention enforces outbound links, each new principle becomes a new orphan by default, and the orphan check accumulates noise until it stops being a true signal.
 
-By convention, every principle that has genuine relationships cites them with `[[id]]` syntax, keeping the orphan floor at the documented `.canon/principles` residual (~28 Canon-internal, gitignored principles) rather than growing unboundedly with each new principle added.
+By convention, every principle that has genuine relationships cites them with `[[id]]` syntax, keeping the orphan floor at the documented `.canon/principles` residual (26 Canon-internal, gitignored principles) rather than growing unboundedly with each new principle added.
 
 ## Examples
 
@@ -49,7 +49,7 @@ A link with no rationale clause does not convey the nature of the relationship. 
 
 ## Exceptions
 
-- **`.canon/principles` residual**: The ~28 gitignored, portable:false Canon-internal principles are an accepted residual. They are not shippable in a PR, so they cannot be inbound targets from tracked principles. Their orphan status is documented, not chased.
+- **`.canon/principles` residual**: The 26 gitignored, portable:false Canon-internal principles are an accepted residual. They are not shippable in a PR, so they cannot be inbound targets from tracked principles. Their orphan status is documented, not chased.
 - **Non-resolving ids**: If a principle id exists in prose but does not resolve to a real principle file (tracked or `.canon`) — e.g., `component-single-responsibility` — keep it as `` `backtick` `` prose rather than converting it to `[[id]]`. Unresolvable links introduce a `BROKEN_WIKILINK` finding and would fail the `link_integrity` gate.
 
 ## Related
