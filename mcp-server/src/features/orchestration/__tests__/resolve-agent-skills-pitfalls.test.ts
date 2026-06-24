@@ -317,7 +317,9 @@ describe("resolveAgentSkills — pitfall injection", () => {
       }),
     );
 
-    expect(mockAppendEvent).not.toHaveBeenCalled();
+    // pitfall_injected must NOT be called when no pitfalls found.
+    // (context_provenance is now also emitted — that is expected and correct.)
+    expect(mockAppendEvent).not.toHaveBeenCalledWith("pitfall_injected", expect.anything());
   });
 
   it("audit event NOT logged when workspace not provided", async () => {
