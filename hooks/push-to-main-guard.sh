@@ -287,6 +287,7 @@ push_updates_protected_branch() {
   local remote_name="origin"  # default remote name; updated when first bare token seen
   local refspecs=()
   local skip_next=false
+  local skip_redirect_target=false  # set when a STANDALONE redirect operator was seen; consumes its target filename
   local _capture_repo_next=false  # set when --repo <value> (separate form) is seen
   local tags_only_mode=false   # set when --tags seen (without push-everything mode)
 
@@ -295,6 +296,15 @@ push_updates_protected_branch() {
 
     if [[ "$skip_next" == "true" ]]; then
       skip_next=false
+      continue
+    fi
+
+    # Consume the TARGET of a standalone redirect operator (see the redirect
+    # block below). The previous token was a bare `>`/`>>`/`<`/`2>`/`&>`/… with
+    # no glued filename, so THIS token is the redirect target (a filename) — it
+    # must NOT be accounted as a remote or refspec.
+    if [[ "$skip_redirect_target" == "true" ]]; then
+      skip_redirect_target=false
       continue
     fi
 
@@ -391,6 +401,49 @@ push_updates_protected_branch() {
           ;;
       esac
       continue
+    fi
+
+    # Shell redirect operator: strip before any positional / refspec handling.
+    # When `git push ... 2>&1 | tail` is run, the guard's segmenter splits on `|`,
+    # leaving `2>&1` (and similar redirect tokens) attached to the push segment.
+    # canon_tokenize emits them as bare words that must NOT be treated as refspecs.
+    #
+    # A token is a redirect operator iff it starts with:
+    #   - `[0-9]*>` — output redirect (optional fd), covers `>file`, `>>log`,
+    #                 `2>/dev/null`, `2>&1`, `1>&2`, `2>>file`, etc.
+    #   - `&>`      — combined stdout+stderr redirect, covers `&>/dev/null`
+    #   - `[0-9]*<` — input redirect (optional fd), covers `<file`, `0<file`,
+    #                 `<<EOF`, `<<<word`, etc.
+    # The characters `>`, `<`, and `&` are ALL absent from SAFE_REFSPEC_RE's
+    # allowlist, so no valid git refspec can ever match these tests — stripping is
+    # provably correct and cannot create a bypass gap. (watch_GGGGGGGGGG3 fix)
+    #
+    # GLUED vs SEPARATED targets: the shell may tokenize the redirect TARGET
+    # either glued to the operator (`>file`, `2>&1`, `&>/dev/null`) or as a
+    # SEPARATE following token (`git push origin > log` → `>` then `log`).
+    # For the glued form the target travels with the operator and is consumed
+    # here. For the separated form we must ALSO consume the NEXT token (the
+    # filename) — otherwise it survives as a phantom refspec/remote, which
+    # converts a bare push into a safe-looking explicit refspec push (a
+    # fail-OPEN bypass of this fail-closed guard — Codex P1 on PR #409).
+    #
+    # The discriminator is STRUCTURAL, not an operator-spelling enumeration:
+    # strip the leading redirect-operator shape (optional fd digits, then a run
+    # of the redirect characters `>`/`<`/`&`); if NOTHING remains, the token is
+    # a bare operator with no glued target ⇒ its target is the next token.
+    # A protected refspec (`main`, `+main`, `HEAD:main`, …) can NEVER be the
+    # consumed target: the next token is only skipped when the PRIOR token was a
+    # standalone redirect operator (none of `>`/`<`/`&` appear in any refspec).
+    if [[ "$token" =~ ^[0-9]*\> || "$token" =~ ^\&\> || "$token" =~ ^[0-9]*\< ]]; then
+      # Remove leading fd digits then the run of redirect operator chars.
+      # If the remainder is empty, no glued target is present ⇒ standalone.
+      local _redir_rest="${token#"${token%%[\<\>\&]*}"}"   # drop leading fd digits
+      _redir_rest="${_redir_rest##[\<\>\&]}"                # drop one+ operator chars
+      while [[ "$_redir_rest" == [\<\>\&]* ]]; do _redir_rest="${_redir_rest#[\<\>\&]}"; done
+      if [[ -z "$_redir_rest" ]]; then
+        skip_redirect_target=true   # standalone operator — consume the target filename next
+      fi
+      continue  # redirect operator token — skip; not a refspec
     fi
 
     # Bare token: first is remote, rest are refspecs
