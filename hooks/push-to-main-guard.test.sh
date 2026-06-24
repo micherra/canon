@@ -1530,6 +1530,75 @@ run_test 'git push origin HEAD:$(echo main) (AC3 cmd-sub refspec — must block)
 
 echo ""
 # ---------------------------------------------------------------------------
+# Separated-redirect bypass (Codex P1 on PR #409): a STANDALONE redirect
+# operator token (`>`, `>>`, `<`, `2>`, `&>`, etc.) leaves its TARGET filename
+# as a separate token. The prior strip skipped only the operator and let the
+# target ('log') flow on as a refspec — converting a BARE push to origin
+# (which must take the bare_push_is_safe path) into a safe-looking explicit
+# refspec push to 'log', allowing a redirected direct push to main.
+# The fix consumes the target token after a standalone operator.
+# ---------------------------------------------------------------------------
+echo "-- Separated-redirect AC1: target filename must NOT be misread as a refspec (feature branch → allow) --"
+
+# On a non-protected branch a bare push with a SEPARATED redirect must stay
+# allowed AND must not parse the target ('log'/'out.txt'/'err'/'in') as a refspec.
+TMPDIR_SEPRD=$(mktemp -d)
+setup_repo "$TMPDIR_SEPRD"
+git -C "$TMPDIR_SEPRD" checkout -q -b canon/sep-redir 2>/dev/null || true
+
+run_test 'git push origin > log (separated stdout redirect, feature branch → allow)' \
+  0 "$(make_input 'git push origin > log')" "$TMPDIR_SEPRD"
+run_test 'git push origin >> out.txt (separated append redirect, feature branch → allow)' \
+  0 "$(make_input 'git push origin >> out.txt')" "$TMPDIR_SEPRD"
+run_test 'git push origin 2> err (separated fd2 redirect, feature branch → allow)' \
+  0 "$(make_input 'git push origin 2> err')" "$TMPDIR_SEPRD"
+run_test 'git push origin < in (separated input redirect, feature branch → allow)' \
+  0 "$(make_input 'git push origin < in')" "$TMPDIR_SEPRD"
+run_test 'git push origin &> log (separated combined redirect, feature branch → allow)' \
+  0 "$(make_input 'git push origin &> log')" "$TMPDIR_SEPRD"
+
+rm -rf "$TMPDIR_SEPRD"
+
+echo ""
+echo "-- Separated-redirect AC2 (the bug): a bare push that MUST block stays blocked with a separated redirect (should block, exit 2) --"
+
+# Bare push, non-repo cwd (default /home/user/project) → unresolvable → BLOCK.
+# With the bug, 'log' was read as an explicit refspec → fail-OPEN allow.
+run_test 'git push origin > log (separated redirect, non-repo cwd → must block)' \
+  2 "$(make_input 'git push origin > log')"
+run_test 'git push origin 2>&1 > log (glued+separated redirects, non-repo cwd → must block)' \
+  2 "$(make_input 'git push origin 2>&1 > log')"
+run_test 'git push origin >> out.txt (separated append, non-repo cwd → must block)' \
+  2 "$(make_input 'git push origin >> out.txt')"
+run_test 'git push origin 2> err (separated fd2, non-repo cwd → must block)' \
+  2 "$(make_input 'git push origin 2> err')"
+run_test 'git push origin < in (separated input, non-repo cwd → must block)' \
+  2 "$(make_input 'git push origin < in')"
+# --mirror pushes every ref incl. main; a separated redirect must not smuggle past it.
+run_test 'git push --mirror origin > log (separated redirect on --mirror → must block)' \
+  2 "$(make_input 'git push --mirror origin > log')"
+
+# Bare push from a real main checkout with a separated redirect must still block.
+TMPDIR_SEPRD_MAIN=$(mktemp -d)
+setup_repo "$TMPDIR_SEPRD_MAIN"
+run_test 'git push origin > log from main checkout (separated redirect → must block)' \
+  2 "$(make_input 'git push origin > log')" "$TMPDIR_SEPRD_MAIN"
+rm -rf "$TMPDIR_SEPRD_MAIN"
+
+echo ""
+echo "-- Separated-redirect AC3 (fail-closed): an explicit protected refspec with a separated redirect still blocks (should block, exit 2) --"
+
+# 'main' is a real refspec; only 'log' is the redirect target. The consumed
+# token must NEVER be a protected refspec.
+run_test 'git push origin main > log (explicit main + separated redirect → must block)' \
+  2 "$(make_input 'git push origin main > log')"
+run_test 'git push origin HEAD:main > log (explicit HEAD:main + separated redirect → must block)' \
+  2 "$(make_input 'git push origin HEAD:main > log')"
+run_test 'git push origin +main >> out.txt (force +main + separated append → must block)' \
+  2 "$(make_input 'git push origin +main >> out.txt')"
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
