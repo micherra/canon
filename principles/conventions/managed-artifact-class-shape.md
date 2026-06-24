@@ -171,7 +171,7 @@ Inventing a parallel loader, parser, or registration mechanism when a known-good
 
 ## Related
 
-[[simplicity-first]] is the foundation — cloning the nearest existing shape is the simplest path to a correct implementation; inventing parallel infrastructure violates simplicity without adding capability. [[structured-logging-with-levels]] is a peer artifact-class convention in the ops cluster — both principles ensure Canon's own artifact classes are consistent and observable.
+[[simplicity-first]] is the foundation — cloning the nearest existing shape is the simplest path to a correct implementation; inventing parallel infrastructure violates simplicity without adding capability. [[structured-logging-with-levels]] is a peer artifact-class convention in the ops cluster — both principles ensure Canon's own artifact classes are consistent and observable. [[principles-use-id-crosslinks]] is the companion meta-convention — it governs how principles within the artifact corpus cross-link each other, completing the two-part authoring contract (shape + linking).
 
 ## Verification
 
