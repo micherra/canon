@@ -57,7 +57,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect
 
 ## Contracts
-<!-- last-updated: 2026-06-12 -->
+<!-- last-updated: 2026-06-24 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -76,7 +76,9 @@ src/
 
 **Flow parser** (`src/orchestration/flow-parser.ts`) — ADR-004: `loadAndResolveFlow` throws on hard validation errors. Exports: `validateSpawnCoverage`, `analyzeReachability`, `checkUnresolvedRefs`, `validateStateIdParams`, `VIRTUAL_SINKS`, `RUNTIME_VARIABLES`.
 
-**Execution store** (`src/domains/workspaces/execution-store.ts`) — optimistic locking via `updateExecutionVersioned(fields, expectedVersion)` (returns `{ updated: true|false }`); `SQLITE_BUSY` retry via `withRetry`; all board mutations use `updateExecutionVersioned`; `isStuck` is SQL-based. SCHEMA_VERSION = '11'.
+**Execution store** (`src/domains/workspaces/execution-store.ts`) — optimistic locking via `updateExecutionVersioned(fields, expectedVersion)` (returns `{ updated: true|false }`); `SQLITE_BUSY` retry via `withRetry`; all board mutations use `updateExecutionVersioned`; `isStuck` is SQL-based. SCHEMA_VERSION = '11'. Event types added 2026-06-24: `context_provenance` (emitted per agent spawn by `resolve_agent_skills` post-disclosure, keyed by `step_id`); `context_provenance_agent_id` (back-filled by `log_step`/`batch_log_steps` on step completion with `agent_id`, keyed by `step_id`).
+
+**Context provenance module** (`src/domains/workspaces/context-provenance.ts`) — `ContextProvenanceRecord` / `ContextProvenanceSummary` types; `hashContent(s)` (deterministic sha256 hex); `buildContextProvenanceRecord(opts)` — pure; builds hashes + char spans for each artifact, never stores content; blanked artifacts carry `char_span: null` + `source:"sidecar"` + `sidecar_path`; fail-open: `indexOf === -1` yields `char_span: null`. Added 2026-06-24. (ADR-0018)
 
 **KG schema** (`src/graph/kg-schema.ts`) — SCHEMA_VERSION = "5"; v5 adds `community_id`, `file_tags`, `hotspot_scores`, `co_change_edges`. Freshness marker in `meta` table under key `graph_head_commit`; stamped on full-project runs only — scoped runs skip orphan pruning and marker stamping.
 
