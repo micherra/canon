@@ -29,12 +29,14 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { scanArtifactList, scanArtifacts } from "../services/artifact-matching.ts";
 import { tryWriteBuildTrendSummary } from "../services/build-trend-summary-writer.ts";
+import { backfillContextProvenanceAgentId } from "../services/context-provenance-backfill.ts";
 import { tryWriteBuildDigest } from "../services/digest-writer.ts";
+import { computeFlowOutcome, getStepsMissingSkipReason } from "../services/finalize-helpers.ts";
+import { tryTranscriptCapture } from "../services/transcript-capture-hook.ts";
 import {
   archiveWorkspaceOnly,
   tryAppendAnalytics,
@@ -42,7 +44,6 @@ import {
   tryRemoveCliffLedger,
   tryRunJanitor,
 } from "../services/workspace-cleanup.ts";
-import { captureTranscript } from "./capture-transcript.ts";
 
 export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
 
@@ -325,35 +326,6 @@ function enforceArtifacts(
   return null;
 }
 
-async function tryTranscriptCapture(
-  step: JournalStep,
-  result: LogStepResult,
-  input: LogStepInput,
-): Promise<void> {
-  if (!input.agent_id) return;
-  const captureResult = await captureTranscript({
-    agent_id: input.agent_id,
-    agent_type: step.agent_type ?? "unknown",
-    projectDir: input.projectDir,
-    step_id: input.step_id,
-    workspace: input.workspace,
-  });
-  if (captureResult.ok && captureResult.transcript_path) {
-    step.transcript_path = captureResult.transcript_path;
-    result.transcript_path = captureResult.transcript_path;
-    // Persist to ExecutionStore so get_transcript can find the path via getTranscriptPath().
-    try {
-      const store = getExecutionStore(input.workspace);
-      store.setTranscriptPath(input.step_id, captureResult.transcript_path);
-    } catch {
-      // best-effort — transcript capture itself already succeeded; don't fail the step
-    }
-  }
-  if (captureResult.ok && captureResult.warning) {
-    result.transcript_warning = captureResult.warning;
-  }
-}
-
 export type BatchLogStepsInput = {
   workspace: string;
   /** Project directory — threaded from resolveScope(extra) in register-journal.ts. */
@@ -415,6 +387,7 @@ function processEntries(
 
     if (entry.status === "completed" && entry.agent_id) {
       captureTasks.push({ logInput, result, step });
+      backfillContextProvenanceAgentId(input.workspace, entry.step_id, entry.agent_id);
     }
 
     results.push(result);
@@ -476,6 +449,17 @@ export async function batchLogSteps(
   return toolOk({ results });
 }
 
+async function runStepCompletionSideEffects(
+  step: JournalStep,
+  result: LogStepResult,
+  input: LogStepInput,
+): Promise<void> {
+  await tryTranscriptCapture(step, result, input);
+  if (input.agent_id) {
+    backfillContextProvenanceAgentId(input.workspace, input.step_id, input.agent_id);
+  }
+}
+
 export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
   if (!input.step_id?.trim()) {
     return toolError("INVALID_INPUT", "step_id must be a non-empty string", false);
@@ -523,57 +507,12 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
   const result: LogStepResult = { status: input.status, step_id: input.step_id };
 
   if (input.status === "completed") {
-    await tryTranscriptCapture(step, result, input);
+    await runStepCompletionSideEffects(step, result, input);
   }
 
   await writeJournal(input.workspace, journal);
 
   return toolOk(result);
-}
-
-/** Wall clock: max(completed_at) − min(started_at). Null when no timestamps. */
-function computeTotalDurationMs(steps: readonly JournalStep[]): number | null {
-  const starts = steps.map((s) => s.started_at).filter((t): t is string => typeof t === "string");
-  const ends = steps.map((s) => s.completed_at).filter((t): t is string => typeof t === "string");
-  if (starts.length === 0 || ends.length === 0) return null;
-  const minStart = Math.min(...starts.map((s) => Date.parse(s)));
-  const maxEnd = Math.max(...ends.map((s) => Date.parse(s)));
-  if (!Number.isFinite(minStart) || !Number.isFinite(maxEnd)) return null;
-  return maxEnd - minStart;
-}
-
-export function computeFlowOutcome(
-  steps: readonly JournalStep[],
-): FinalizeWorkspaceResult["flow_outcome"] {
-  const domain_skills_used = Array.from(
-    new Set(steps.flatMap((s) => s.domain_skills_loaded ?? [])),
-  ).sort();
-
-  // Last verdict wins: for review→fix→re-review flows the re-review is
-  // the one that answers "did this flow end approved?"
-  let review_verdict: string | null = null;
-  for (const s of steps) {
-    if (s.outcome?.review_verdict) review_verdict = s.outcome.review_verdict;
-  }
-
-  const fix_iterations = steps.reduce((sum, s) => sum + (s.outcome?.fix_iterations ?? 0), 0);
-
-  return {
-    domain_skills_used,
-    fix_iterations,
-    review_verdict,
-    total_duration_ms: computeTotalDurationMs(steps),
-    total_steps: steps.length,
-  };
-}
-
-/** L4 defense-in-depth: returns step IDs of skipped steps that have no skip_reason.
- * The L1 check in logStep/batchLogSteps should have blocked these writes,
- * but journals can be corrupted by bugs, manual edits, or older code paths. */
-function getStepsMissingSkipReason(skipped: readonly JournalStep[]): string[] {
-  return skipped
-    .filter((s) => typeof s.skip_reason !== "string" || !s.skip_reason.trim())
-    .map((s) => s.step_id);
 }
 
 // Best-effort side effects on workspace completion: digest, analytics, trend summary, claims.
@@ -656,7 +595,6 @@ export async function finalizeWorkspace(
   });
 }
 
-// Re-export for registration layer.
+// Exports for registration layer and reconcile-workspace.ts (same module family, no barrel).
 export const journalFilename = "journal.json";
-// Export internals needed by reconcile-workspace.ts (same module family, no barrel).
 export { journalPath as _journalPath, readJournal, scanArtifactList };
