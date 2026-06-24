@@ -264,17 +264,36 @@ export type JanitorConfig = {
   enabled: boolean;
   min_hours_between_runs: number;
   /**
-   * Age threshold (hours) for pruning abandoned workspaces (no active lock).
-   * When null, abandoned workspaces are never pruned by age alone. Default: null.
+   * Secondary age threshold (hours) for reclaiming post-ship workspaces.
+   * A workspace is reclaim-eligible only when BOTH conditions hold:
+   *   (1) its journal.json records a completed "ship" step (primary gate), AND
+   *   (2) its directory mtime exceeds this age threshold (secondary buffer).
+   * When null, post-ship workspaces are never automatically reclaimed.
+   * Default: 24 (reclaim post-ship workspaces after 24h). (finalize-04)
    */
   max_abandoned_workspace_age_hours: number | null;
 };
 
 const DEFAULT_JANITOR_CONFIG: JanitorConfig = {
   enabled: true,
-  max_abandoned_workspace_age_hours: null,
+  max_abandoned_workspace_age_hours: 24,
   min_hours_between_runs: 1,
 };
+
+/**
+ * Resolve the `max_abandoned_workspace_age_hours` value, preserving the opt-out sentinel.
+ *
+ * An explicit `null` is the documented opt-out — "never automatically reclaim" — and is
+ * returned as `null`, NOT coerced into the default. A missing/absent key (`undefined`)
+ * falls back to the default. Any other invalid value (non-numeric, negative) also falls
+ * back to the default.
+ */
+function readAbandonedAgeHours(raw: unknown): number | null {
+  if (raw === null) return null; // explicit opt-out — never auto-reclaim
+  return typeof raw === "number" && raw >= 0
+    ? raw
+    : DEFAULT_JANITOR_CONFIG.max_abandoned_workspace_age_hours;
+}
 
 /** Load janitor config from .canon/config.json, falling back to defaults. */
 export async function loadJanitorConfig(projectDir: string): Promise<JanitorConfig> {
@@ -283,11 +302,7 @@ export async function loadJanitorConfig(projectDir: string): Promise<JanitorConf
   if (!raw) return DEFAULT_JANITOR_CONFIG;
   return {
     enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_JANITOR_CONFIG.enabled,
-    max_abandoned_workspace_age_hours:
-      typeof raw.max_abandoned_workspace_age_hours === "number" &&
-      raw.max_abandoned_workspace_age_hours >= 0
-        ? raw.max_abandoned_workspace_age_hours
-        : DEFAULT_JANITOR_CONFIG.max_abandoned_workspace_age_hours,
+    max_abandoned_workspace_age_hours: readAbandonedAgeHours(raw.max_abandoned_workspace_age_hours),
     min_hours_between_runs:
       typeof raw.min_hours_between_runs === "number" && raw.min_hours_between_runs >= 0
         ? raw.min_hours_between_runs

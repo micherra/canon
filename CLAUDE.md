@@ -74,7 +74,7 @@ Do not narrate individual tool calls. One line between state transitions is corr
 |--------|--------|
 | Build, fix, change, improve (any scope) | PM triage → route to `architect` or `engineer` |
 | Review PR or branch | Spawn `reviewer` |
-| Security audit | Spawn `security`, then `reviewer` |
+| Security audit | Spawn `security`, then `reviewer`. Re-verify after a CRITICAL/BLOCKING safety-hook fix MUST dispatch a FRESH (non-author) adversarial agent — the author's "my listed cases are covered" framing structurally cannot hold the adversarial "the list is a hypothesis to attack" framing (watch_CCCCCCCCCCCC1). |
 | Investigate / "how does X work" | Spawn `architect` |
 | Scan for violations (via init) | Spawn `engineer` to scan + fix |
 | Create/edit principle | Route to `writer` via content flow (see `references/content-flow.md`) |
@@ -153,6 +153,8 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 **Dead-code-removal enrichment**: For builds that delete symbols, functions, types, or directory paths, add to the engineer spawn prompt: "After deleting each symbol, grep the full codebase for: (1) the symbol name as a string literal (catches constant arrays and config entries), (2) the TypeScript type name (catches orphan type declarations whose value-producers were deleted), (3) any directory path strings being removed (catches docstrings and comments). List all additional deletions in the Criteria Coverage table."
 
 **Wiring-task enrichment**: The standing dead-wire gate (Step Enforcement Contracts → Verify step) now enforces new-export reachability automatically; the manual checks below remain engineer-facing guidance for closing wiring ACs with explicit evidence. When the build spec requires that agent X calls tool Y (new or pre-existing), add to the engineer spawn prompt: "Before closing any AC that says agent X must call tool Y, verify: (1) `awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/X.md | grep '  - mcp__canon__Y$'` returns a match — this confirms Y is in the `tools:` allowlist, not merely mentioned in the description or body; (2) `grep -rn '"Y"' mcp-server/src/app/register-*.ts` (quoted-string form in registration files) returns a non-empty result — a match only in a doc comment or non-registration file does not satisfy this condition. Both checks are required. List the command output as evidence in the Criteria Coverage table."
+
+**Hook-bypass-fix enrichment**: For safety-hook bypass fixes, add to the engineer spawn prompt: "Prefer a vocabulary-free / fail-closed-on-unrecognized predicate over an enumerated wrapper/token list — each new list item closes one form and opens the next unlisted one. If this fix is the Nth patch of the same bypass class, treat it as a posture rethink, not another enumeration (see `.canon/principles/conventions/security-hook-parser-allowlist-posture.md`, watch_UUUUUUUU2)."
 
 #### Non-trivial path (PM → architect → execution)
 
@@ -491,7 +493,7 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Loop Framework <!-- last-updated: 2026-06-12 -->
+## Loop Framework <!-- last-updated: 2026-06-22 -->
 
 Loops are Canon's managed periodic-observation artifact class. A loop is authored as
 `loops/<id>.md` (YAML frontmatter + action-prompt body), registered via `list_loops`,
@@ -533,15 +535,18 @@ a plugin cannot do this.
 **Phase history:** Phase A shipped the framework spine — schema, registry, MCP tools, `_probe`
 demo; no production loop ran. Phase B ships `loops/ship-watch.md` — the first real loop,
 dispatched via the post-ship tap. Phase C ships session-watch + self-paced mode.
+Phase D ships harness-watch — the accumulated-build-signal observer, fired post-ship, surfaces `run-learner`.
 Discovery: `list_loops`.
 
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
-`list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop:
-- `firing_posture[tier] === "auto"` → call `CronCreate({ schedule: loop.schedule.interval, command: "<inline tick prompt for <id> — see Resilient dispatch above>", max: loop.schedule.max_ticks })` immediately.
-- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; call `CronCreate` only on confirmation.
+`list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop, branch on `loop.mode`:
+- `firing_posture[tier] === "auto"`:
+  - `mode: "interval"` → call `CronCreate({ schedule: loop.schedule.interval, command: "<inline tick prompt for <id> — see Resilient dispatch above>", max: loop.schedule.max_ticks })` immediately.
+  - `mode: "self-paced"` → call `ScheduleWakeup({ delaySeconds: <loop initial cadence>, reason: "Starting <id> at post-ship", prompt: "<inline tick prompt for <id> — see Resilient dispatch above>" })` immediately.
+- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; dispatch by mode on confirmation (CronCreate for interval, ScheduleWakeup for self-paced).
 - `firing_posture[tier] === "disabled"` → skip silently.
 
-`ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in). It demonstrates the resilient inline dispatch form (mechanism-ships-first-instance, dc-06).
+`ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in). It demonstrates the resilient inline dispatch form (mechanism-ships-first-instance, dc-06). `harness-watch` is a self-paced post-ship loop and is dispatched via `ScheduleWakeup`.
 
 **Session-start tap (Phase C+):** At session start, the orchestrator calls
 `list_loops({ lifecycle_hook: "session-start", tier })`. For each returned loop:
@@ -584,6 +589,14 @@ On a release tag being cut:
 3. Run `plugin-update` + confirm the new version is active ONLY after explicit user confirmation.
 NEVER silently run plugin-update; the ask-first/confirm requirement is non-optional.
 
+**`run-learner`** (fires on the `harness-watch` `learner_due` false→true transition): The
+orchestrator spawns `canon:learner` per the learn-step protocol. Under the `supervised` tier,
+ASK the user first before spawning; under `autonomous` and `light-touch`, spawn the learner
+automatically. The learner pass NEVER mutates the build — it only analyzes patterns and writes
+to `.canon/`. dc-06 holds: the `harness-watch` loop only surfaces the signal via
+`ORCHESTRATOR_ACTION: run-learner field=learner_due loop=harness-watch`; the orchestrator
+spawns the learner.
+
 ## Project Structure <!-- last-updated: 2026-06-12 -->
 
 ```
@@ -604,12 +617,12 @@ canon/
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
-│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase C current)
+│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase D current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase C: _probe + ship-watch + session-watch)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase D: _probe + ship-watch + session-watch + harness-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
 ├── principles/           # Built-in principles (61 total: 6 rules, 36 strong-opinions, 19 conventions); 26 Canon-internal principles in .canon/principles/ (portable: false)

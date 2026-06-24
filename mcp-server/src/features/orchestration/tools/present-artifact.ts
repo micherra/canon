@@ -1,10 +1,9 @@
 /**
- * present_artifact MCP tool — thin wrapper.
+ * present_artifact MCP tool — type re-exports.
  *
  * The reusable `presentArtifact` function and its types live in
- * `@app/artifact-presentation.ts` (composition root). This file re-exports
- * them so existing importers via this path continue to resolve, and exposes
- * the tool handler used by `register-present-artifact.ts`.
+ * `@app/artifact-presentation.ts` (composition root). Import `presentArtifact`
+ * directly from `@app/artifact-presentation.ts`.
  *
  * See `@app/artifact-presentation.ts` for the full implementation.
  */
@@ -13,4 +12,3 @@ export type {
   PresentArtifactInput,
   PresentArtifactResult,
 } from "@app/artifact-presentation.ts";
-export { presentArtifact } from "@app/artifact-presentation.ts";

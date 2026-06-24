@@ -12,7 +12,15 @@ Files are named `NNNN-slug.md`, where `NNNN` is a 4-digit zero-padded sequential
 
 **To assign the next number**: scan `docs/adr/` for the highest existing `NNNN` and add 1. Zero-pad to 4 digits.
 
-**Concurrency note**: Concurrent builds on separate branches may independently pick the same number. This surfaces as a benign additive-file conflict at PR merge (two new files with the same number prefix). Resolve it by renaming the later ADR to the next available number. No distributed counter is used — the collision window is small and the rename is trivial.
+**Concurrency note**: ADR numbers are assigned at design time by the scan-and-increment pattern above (`next = highest-on-disk + 1`). Because origin/main advances during the build window, two concurrent builds — or one build whose number is claimed by a PR that merges before it ships — will independently pick the same number. This is a recurring pattern, not a rare one: it has occurred across a dozen builds, and long multi-pass builds (especially security builds with several verify cycles) are the highest-risk because origin/main advances more often during the extended window. It surfaces as a benign additive-file conflict at PR merge (two new files with the same number prefix); resolve it by renaming the later ADR to the next available number and keeping both index rows in numeric order. No distributed counter is used.
+
+**Mitigation — re-verify the number against origin/main immediately before ship, not only at design time.** A design-time scan is necessary but insufficient: it goes stale as origin/main lands new ADRs during the build. Immediately before the ship step, re-check the next-free number against both merged main and open PRs:
+
+```
+git fetch origin && git ls-tree origin/main docs/adr/ | grep -oE '[0-9]{4}' | sort | tail -1
+```
+
+If the chosen number is now taken, renumber the ADR (file rename + heading + frontmatter + README index row + any in-tree cross-references) before pushing. Resolving collisions by keeping both rows in numeric order is the canonical resolution; the pre-push mergeability check is the reliable detection point when a re-verify is skipped.
 
 ## The Conjunctive 3-Condition Gate
 
@@ -61,4 +69,5 @@ Use `docs/adr/TEMPLATE.md` as the starting point for every new ADR. Copy it, fil
 | [0013](0013-deterministic-gates-as-bash-scripts.md) | Deterministic verification gates are bash scripts invoked by the verify contract, not MCP tools | accepted | 2026-06-11 | deterministic-verification-hardening-batch-a-1-dead-wire-reachability |
 | [0014](0014-writer-retire-guardrail-artifacts.md) | Writer retire action removes guardrail artifacts behind five safety gates | accepted | 2026-06-13 | address-two-codex-p2-review-comments-on-pr-396-artifact-retirement |
 | [0015](0015-canonical-env-independent-mcp-auth-token-path.md) | Canon MCP auth token resolves to a single env-independent canonical path | accepted | 2026-06-12 | durable-fix-for-canon-mcp-clientdaemon-auth-token-path-nondeterminism |
+| [0016](0016-finalize-no-destructive-teardown.md) | finalize_workspace performs no destructive teardown; teardown is post-merge only | accepted | 2026-06-13 | fix-finalizeworkspace-so-it-does-not-delete-the-canonslug-git-branch |
 | [0017](0017-resilient-loop-dispatch-inline-tick-prompt.md) | Loop dispatch uses a self-contained inline tick prompt, not the /canon:loop-tick slash command | accepted | 2026-06-12 | make-the-canon-loop-framework-croncreateschedulewakeup-dispatch |

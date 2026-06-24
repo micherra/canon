@@ -54,7 +54,7 @@ export function computeBindingDrift(routine: Routine, env: RoutineEnv): BindingD
   }
 
   // cloud-routine
-  if (env.hasCloudRecipeMarker && env.hasCloudRecipeMarker(routine.name)) {
+  if (env.hasCloudRecipeMarker?.(routine.name)) {
     return "bound";
   }
   return "unbound";

@@ -88,6 +88,17 @@ function makeGitFailResult(): GitResult {
   };
 }
 
+/** Write a minimal journal.json with the given steps. */
+async function writeJournal(
+  slugPath: string,
+  steps: Array<{ step_id: string; status: string }>,
+): Promise<void> {
+  await writeFile(
+    join(slugPath, "journal.json"),
+    JSON.stringify({ version: 1, workspace: slugPath, steps }),
+  );
+}
+
 let tmpDir: string;
 let canonDir: string;
 let claudeDir: string;
@@ -346,7 +357,8 @@ describe("needs_prune semantics", () => {
     const branchDir = join(canonWorkspacesDir, "feat--some-feature");
     const slugDir = join(branchDir, "stale-build");
     await mkdir(slugDir, { recursive: true });
-    // No .completed — abandoned workspace
+    // Post-ship workspace (completed ship step required by ship-gate)
+    await writeJournal(slugDir, [{ step_id: "ship", status: "completed" }]);
 
     // Make the workspace stale (72h past the 48h threshold)
     const secs = (Date.now() - 72 * 60 * 60 * 1000) / 1000;
