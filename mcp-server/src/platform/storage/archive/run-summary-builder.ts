@@ -13,7 +13,10 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { ContextProvenanceSummary } from "../../../domains/workspaces/context-provenance.ts";
+import type {
+  AssembledArtifact,
+  ContextProvenanceSummary,
+} from "../../../domains/workspaces/context-provenance.ts";
 import { getExecutionStore } from "../../../domains/workspaces/execution-store-cache.ts";
 import type {
   ArtifactInventory,
@@ -263,7 +266,7 @@ function mapProvenanceEvent(
   const p = ev.payload as Record<string, unknown>;
   const stepId = typeof p.step_id === "string" ? p.step_id : null;
   const artifacts = Array.isArray(p.assembled_artifacts)
-    ? (p.assembled_artifacts as ContextProvenanceSummary["artifacts"])
+    ? (p.assembled_artifacts as AssembledArtifact[])
     : [];
 
   // Join: back-fill agent_id wins; fall back to inline agent_id in the event; then null.

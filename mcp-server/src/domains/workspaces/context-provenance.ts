@@ -54,6 +54,7 @@ export type ContextProvenanceSummary = {
 /**
  * Compute sha256 hex of a string (utf-8 encoding). Deterministic.
  */
+// canon:allow-unwired: foundation hash helper; consumed by Phase-1 attribution loop (deliverable 2, out of scope this build) + provenance tests
 export function hashContent(s: string): string {
   return createHash("sha256").update(s, "utf-8").digest("hex");
 }

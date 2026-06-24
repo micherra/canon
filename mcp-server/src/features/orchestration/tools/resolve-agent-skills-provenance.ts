@@ -12,6 +12,7 @@
 import {
   buildContextProvenanceRecord,
   type ContextProvenanceRecord,
+  type ProvenanceArtifactKind,
 } from "@domains/workspaces/context-provenance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { ResolveAgentSkillsResult, ResolvedSkill } from "./resolve-agent-skills.ts";
@@ -40,7 +41,7 @@ function buildSkillInputs(
       blanked,
       id: preSk.id,
       inContextText,
-      kind: preSk.kind,
+      kind: preSk.kind as ProvenanceArtifactKind,
       originalContent,
       path: preSk.path,
     };
