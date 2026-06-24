@@ -6,7 +6,7 @@
 Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint, agent metrics, signal compilation, and summary storage. All tools surface quality signals; none mutate workflow state.
 
 ## Architecture
-<!-- last-updated: 2026-06-12 -->
+<!-- last-updated: 2026-06-24 -->
 
 **`tools/`** — MCP tool handlers (thin wrappers calling services).
 
@@ -25,6 +25,8 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `wiki-lint.ts` | `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `assembleWikiLintOutput(AssembleWikiLintInput)`; re-exports `GlossaryConsistencyFinding`, `MisroutedPrincipleFinding`, `DuplicateTitleFinding` types from siblings |
 | `wiki-lint-glossary.ts` | `checkGlossaryConsistency(file)` — glossary wiki_lint check; parses CONTEXT.md H2 headings, detects exact-duplicate and naked-vs-qualified collisions; pure, no I/O |
 | `wiki-lint-principle-tier.ts` | `checkMisroutedPrinciples(principles)`, `checkDuplicateTitles(principles)`, `normalizeTitle(title)` — principle-tier checks; `CANON_INTERNAL_PREFIXES` constant; split per `line-limit-split-into-siblings`; pure, no I/O |
+| `frontmatter-schema.ts` | `runFrontmatterSchemaCheck(files, projectDir)` — per-class Zod schema registry for principles, agents, templates, docs/adr, loops, routines; `classifyFmClass(filePath)` pure classifier (skips dot-dirs, empty-fm prose, index docs); `toFrontmatterSchemaInput` helper; emits `SCHEMA_ERROR` / `PARSE_ERROR` findings; pure I/O split via injected `existsOnDisk`; whole-corpus zero-false-positive coverage (ADR-0018; added 2026-06-24) |
+| `link-graph.ts` | `buildCorpusLinkGraph(files, projectDir)` — mdast text-node visitor extracts `[[wiki-links]]` (with line numbers), relative markdown links, and `ADR-NNNN` refs; fenced/inline-code `[[...]]` excluded by construction; `referencedPrincipleIds` set = ids targeted by at least one `[[id]]` link (inbound-link source of truth for `orphan_principles`); single shared graph consumed by both `link_integrity` and `orphan_principles` checks; `docs/explore/` excluded as link source; helpers: `collectWikiFindingsForFile`, `collectMdFindingsForFile`, `collectAdrFindingsForFile`; pure (ADR-0019; added 2026-06-24) |
 | `index-inventory.ts` | `toDescriptors`, `renderInventoryBlock`, `rewriteManagedBlock`, `extractManagedBlock`, `diffIndex` (pure); `checkIndexDrift` (I/O boundary); sentinel constants `INVENTORY_START`/`INVENTORY_END`; types `ArtifactClass`, `ArtifactDescriptor`, `IndexDriftFinding`, `CLASS_DIRS` |
 | `doc-gap-detect.ts` | `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)` |
 | `signal-compiler.ts` | `compileSignals(filePaths, driftDbSignals)` — read-only; scores by priority within per-file token budget |
@@ -33,11 +35,11 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `craft-audit-service.ts` | Pure audit area selector + profile persistence; see Contracts below |
 
 ## Contracts
-<!-- last-updated: 2026-06-12 -->
+<!-- last-updated: 2026-06-24 -->
 
 **Craft audit service** (`services/craft-audit-service.ts`) — `selectAuditAreas(files, options?)` pure selector; bounded by `limit` default 5; `persistAuditProfile(areas, ratings, dao)` writes `source:"audit"` rows via injected `CraftProfileDao`; reuses `CraftProfileSchema` + `deriveSubsystemKey`. Added 2026-06-03.
 
-**`wiki_lint` tool** — `wikiLint(input, projectDir)` runs any combination of 10 non-`index_drift` checks (11 total with `index_drift`); returns `WikiLintOutput` with per-check arrays + `total_findings`. `WIKI_LINT_CHECK_NAMES` exported from `register-knowledge.ts` — derive-from-const parity with `CheckName` union (schema-parity test enforces this).
+**`wiki_lint` tool** — `wikiLint(input, projectDir)` runs any combination of 12 non-`index_drift` checks (13 total with `index_drift`); returns `WikiLintOutput` with per-check arrays + `total_findings`. `WIKI_LINT_CHECK_NAMES` exported from `register-knowledge.ts` — derive-from-const parity with `CheckName` union (schema-parity test enforces this).
 
 `CheckName` union (all valid values for the optional `checks` input array):
 
@@ -46,10 +48,12 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `"cited_paths"` | File paths cited in `references/**/*.md` **and DDD doc set** that do not resolve from repo root |
 | `"contradictions"` | Conflicting rules between CLAUDE.md files |
 | `"duplicate_titles"` | Two or more principles (across both tiers) sharing the same normalized title; normalization: lowercase, collapsed whitespace, stripped trailing punctuation |
+| `"frontmatter_schema"` | Per-class Zod schema validation for every schema-bearing artifact (principles, agents, templates, docs/adr, loops, routines); emits `SCHEMA_ERROR` or `PARSE_ERROR` findings; implemented in `services/frontmatter-schema.ts` (ADR-0018); lint-only — does not harden runtime parser |
 | `"glossary_consistency"` | CONTEXT.md H2 headings — exact-duplicate or naked-vs-qualified collisions; allowed: same base with ≥2 distinct qualifiers |
+| `"link_integrity"` | Broken `[[wiki-links]]`, broken relative markdown links, and dangling `ADR-NNNN` references in all tracked corpus files; link graph computed once in `services/link-graph.ts` (ADR-0019); `docs/explore/` excluded as a link source; `[[wiki-links]]` in fenced/inline code are not extracted |
 | `"missing_examples"` | Principles lacking usage examples |
 | `"misrouted_principles"` | Bidirectional tier mismatch: (A) principles in the shipped `principles/` tree with `portable: false` (explicit) OR with exclusively Canon-internal `scope.file_patterns` and no explicit `portable: true` override; (B) principles outside the shipped tier (e.g. `.canon/principles/`) with `portable: true` |
-| `"orphan_principles"` | Principles not referenced anywhere |
+| `"orphan_principles"` | Principles not referenced by any inbound `[[id]]` wiki-link (ADR-0019 — replaces prose-substring scan; tracked principles carry `## Related` cross-links per `principles-use-id-crosslinks` convention) |
 | `"scope_layers"` | `scope.layers` values in principles outside the valid set (derived from `loadLayerMappings(projectDir)` — project config keys when `.canon/config.json` defines `layers`, otherwise defaults; replaces defaults entirely when config defines any layers) |
 | `"scope_tags"` | `scope.tags` values in principles outside `VALID_COMPUTED_TAGS` (static const from `kg-tags.ts` — 15 values, no I/O); both `scope_tags` and `scope_layers` emit a "must be a YAML list" finding when the field is a scalar string |
 | `"index_drift"` | Sentinel-delimited `## Artifact Inventory` blocks in the 5 sibling indexes diverge from on-disk artifact set; `MISSING_MARKERS` when block absent, `INVENTORY_MISMATCH` when content differs |
@@ -62,13 +66,15 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 **`assembleWikiLintOutput(input: AssembleWikiLintInput)`** — `total_findings` includes all check counts including `scopeLayers`, `scopeTags`, `indexDrift`, `glossaryConsistency`, `misroutedPrinciples`, and `duplicateTitles`. `filesScanned` counts CLAUDE.md files + agent files + DDD doc files.
 
 ## Invariants
-<!-- last-updated: 2026-06-12 -->
+<!-- last-updated: 2026-06-24 -->
 - All service functions are pure: no I/O except `scanDirectories` and `doc-freshness.ts` (git + fs reads)
 - `tools/wiki-lint.ts` is the only file that calls `existsSync` for `checkCitedPaths`; service layer receives an injected `existsOnDisk` predicate (pure-IO split)
 - `checkCitedPaths` scans `references/**/*.md` and DDD doc set; `collectDddDocPaths` performs a live filesystem scan (never depends on KG graph store)
 - `dddDocFiles` is only loaded when `stale_refs` or `cited_paths` is enabled — no unnecessary filesystem scans for unrelated check subsets
 - `checkScopeLayers` is a pure function in `services/wiki-lint.ts`; `tools/wiki-lint.ts` calls `loadLayerMappings(projectDir)` at the I/O boundary and passes `Object.keys(mappings)` as `validLayers` — no I/O in the service
 - `checkScopeTags` is a pure function in `services/wiki-lint.ts`; vocabulary (`VALID_COMPUTED_TAGS`) is injected at the tool boundary from `kg-tags.ts` — no I/O in the service; mirrors `checkScopeLayers` in structure
+- `frontmatter-schema.ts` is pure; `existsOnDisk` injected at the tool boundary; ADR-0018: lint-only pass does NOT change `parsePrinciple` runtime behavior
+- `link-graph.ts` is pure; `buildCorpusLinkGraph` called once per `wiki_lint` invocation when either `link_integrity` or `orphan_principles` is enabled; `referencedPrincipleIds` set (from `[[id]]` links) is the sole source of truth for orphan suppression (ADR-0019)
 - `index-inventory.ts` is pure except `checkIndexDrift` (clearly separated at the bottom of the file); `sync-indexes.ts` holds all I/O for `sync_indexes`
 - `rewriteManagedBlock` returns `{ ok: false }` when sentinel markers are absent — no file is written; `diffIndex` returns `MISSING_MARKERS` when either sentinel is absent
 
@@ -79,4 +85,4 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 
 ## Known Expected Noise
 
-**`orphan_principles` residual (~28 findings)**: `orphan_principles` is a DEFAULT check. The tracked `principles/` corpus now uses `[[principle-id]]` wiki cross-links (per the `principles-use-id-crosslinks` convention), so tracked principles are no longer orphans. The **residual ~28 findings are `.canon/principles/` internal principles** (`portable: false`, gitignored) — no committed source can ship inbound links pointing at them. This is an accepted residual, not a regression. A count significantly above ~28 indicates new tracked principles were added without cross-links.
+**`orphan_principles` residual (26 findings)**: `orphan_principles` is a DEFAULT check. The tracked `principles/` corpus now uses `[[principle-id]]` wiki cross-links (per the `principles-use-id-crosslinks` convention), so tracked principles are no longer orphans. The **residual 26 findings are `.canon/principles/` internal principles** (`portable: false`, gitignored) — no committed source can ship inbound links pointing at them. This is an accepted residual, not a regression. A count significantly above 26 indicates new tracked principles were added without cross-links.

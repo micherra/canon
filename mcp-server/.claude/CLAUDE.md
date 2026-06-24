@@ -110,7 +110,7 @@ src/
 
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`.
 
-**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks plus `checkGlossaryConsistency` in sibling `wiki-lint-glossary.ts`, `checkIndexDrift` in `index-inventory.ts`, and `checkMisroutedPrinciples`/`checkDuplicateTitles` in new sibling `wiki-lint-principle-tier.ts` (10 DEFAULT_CHECKS + `index_drift` = 11 total `CheckName` values; `WIKI_LINT_CHECK_NAMES` const exported from `register-knowledge.ts` with schema-parity enforcement): `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `checkGlossaryConsistency`, `checkIndexDrift`, `checkMisroutedPrinciples`, `checkDuplicateTitles`; `wiki-lint-principle-tier.ts` is a pure sibling split per `line-limit-split-into-siblings`; both `checkScopeLayers` and `checkScopeTags` guard scalar (non-array) input with a "must be a YAML list" finding; `stale_refs` and `cited_paths` now include the DDD doc set (`docs/**/*.md` excl. `docs/explore/`, `mcp-server/src/domains/*/README.md`, `CONTEXT.md`); `checkGlossaryConsistency` parses CONTEXT.md H2 headings, flags exact-duplicate and naked-vs-qualified collisions; see `src/features/diagnostics/.claude/CLAUDE.md` for `CheckName` details.
+**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks plus `checkGlossaryConsistency` in sibling `wiki-lint-glossary.ts`, `checkIndexDrift` in `index-inventory.ts`, `checkMisroutedPrinciples`/`checkDuplicateTitles` in sibling `wiki-lint-principle-tier.ts`, `runFrontmatterSchemaCheck` in sibling `frontmatter-schema.ts`, and corpus link graph in sibling `link-graph.ts` (12 DEFAULT_CHECKS + `index_drift` = 13 total `CheckName` values; `WIKI_LINT_CHECK_NAMES` const exported from `register-knowledge.ts` with schema-parity enforcement): `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `checkGlossaryConsistency`, `checkIndexDrift`, `checkMisroutedPrinciples`, `checkDuplicateTitles`, `frontmatter_schema` (ADR-0018), `link_integrity` (ADR-0019); `orphan_principles` now inbound-`[[id]]`-link-based (ADR-0019) — the link graph's `referencedPrincipleIds` replaces the prior prose-substring scan; see `src/features/diagnostics/.claude/CLAUDE.md` for full `CheckName` details. <!-- last-updated: 2026-06-24 -->
 
 **Agent Provenance** (`src/shared/lib/commit-trailers.ts`, `src/shared/lib/file-claims.ts`) — `formatCommitTrailers`/`buildCommitMessage` produce Canon trailer blocks; `ClaimsFile` persisted to `.canon/claims.json`; 24h-TTL file ownership claims. See `src/shared/.claude/CLAUDE.md`.
 
@@ -187,13 +187,13 @@ src/
 | `sync_routines` | Sync routine state to `.canon/routines/`; returns drift summary |
 
 ## Dependencies
-<!-- last-updated: 2026-05-16 -->
+<!-- last-updated: 2026-06-24 -->
 
 | Package | Purpose |
 |---------|---------|
 | `@modelcontextprotocol/sdk` | MCP server/client implementation |
 | `zod` | Runtime schema validation |
-| `gray-matter` | YAML frontmatter parsing in `parser.ts` |
+| `yaml` | YAML frontmatter parsing via `splitFrontmatter`/`readFrontmatter` seam in `shared/lib/frontmatter.ts` (replaced `gray-matter` — R0) |
 | `tsx` | TypeScript execution (runtime dependency — server launched via boot.sh → tsx) |
 | `vitest` | Unit testing (dev) |
 

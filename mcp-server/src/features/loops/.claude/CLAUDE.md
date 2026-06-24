@@ -17,7 +17,7 @@ via `list_loops`. This mirrors how `principles/` is the principle registry.
 | File/Directory | Purpose |
 |----------------|---------|
 | `loop-schema.ts` | Zod schema + `LoopDefinition` type + `parseLoopDefinition`. Pure leaf module — no I/O. Enforces the mechanical determinism guardrail (dc-05). |
-| `load-loops.ts` | `loadLoopsFromDir(dir)` — reads `loops/*.md`, parses frontmatter with gray-matter, calls `parseLoopDefinition`. Returns `{ valid, invalid, validBodies }`. Never silently drops invalid definitions. |
+| `load-loops.ts` | `loadLoopsFromDir(dir)` — reads `loops/*.md`, parses frontmatter via `splitFrontmatter` from `shared/lib/frontmatter.ts` (was gray-matter; R0), calls `parseLoopDefinition`. Returns `{ valid, invalid, validBodies }`. Never silently drops invalid definitions. |
 | `tools/list-loops.ts` | `listLoopsHandler` — loads all loops, filters to `status:active`, applies optional `lifecycle_hook` + `tier` filters. Always returns `invalid[]`. |
 | `tools/get-loop-definition.ts` | `getLoopDefinitionHandler` — loads a single loop by id, returns definition + body. Used by the `/canon:loop-tick` runner. |
 | `__tests__/` | Vitest unit tests: schema, loader, and tool integration tests. |
