@@ -497,7 +497,7 @@ async function runEnabledChecks(
 /**
  * Run wiki lint checks against Canon's own meta-layer artifacts.
  *
- * @param input - Which checks to run (default: 8 checks, excluding index_drift; pass checks:["index_drift"] to run it)
+ * @param input - Which checks to run (default: all 12 checks except index_drift; pass checks:["index_drift"] to run it)
  * @param projectDir - Project root (for CLAUDE.md scanning, stale ref resolution, drift store)
  * @param pluginDir - Plugin directory (for principles loading, agent definitions)
  */

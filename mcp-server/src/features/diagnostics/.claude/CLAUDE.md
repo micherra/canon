@@ -76,3 +76,7 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 <!-- last-updated: 2026-06-03 -->
 - Pure check functions export their helpers (`isExcludedCitedPath`) for direct testing; fence-skip logic is inline in `collectCitedPathsInFile` (not exported) since 2026-06-02
 - Recursive scanners thread `originalRoot` through all recursive calls (root-drift bug class prevention)
+
+## Known Expected Noise
+
+**`orphan_principles` high finding count**: `orphan_principles` is a DEFAULT check. On the current Canon corpus it reports ~84 findings because principles do not yet use `[[principle-id]]` wiki cross-links — every `[[ ]]` occurrence is bash test syntax inside code blocks, which is correctly excluded by the scanner. Under ADR-0019 (link-graph source-of-truth for orphans), this is expected and not a regression. The count will drop once the corpus adopts `[[principle-id]]` wiki cross-linking conventions.
