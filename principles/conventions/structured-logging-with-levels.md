@@ -67,7 +67,9 @@ logger.info("user.registered", { userId, source: "signup_form" });
 
 Prototype/script code where structured logging is overhead. CLI tools where human-readable output is the product. Test code where `console.log` for debugging is acceptable (but should be removed before merge).
 
-**Related:** `no-hidden-side-effects` — logging should be the only side effect of a query/read operation. `secrets-never-in-code` — never log secrets, tokens, passwords, or PII at any level.
+## Related
+
+[[no-hidden-side-effects]] — logging should be the only side effect of a query/read operation. [[secrets-never-in-code]] — never log secrets, tokens, passwords, or PII at any level. [[prefer-async-between-services]] — structured log events at the right level form the observable audit trail that async event flows depend on for debugging and incident response. [[managed-artifact-class-shape]] — Canon's own artifact loaders (loops, routines, principles) should emit structured log events at the right level when they encounter invalid entries or ENOENT conditions, following the same observability pattern they apply to their own artifact registries.
 
 ## Anti-Rationalization
 

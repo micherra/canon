@@ -77,7 +77,9 @@ Note: `unit_price` in `order_items` is an intentional, documented denormalizatio
 
 Analytics and reporting schemas (star schemas, data warehouses) are intentionally denormalized for read performance — that is their documented purpose. Event stores where each event is a self-contained snapshot. Read models in CQRS architectures that are projected from normalized write models. In all cases, the denormalization is intentional, documented, and has a defined strategy for keeping data consistent.
 
-**Related:** `backward-compatible-schema-changes` governs how to evolve schemas once they're in production — normalized or not, schema changes must be backward compatible during rolling deployments.
+## Related
+
+[[backward-compatible-schema-changes]] governs how to evolve schemas once they're in production — normalized or not, schema changes must be backward compatible during rolling deployments.
 
 ## Anti-Rationalization
 

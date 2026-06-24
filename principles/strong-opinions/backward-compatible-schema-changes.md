@@ -75,7 +75,9 @@ ALTER TABLE orders ADD COLUMN priority VARCHAR(20) DEFAULT 'normal';
 
 Greenfield projects before their first production deployment can make breaking changes freely — there are no existing consumers. Development databases that can be destroyed and recreated from scratch (via seed scripts) do not need phased migrations. Breaking changes to internal event schemas are acceptable if all producers and consumers deploy atomically (e.g., in a monolith).
 
-**Related:** `normalize-first-denormalize-intentionally` governs initial schema design — start normalized, denormalize with justification. This principle governs how those schemas evolve safely over time.
+## Related
+
+[[normalize-first-denormalize-intentionally]] governs initial schema design — start normalized, denormalize with justification. This principle governs how those schemas evolve safely over time.
 
 ## Anti-Rationalization
 

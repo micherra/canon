@@ -97,3 +97,7 @@ Global reset/normalize stylesheets and design token definitions are intentionall
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[design-tokens-as-style-contract]] — a component's single style source should reference design tokens rather than hardcoded values so the visual contract is expressed through the shared token system. [[colocate-component-assets]] — the single style source for a component should be colocated in the component's own directory so it is unambiguously owned and can be deleted together with the component.

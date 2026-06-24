@@ -94,8 +94,6 @@ function ItemSelector({ onAdd }: { onAdd: (item: Item) => void }) {
 
 Two-way binding for form inputs (`v-model` in Vue, controlled inputs in React) is the pragmatic choice when the parent explicitly opts in — the binding is declared at the call site, not hidden inside the child. Global state managers (Redux, Zustand, Pinia) that use a dispatch/action model maintain unidirectional flow even though components can trigger state changes from anywhere — the change goes through a central, predictable reducer, not by mutating a prop.
 
-**Related:** `minimize-client-side-state` reduces the amount of state flowing through the tree, making unidirectional flow simpler to maintain.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -110,3 +108,7 @@ Two-way binding for form inputs (`v-model` in Vue, controlled inputs in React) i
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[minimize-client-side-state]] — fewer pieces of state in the tree means fewer opportunities for unidirectional flow to be violated by redundant synchronization logic.

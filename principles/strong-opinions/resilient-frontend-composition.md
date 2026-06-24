@@ -90,8 +90,6 @@ Recommendations failing shows a placeholder. The product details, reviews, and a
 
 Modules that are genuinely critical to the page's core purpose — the `AddToCart` button on a product page, the message composer in a chat app — may warrant failing the whole page rather than showing a broken partial experience. In these cases, the error boundary should be at the page level, not the module level. The principle applies to auxiliary and composable modules, not to the page's primary interactive element.
 
-**Related:** `deploy-frontend-modules-independently` describes the deployment model that makes failure isolation necessary. `isolate-frontend-runtime-state` explains why modules must not share state, which is the precondition for isolated failure.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -106,3 +104,7 @@ Modules that are genuinely critical to the page's core purpose — the `AddToCar
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[isolate-frontend-runtime-state]] — modules that don't share state can fail without cascading into sibling modules, which is the structural prerequisite for error boundary isolation. [[deploy-frontend-modules-independently]] — independent deployment is why version mismatches and runtime errors between modules become routine rather than exceptional, making error boundary isolation necessary.

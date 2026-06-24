@@ -83,8 +83,6 @@ function getPublicContent(id: string): Content | null {
 
 Public, read-only endpoints where denying access has a worse user impact than allowing it (e.g., a public homepage). Graceful degradation paths where the fallback is a reduced-functionality mode, not full access. Health check endpoints that should remain accessible during partial outages. In all cases, the fail-open must be **documented in a code comment** explaining why.
 
-**Related:** `handle-partial-failure` — addresses the mechanics of handling failure (timeouts, retries, circuit breaking); this principle addresses the *policy* (deny vs allow when the check itself fails). `secrets-never-in-code` — both are security principles; a fail-open auth check is as dangerous as a leaked credential.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -100,3 +98,7 @@ Public, read-only endpoints where denying access has a worse user impact than al
 - [ ] No catch block in auth or permission code returns a truthy / allow value — grep for `catch` in auth-related files and check that no catch body returns `true`, `null`, or an allow-access value without a `// INTENTIONAL FAIL-OPEN` comment.
 - [ ] No catch block silently swallows errors without a deny outcome — grep for empty catch blocks (`catch {` or `catch (e) {` followed immediately by `}`) in security-sensitive modules.
 - [ ] All intentional fail-open paths have a documented justification comment containing `INTENTIONAL FAIL-OPEN` — grep for fail-open patterns in catch blocks and confirm each has this comment.
+
+## Related
+
+[[hooks-fail-closed]] — operationalizes this rule for the shell hook layer, where the same fail-open pattern appears through silently-swallowed extraction failures rather than application-layer catch blocks. [[secrets-never-in-code]] — companion security rule: a fail-open auth check that grants access when the auth service is down is as dangerous as leaking the credential that service would have checked. [[fail-closed-scan-scope]] — refines this rule for scoped guards: a fail-closed denial is correct only when the input is within the guard's threat model scope. [[validate-at-trust-boundaries]] — validates input at entry points rather than trusting it; pairs with fail-closed-by-default because a check that fails open on invalid input undermines boundary validation.

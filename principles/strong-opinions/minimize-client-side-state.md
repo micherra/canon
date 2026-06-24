@@ -88,8 +88,6 @@ One state variable (`searchTerm`). Everything else is computed. No synchronizati
 
 Performance-critical derivations that are expensive to recompute on every render may justify caching in state — but reach for `useMemo` or framework-level caching first, not a separate `useState` + `useEffect` pair. Optimistic UI updates that temporarily diverge from server state are a deliberate, bounded exception — the local state exists to make the UI feel fast while the server catches up, and it's reconciled when the response arrives.
 
-**Related:** `unidirectional-data-flow` ensures what state does exist flows predictably through the component tree.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -104,3 +102,7 @@ Performance-critical derivations that are expensive to recompute on every render
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[unidirectional-data-flow]] — whatever state remains after minimizing must flow predictably down through props and up through callbacks, not sideways through shared mutation.

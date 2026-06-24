@@ -113,3 +113,7 @@ Large integration test datasets (e.g., seeding a database with 50 records for a 
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[tests-are-independent]] — inline test data eliminates the shared-fixture pattern, which is the most common source of hidden inter-test coupling via shared mutable objects. [[one-behavior-per-test]] — when a test covers one behavior, the data it needs is narrow enough to express inline; a test needing a large shared fixture is often a signal it covers multiple behaviors.

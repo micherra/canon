@@ -75,3 +75,8 @@ import { runGitIntel } from "@features/knowledge-graph/index";
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[grey-box-module]] — the single public entry point is the structural enforcement of the grey-box boundary: the index file is the grey-box seam the reviewer trusts, without needing to read the feature's internals.
+- [[information-hiding]] — the per-folder interface is the file-system manifestation of information hiding: all implementation details of a feature folder are hidden behind one boundary file.

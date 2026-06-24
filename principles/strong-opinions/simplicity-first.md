@@ -61,8 +61,6 @@ This includes dead abstractions: every interface, base class, and generic type p
 
 Security-critical paths (auth, payment, data access control) deserve explicit layering even when it feels heavy. Also, if you're building a module that genuinely has multiple implementations today (not hypothetically), an interface is earned. Interfaces required by DI frameworks are acceptable.
 
-**Related:** `patterns-need-justification` applies the same lens to design patterns rather than interfaces.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -76,3 +74,7 @@ Security-critical paths (auth, payment, data access control) deserve explicit la
 
 - [ ] No interface has a single implementing class — grep for `implements ` and check that each interface name used after `implements` has more than one implementing class in the codebase.
 - [ ] No generic type parameters that are always instantiated with the same type — check for `<T>` functions or classes where `T` is always `string` or a single domain type at every call site.
+
+## Related
+
+- [[patterns-need-justification]] — applies the same lens to design patterns rather than interfaces; both principles guard against premature complexity, one at the abstraction level and one at the pattern level.

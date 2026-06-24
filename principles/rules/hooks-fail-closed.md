@@ -81,8 +81,6 @@ fi
 
 The exception requires an explicit `# DOCUMENTED FAIL-OPEN` comment naming the advisory contract. Absence of such a comment means the hook is subject to this rule.
 
-**Related:** `fail-closed-by-default` — the application-layer equivalent this rule operationalizes for shell hooks. `source-shared-hook-helpers` — the convention that mandates using `canon_extract_command` rather than inlining extraction expressions. `security-hook-parser-allowlist-posture` — the convention that sharpens this rule for the parser-posture dimension: a wrapper/prefix/command-word allowlist must fail closed on an unrecognized leading token rather than blocklist over derived substrings.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -98,3 +96,7 @@ The exception requires an explicit `# DOCUMENTED FAIL-OPEN` comment naming the a
 - [ ] No guard hook has a bare `[[ -z "$COMMAND" ]] && exit 0` pattern after extraction without the second-stage payload check.
 - [ ] Hooks that are intentionally advisory-only carry a `# DOCUMENTED FAIL-OPEN` comment; absent this comment, empty-extraction must block.
 - [ ] Guard hooks source `hooks/lib/canon-hook-lib.sh` and use `canon_extract_command` rather than inlining jq expressions with `2>/dev/null || true`.
+
+## Related
+
+[[fail-closed-by-default]] — hooks-fail-closed operationalizes the application-layer fail-closed rule for the shell hook layer, where the same fail-open failure mode appears through `2>/dev/null || true` extraction patterns. [[fail-closed-scan-scope]] — this rule covers fail-closed behavior on extraction failure; the companion convention covers scope-confirming the scan input so the hook does not false-positive on non-threat commands. [[source-shared-hook-helpers]] — the convention mandating `canon_extract_command` rather than inlined extraction is the shared mechanism that makes fail-closed extraction achievable across all hooks. [[security-hook-parser-allowlist-posture]] — sharpens this rule for the parser-posture dimension: an allowlist of recognized leading tokens must fail closed on unrecognized ones rather than falling through.

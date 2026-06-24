@@ -169,6 +169,10 @@ ScheduleWakeup({ delaySeconds: active_delay_seconds, prompt: "Run one tick of Ca
 
 Inventing a parallel loader, parser, or registration mechanism when a known-good one already exists for a neighboring class. Indicators: a new YAML/TOML/JSON parser dependency where `gray-matter` already covers the use case; a new tool-registration helper instead of a `register-*.ts` factory; a new override-precedence algorithm instead of the project-local-first pattern from `loadAllRoutines`.
 
+## Related
+
+[[simplicity-first]] is the foundation — cloning the nearest existing shape is the simplest path to a correct implementation; inventing parallel infrastructure violates simplicity without adding capability. [[structured-logging-with-levels]] is a peer artifact-class convention in the ops cluster — both principles ensure Canon's own artifact classes are consistent and observable.
+
 ## Verification
 
 - [ ] New artifact class has a `register-<class>.ts` factory wired into `create-server.ts`: `grep -rn "register<Class>Tools" mcp-server/src/app/create-server.ts` returns a match.
