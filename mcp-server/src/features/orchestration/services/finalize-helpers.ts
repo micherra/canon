@@ -5,8 +5,7 @@
  * limit (line-limit-split-into-siblings convention). All functions here are pure compute;
  * they have no side effects and no runtime dependencies beyond the JournalStep type.
  *
- * workspace-cleanup.ts re-imports computeFlowOutcome via orchestration-journal.ts re-export;
- * no change needed in that consumer.
+ * workspace-cleanup.ts imports computeFlowOutcome directly from this file.
  */
 
 import type { JournalStep } from "../tools/orchestration-journal.ts";
