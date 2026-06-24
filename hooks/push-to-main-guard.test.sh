@@ -1579,8 +1579,15 @@ run_test 'git push --mirror origin > log (separated redirect on --mirror → mus
   2 "$(make_input 'git push --mirror origin > log')"
 
 # Bare push from a real main checkout with a separated redirect must still block.
+# setup_repo runs `git init` with no explicit branch, so the initial branch name
+# is environment-dependent (`main` locally, `master` in CI when init.defaultBranch
+# is unset). Force the branch to `main` so this "on the protected branch" precondition
+# holds regardless of the ambient default-branch config — otherwise the bare push
+# resolves to a non-protected branch in CI and is (correctly) allowed, breaking the
+# `must block` assertion for environment reasons rather than a real regression.
 TMPDIR_SEPRD_MAIN=$(mktemp -d)
 setup_repo "$TMPDIR_SEPRD_MAIN"
+git -C "$TMPDIR_SEPRD_MAIN" branch -M main
 run_test 'git push origin > log from main checkout (separated redirect → must block)' \
   2 "$(make_input 'git push origin > log')" "$TMPDIR_SEPRD_MAIN"
 rm -rf "$TMPDIR_SEPRD_MAIN"
