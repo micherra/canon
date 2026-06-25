@@ -116,8 +116,17 @@ function registerFinalizeWorkspace(server: McpServer): void {
     "finalize_workspace",
     {
       description:
-        "Finalize a completed workflow: verify all steps are done, all artifacts are present, release file claims, record analytics, and archive the workspace. Returns steps logged, missing steps, missing artifacts, aggregated quality signals, and post-completion cleanup results.",
+        "Finalize a completed workflow: verify all steps are done, all artifacts are present, release file claims, release the workspace mutex, record analytics, and archive the workspace. Returns steps logged, missing steps, missing artifacts, aggregated quality signals, and post-completion cleanup results.",
       inputSchema: {
+        session_id: z
+          .string()
+          .optional()
+          .describe(
+            "Calling session's identity for workspace mutex release — pass the same value " +
+              "given to init_workspace. Omitting releases the lock unconditionally (single-session " +
+              "backward compat). The shared HTTP daemon cannot derive per-session identity from " +
+              "process.env; pass explicitly when running in a multi-session context.",
+          ),
         workspace: z.string().describe("Workspace directory path"),
       },
     },
