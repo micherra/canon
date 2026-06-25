@@ -26,6 +26,10 @@ export function registerAgentTeamsTools(server: McpServer): void {
           .describe(
             "File paths to query for historical pitfalls. When provided, appends a Known Pitfalls section to preload_prompt.",
           ),
+        step_id: z
+          .string()
+          .optional()
+          .describe("Journal step_id — the durable join key for context provenance back-fill."),
         workspace: z
           .string()
           .optional()
@@ -37,6 +41,7 @@ export function registerAgentTeamsTools(server: McpServer): void {
     wrapHandler(async (input, extra) =>
       resolveAgentSkills({ agent_name: input.agent_name }, pluginDir, resolveScope(extra), {
         filePaths: input.file_paths,
+        step_id: input.step_id,
         workspace: input.workspace,
       }),
     ),

@@ -8,11 +8,16 @@
  * Canon principles:
  *   - fail-closed-by-default: extraction errors return partial data, not exceptions
  *   - validate-at-trust-boundaries: file contents are validated before use
- *   - bounded-context-boundaries: only imports from platform and node builtins
+ *   - bounded-context-boundaries: only imports from platform and node builtins; may import @domains
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import type {
+  AssembledArtifact,
+  ContextProvenanceSummary,
+} from "../../../domains/workspaces/context-provenance.ts";
+import { getExecutionStore } from "../../../domains/workspaces/execution-store-cache.ts";
 import type {
   ArtifactInventory,
   PlannerContext,
@@ -52,6 +57,7 @@ export function buildRunSummary(input: {
   const stepOutcomes = extractStepOutcomes(workspacePath);
   const reviewResults = extractReviewResults(workspacePath);
   const artifactInventory = buildArtifactInventory(workspacePath);
+  const contextProvenance = extractContextProvenance(workspacePath);
 
   // Compute timing from step outcomes
   const { startedAt, completedAt, totalDurationMs } = computeTiming(stepOutcomes);
@@ -59,6 +65,7 @@ export function buildRunSummary(input: {
   return {
     archive_id: archiveId,
     artifact_inventory: artifactInventory,
+    context_provenance: contextProvenance,
     // decision_summaries is always empty — retained for version: 1 backward compatibility
     decision_summaries: [] as const,
     planner_context: plannerContext,
@@ -229,6 +236,78 @@ function buildArtifactInventory(workspacePath: string): ArtifactInventory {
 }
 
 // ---- Private helpers ----
+
+/**
+ * Build a step_id → latest agent_id lookup from back-fill events.
+ * Latest event for a given step_id wins (map is overwritten in iteration order).
+ */
+function buildAgentByStepMap(
+  backfills: ReturnType<ReturnType<typeof getExecutionStore>["getEventsByType"]>,
+): Map<string, string> {
+  const agentByStep = new Map<string, string>();
+  for (const ev of backfills) {
+    const sid = ev.payload.step_id;
+    const aid = ev.payload.agent_id;
+    if (typeof sid === "string" && typeof aid === "string") {
+      agentByStep.set(sid, aid);
+    }
+  }
+  return agentByStep;
+}
+
+/**
+ * Map a single context_provenance event payload to a ContextProvenanceSummary.
+ * Joins agent_id from the back-fill map (back-fill wins; falls back to inline; then null).
+ */
+function mapProvenanceEvent(
+  ev: ReturnType<ReturnType<typeof getExecutionStore>["getEventsByType"]>[number],
+  agentByStep: Map<string, string>,
+): ContextProvenanceSummary {
+  const p = ev.payload as Record<string, unknown>;
+  const stepId = typeof p.step_id === "string" ? p.step_id : null;
+  const artifacts = Array.isArray(p.assembled_artifacts)
+    ? (p.assembled_artifacts as AssembledArtifact[])
+    : [];
+
+  // Join: back-fill agent_id wins; fall back to inline agent_id in the event; then null.
+  const joinedAgentId =
+    (stepId !== null ? agentByStep.get(stepId) : undefined) ??
+    (typeof p.agent_id === "string" ? p.agent_id : null);
+
+  return {
+    agent_id: joinedAgentId ?? null,
+    agent_name: typeof p.agent_name === "string" ? p.agent_name : "",
+    artifact_count: artifacts.length,
+    artifacts,
+    spawned_at: typeof p.spawned_at === "string" ? p.spawned_at : "",
+    step_id: stepId,
+  };
+}
+
+/**
+ * Extract context provenance summaries from the workspace's execution store.
+ *
+ * Reads `context_provenance` events and joins `agent_id` from
+ * `context_provenance_agent_id` back-fill events (latest back-fill wins per step_id).
+ *
+ * fail-open: any read or parse error returns []. buildRunSummary's never-throws
+ * contract is preserved.
+ *
+ * bounded-context-boundaries: reads via getExecutionStore (live cached connection —
+ * sees WAL-buffered rows). Do NOT open a second read-only handle.
+ */
+function extractContextProvenance(workspacePath: string): ContextProvenanceSummary[] {
+  try {
+    const store = getExecutionStore(workspacePath);
+    const provEvents = store.getEventsByType("context_provenance");
+    const backfills = store.getEventsByType("context_provenance_agent_id");
+    const agentByStep = buildAgentByStepMap(backfills);
+    return provEvents.map((ev) => mapProvenanceEvent(ev, agentByStep));
+  } catch {
+    // Fail-open: provenance summary is best-effort; buildRunSummary must never throw.
+    return [];
+  }
+}
 
 /**
  * Convert a raw journal step object to a StepOutcome.
