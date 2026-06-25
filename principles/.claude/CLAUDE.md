@@ -32,6 +32,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | artifact | summary |
 |---|---|
 | aggregates-reference-by-id.md | Aggregates Reference Other Aggregates by ID Only |
+| ambient-advisory-dep-bump-pattern.md | Ambient npm Advisory Requires a Dedicated Dep-Bump PR to Main |
 | architectural-fitness-functions.md | Enforce Architecture with Automated Tests |
 | backward-compatible-schema-changes.md | Schema Changes Must Be Backward Compatible |
 | bounded-context-boundaries.md | Enforce Bounded Context Boundaries in Code |
@@ -110,7 +111,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 - Principles should be specific and actionable — not aspirational
 - Rules (6): `secrets-never-in-code`, `least-privilege-access`, `fail-closed-by-default`, `validate-at-trust-boundaries`, `refactoring-integrity`, `hooks-fail-closed` (added 2026-05-29 — safety/guard hooks must fail closed on extraction failure or missing tooling; scoped to `hooks/**`). Note: `no-llm-calls-in-mcp-tools` relocated to `.canon/principles/rules/` (Canon-internal, portable: false).
 - Strong opinions cover architecture, testing, error handling, data flow
-- Conventions cover naming, file organization, test structure (19 total in `principles/conventions/`; 25 Canon-internal conventions in `.canon/principles/conventions/`, portable: false)
+- Conventions cover naming, file organization, test structure (20 total in `principles/conventions/`; 25 Canon-internal conventions in `.canon/principles/conventions/`, portable: false)
 - `accumulator-test-coverage` (added 2026-05-16) — accumulator functions in `mcp-server/**` require at least one test case with N>1 input and exact numeric assertion; capped accumulators require below-cap, at-cap, and above-cap cases
 - `source-shared-hook-helpers` (added 2026-05-29) — hooks that parse Claude Code `tool_input` JSON must source `hooks/lib/canon-hook-lib.sh` and use `canon_extract_command`; no inlined extraction expressions; scoped to `hooks/**`
 - `hooks-observable-failures` (added 2026-05-29) — bare silent swallows (`|| true`, `2>/dev/null`) in `hooks/**` must carry a justifying comment, emit `CANON WARNING:` to stderr, or exit non-zero; the `hooks/**`-scoped sibling of `observable-best-effort` at convention severity (see decision quality-coverage-01); scoped to `hooks/**`

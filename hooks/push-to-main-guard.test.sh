@@ -1433,6 +1433,179 @@ fi
 
 echo ""
 # ---------------------------------------------------------------------------
+# watch_GGGGGGGGGG3 fix: redirect / pipe shell-syntax tokens must NOT be
+# treated as refspecs (AC1: false-positive fix) and main must STILL block
+# when wrapped with redirects/pipes (AC2: no bypass).
+#
+# The bug: when a command is piped (`git push ... 2>&1 | tail`), the guard
+# segments on `|`, leaving `2>&1` attached to the push segment. canon_tokenize
+# emits `2>&1` as a bare word — it is not `-*`, so the parser treats it as a
+# positional. After `remote_seen=true` it lands in refspecs[]. `SAFE_REFSPEC_RE`
+# rejects `2>&1` → false-positive block of a legitimate non-main push.
+#
+# The fix: strip redirect-shaped tokens (`^[0-9]*>>?&?[0-9/dev/null]*$`,
+# `^&>`, etc.) from the token stream inside push_updates_protected_branch
+# BEFORE the refspec loop.  After stripping, remaining tokens are still fully
+# refspec-checked (AC3: fail-closed preserved).
+# ---------------------------------------------------------------------------
+echo "-- watch_GGGGGGGGGG3 AC1: redirect tokens must NOT block a non-main push (should allow, exit 0) --"
+
+# Core production incident form: git push ... 2>&1 | tail
+# The guard sees the segment before `|` which still has `2>&1` in it.
+# Simulate: feed only the pre-pipe segment as the command.
+run_test 'git push origin HEAD:canon/some-branch 2>&1 (AC1 core form — should allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/some-branch 2>&1')"
+
+# Additional output-redirect forms
+run_test 'git push origin HEAD:canon/foo >file.log (stdout redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo >file.log')"
+run_test 'git push origin HEAD:canon/foo 2>/dev/null (stderr to devnull — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo 2>/dev/null')"
+run_test 'git push origin HEAD:canon/foo &>/dev/null (combined redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo &>/dev/null')"
+run_test 'git push origin HEAD:canon/foo >>out.log (append redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo >>out.log')"
+run_test 'git push origin HEAD:canon/foo 1>&2 (stdout to stderr — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo 1>&2')"
+run_test 'git push origin HEAD:canon/foo 2>&1 1>/dev/null (chained redirects — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo 2>&1 1>/dev/null')"
+# Full pipeline: the segmentor splits on `|`, but we also want the combined form
+run_test 'git push origin HEAD:canon/foo 2>&1 | tail -5 (full pipeline — post-pipe tail is inert)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo 2>&1 | tail -5')"
+
+# Input-redirect forms (AC1 extension — input redirects must also be stripped)
+run_test 'git push origin HEAD:canon/foo <somefile (input redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo <somefile')"
+run_test 'git push origin HEAD:canon/foo 0<x (fd0 input redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo 0<x')"
+run_test 'git push origin HEAD:canon/foo <<EOF (heredoc redirect token — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo <<EOF')"
+run_test 'git push origin HEAD:canon/foo <<<word (here-string redirect — allow)' \
+  0 "$(make_input 'git push origin HEAD:canon/foo <<<word')"
+
+echo ""
+echo "-- watch_GGGGGGGGGG3 AC2: main push STILL BLOCKED even with redirects (should block, exit 2) --"
+
+# AC2 (critical): stripping redirect tokens must not create a bypass for main.
+# Every form below must still exit 2.
+run_test 'git push origin HEAD:main 2>&1 (AC2 main with redirect — must block)' \
+  2 "$(make_input 'git push origin HEAD:main 2>&1')"
+run_test 'git push origin main >/dev/null (AC2 main with stdout redirect — must block)' \
+  2 "$(make_input 'git push origin main >/dev/null')"
+run_test 'git push origin main 2>/dev/null (AC2 main with stderr redirect — must block)' \
+  2 "$(make_input 'git push origin main 2>/dev/null')"
+run_test 'git push origin main &>/dev/null (AC2 combined redirect — must block)' \
+  2 "$(make_input 'git push origin main &>/dev/null')"
+run_test 'git push origin HEAD:main >>log.txt (AC2 main + append redirect — must block)' \
+  2 "$(make_input 'git push origin HEAD:main >>log.txt')"
+# Piped main push: `git push origin HEAD:main 2>&1 | tail`
+# After segmentation the first segment is `git push origin HEAD:main 2>&1`.
+run_test 'git push origin HEAD:main 2>&1 | tail (AC2 piped main — must block)' \
+  2 "$(make_input 'git push origin HEAD:main 2>&1 | tail')"
+# Bare push with redirect (no refspec — bare_push_is_safe path; CANON_GUARD_CWD is /home/user/project which is non-repo → block)
+run_test 'git push 2>&1 (AC2 bare push + redirect, non-repo cwd — must block)' \
+  2 "$(make_input 'git push 2>&1')"
+# Input-redirect + main (AC2 extension — input redirect must NOT open a bypass)
+run_test 'git push origin HEAD:main <somefile (AC2 main + input redirect — must block)' \
+  2 "$(make_input 'git push origin HEAD:main <somefile')"
+run_test 'git push origin main 0<x (AC2 main + fd0 input redirect — must block)' \
+  2 "$(make_input 'git push origin main 0<x')"
+# Reviewer-noted missing AC2 explicit cases (refs/heads/ prefix and force-push form)
+run_test 'git push origin refs/heads/main 2>&1 (AC2 refs/heads/ form + redirect — must block)' \
+  2 "$(make_input 'git push origin refs/heads/main 2>&1')"
+run_test 'git push origin +main 2>&1 (AC2 force-push +main + redirect — must block)' \
+  2 "$(make_input 'git push origin +main 2>&1')"
+
+echo ""
+echo "-- watch_GGGGGGGGGG3 AC3: genuinely non-literal refspecs still fail-closed (should block, exit 2) --"
+
+# Confirm fail-closed is not weakened: a token that looks like a redirect but
+# could also be a real non-provably-literal refspec must still be rejected.
+# The redirect strip ONLY removes tokens matching the redirect regex; any
+# leftover non-literal tokens still hit SAFE_REFSPEC_RE and block.
+run_test 'git push origin HEAD:${BRANCH} 2>&1 (AC3 variable refspec survives redirect strip — must block)' \
+  2 "$(make_input 'git push origin HEAD:${BRANCH} 2>&1')"
+run_test 'git push origin HEAD:$(echo main) (AC3 cmd-sub refspec — must block)' \
+  2 "$(make_input 'git push origin HEAD:$(echo main)')"
+
+echo ""
+# ---------------------------------------------------------------------------
+# Separated-redirect bypass (Codex P1 on PR #409): a STANDALONE redirect
+# operator token (`>`, `>>`, `<`, `2>`, `&>`, etc.) leaves its TARGET filename
+# as a separate token. The prior strip skipped only the operator and let the
+# target ('log') flow on as a refspec — converting a BARE push to origin
+# (which must take the bare_push_is_safe path) into a safe-looking explicit
+# refspec push to 'log', allowing a redirected direct push to main.
+# The fix consumes the target token after a standalone operator.
+# ---------------------------------------------------------------------------
+echo "-- Separated-redirect AC1: target filename must NOT be misread as a refspec (feature branch → allow) --"
+
+# On a non-protected branch a bare push with a SEPARATED redirect must stay
+# allowed AND must not parse the target ('log'/'out.txt'/'err'/'in') as a refspec.
+TMPDIR_SEPRD=$(mktemp -d)
+setup_repo "$TMPDIR_SEPRD"
+git -C "$TMPDIR_SEPRD" checkout -q -b canon/sep-redir 2>/dev/null || true
+
+run_test 'git push origin > log (separated stdout redirect, feature branch → allow)' \
+  0 "$(make_input 'git push origin > log')" "$TMPDIR_SEPRD"
+run_test 'git push origin >> out.txt (separated append redirect, feature branch → allow)' \
+  0 "$(make_input 'git push origin >> out.txt')" "$TMPDIR_SEPRD"
+run_test 'git push origin 2> err (separated fd2 redirect, feature branch → allow)' \
+  0 "$(make_input 'git push origin 2> err')" "$TMPDIR_SEPRD"
+run_test 'git push origin < in (separated input redirect, feature branch → allow)' \
+  0 "$(make_input 'git push origin < in')" "$TMPDIR_SEPRD"
+run_test 'git push origin &> log (separated combined redirect, feature branch → allow)' \
+  0 "$(make_input 'git push origin &> log')" "$TMPDIR_SEPRD"
+
+rm -rf "$TMPDIR_SEPRD"
+
+echo ""
+echo "-- Separated-redirect AC2 (the bug): a bare push that MUST block stays blocked with a separated redirect (should block, exit 2) --"
+
+# Bare push, non-repo cwd (default /home/user/project) → unresolvable → BLOCK.
+# With the bug, 'log' was read as an explicit refspec → fail-OPEN allow.
+run_test 'git push origin > log (separated redirect, non-repo cwd → must block)' \
+  2 "$(make_input 'git push origin > log')"
+run_test 'git push origin 2>&1 > log (glued+separated redirects, non-repo cwd → must block)' \
+  2 "$(make_input 'git push origin 2>&1 > log')"
+run_test 'git push origin >> out.txt (separated append, non-repo cwd → must block)' \
+  2 "$(make_input 'git push origin >> out.txt')"
+run_test 'git push origin 2> err (separated fd2, non-repo cwd → must block)' \
+  2 "$(make_input 'git push origin 2> err')"
+run_test 'git push origin < in (separated input, non-repo cwd → must block)' \
+  2 "$(make_input 'git push origin < in')"
+# --mirror pushes every ref incl. main; a separated redirect must not smuggle past it.
+run_test 'git push --mirror origin > log (separated redirect on --mirror → must block)' \
+  2 "$(make_input 'git push --mirror origin > log')"
+
+# Bare push from a real main checkout with a separated redirect must still block.
+# setup_repo runs `git init` with no explicit branch, so the initial branch name
+# is environment-dependent (`main` locally, `master` in CI when init.defaultBranch
+# is unset). Force the branch to `main` so this "on the protected branch" precondition
+# holds regardless of the ambient default-branch config — otherwise the bare push
+# resolves to a non-protected branch in CI and is (correctly) allowed, breaking the
+# `must block` assertion for environment reasons rather than a real regression.
+TMPDIR_SEPRD_MAIN=$(mktemp -d)
+setup_repo "$TMPDIR_SEPRD_MAIN"
+git -C "$TMPDIR_SEPRD_MAIN" branch -M main
+run_test 'git push origin > log from main checkout (separated redirect → must block)' \
+  2 "$(make_input 'git push origin > log')" "$TMPDIR_SEPRD_MAIN"
+rm -rf "$TMPDIR_SEPRD_MAIN"
+
+echo ""
+echo "-- Separated-redirect AC3 (fail-closed): an explicit protected refspec with a separated redirect still blocks (should block, exit 2) --"
+
+# 'main' is a real refspec; only 'log' is the redirect target. The consumed
+# token must NEVER be a protected refspec.
+run_test 'git push origin main > log (explicit main + separated redirect → must block)' \
+  2 "$(make_input 'git push origin main > log')"
+run_test 'git push origin HEAD:main > log (explicit HEAD:main + separated redirect → must block)' \
+  2 "$(make_input 'git push origin HEAD:main > log')"
+run_test 'git push origin +main >> out.txt (force +main + separated append → must block)' \
+  2 "$(make_input 'git push origin +main >> out.txt')"
+
+echo ""
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo "=== Results: PASS=$PASS FAIL=$FAIL ==="
