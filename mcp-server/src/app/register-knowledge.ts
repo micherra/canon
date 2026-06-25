@@ -1,3 +1,7 @@
+import {
+  type CheckContextStalenessInput,
+  checkContextStaleness,
+} from "@features/diagnostics/tools/check-context-staleness.ts";
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
@@ -171,6 +175,26 @@ function registerDiagnosticsTools(server: McpServer): void {
       },
     },
     gatedWrapHandler(async (input) => getHistory(input)),
+  );
+}
+
+function registerContextStalenessTool(server: McpServer): void {
+  server.registerTool(
+    "check_context_staleness",
+    {
+      description:
+        "Check whether the installed Canon context artifacts (principles, rules, references, primers, agents, templates) match the committed context-manifest.json. Returns a StalenessReport listing drifted, missing, and extra files.",
+      inputSchema: {
+        manifest_path: z
+          .string()
+          .optional()
+          .describe(
+            "Explicit path to the committed manifest JSON file (default: <project_dir>/context-manifest.json)",
+          ),
+        project_dir: z.string().describe("Project root directory path"),
+      },
+    },
+    gatedWrapHandler(async (input: CheckContextStalenessInput) => checkContextStaleness(input)),
   );
 }
 
@@ -368,6 +392,7 @@ export function registerKnowledgeTools(server: McpServer): void {
   registerDiagnosticsTools(server);
   registerWikiLintTool(server);
   registerSyncIndexesTool(server);
+  registerContextStalenessTool(server);
   registerGraphQueryTool(server);
   registerSemanticSearchTool(server);
   registerGraphJobTools(server);
