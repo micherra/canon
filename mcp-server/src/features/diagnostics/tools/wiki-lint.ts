@@ -11,7 +11,7 @@
  * - validate-at-trust-boundaries: Zod validates input at registration
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { VALID_COMPUTED_TAGS } from "@graph/kg-tags.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
@@ -396,9 +396,14 @@ export function buildCorpusLinkGraph(
   pluginDir: string,
   principles: Principle[],
 ): LinkGraphResult {
-  /** Normalise a directory for same-root comparison (resolve trailing slashes). */
+  /** Normalise a directory for same-root comparison: resolve symlinks + trailing slashes.
+   * Fail-open: falls back to raw string on ENOENT or other fs errors. */
   function normDir(d: string): string {
-    return d.replace(/\/+$/, "");
+    try {
+      return realpathSync(d).replace(/\/+$/, "");
+    } catch {
+      return d.replace(/\/+$/, "");
+    }
   }
 
   const projectDirNorm = normDir(projectDir);
@@ -447,7 +452,10 @@ export function buildCorpusLinkGraph(
     stems,
   };
 
-  const existsOnDisk = (refPath: string): boolean => existsSync(join(projectDir, refPath));
+  // Check both roots: a relative md link inside a plugin-shipped file resolves against
+  // pluginDir, not projectDir. When sameRoot, both checks hit the same directory.
+  const existsOnDisk = (refPath: string): boolean =>
+    existsSync(join(projectDir, refPath)) || existsSync(join(pluginDir, refPath));
   return buildLinkGraph(docs, known, existsOnDisk);
 }
 

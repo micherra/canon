@@ -261,6 +261,36 @@ describe("buildCorpusLinkGraph — includes plugin corpus when projectDir !== pl
     expect(broken.length).toBeGreaterThan(0);
     expect(broken.some((f) => f.message.includes("completely-nonexistent-target"))).toBe(true);
   });
+
+  // W1 — existsOnDisk must check BOTH roots so plugin-shipped relative md links do not
+  // emit false BROKEN_MDLINK when the target file exists under pluginDir.
+  it("does NOT emit BROKEN_MDLINK for a relative md link that resolves under pluginDir", () => {
+    const projectDir = mkTmpDir();
+    const pluginDir = mkTmpDir();
+    // A shipped principle with a relative link to a sibling file that lives in pluginDir.
+    writeMd(
+      pluginDir,
+      "principles/conventions/ref-principle.md",
+      "---\nid: ref-principle\ntitle: Ref\n---\n\nSee [details](./sibling.md).\n",
+    );
+    writeMd(pluginDir, "principles/conventions/sibling.md", "# Sibling\n\nContent here.\n");
+    const result = buildCorpusLinkGraph(projectDir, pluginDir, []);
+    const broken = result.findings.filter((f) => f.code === "BROKEN_MDLINK");
+    expect(broken).toHaveLength(0);
+  });
+
+  it("still emits BROKEN_MDLINK for a relative md link that does not exist under either root", () => {
+    const projectDir = mkTmpDir();
+    const pluginDir = mkTmpDir();
+    writeMd(
+      pluginDir,
+      "principles/conventions/ref-principle.md",
+      "---\nid: ref-principle\ntitle: Ref\n---\n\nSee [gone](./totally-missing.md).\n",
+    );
+    const result = buildCorpusLinkGraph(projectDir, pluginDir, []);
+    const broken = result.findings.filter((f) => f.code === "BROKEN_MDLINK");
+    expect(broken.length).toBeGreaterThan(0);
+  });
 });
 
 // ---- Whole-corpus no-false-positive assertion (AC) ----
