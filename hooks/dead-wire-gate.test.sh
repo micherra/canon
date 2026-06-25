@@ -1143,6 +1143,936 @@ echo "-- Defect 1 regression: top-level src/*.ts wired export => exit 0 --"
   rm -rf "$REPO"
 }
 
+# ===========================================================================
+# Parse-aware same-file internal-use tests (dwparse-02 — T1-T15)
+#
+# These tests exercise the new is_internally_used() path that calls the
+# node dead-wire-internal-use.mjs helper instead of a regex comment-strip.
+#
+# Helper path (must be under mcp-server/ for ESM resolution):
+HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/mcp-server/scripts/dead-wire-internal-use.mjs"
+#
+# Each fixture adds a newly-exported symbol (so the gate sees it as a
+# candidate) and controls whether the same-file content is a code use or a
+# comment/string/non-code mention.  The cross-file grep finds no other
+# references, so the decision falls to the same-file check.
+#
+# Bypass-class tests (T1-T6) expect exit 2 (DEAD).
+# Genuine-use tests (T7-T8) expect exit 0 (WIRED via same-file use).
+# Invariant tests (T9-T11) exercise R2 / R3 / cross-file WIRED.
+# Fail-closed tests (T12-T14) expect exit 2 (DEAD on any helper failure).
+# Suppression test (T15) expects exit 0 (suppressed despite true dead).
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Helper: make a minimal fixture repo with only the definition file.
+# The caller passes the file content; the export symbol name is "deadFn"
+# throughout the bypass tests so that any inline occurrence is detectable.
+# ---------------------------------------------------------------------------
+make_same_file_repo() {
+  local dir="$1"
+  local file_content="$2"
+  mkdir -p "$dir/mcp-server/src/features" "$dir/mcp-server/src/app"
+  git -C "$dir" init -q
+  git -C "$dir" config user.email "test@example.com"
+  git -C "$dir" config user.name "Test"
+  git -C "$dir" config commit.gpgsign false
+  # Initial commit so HEAD~1 exists
+  printf '// placeholder\n' > "$dir/mcp-server/src/features/placeholder.ts"
+  git -C "$dir" add .
+  git -C "$dir" commit -q -m "init"
+  # The definition file with the specified content
+  printf '%s\n' "$file_content" > "$dir/mcp-server/src/features/target.ts"
+  git -C "$dir" add .
+  git -C "$dir" commit -q -m "add target"
+}
+
+# ---------------------------------------------------------------------------
+# T1: block-comment-only mention — "/* deadFn */" → exit 2 (DEAD)
+#
+# OLD regex: comment stripping on plain grep may or may not strip block
+# comments correctly depending on generation.  The parse-aware helper
+# correctly classifies this as a comment leaf → count = 1 (def only) → DEAD.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T1: block-comment-only mention → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  # Export definition + only a block comment mention (no code use)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+// This uses deadFn in a comment: /* deadFn */'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T1: block-comment mention only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T2: unterminated /* mention — "/* deadFn" …EOF → exit 2 (DEAD)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T2: unterminated /* mention → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+/* deadFn'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T2: unterminated /* mention only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T3: comment-inside-string — 'const s = "/* deadFn */"' → exit 2 (DEAD)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T3: comment-inside-string mention → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const s = "/* deadFn */";'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T3: comment-inside-string only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T4: comment-inside-regex — 'const r = /\/\* deadFn \*\//' → exit 2 (DEAD)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T4: comment-inside-regex mention → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const r = /\/\* deadFn \*\//;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T4: comment-inside-regex only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T5: bare-token-after-comment — "/* x */ // deadFn" → exit 2 (DEAD)
+# The entire second line is a line comment; the token after // is not code.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T5: bare-token-after-line-comment → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+/* x */ // deadFn'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T5: token after line-comment only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T6: nested comment — "/* /* deadFn */" → exit 2 (DEAD)
+# Tree-sitter error-recovers; deadFn still ends up inside a comment leaf.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T6: nested /* /* mention → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+/* /* deadFn */'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T6: nested /* /* mention only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T7: template substitution — `${deadFn()}` → exit 0 (WIRED)
+# The expression inside ${...} is real code; the helper counts it as a code
+# ref.  count ≥ 2 (def + template use) → WIRED.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T7: template substitution \${deadFn()} → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): string { return "x"; }
+const msg = `result: ${deadFn()}`;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T7: template substitution → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T8: genuine same-file call — "const x = deadFn()" → exit 0 (WIRED)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T8: genuine same-file call → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): number { return 42; }
+const x = deadFn();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T8: genuine same-file call → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T9: zero reference (def only) — no extra mention at all → exit 2 (DEAD)
+# Invariant R2: a symbol with only its own definition is DEAD.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T9: zero reference (def only) → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T9: zero reference (def only) → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T10: test-file-only reference → exit 2 (DEAD)
+# Invariant R3: the gate excludes *.test.ts from cross-file grep;
+# the same-file check runs on the def file, so a *.test.ts mention never
+# WIREs the symbol.  Simulate: def only in target.ts, use in target.test.ts.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T10: test-file-only reference → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  mkdir -p "$REPO/mcp-server/src/features" "$REPO/mcp-server/src/app"
+  git -C "$REPO" init -q
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test"
+  git -C "$REPO" config commit.gpgsign false
+  printf '// placeholder\n' > "$REPO/mcp-server/src/features/placeholder.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "init"
+  # def file (no same-file code use)
+  printf 'export function deadFn(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/target.ts"
+  # test file with a code use (excluded by gate)
+  printf 'import { deadFn } from "./target"; deadFn();\n' \
+    > "$REPO/mcp-server/src/features/target.test.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "add target + test ref"
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T10: test-file-only reference → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T11: cross-file wired — used in a non-test sibling .ts → exit 0
+# Existing cross-file grep path; verify the same-file check does NOT
+# interfere with the already-wired path.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T11: cross-file wired (non-test sibling) → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  mkdir -p "$REPO/mcp-server/src/features" "$REPO/mcp-server/src/app"
+  git -C "$REPO" init -q
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test"
+  git -C "$REPO" config commit.gpgsign false
+  printf '// placeholder\n' > "$REPO/mcp-server/src/features/placeholder.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "init"
+  # def file (no same-file code use)
+  printf 'export function deadFn(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/target.ts"
+  # non-test sibling with a code use → cross-file grep finds it → WIRED
+  printf 'import { deadFn } from "./target"; deadFn();\n' \
+    > "$REPO/mcp-server/src/features/consumer.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "add target + consumer"
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T11: cross-file wired → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T12: node absent — PATH stripped of node → exit 2 (fail-closed)
+# The gate's "command -v node" guard must fire and flag DEAD.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T12: node absent from PATH → DEAD (fail-closed, exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const x = deadFn();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+
+  # Strip node from PATH by keeping only dirs that do NOT contain a "node" binary
+  NO_NODE_PATH=""
+  IFS=: read -ra path_dirs <<< "$PATH"
+  for d in "${path_dirs[@]}"; do
+    if [[ ! -x "$d/node" ]]; then
+      NO_NODE_PATH="${NO_NODE_PATH:+$NO_NODE_PATH:}$d"
+    fi
+  done
+
+  _t12_exit=0
+  (cd "$REPO" && PATH="$NO_NODE_PATH" bash "$GATE" "$BASE") >/dev/null 2>&1 || _t12_exit=$?
+  if [[ "$_t12_exit" -eq 2 ]]; then
+    echo "  PASS: T12: node absent → exit 2 (fail-closed)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: T12: node absent → expected exit 2, got exit $_t12_exit"
+    FAIL=$((FAIL + 1))
+  fi
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T13: helper returns non-zero (stub helper exits 1) → exit 2 (fail-closed)
+# Shadow the real helper with a stub script that always exits 1.
+# The gate must treat helper non-zero as DEAD, never as WIRED.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T13: helper exits 1 (stub) → DEAD (fail-closed, exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const x = deadFn();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+
+  # Create a stub helper that always exits 1 (any error)
+  STUB_DIR=$(mktemp -d)
+  mkdir -p "$STUB_DIR/mcp-server/scripts"
+  cat > "$STUB_DIR/mcp-server/scripts/dead-wire-internal-use.mjs" <<'STUB'
+#!/usr/bin/env node
+process.stderr.write("CANON ERROR [stub]: simulated helper failure\n");
+process.exit(1);
+STUB
+
+  # Run gate from repo, but override the helper path via env var
+  _t13_exit=0
+  (cd "$REPO" && DEAD_WIRE_HELPER_PATH="$STUB_DIR/mcp-server/scripts/dead-wire-internal-use.mjs" \
+    bash "$GATE" "$BASE") >/dev/null 2>&1 || _t13_exit=$?
+  if [[ "$_t13_exit" -eq 2 ]]; then
+    echo "  PASS: T13: helper exits 1 → exit 2 (fail-closed)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: T13: helper exits 1 → expected exit 2, got exit $_t13_exit"
+    FAIL=$((FAIL + 1))
+  fi
+  rm -rf "$REPO" "$STUB_DIR"
+}
+
+# ---------------------------------------------------------------------------
+# T14: helper exits non-zero — stub helper exits 1 → DEAD (fail-closed, exit 2)
+# The TS-compiler resolver no longer uses WASM grammars; the DEAD_WIRE_GRAMMARS_DIR
+# env var is unused. We test fail-closed by using a stub helper that exits 1
+# (same as T13 but focused on the gate's fail-closed guarantee, not grammar loading).
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T14: stub helper exits 1 (fail-closed — no WASM grammar dependency) → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const x = deadFn();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+
+  # Create a stub helper that always exits 1 — gate must treat as DEAD
+  STUB_DIR_T14=$(mktemp -d)
+  mkdir -p "$STUB_DIR_T14/mcp-server/scripts"
+  cat > "$STUB_DIR_T14/mcp-server/scripts/dead-wire-internal-use.mjs" <<'STUB14'
+#!/usr/bin/env node
+process.stderr.write("CANON ERROR [stub-t14]: simulated helper failure\n");
+process.exit(1);
+STUB14
+
+  _t14_exit=0
+  (cd "$REPO" && DEAD_WIRE_HELPER_PATH="$STUB_DIR_T14/mcp-server/scripts/dead-wire-internal-use.mjs" \
+    bash "$GATE" "$BASE") >/dev/null 2>&1 || _t14_exit=$?
+  if [[ "$_t14_exit" -eq 2 ]]; then
+    echo "  PASS: T14: stub helper exits 1 → exit 2 (fail-closed)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: T14: stub helper exits 1 → expected exit 2, got exit $_t14_exit"
+    FAIL=$((FAIL + 1))
+  fi
+  rm -rf "$REPO" "$STUB_DIR_T14"
+}
+
+# ---------------------------------------------------------------------------
+# T15: suppression marker on a true dead export → exit 0 (suppressed)
+# Verifies that the canon:allow-unwired: path is untouched by the new logic.
+# The symbol has no cross-file or same-file code refs, but is suppressed.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T15: suppression marker on true dead → suppressed (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    '// canon:allow-unwired: test fixture — intentional dead export
+export function deadFn(): void { return; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T15: suppression marker on true dead → exit 0 (suppressed)"
+  rm -rf "$REPO"
+}
+
+# ===========================================================================
+# Multi-declaration false-WIRE gate tests (use-position counting fix)
+#
+# T16-T25: Gate-level tests for the 5 false-WIRE forms identified in the
+# adversarial review. Each false-WIRE form has:
+#   (a) zero-use variant → gate must exit 2 (DEAD)
+#   (b) genuine-use variant → gate must exit 0 (WIRED)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# T16: overloaded function (2 sigs + impl), zero uses → DEAD (exit 2)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T16: overloaded function, zero uses → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function overloadFn(x: string): string;
+export function overloadFn(x: number): number;
+export function overloadFn(x: string | number): string | number { return x; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T16: overloaded fn, zero uses → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T17: overloaded function + genuine call → WIRED (exit 0)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T17: overloaded function + genuine call → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function overloadFn(x: string): string;
+export function overloadFn(x: number): number;
+export function overloadFn(x: string | number): string | number { return x; }
+const result = overloadFn("hello");'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T17: overloaded fn + call → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T18: export type + export const (declaration merge), zero uses → DEAD (exit 2)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T18: export type + export const (decl merge), zero uses → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export type MergedName = string;
+export const MergedName = "value";'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T18: type+const merge, zero uses → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T19: export type + export const + genuine use → WIRED (exit 0)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T19: export type + export const + genuine use → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export type MergedName = string;
+export const MergedName = "value";
+const x: MergedName = MergedName;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T19: type+const merge + use → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T20: export interface + export const (declaration merge), zero uses → DEAD (exit 2)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T20: export interface + export const (decl merge), zero uses → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export interface IfaceConst { id: string; }
+export const IfaceConst = { id: "x" };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T20: interface+const merge, zero uses → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T21: export interface + export const + genuine use → WIRED (exit 0)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T21: export interface + export const + genuine use → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export interface IfaceConst { id: string; }
+export const IfaceConst = { id: "x" };
+const x: IfaceConst = IfaceConst;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T21: interface+const merge + use → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T22: export interface + export class (declaration merge), zero uses → DEAD (exit 2)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T22: export interface + export class (decl merge), zero uses → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export interface IfaceClass { id: string; }
+export class IfaceClass { id = "x"; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T22: interface+class merge, zero uses → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T23: export interface + export class + genuine use → WIRED (exit 0)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T23: export interface + export class + genuine use → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export interface IfaceClass { id: string; }
+export class IfaceClass { id = "x"; }
+const obj: IfaceClass = new IfaceClass();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T23: interface+class merge + use → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T24: export function + export namespace (declaration merge), zero uses → DEAD (exit 2)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T24: export function + export namespace (decl merge), zero uses → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function FnNs(): void {}
+export namespace FnNs { export const version = 1; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T24: function+namespace merge, zero uses → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T25: export function + export namespace + genuine use → WIRED (exit 0)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T25: export function + export namespace + genuine use → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function FnNs(): void {}
+export namespace FnNs { export const version = 1; }
+FnNs();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T25: function+namespace merge + use → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ===========================================================================
+# FALSE-WIRE leak tests (adversarial re-review, reviewer-confirmed)
+#
+# T26-T36: Gate-level tests for the 6 FALSE-WIRE forms identified in the
+# second adversarial review. Each form previously caused a genuinely-dead
+# export to register count >= 1 under the old denylist, silently passing
+# the gate (FALSE-WIRE). Under the inverted USE-POSITION ALLOWLIST they
+# must all exit 2 (DEAD).
+#
+# Also tests:
+#   - The `export const status` + `{ status: 'ok' }` realistic collision
+#   - Fail-closed-default: an unrecognized position defaults to NON-use
+#   - Attack-2 preserved: shorthand object EXPRESSION { deadFn } still WIRED
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# T26: Leak 1 — property KEY { deadFn: 1 } → DEAD (exit 2)
+# The property key is NOT a use of the symbol; only the value would be.
+# Realistic collision: `export function handleFoo` + `const c = { handleFoo: true }`
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T26: property KEY { deadFn: 1 } → DEAD (exit 2) [Leak 1] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const obj = { deadFn: 1 };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T26: property key { deadFn: 1 } → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T27: Leak 1 realistic — export const status + { status: 'ok' } → DEAD (exit 2)
+# The most common real collision: short status/type/kind names as property keys.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T27: export const status + { status: 'ok' } key collision → DEAD (exit 2) [Leak 1 realistic] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export const status = "active";
+const response = { status: "ok" };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T27: status key collision → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T28: Leak 2 — enum member `enum E { deadFn }` → DEAD (exit 2)
+# enum_body not in old DECLARATION_NODE_TYPES_WITH_NAME_FIELD → leaked.
+# Under the new allowlist, enum_body is explicitly a NON-use.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T28: enum member enum E { deadFn } → DEAD (exit 2) [Leak 2] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+enum E { deadFn }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T28: enum member → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T29: Leak 3 — array destructure binding `const [deadFn] = x` → DEAD (exit 2)
+# array_pattern is a binding context; identifier here is the local binding name.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T29: array destructure binding const [deadFn] = x → DEAD (exit 2) [Leak 3] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const arr: (() => void)[] = [];
+const [deadFn] = arr;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T29: array destructure binding → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T30: Leak 4 — renamed destructure binding `const { x: deadFn } = y` → DEAD (exit 2)
+# pair_pattern value field is the renamed local binding, not a use of the symbol.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T30: renamed destructure binding const { x: deadFn } = y → DEAD (exit 2) [Leak 4] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const source = { x: (): void => {} };
+const { x: deadFn } = source;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T30: renamed destructure binding → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T31: Leak 5 — export specifier `export { deadFn }` → DEAD (exit 2)
+# Re-exporting a symbol is not an internal USE of it in the same file.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T31: export specifier export { deadFn } → DEAD (exit 2) [Leak 5] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+export { deadFn };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T31: export specifier → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T32: Leak 6 — re-export `export { deadFn } from './m'` → DEAD (exit 2)
+# Same root cause as Leak 5: export_specifier name field is not an internal use.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T32: re-export export { deadFn } from './m' → DEAD (exit 2) [Leak 6] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    "export function deadFn(): void { return; }
+export { deadFn } from './other';"
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T32: re-export specifier → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T33: Fail-closed-default — unrecognized position defaults to NON-use → DEAD (exit 2)
+# A symbol that appears only in a binding position (parameter name in a nested
+# function) is NOT a use. The allowlist posture: unrecognized → NON-use → DEAD.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T33: fail-closed-default — parameter binding NOT a use → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+function wrapper(deadFn: () => void): void { return; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T33: parameter binding is NOT a use → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T34: Attack-2 preserved — shorthand object EXPRESSION { deadFn } → WIRED (exit 0)
+# `const obj = { deadFn }` reads the value of deadFn — a genuine use.
+# This was correctly classified in the first review and must stay WIRED.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T34: shorthand object expression { deadFn } → WIRED (exit 0) [Attack-2] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const obj = { deadFn };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T34: shorthand object expression → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T35: Type annotation use IS a use → WIRED (exit 0)
+# `let x: DeadFn` — type reference position.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T35: type annotation use (let x: DeadFn) → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export type DeadFn = () => void;
+let x: DeadFn;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T35: type annotation → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T36: Extends-clause use IS a use → WIRED (exit 0)
+# `class C extends DeadFn` — heritage clause.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T36: class extends DeadFn → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export class DeadFn {}
+class Child extends DeadFn {}'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T36: extends clause → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ===========================================================================
+# Scope-aware resolver tests (S1/S4/S5/S9 gate-level discriminating guards)
+#
+# T37–T43: Gate-level end-to-end tests for the TS-compiler binding resolver.
+# Each fixture creates a repo with a newly-exported symbol whose same-file
+# content contains the discriminating pattern.  The cross-file grep finds
+# nothing, so the decision falls to the same-file resolver.
+#
+# Member-property and shadowing cases → DEAD (exit 2)
+# Member-OBJECT and genuine call cases → WIRED (exit 0)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# T37: S1 gate — member-property res.deadFn → DEAD (exit 2)
+# The symbol appears as a property NAME on an unrelated object, not as a
+# direct use of the exported binding.  The resolver returns count 0.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T37: S1 gate — member-property res.deadFn → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const res = { deadFn: () => {} };
+const x = res.deadFn;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T37: S1 gate — res.deadFn → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T38: S4 gate — export function status + res.status realistic collision → DEAD (exit 2)
+# The most common real-world false-WIRE: short property names like status/type/id.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T38: S4 gate — function status + res.status collision → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function status(): string { return "active"; }
+function handleReq(res: { status: string }): string {
+  return res.status;
+}'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T38: S4 gate — res.status collision → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T39: S5 gate — export function deadFn + shadowing local (used) → DEAD (exit 2)
+# A local const named deadFn is declared and used inside wrapper(); the
+# resolver correctly resolves the use to the local binding, not the export.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T39: S5 gate — shadowing local const → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+function wrapper(): number {
+  const deadFn = 42;
+  return deadFn;
+}'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T39: S5 gate — shadowing local → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T40: S9 gate — export function deadFn + deadFn.bind(null) member-OBJECT → WIRED (exit 0)
+# deadFn is the object of the member expression (not the property name),
+# so the resolver correctly counts this as a use of the export binding.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T40: S9 gate — deadFn.bind(null) member-OBJECT → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const bound = deadFn.bind(null);'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T40: S9 gate — deadFn.bind → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T41: S10 gate — export function deadFn + shorthand { deadFn } reading export → WIRED (exit 0)
+# `const o = { deadFn }` reads the export binding; getShorthandAssignmentValueSymbol
+# resolves this correctly to the export symbol.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T41: S10 gate — shorthand { deadFn } reading export → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const o = { deadFn };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T41: S10 gate — shorthand reading export → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T42: S1 variant gate — member-property + genuine call mixed → WIRED (exit 0)
+# res.deadFn alone would be DEAD, but a real deadFn() call wires it.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T42: S1 variant + genuine call → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const res = { deadFn: () => {} };
+res.deadFn;
+deadFn();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T42: member-property + genuine call → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T43: S5 variant gate — shadow in g() + genuine call in h() → WIRED (exit 0)
+# Same as S8: the shadow is DEAD locally but the real call in h() wires it.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T43: S5+S8 variant — shadow + genuine call → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+function g(): number {
+  const deadFn = 99;
+  return deadFn;
+}
+function h(): void {
+  deadFn();
+}'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T43: shadow-in-g + genuine-call-in-h → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ===========================================================================
+# Intra-declaration self-reference tests (recursive-export bypass fix)
+#
+# T44–T45: Gate-level tests for the recursive-export false-WIRE bypass.
+#
+# When a newly-added export is ONLY referenced from inside its own declaration
+# body (e.g. a recursive function calling itself), the resolver must NOT count
+# that as an internal use.  A purely self-referential export with no external
+# caller must be DEAD.
+#
+# T44: purely recursive export → DEAD (exit 2)
+# T45: recursive export + genuine sibling call → WIRED (exit 0)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# T44: purely self-referential recursive export → DEAD (exit 2)
+#
+# `export function deadFn(){ return deadFn(); }` — the only occurrence of
+# deadFn inside the file is the recursive call inside its own body.
+# The resolver must skip intra-declaration references; count = 0 → DEAD.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T44: purely recursive export (self-call only) → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return deadFn(); }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T44: self-recursive export, no external caller → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T45: recursive export that IS also called from a sibling declaration → WIRED (exit 0)
+#
+# The recursive call inside deadFn's own body must not count, but a genuine
+# call from an outer sibling function DOES count → WIRED.  This guards
+# against over-correction (the fix must not suppress legitimate sibling uses).
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T45: recursive export + sibling caller → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return deadFn(); }
+function caller(): void { deadFn(); }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T45: self-recursive export + sibling caller → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

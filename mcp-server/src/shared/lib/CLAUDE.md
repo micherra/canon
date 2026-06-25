@@ -76,6 +76,18 @@ Manages `.canon/janitor.lock` — a PID + mtime lock that prevents concurrent ja
 
 ---
 
+### `atomic-write.ts` — Atomic File Write Utilities
+
+**Exports:**
+- `atomicWriteFile(filePath, data): Promise<void>` — writes to a temp file in the same directory then renames; rename() within the same filesystem is POSIX-atomic; prevents partial reads
+- `atomicWritePair(filePath1, data1, filePath2, data2): Promise<void>` — writes both temp files first, then renames both; callers see either both old files or both new files, never a mix; use when two files must stay in sync (e.g. `REVIEW.md` + `REVIEW.meta.json`)
+
+**Key pattern:** `atomicWritePair` closes the md-new/meta-old divergence window that would arise from two sequential `atomicWriteFile` calls crashing between the first and second rename. Used by `write_review` for all REVIEW pairs.
+
+Added `atomicWritePair` 2026-06-24.
+
+---
+
 ### `subsystem-key.ts` — Area Memory Subsystem Key Derivation
 
 **Exports:**
