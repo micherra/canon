@@ -25,6 +25,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `workspace-lock-guard.sh` | PreToolUse (Bash) | Prevent concurrent builds on same branch |
 | `pre-push-review.sh` | PreToolUse (Bash) | Require review before pushing |
 | `push-to-main-guard.sh` | PreToolUse (Bash) | Fail-closed allowlist-posture guard blocking any `git push` whose destination resolves to the repo's default protected branch (origin/HEAD → `main` fallback); defense-in-depth against accidental direct pushes — AUTHORITATIVE control is GitHub branch-protection |
+| `adr-number-check.sh` | PreToolUse (Bash) | Fail-closed ADR-number collision gate — blocks a `git push` adding `docs/adr/NNNN-*.md` whose NNNN already exists on origin/main under a different slug (network-free local check); open-PR check deferred (Decision adr-id-02) |
 | `large-file-guard.sh` | PreToolUse (Write/Edit) | Prevent accidental large file commits |
 | `principle-inject.sh` | PreToolUse (Write/Edit) | Inject principle summaries into prompts |
 | `plan-mode-guard.sh` | PreToolUse (EnterPlanMode) | Guard against unintended plan mode entry |
@@ -63,7 +64,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 - Each hook script must be executable and exit 0 (pass) or non-zero (block)
 - Hook configuration lives in `hooks.json` with matcher patterns for tool names
 - `principle-inject-worker.mjs` is a Node.js helper invoked by `principle-inject.sh`
-- `destructive-guard.test.sh`, `dead-wire-gate.test.sh`, `summary-diff-check.test.sh`, `scribe-scope-guard.test.sh`, and `install-git-hooks.sh` are utilities, not registered hooks; each `.test.sh` is the test suite for its corresponding script
+- `destructive-guard.test.sh`, `dead-wire-gate.test.sh`, `summary-diff-check.test.sh`, `scribe-scope-guard.test.sh`, `adr-number-check.sh.test.sh`, and `install-git-hooks.sh` are utilities, not registered hooks; each `.test.sh` is the test suite for its corresponding script
 - When testing secret-detection hooks, use all-zeros suffixes or EXAMPLE-pattern placeholders for key fixtures — not plausible real-looking values. GitHub push protection scans test files regardless of hook exclusion rules.
 - **Hook test files**: Hooks with 3+ decision branches, runtime state inspection (sqlite queries, filesystem checks), or bypass gate env vars MUST have a corresponding `.test.sh` file. Place it alongside the hook (e.g., `pre-commit-check.test.sh`) or in a `__tests__/` subdirectory. Tests must cover: bypass gate, all silent-pass paths, and all warning/blocking paths. Run with `bash hooks/<name>.test.sh`.
 - **Shared test helpers**: All hook test files source `hooks/test-helpers.sh` for shared utilities (`run_test`, `assert_eq`, etc.); do not define these helpers inline in individual test files.
