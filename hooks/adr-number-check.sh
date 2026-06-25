@@ -26,8 +26,9 @@
 # before the diff at Step 1). Safety then rests on two backstops: (1) jq-presence
 # is required for reliable extraction (lib/canon-hook-lib.sh fails closed without it),
 # and (2) branch-protection / PR-review catches any ADR collision that slips a missed
-# push. A missed collision here produces a benign additive merge conflict — it is not
-# a silent breach.
+# push. A missed collision here produces a silent duplicate ADR number (two docs/adr/NNNN-*.md
+# files sharing the same NNNN under different slugs on origin/main), caught only later by
+# chance — it is not an undetectable breach, but it is not self-correcting either.
 # The only fail-closed scope is: "a push that adds a new docs/adr/NNNN-*.md whose NNNN
 # already exists on origin/main." That surface is fail-CLOSED (exit 2). The command
 # parse is a coarse pre-filter only; its fail-open posture is therefore consequence-safe.
@@ -51,8 +52,8 @@ COMMAND=$(canon_extract_command "$INPUT")
 # INTENTIONAL DIVERGENCE from destructive-guard/pre-commit-check: those hooks must
 # analyze ALL Bash commands for destructive patterns, so they fail CLOSED (exit 2) on
 # an empty COMMAND. This hook is a collision gate for git push only — it sees ALL Bash
-# but only acts on push-shaped commands. A parse miss here is consequence-safe (benign
-# merge conflict at worst; backstopped by jq-presence requirement + branch-protection).
+# but only acts on push-shaped commands. A parse miss here is consequence-safe (silent
+# duplicate ADR number at worst; backstopped by jq-presence requirement + branch-protection).
 if [[ -z "$COMMAND" ]]; then
   exit 0
 fi
