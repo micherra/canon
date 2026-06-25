@@ -184,6 +184,34 @@ rename_adr() {
   git -C "$workdir" commit -q -m "rename $from_path to $to_path"
 }
 
+# advance_origin_main <workdir> <old_adr_path> <new_adr_path>
+# Simulates origin/main advancing after the feature branch diverged:
+# deletes old_adr_path and adds new_adr_path on origin/main. Does NOT
+# fetch the result into workdir — the caller must run 'git fetch origin'.
+advance_origin_main() {
+  local workdir="$1"
+  local old_path="$2"
+  local new_path="$3"
+
+  local origin="${workdir}-origin.git"
+  local temp_clone
+  temp_clone=$(mktemp -d)
+
+  git clone --local "$origin" "$temp_clone" -q
+  git -C "$temp_clone" config user.email "test@test"
+  git -C "$temp_clone" config user.name "Test"
+  git -C "$temp_clone" config commit.gpgsign false
+
+  git -C "$temp_clone" rm -q "$old_path"
+  mkdir -p "$temp_clone/$(dirname "$new_path")"
+  printf '# ADR\nStatus: Accepted\n' > "$temp_clone/$new_path"
+  git -C "$temp_clone" add "$new_path"
+  git -C "$temp_clone" commit -q -m "renumber: remove $(basename "$old_path"), add $(basename "$new_path")"
+  git -C "$temp_clone" push -q origin HEAD:main
+
+  rm -rf "$temp_clone"
+}
+
 echo ""
 echo "=== adr-number-check.sh tests ==="
 echo ""
@@ -420,6 +448,44 @@ rename_adr "$CASE13_REPO" \
 
 run_test_in_dir "benign rename (non-colliding number) → exit 0" 0 \
   "$CASE13_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 14: Three-dot merge-base miss (BLOCKING regression — two-dot fix)
+# Scenario:
+#   merge-base:   origin/main has 0022-foo.md; feature branch branches from here.
+#   feature:      KEEPS 0022-foo.md (inherited, not re-added), adds 0050-unrelated.md.
+#   origin/main ADVANCES: deletes 0022-foo.md, adds 0022-bar.md (number 0022 reused).
+#   push feature: re-introduces 0022-foo.md to a main that already holds 0022-bar.md
+#                 → TRUE collision (number 0022, two different slugs).
+#
+# Bug (THREE-DOT origin/main...HEAD):
+#   0022-foo.md is present at the merge-base → git classifies it as NOT Added → never
+#   enters NEW_ADRS → hook exits 0 (FAIL-OPEN).
+# Fix (TWO-DOT origin/main..HEAD):
+#   Compares HEAD to origin/main TIP (not merge-base). 0022-foo.md is in HEAD but NOT
+#   in origin/main → classified as Added → collision with 0022-bar.md caught → exit 2.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 14: Three-dot merge-base miss: origin reused 0022 after branch diverged → exit 2 [BLOCKING regression] --"
+
+CASE14_REPO="$MASTER_TMP/case14"
+# Step 1: origin starts with 0022-foo.md; feature branch inherits it (merge-base)
+setup_repo_with_origin "$CASE14_REPO" "docs/adr/0022-foo.md"
+
+# Step 2: feature branch adds 0050-unrelated.md (0022-foo.md already present, not re-added)
+add_adr "$CASE14_REPO" "docs/adr/0050-unrelated.md"
+
+# Step 3: origin/main advances — deletes 0022-foo.md, adds 0022-bar.md (number reused)
+advance_origin_main "$CASE14_REPO" "docs/adr/0022-foo.md" "docs/adr/0022-bar.md"
+
+# Step 4: update local origin/main ref so the hook sees the advanced state
+git -C "$CASE14_REPO" fetch origin -q
+
+run_test_in_dir "three-dot miss: origin reused 0022 after branch diverged → exit 2" 2 \
+  "$CASE14_REPO" '{"command":"git push origin feature"}'
+
+run_test_in_dir_with_output "three-dot regression: output names 0022" 2 \
+  "0022" "$CASE14_REPO" '{"command":"git push origin feature"}'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summary

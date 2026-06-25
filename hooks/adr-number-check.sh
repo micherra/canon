@@ -21,10 +21,13 @@
 #
 # Parser-fail-open justification (security-hook-parser-allowlist-posture):
 # The non-push gate and the parse-fail path (lines 37–43) are denylist-shaped:
-# unrecognised or unparseable commands exit 0 silently. This is safe because the
-# COLLISION-DETECTION SURFACE is the git diff at Step 1 (origin/main...HEAD with
-# --diff-filter=A --no-renames), not the command string. A parse miss means the diff
-# check runs unnecessarily — it cannot cause a real ADR-number collision to be missed.
+# unrecognised or unparseable commands exit 0 silently. This is safe because a
+# parse miss SKIPS the collision check entirely (exit 0 at the empty-COMMAND guard,
+# before the diff at Step 1). Safety then rests on two backstops: (1) jq-presence
+# is required for reliable extraction (lib/canon-hook-lib.sh fails closed without it),
+# and (2) branch-protection / PR-review catches any ADR collision that slips a missed
+# push. A missed collision here produces a benign additive merge conflict — it is not
+# a silent breach.
 # The only fail-closed scope is: "a push that adds a new docs/adr/NNNN-*.md whose NNNN
 # already exists on origin/main." That surface is fail-CLOSED (exit 2). The command
 # parse is a coarse pre-filter only; its fail-open posture is therefore consequence-safe.
@@ -42,8 +45,14 @@ COMMAND=$(canon_extract_command "$INPUT")
 
 # Non-push or unanalyzable command → pass silently
 # DOCUMENTED FAIL-OPEN: the gate's authority is the collision diff, not command parsing;
-# a non-analyzable command is not a push and cannot collide, so blocking would
-# over-block arbitrary Bash with no safety benefit.
+# an unanalyzable command is indistinguishable from a non-push and cannot cause an ADR
+# collision regardless, so blocking would over-block arbitrary Bash with no safety benefit.
+#
+# INTENTIONAL DIVERGENCE from destructive-guard/pre-commit-check: those hooks must
+# analyze ALL Bash commands for destructive patterns, so they fail CLOSED (exit 2) on
+# an empty COMMAND. This hook is a collision gate for git push only — it sees ALL Bash
+# but only acts on push-shaped commands. A parse miss here is consequence-safe (benign
+# merge conflict at worst; backstopped by jq-presence requirement + branch-protection).
 if [[ -z "$COMMAND" ]]; then
   exit 0
 fi
@@ -61,7 +70,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 _DIFF_RAW=""
 _DIFF_EXIT=0
-_DIFF_RAW=$(git diff --name-only --diff-filter=A --no-renames origin/main...HEAD -- docs/adr/ 2>/dev/null) || _DIFF_EXIT=$?
+_DIFF_RAW=$(git diff --name-only --diff-filter=A --no-renames origin/main..HEAD -- docs/adr/ 2>/dev/null) || _DIFF_EXIT=$?
 
 NEW_ADRS=$(echo "$_DIFF_RAW" | grep -E 'docs/adr/[0-9]{4}-.*\.md$' || true)  # DOCUMENTED FAIL-OPEN -- grep exits 1 on no-match; empty = no ADRs added or diff failed
 
