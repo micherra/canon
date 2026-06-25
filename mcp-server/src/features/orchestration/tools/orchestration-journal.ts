@@ -347,13 +347,20 @@ export type BatchLogStepsResult = {
 };
 
 type CaptureTask = { logInput: LogStepInput; result: LogStepResult; step: JournalStep };
+type BackfillTask = { agentId: string; stepId: string; workspace: string };
 
 function processEntries(
   journal: Journal,
   input: BatchLogStepsInput,
-): { results: LogStepResult[]; captureTasks: CaptureTask[]; rejection?: ToolResult<null> } {
+): {
+  results: LogStepResult[];
+  captureTasks: CaptureTask[];
+  backfillTasks: BackfillTask[];
+  rejection?: ToolResult<null>;
+} {
   const results: LogStepResult[] = [];
   const captureTasks: CaptureTask[] = [];
+  const backfillTasks: BackfillTask[] = [];
 
   for (const entry of input.steps) {
     const logInput: LogStepInput = {
@@ -376,7 +383,10 @@ function processEntries(
         journal,
         entry.artifacts_expected,
       );
-      if (rejection) return { captureTasks, rejection, results };
+      // Return immediately on rejection — no back-fill tasks accumulated yet for this
+      // entry, so the partial backfillTasks list does NOT contain a stale event for
+      // this rejected entry. Callers must check `rejection` before firing back-fills.
+      if (rejection) return { backfillTasks, captureTasks, rejection, results };
     }
 
     const step = upsertStep(journal, logInput);
@@ -387,13 +397,21 @@ function processEntries(
 
     if (entry.status === "completed" && entry.agent_id) {
       captureTasks.push({ logInput, result, step });
-      backfillContextProvenanceAgentId(input.workspace, entry.step_id, entry.agent_id);
+      // Defer the back-fill write until AFTER the journal write succeeds.
+      // Writing the event here (before the journal write) would leave a stale
+      // context_provenance_agent_id in the execution store if a later entry causes
+      // batchLogSteps to reject the entire batch. (Codex P2 fix 2026-06-24)
+      backfillTasks.push({
+        agentId: entry.agent_id,
+        stepId: entry.step_id,
+        workspace: input.workspace,
+      });
     }
 
     results.push(result);
   }
 
-  return { captureTasks, results };
+  return { backfillTasks, captureTasks, results };
 }
 
 /**
@@ -429,11 +447,18 @@ export async function batchLogSteps(
   // 3. Single journal read.
   const journal = await readJournal(input.workspace);
 
-  const { captureTasks, results, rejection } = processEntries(journal, input);
+  const { backfillTasks, captureTasks, results, rejection } = processEntries(journal, input);
+  // Rejection: batch aborted, journal NOT written — back-fills must NOT fire.
   if (rejection) return rejection;
 
   // 5. Single journal write (before transcript capture — captures are best-effort).
   await writeJournal(input.workspace, journal);
+
+  // 5a. Fire context-provenance back-fills AFTER the journal write so a rejected batch
+  //     never leaves stale context_provenance_agent_id events in the execution store.
+  for (const { agentId, stepId, workspace } of backfillTasks) {
+    backfillContextProvenanceAgentId(workspace, stepId, agentId);
+  }
 
   // 6. Run transcript captures in parallel (no await inside a loop).
   await Promise.all(

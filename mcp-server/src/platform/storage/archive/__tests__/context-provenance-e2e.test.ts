@@ -21,10 +21,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  clearStoreCache,
-  getExecutionStore,
-} from "@domains/workspaces/execution-store-cache.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { logStep } from "@features/orchestration/tools/orchestration-journal.ts";
 import { resolveAgentSkills } from "@features/orchestration/tools/resolve-agent-skills.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
@@ -133,12 +130,10 @@ describe("end-to-end provenance chain: emit → back-fill → summary join", () 
     const AGENT_ID = "agent-e2e-happy-001";
 
     // PIECE 1: EMIT — resolveAgentSkills writes the context_provenance event
-    const resolved = await resolveAgentSkills(
-      { agent_name: "engineer" },
-      pluginDir,
-      undefined,
-      { workspace, step_id: STEP_ID },
-    );
+    const resolved = await resolveAgentSkills({ agent_name: "engineer" }, pluginDir, undefined, {
+      workspace,
+      step_id: STEP_ID,
+    });
     assertOk(resolved);
     expect(resolved.agent_name).toBe("engineer");
 
@@ -225,12 +220,10 @@ describe("sad path: no back-fill when logStep has no agent_id", () => {
 
     // EMIT with a real step_id (the provenance event for this step)
     const STEP_ID_PROVISION = "implement";
-    const resolved = await resolveAgentSkills(
-      { agent_name: "engineer" },
-      pluginDir,
-      undefined,
-      { workspace, step_id: STEP_ID_PROVISION },
-    );
+    const resolved = await resolveAgentSkills({ agent_name: "engineer" }, pluginDir, undefined, {
+      workspace,
+      step_id: STEP_ID_PROVISION,
+    });
     assertOk(resolved);
 
     // Complete the INLINE-FIX step (step_id === "inline-fix" is the only path logStep

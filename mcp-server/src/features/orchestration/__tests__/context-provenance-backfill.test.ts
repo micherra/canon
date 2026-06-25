@@ -160,6 +160,56 @@ describe("logStep — completed WITHOUT agent_id (inline-fix) writes NO backfill
 // Integration: batchLogSteps wires the backfill
 // ---------------------------------------------------------------------------
 
+/**
+ * Regression test for Codex P2 bug (2026-06-24):
+ *
+ * When batchLogSteps processes a batch where an earlier completed entry carries
+ * an agent_id and a LATER entry causes rejection (e.g. empty step_id), the
+ * back-fill must NOT be written — the batch did not commit.
+ *
+ * Before the fix, backfillContextProvenanceAgentId was called inside processEntries
+ * before the rejection short-circuit, leaving a stale event in the execution store.
+ * After the fix, back-fills are only fired after the journal write succeeds.
+ */
+describe("batchLogSteps — rejected batch writes ZERO back-fill events", () => {
+  it("does not append context_provenance_agent_id when batch is rejected by a later invalid entry", async () => {
+    const workspace = makeTmpWorkspace();
+    setupWorkspace(workspace);
+    await writeEmptyJournal(workspace);
+    await mkdir(join(workspace, "artifacts"), { recursive: true });
+
+    // First entry is valid (completed with agent_id).
+    // Second entry has an empty step_id → causes the entire batch to be rejected.
+    const result = await batchLogSteps({
+      projectDir: workspace,
+      steps: [
+        {
+          agent_id: "agent-rejected-batch-001",
+          agent_type: "engineer",
+          artifacts_expected: [],
+          status: "completed",
+          step_id: "implement",
+        },
+        {
+          agent_type: "engineer",
+          status: "completed",
+          step_id: "", // invalid — empty step_id causes batch rejection
+        },
+      ],
+      workspace,
+    });
+
+    // The batch must have been rejected.
+    expect(result.ok).toBe(false);
+
+    // CRITICAL: no back-fill event must have been written for the first entry,
+    // because the batch was rejected before the journal write.
+    const store = getExecutionStore(workspace);
+    const backfills = store.getEventsByType("context_provenance_agent_id");
+    expect(backfills).toHaveLength(0);
+  });
+});
+
 describe("batchLogSteps — completed entry with agent_id writes backfill event", () => {
   it("appends context_provenance_agent_id event for each completed entry with agent_id", async () => {
     const workspace = makeTmpWorkspace();
