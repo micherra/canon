@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CANON_DIR } from "./constants.ts";
 import { splitFrontmatter } from "./lib/frontmatter.ts";
+import { scanOverlayContent } from "./lib/overlay-scanner.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -170,12 +171,28 @@ export async function loadRoutinesFromDir(
  * - Project-local: `{projectDir}/.canon/routines/` (source: "project")
  * - Plugin: `{pluginDir}/routines/` (source: "plugin")
  * - On `name` conflict, project-local wins (mirrors `loadAllPrinciples` seenIds merge).
+ *
+ * Project-local routine bodies are scanned at the trust boundary before the
+ * merged list is returned. Plugin routines are trusted (in-tree) and not scanned.
  */
 export async function loadAllRoutines(projectDir: string, pluginDir: string): Promise<Routine[]> {
-  const projectRoutines = await loadRoutinesFromDir(
+  const rawProjectRoutines = await loadRoutinesFromDir(
     join(projectDir, CANON_DIR, "routines"),
     "project",
   );
+
+  // Scan project-local routine bodies (project-local overlay boundary).
+  // Plugin routines are in-tree and trusted — not scanned.
+  const projectRoutines = rawProjectRoutines.filter((r) => {
+    if (!r.body) return true; // empty body — nothing to scan
+    const scanResult = scanOverlayContent(r.body);
+    if (!scanResult.ok) {
+      console.warn(`[overlay-scan] dropped routine '${r.name}':`, scanResult.reason);
+      return false;
+    }
+    return true;
+  });
+
   const pluginRoutines = await loadRoutinesFromDir(join(pluginDir, "routines"), "plugin");
 
   // Project-local takes precedence on name conflict

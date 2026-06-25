@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { CANON_DIR, CANON_FILES } from "./constants.ts";
 import { buildLayerInferrer, DEFAULT_LAYER_MAPPINGS } from "./lib/config.ts";
+import { scanOverlayContent } from "./lib/overlay-scanner.ts";
 import { loadPrincipleFile, type Principle } from "./parser.ts";
 
 const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
@@ -254,6 +255,14 @@ async function loadOverrides(projectDir: string): Promise<PrincipleOverride[]> {
   const overridePath = join(projectDir, CANON_DIR, CANON_FILES.PRINCIPLE_OVERRIDES);
   try {
     const content = await readFile(overridePath, "utf-8");
+
+    // Scan override file content at the project-local trust boundary.
+    const scanResult = scanOverlayContent(content);
+    if (!scanResult.ok) {
+      console.warn("[overlay-scan] dropped principle overrides file:", scanResult.reason);
+      return [];
+    }
+
     const parsed = parseYaml(content) as PrincipleOverridesFile | null;
     if (!parsed || !Array.isArray(parsed.overrides)) {
       return [];
@@ -375,7 +384,21 @@ export async function loadAllPrinciples(
     return principleCache.principles;
   }
 
-  const projectPrinciples = await loadPrinciplesFromDir(join(projectDir, CANON_DIR, "principles"));
+  const rawProjectPrinciples = await loadPrinciplesFromDir(
+    join(projectDir, CANON_DIR, "principles"),
+  );
+
+  // Scan project-local principle bodies at the trust boundary.
+  // Plugin principles are trusted (in-tree, version-controlled) — not scanned.
+  const projectPrinciples = rawProjectPrinciples.filter((p) => {
+    const scanResult = scanOverlayContent(p.body);
+    if (!scanResult.ok) {
+      console.warn(`[overlay-scan] dropped project principle '${p.id}':`, scanResult.reason);
+      return false;
+    }
+    return true;
+  });
+
   const pluginPrinciples = await loadPrinciplesFromDir(join(pluginDir, "principles"));
 
   // Project-local takes precedence on ID conflict
