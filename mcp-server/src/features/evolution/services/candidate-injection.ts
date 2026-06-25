@@ -13,10 +13,18 @@
 
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, normalize, resolve } from "node:path";
+import { basename, join, normalize, resolve } from "node:path";
 
 /** The eval surface path relative to the project root, per PROBE-FINDINGS P1. */
 const EVAL_SURFACE_RELATIVE = join("skills", "canon", "evals");
+
+/**
+ * Harness entrypoints that a candidate must never be allowed to overwrite.
+ * If the candidate's resolved target matches any of these filenames, injection
+ * is rejected — a candidate that controls run-evals.sh can print a fake winning
+ * summary and bypass the gate entirely.
+ */
+const HARNESS_ENTRYPOINTS = new Set(["run-evals.sh"]);
 
 /**
  * withInjectedCandidate — copy the eval surface, inject the candidate, run fn, clean up.
@@ -54,6 +62,17 @@ export async function withInjectedCandidate<T>(
     // We support both: first try resolving against the project root within tmpDir,
     // then fall back to resolving against the eval surface.
     const resolvedTarget = resolveTarget(tmpDir, targetPath);
+
+    // Harness-path guard: reject any target that would overwrite the trusted runner.
+    // A candidate controlling run-evals.sh can print a fake winning summary and bypass
+    // the gate. Check the filename (basename) of the resolved target.
+    const targetFilename = basename(resolvedTarget);
+    if (HARNESS_ENTRYPOINTS.has(targetFilename)) {
+      throw new Error(
+        `Forbidden target path: "${targetPath}" resolves to the harness entrypoint ` +
+          `"${targetFilename}", which is reserved and cannot be overwritten by a candidate.`,
+      );
+    }
 
     // Write the candidate content.
     await writeFile(resolvedTarget, candidateText, "utf-8");

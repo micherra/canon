@@ -137,6 +137,36 @@ describe("withInjectedCandidate", () => {
     ).rejects.toThrow(/path traversal|outside.*temp|invalid.*path/i);
   });
 
+  it("rejects target_path pointing to run-evals.sh (P1-BUG-2: harness bypass guard)", async () => {
+    // A candidate that targets run-evals.sh would overwrite the trusted runner and
+    // could print a fake winning summary. Must be rejected before any write.
+    await expect(
+      withInjectedCandidate(
+        WORKTREE_ROOT,
+        "#!/bin/bash\necho 'Total: 10 | Passed: 10 | Failed: 0 | Errors: 0 | Skipped: 0'\nexit 0",
+        "skills/canon/evals/run-evals.sh",
+        async (_tmpDir) => {
+          // must not reach here
+        },
+      ),
+    ).rejects.toThrow(/harness|run-evals\.sh|forbidden|reserved/i);
+  });
+
+  it("rejects target_path that is just 'run-evals.sh' (relative to evals dir)", async () => {
+    // When the caller passes just the filename (relative to evals dir),
+    // the harness guard must still reject it.
+    await expect(
+      withInjectedCandidate(
+        WORKTREE_ROOT,
+        "#!/bin/bash\nexit 0",
+        "run-evals.sh",
+        async (_tmpDir) => {
+          // must not reach here
+        },
+      ),
+    ).rejects.toThrow(/harness|run-evals\.sh|forbidden|reserved/i);
+  });
+
   it("writes the candidate content to the correct file in the temp tree", async () => {
     const candidateText = '{"skill_name":"canon","evals":[{"id":"injected"}]}';
 

@@ -220,6 +220,142 @@ describe("evaluateCandidate", () => {
     });
   });
 
+  describe("(b2) exit-nonzero with valid summary → parsed as eval result, not infra error", () => {
+    it("exit code 1 + parseable summary → valid result with correct pass counts (P1-BUG-1)", async () => {
+      // run-evals.sh exits 1 whenever FAILED > 0 || ERRORS > 0, but still prints a summary.
+      // A baseline of 2/3 (one failing case) exits nonzero. This must be parsed as a
+      // valid eval result, not an infra error. The old code (check ok before parseSummary)
+      // would return a ToolResult error here instead of parsing the 2 passed count.
+      //
+      // Both baseline AND candidate return exit 1 with a valid summary (2/3 each).
+      // This tests the core contract: exit-1 + valid summary → parsed result, not error.
+      // (Promise.all runs both sides concurrently so we use identical summaries to
+      // avoid call-order races.)
+      const summaryWithFailures = "Total: 3 | Passed: 2 | Failed: 1 | Errors: 0 | Skipped: 0";
+
+      mockRunShell.mockImplementation((command: string) => {
+        if (hasFlag(command, "--dry-run")) {
+          return {
+            duration_ms: 50,
+            exitCode: 0,
+            ok: true,
+            stderr: "",
+            stdout: "Total: 3 | Passed: 3 | Failed: 0 | Errors: 0 | Skipped: 0",
+            timedOut: false,
+          };
+        }
+        if (hasFlag(command, "--split holdout")) {
+          // Both baseline and candidate exit 1 with a valid summary (2/3 each).
+          // The old code would return a ToolResult error here. The fix must parse them.
+          return {
+            duration_ms: 100,
+            exitCode: 1,
+            ok: false,
+            stderr: "",
+            stdout: summaryWithFailures,
+            timedOut: false,
+          };
+        }
+        return {
+          duration_ms: 50,
+          exitCode: 0,
+          ok: true,
+          stderr: "",
+          stdout: "Total: 1 | Passed: 1 | Failed: 0 | Errors: 0 | Skipped: 0",
+          timedOut: false,
+        };
+      });
+
+      const result = await evaluateCandidate({
+        candidate_text: "improved candidate text",
+        project_dir: tmpDir,
+        splits: ["holdout"],
+        target_path: "skills/canon/evals/eval-set.json",
+      });
+
+      // Must succeed — exit 1 + valid summary is a valid eval result (not a ToolResult error)
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      // Both sides report 2/3 → scores are 2, gate gives accepted=false (equal, not greater)
+      expect(result.baseline_score).toBe(2);
+      expect(result.candidate_score).toBe(2);
+      // Gate is strict >; equal holdout → not accepted (not regressed either)
+      expect(result.accepted).toBe(false);
+      expect(result.regressed).toBe(false);
+    });
+
+    it("exit code 1 + no parseable summary → ToolResult error (genuine infra failure)", async () => {
+      // No summary line in stdout = genuine crash/infra error. Must still be an error.
+      mockRunShell.mockImplementation((command: string) => {
+        if (hasFlag(command, "--dry-run")) {
+          return {
+            duration_ms: 50,
+            exitCode: 0,
+            ok: true,
+            stderr: "",
+            stdout: "Total: 1 | Passed: 1 | Failed: 0 | Errors: 0 | Skipped: 0",
+            timedOut: false,
+          };
+        }
+        // Returns exit 1 with no parseable summary (genuine crash)
+        return {
+          duration_ms: 100,
+          exitCode: 1,
+          ok: false,
+          stderr: "Unexpected error: segfault",
+          stdout: "some garbled output with no summary line",
+          timedOut: false,
+        };
+      });
+
+      const result = await evaluateCandidate({
+        candidate_text: "some text",
+        project_dir: tmpDir,
+        splits: ["holdout"],
+        target_path: "skills/canon/evals/eval-set.json",
+      });
+
+      // Must be an error — no summary means genuine infra failure
+      expect(result.ok).toBe(false);
+    });
+
+    it("timeout is still fail-closed even if stdout has a summary (P1-BUG-1 timeout invariant)", async () => {
+      // Even if timedOut=true with a valid summary in stdout, must be a ToolResult error.
+      mockRunShell.mockImplementation((command: string) => {
+        if (hasFlag(command, "--dry-run")) {
+          return {
+            duration_ms: 50,
+            exitCode: 0,
+            ok: true,
+            stderr: "",
+            stdout: "Total: 1 | Passed: 1 | Failed: 0 | Errors: 0 | Skipped: 0",
+            timedOut: false,
+          };
+        }
+        return {
+          duration_ms: 600_000,
+          exitCode: 1,
+          ok: false,
+          stderr: "ETIMEDOUT",
+          stdout: "Total: 3 | Passed: 3 | Failed: 0 | Errors: 0 | Skipped: 0", // summary present but timed out
+          timedOut: true,
+        };
+      });
+
+      const result = await evaluateCandidate({
+        candidate_text: "some text",
+        project_dir: tmpDir,
+        splits: ["holdout"],
+        target_path: "skills/canon/evals/eval-set.json",
+      });
+
+      // Timeout is always fail-closed — never an accept even with a summary
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.message).toMatch(/timeout|timed out/i);
+    });
+  });
+
   describe("(d) holdout-only gating", () => {
     it("train and val improvements with holdout unchanged → rejected", async () => {
       // Train improved, val improved, holdout unchanged (2→2).

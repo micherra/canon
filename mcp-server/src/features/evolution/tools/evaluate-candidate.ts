@@ -84,6 +84,7 @@ async function runOneSplit(
     runSplit(tmpDir, split, { judgeVotes, structuredJudge: true }),
   );
 
+  // Timeout is always fail-closed — even if stdout contains a summary line, we reject.
   if (result.timedOut) {
     return toolError(
       "UNEXPECTED",
@@ -93,16 +94,20 @@ async function runOneSplit(
     );
   }
 
-  if (!result.ok) {
+  // run-evals.sh exits 1 whenever FAILED > 0 || ERRORS > 0 — a nonzero exit with a
+  // parseable summary line is a valid eval result (e.g. baseline 2/3 failing cases).
+  // Only treat as an infra error when there is NO parseable summary in stdout.
+  const summary = parseSummary(result.stdout);
+  if (!result.ok && summary.total === 0) {
     return toolError(
       "UNEXPECTED",
-      `Eval script failed during ${split} run: ${result.stderr || result.stdout}`,
+      `Eval script failed during ${split} run with no parseable summary: ${result.stderr || result.stdout}`,
       false,
       { exitCode: result.exitCode, split, stderr: result.stderr },
     );
   }
 
-  return toolOk(parseSummary(result.stdout));
+  return toolOk(summary);
 }
 
 /** Run all requested splits in parallel; fail-closed on first error. */
