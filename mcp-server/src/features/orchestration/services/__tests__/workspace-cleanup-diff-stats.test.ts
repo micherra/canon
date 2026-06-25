@@ -64,8 +64,8 @@ vi.mock("@platform/storage/drift/analytics.ts", () => ({
   appendFlowRun: (projectDir: string, entry: unknown) => mockAppendFlowRun(projectDir, entry),
 }));
 
-// Mock computeFlowOutcome from orchestration-journal to avoid deep dependency
-vi.mock("../../../tools/orchestration-journal.ts", () => ({
+// Mock computeFlowOutcome from finalize-helpers (workspace-cleanup.ts imports directly from there)
+vi.mock("../finalize-helpers.ts", () => ({
   computeFlowOutcome: vi.fn().mockReturnValue({ total_duration_ms: 1000 }),
 }));
 

@@ -9,7 +9,7 @@ import { releaseClaims } from "@shared/lib/file-claims.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
 import type { JournalStep } from "../tools/orchestration-journal.ts";
-import { computeFlowOutcome } from "../tools/orchestration-journal.ts";
+import { computeFlowOutcome } from "./finalize-helpers.ts";
 
 /** Optional diff-size fields for a FlowRunEntry. Both absent = "could not measure". */
 export type DiffStatFields = {

@@ -1,6 +1,6 @@
 /**
  * Tool-wiring integration tests for the `frontmatter_schema` wiki_lint check (R1,
- * ADR-0018). Exercises the `wikiLint()` handler end-to-end via a temp-dir project
+ * ADR-0021). Exercises the `wikiLint()` handler end-to-end via a temp-dir project
  * fixture — confirms that the check is dispatched, produces findings for malformed
  * artifact frontmatter, and is included in default (no-filter) runs.
  *

@@ -9,6 +9,7 @@ import {
 import { buildHotFileSection } from "@features/orchestration/services/hot-file-detection.ts";
 import { buildPitfallsSection } from "@features/orchestration/services/pitfall-enrichment.ts";
 import { applyAgentSkillsDisclosure } from "@features/orchestration/tools/resolve-agent-skills-disclosure.ts";
+import { emitContextProvenance } from "@features/orchestration/tools/resolve-agent-skills-provenance.ts";
 import { splitFrontmatter } from "@shared/lib/frontmatter.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
@@ -56,6 +57,8 @@ export type ResolveAgentSkillsOptions = {
   filePaths?: string[];
   /** Workspace path for audit logging. When provided, a pitfall_injected event is appended. */
   workspace?: string;
+  /** Journal step_id — durable join key for context provenance back-fill. Fail-open when absent. */
+  step_id?: string;
 };
 
 export type ResolvedSkillKind = "rule" | "ref" | "primer" | "template";
@@ -250,6 +253,35 @@ function resolveSkills(
   return { skills, unresolved };
 }
 
+/** Apply disclosure (if projectDir present), emit provenance, return final result. */
+async function applyDisclosureAndEmit(
+  result: ResolveAgentSkillsResult,
+  skills: ResolvedSkill[],
+  projectDir: string | undefined,
+  options: ResolveAgentSkillsOptions | undefined,
+): Promise<ResolveAgentSkillsResult> {
+  if (projectDir) {
+    const disclosed = await applyAgentSkillsDisclosure(result, projectDir);
+    // Emit provenance AFTER disclosure so char_span reflects the final prompt.
+    emitContextProvenance({
+      disclosed,
+      preDisclosureSkills: skills,
+      stepId: options?.step_id,
+      workspace: options?.workspace,
+    });
+    return disclosed;
+  }
+  // Non-disclosure branch: result has full content and no full_data_path.
+  // Emit provenance when workspace is present (fail-open on absent workspace).
+  emitContextProvenance({
+    disclosed: result,
+    preDisclosureSkills: skills,
+    stepId: options?.step_id,
+    workspace: options?.workspace,
+  });
+  return result;
+}
+
 export async function resolveAgentSkills(
   input: ResolveAgentSkillsInput,
   pluginDir: string,
@@ -302,11 +334,6 @@ export async function resolveAgentSkills(
     skills,
     unresolved,
   };
-
-  if (projectDir) {
-    const disclosed = await applyAgentSkillsDisclosure(result, projectDir);
-    return toolOk<ResolveAgentSkillsResult>(disclosed);
-  }
-
-  return toolOk<ResolveAgentSkillsResult>(result);
+  const final = await applyDisclosureAndEmit(result, skills, projectDir, options);
+  return toolOk<ResolveAgentSkillsResult>(final);
 }

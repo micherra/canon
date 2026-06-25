@@ -322,7 +322,7 @@ function toFrontmatterSchemaInput(
 /**
  * Enumerate the schema-bearing corpus (principles, .canon/principles, agents,
  * templates, docs/adr), slice each file's raw frontmatter block, classify it, and
- * run the pure per-class schema check (R1, ADR-0018).
+ * run the pure per-class schema check (R1, ADR-0021).
  *
  * Files that don't classify (index docs, loops/routines — own validation) are
  * skipped. I/O lives here; computation in services/frontmatter-schema.ts.

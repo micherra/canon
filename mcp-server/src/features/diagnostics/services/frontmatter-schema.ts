@@ -1,5 +1,5 @@
 /**
- * Frontmatter Schema Check (R1, ADR-0018) — per-class Zod validation of artifact
+ * Frontmatter Schema Check (R1, ADR-0021) — per-class Zod validation of artifact
  * frontmatter, surfaced as a lint pass.
  *
  * Canon authors several markdown artifact classes with YAML frontmatter, but only
@@ -9,7 +9,7 @@
  * validates each file's frontmatter against the matching per-class schema and
  * surfaces typo'd / missing / wrong-shape values as findings.
  *
- * LINT-ONLY (ADR-0018): this does NOT touch `parsePrinciple`'s runtime coercion —
+ * LINT-ONLY (ADR-0021): this does NOT touch `parsePrinciple`'s runtime coercion —
  * the parser stays lenient (degraded-load resilience); this is a separate read-only
  * pass that drives the deterministic CI gate. Loops/routines are excluded (already
  * Zod-validated at their loaders — no double coverage).

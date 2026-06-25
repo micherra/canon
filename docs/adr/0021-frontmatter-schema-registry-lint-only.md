@@ -1,12 +1,12 @@
 ---
-adr: "0018"
+adr: "0021"
 title: "Frontmatter is validated by a per-class schema registry, surfaced as a lint gate (parser stays lenient)"
 status: accepted
 date: "2026-06-21"
 build: "markdown-corpus-integrity-swap-gray-matteryaml-option-a-then-add-two"
 ---
 
-# ADR-0018: Per-class frontmatter schema registry, lint-only
+# ADR-0021: Per-class frontmatter schema registry, lint-only
 
 ## Context
 

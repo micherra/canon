@@ -1,5 +1,5 @@
 /**
- * Tests for the per-class frontmatter schema check (R1, ADR-0018).
+ * Tests for the per-class frontmatter schema check (R1, ADR-0021).
  *
  * Two layers:
  * 1. Unit — the pure `checkFrontmatterSchema` over synthetic fixtures: a valid
