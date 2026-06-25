@@ -206,6 +206,7 @@ export async function evaluateCandidate(
     : [...requestedSplitsOrDefault, "holdout" as const];
 
   let realContent = "";
+  // Baseline-absent is a valid first run — fall back to a fresh baseline eval rather than failing.
   try {
     realContent = await readFile(join(project_dir, target_path), "utf-8");
   } catch {

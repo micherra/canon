@@ -75,7 +75,7 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
     resetForTesting();
   });
 
-  it("factory produces a server with exactly 50 registered tools", () => {
+  it("factory produces a server with exactly 53 registered tools", () => {
     const server = createCanonServer();
     expect(getToolCount(server)).toBe(53);
   });
