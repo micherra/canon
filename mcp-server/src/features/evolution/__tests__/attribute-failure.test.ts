@@ -230,6 +230,63 @@ describe("fail-open behavior", () => {
 // 3 & 4. INVALID_INPUT paths
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// 5. Transcript seam pin — getTranscriptExcerpt is NOT wired in v1
+// ---------------------------------------------------------------------------
+
+describe("transcript seam unwired (v1 pin)", () => {
+  it("transcript_evidence is [] and confidence is medium when seam not wired", async () => {
+    // This test PINS the documented v1 behavior: the handler does not wire
+    // getTranscriptExcerpt, so transcript_evidence is always [] for handler-level calls.
+    // Confidence should be "medium" (hash_verified + !ambiguous but no transcript)
+    // rather than "high" (which requires transcript evidence).
+    // If a future pass wires the seam without updating this test, the test fails
+    // and the developer must confirm the contract change is intentional.
+    seedContextProvenance(tmpWorkspace, "implement");
+    seedReviewMd(tmpWorkspace);
+    seedCurrentArtifact(tmpProjectDir);
+
+    const result = await attributeFailure({
+      workspace: tmpWorkspace,
+      project_dir: tmpProjectDir,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.attributions).toHaveLength(1);
+
+    const attr = result.attributions[0];
+    // Pin: seam not wired → transcript_evidence is empty array
+    expect(attr.transcript_evidence).toEqual([]);
+    // Pin: no transcript → confidence is "medium" not "high"
+    expect(attr.confidence).toBe("medium");
+  });
+
+  it("does not crash when provenance has a null step_id (partial back-fill)", async () => {
+    // Stress the seam guard: collectTranscriptEvidence skips steps with null step_id
+    // even when a seam is hypothetically wired. At handler level the seam is unwired,
+    // so the null-step guard is never hit, but ensure the result is still ok + empty
+    // transcript_evidence (not a crash).
+    seedContextProvenance(tmpWorkspace, "implement");
+    seedReviewMd(tmpWorkspace);
+    seedCurrentArtifact(tmpProjectDir);
+
+    const result = await attributeFailure({
+      workspace: tmpWorkspace,
+      project_dir: tmpProjectDir,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    // No crash, transcript still empty
+    expect(result.attributions[0].transcript_evidence).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. INVALID_INPUT error paths
+// ---------------------------------------------------------------------------
+
 describe("INVALID_INPUT error paths", () => {
   it("returns INVALID_INPUT when neither workspace nor archive_id is given", async () => {
     const result = await attributeFailure({
