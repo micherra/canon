@@ -84,8 +84,6 @@ async function createOrder(order: OrderInput): Promise<Result<Order>> {
 
 Read-only operations don't need transaction boundaries. Single-row writes that are inherently atomic don't need explicit wrapping. Best-effort operations (sending notifications, logging analytics events) that are acceptable to lose on failure can be outside the transaction boundary — but document them as "fire-and-forget."
 
-**Related:** `handle-partial-failure` — addresses the mechanics of handling failure in distributed calls; this principle addresses the *scope* of what must succeed together. `idempotent-operations` — compensating actions and retries require idempotency to be safe.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -100,3 +98,9 @@ Read-only operations don't need transaction boundaries. Single-row writes that a
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[handle-partial-failure]] — addresses the mechanics of handling failure in distributed calls; this principle addresses the scope of what must succeed together.
+- [[idempotent-operations]] — compensating actions and retries within sagas require idempotency to be safe; the two principles are applied together when designing cross-service writes.
+- [[errors-are-values]] — explicit transaction boundaries pair with typed result returns: the rollback path must return a typed error, not throw, so callers can handle partial-failure outcomes.

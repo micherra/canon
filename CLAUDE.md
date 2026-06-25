@@ -625,7 +625,7 @@ canon/
 ├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase D: _probe + ship-watch + session-watch + harness-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
-├── principles/           # Built-in principles (62 total: 6 rules, 36 strong-opinions, 20 conventions); 26 Canon-internal principles in .canon/principles/ (portable: false)
+├── principles/           # Built-in principles (64 total: 6 rules, 36 strong-opinions, 22 conventions); 26 Canon-internal principles in .canon/principles/ (portable: false)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/

@@ -113,8 +113,6 @@ function UserList() {
 
 Components that encapsulate a complete feature (a `<RichTextEditor>`, a `<MapWidget>`) may legitimately accept a configuration object — the config is their contract, and the internals are genuinely complex. The distinction: a config object is acceptable when it represents the component's domain model, not when it's a grab-bag of implementation toggles. Also, data-fetching components (containers, route-level components) that exist specifically to bridge data and UI may accept identifiers and fetch internally — the point is that the presentational components beneath them accept data, not identifiers.
 
-**Related:** `component-single-responsibility` ensures each component has a focused purpose, which naturally leads to a minimal props interface. `compose-from-small-to-large` produces components whose narrow props make them easy to compose.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -129,3 +127,7 @@ Components that encapsulate a complete feature (a `<RichTextEditor>`, a `<MapWid
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[compose-from-small-to-large]] — bottom-up component composition depends on each piece having a narrow, stable props contract that makes it easy to assemble. `component-single-responsibility` ensures each component has a focused purpose that naturally leads to a minimal props interface (not a tracked principle id — kept as prose).

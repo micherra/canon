@@ -80,8 +80,6 @@ One folder per component. Delete the folder, and every artifact goes with it. Ad
 
 Truly shared type definitions that multiple components import (e.g., `Theme`, `DesignTokens`) belong in a shared location, not duplicated inside each component folder. Global styles (resets, token definitions) are cross-cutting by nature and live at the project root, not inside a component. End-to-end tests that exercise multi-component flows belong in a top-level `e2e/` directory since they don't map to a single component.
 
-**Related:** `single-source-of-component-styles` enforces that a component's styles come from one file — colocation ensures that file lives next to the component. `component-single-responsibility` ensures each colocated folder maps to one coherent purpose.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -96,3 +94,7 @@ Truly shared type definitions that multiple components import (e.g., `Theme`, `D
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[single-source-of-component-styles]] — colocation ensures the one style source for a component lives in the same directory as the component, not scattered in a parallel style tree. [[compose-from-small-to-large]] — colocating a component's assets makes each atomic piece self-contained so it can be freely composed into larger structures without hidden dependencies in other directories.

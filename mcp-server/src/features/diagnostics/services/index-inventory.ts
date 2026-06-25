@@ -18,7 +18,7 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import matter from "gray-matter";
+import { parse as parseYaml } from "yaml";
 
 // ---- Sentinel constants (Decision retrofit-indexes-01) ----
 
@@ -54,15 +54,13 @@ export const CLASS_DIRS: Record<ArtifactClass, string[]> = {
  * Extract a one-line summary from a frontmatter string.
  * Returns `title:` value if present, else `description:` value, else "".
  *
- * Uses gray-matter for YAML parsing so block scalars (>-, |, etc.) are
- * folded/chomped correctly rather than yielding the literal indicator string.
- * Pure function — no I/O.
+ * Parses the already-sliced YAML block directly with the `yaml` lib so block
+ * scalars (>-, |, etc.) are folded/chomped correctly rather than yielding the
+ * literal indicator string. Pure function — no I/O.
  */
 function extractSummaryFromFrontmatter(frontmatter: string): string {
   if (!frontmatter) return "";
-  // Wrap in --- delimiters so gray-matter can parse the YAML block
-  const parsed = matter(`---\n${frontmatter}\n---`);
-  const data = parsed.data as Record<string, unknown>;
+  const data = (parseYaml(frontmatter) ?? {}) as Record<string, unknown>;
 
   const title = data.title;
   if (typeof title === "string" && title.trim()) return title.trim();

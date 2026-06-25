@@ -115,6 +115,10 @@ Mechanical changes (bumping a version string, updating a URL in config) don't re
 | "I'll do a cleanup PR later." | Cleanup PRs almost never happen. Each deferred fix raises the probability that the next agent copies the wrong pattern. | Clean it now, in the same commit, while you're already there. |
 | "Aligning types could change behavior." | Type annotation fixes don't change runtime behavior. If a type correction requires a logic change to compile, that's a bug — fix it or open an issue. | Make the type correction. |
 
+## Related
+
+[[refactoring-integrity]] defines what genuine improvement looks like — splits must follow real domain boundaries, not cosmetic line-count reduction. Leave-touched-files-better sets the obligation to improve while refactoring-integrity keeps the improvement substantive rather than superficial.
+
 ## Verification
 
 - [ ] Every modified file was scanned for quick wins: confusing names, dead code, stale imports, loose types.

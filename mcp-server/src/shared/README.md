@@ -120,7 +120,7 @@ import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 | Allowed | Disallowed |
 |---------|-----------|
 | `zod` (schema validation) | `domains/` (any module) |
-| `gray-matter` (frontmatter parsing) | `features/` (any feature) |
+| `yaml` (frontmatter parsing via `lib/frontmatter.ts` `splitFrontmatter`/`readFrontmatter` seam; replaced `gray-matter` — R0) | `features/` (any feature) |
 | `node:fs/promises`, `node:path`, `node:crypto` (Node built-ins) | `platform/` (job manager, infrastructure) |
 | `@modelcontextprotocol/sdk` (for `wrap-handler.ts` and `fuzzy-field-validation.ts`) | Any relative import going up and then into another context |
 

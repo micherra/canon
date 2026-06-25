@@ -63,7 +63,9 @@ app.use((req, res, next) => {
 
 Internal APIs between services owned by the same team that deploy atomically (monorepo with shared deployment). Prototype/experimental APIs explicitly marked as unstable (`/beta/...` or `/experimental/...`). GraphQL APIs where the schema evolves additively (fields are added, never removed) — though even GraphQL benefits from a deprecation strategy.
 
-**Related:** `backward-compatible-schema-changes` — versioning is the escape hatch when you can't make a change backward-compatible. Both principles protect existing consumers from breaking changes.
+## Related
+
+[[backward-compatible-schema-changes]] — versioning is the escape hatch when you can't make a change backward-compatible. Both principles protect existing consumers from breaking changes. [[prefer-immutable-data]] — versioned APIs and immutable data share the same goal: consumers can rely on what they receive without surprise mutations or contract breaks.
 
 ## Anti-Rationalization
 

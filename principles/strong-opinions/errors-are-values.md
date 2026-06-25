@@ -57,8 +57,6 @@ async function transferFunds(
 
 Use thrown exceptions for genuinely unexpected failures: database connection lost, file system errors, null reference bugs. Also, if the codebase has an established exception-based pattern, consistency may outweigh this principle.
 
-**Related:** `define-errors-out-of-existence` is the companion principle — before modeling an error as a value, ask whether the API can be redesigned so the error condition is impossible. Apply that principle first to eliminate unnecessary errors, then use typed results for the errors that remain.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -72,3 +70,9 @@ Use thrown exceptions for genuinely unexpected failures: database connection los
 
 - [ ] No `throw new Error(...)` in domain-layer functions for expected business rule violations — grep for `throw new Error` in `src/domain/` and `src/services/` and confirm each throw is for a genuinely unexpected failure (not a business rule like "insufficient funds" or "invalid state").
 - [ ] Functions returning `Result`-style types have all branches covered — check that functions with `| { ok: false; ... }` return types do not have code paths that `throw` instead of returning an error object.
+
+## Related
+
+- [[define-errors-out-of-existence]] — the companion principle: before modeling an error as a value, ask whether the API can be redesigned so the error condition is impossible; apply that principle first, then use typed results for the errors that remain.
+- [[wrap-external-exceptions]] — the boundary application of this principle: external library exceptions must be caught at the boundary and converted into typed result values so domain code never sees library-specific error types.
+- [[explicit-transaction-boundaries]] — multi-step mutations that must succeed or fail together require both typed results on each step and explicit rollback paths; the two principles compose in saga and compensating-action patterns.

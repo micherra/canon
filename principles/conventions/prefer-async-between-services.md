@@ -71,7 +71,9 @@ async function placeOrder(order: Order): Promise<OrderResult> {
 
 Queries where the user is actively waiting for a response — search, lookups, real-time data — legitimately need synchronous calls. Authentication and authorization checks must be synchronous (you can't defer "is this user allowed?" to later). The principle targets command-side operations (create, update, notify) between services, not read-side operations. Services within the same bounded context that are always deployed together may use synchronous calls without the coupling downsides.
 
-**Related:** `handle-partial-failure` applies to the synchronous calls that remain — those calls still need timeouts, retries, and circuit breakers to prevent cascading failures.
+## Related
+
+[[handle-partial-failure]] applies to the synchronous calls that remain — those calls still need timeouts, retries, and circuit breakers to prevent cascading failures. [[structured-logging-with-levels]] — async event flows require structured, correctly-leveled logs so operators can trace events across service boundaries during incident response.
 
 ## Anti-Rationalization
 

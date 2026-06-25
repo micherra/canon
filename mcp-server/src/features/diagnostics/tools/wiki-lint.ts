@@ -11,14 +11,26 @@
  * - validate-at-trust-boundaries: Zod validates input at registration
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { VALID_COMPUTED_TAGS } from "@graph/kg-tags.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { loadLayerMappings } from "@shared/lib/config.ts";
 import { loadAllPrinciples } from "@shared/matcher.ts";
 import type { Principle } from "@shared/parser.ts";
+import {
+  checkFrontmatterSchema,
+  classifyFmClass,
+  type FrontmatterSchemaFinding,
+  type FrontmatterSchemaInput,
+} from "../services/frontmatter-schema.ts";
 import { checkIndexDrift } from "../services/index-inventory.ts";
+import {
+  buildLinkGraph,
+  type KnownTargets,
+  type LinkGraphInput,
+  type LinkGraphResult,
+} from "../services/link-graph.ts";
 import {
   assembleWikiLintOutput,
   checkCitedPaths,
@@ -42,7 +54,9 @@ type CheckName =
   | "cited_paths"
   | "contradictions"
   | "duplicate_titles"
+  | "frontmatter_schema"
   | "glossary_consistency"
+  | "link_integrity"
   | "missing_examples"
   | "misrouted_principles"
   | "orphan_principles"
@@ -207,11 +221,18 @@ function collectDddDocPaths(projectDir: string): string[] {
 
 // ---- Check helpers ----
 
+/**
+ * Orphan check. A principle is an orphan iff it has zero DriftStore violations AND
+ * zero inbound `[[ ]]` links in the corpus link graph.
+ *
+ * `referencedIds` comes from the link graph (ADR-0019) — the structurally-correct
+ * inbound-link set that REPLACES the old `allText.includes(p.id)` substring scan
+ * (over-broad: any incidental prose substring suppressed a real orphan).
+ */
 async function runOrphanCheck(
   projectDir: string,
   principles: Principle[],
-  claudeMdFiles: FileRecord[],
-  agentFiles: FileRecord[],
+  referencedIds: Set<string>,
 ): Promise<ReturnType<typeof checkOrphanPrinciples>> {
   let violatedIds = new Set<string>();
   try {
@@ -228,12 +249,6 @@ async function runOrphanCheck(
       err instanceof Error ? err.message : err,
     );
     violatedIds = new Set<string>();
-  }
-
-  const allText = [...claudeMdFiles, ...agentFiles].map((f) => f.content).join("\n");
-  const referencedIds = new Set<string>();
-  for (const p of principles) {
-    if (allText.includes(p.id)) referencedIds.add(p.id);
   }
 
   return checkOrphanPrinciples(principles, violatedIds, referencedIds);
@@ -274,6 +289,176 @@ function runGlossaryCheck(projectDir: string): ReturnType<typeof checkGlossaryCo
   return checkGlossaryConsistency({ content, path: contextMdPath });
 }
 
+/** Matches a leading frontmatter fence and captures the inner YAML block. */
+const FRONTMATTER_FENCE_RE = /^---\r?\n([\s\S]*?)\r?\n---/;
+
+/** Strip a known leading root from an absolute path → repo-relative form. */
+function relativeTo(absPath: string, root: string): string | null {
+  const prefix = `${root}/`;
+  return absPath.startsWith(prefix) ? absPath.slice(prefix.length) : null;
+}
+
+/**
+ * Load one corpus file into a schema-check input, or null when it should be
+ * skipped (unclassified path or unreadable file).
+ */
+function toFrontmatterSchemaInput(
+  absPath: string,
+  projectDir: string,
+  pluginDir: string,
+): FrontmatterSchemaInput | null {
+  // Repo-relative path drives class resolution (mirrors the corpus layout).
+  const repoRel = relativeTo(absPath, projectDir) ?? relativeTo(absPath, pluginDir) ?? absPath;
+  const fmClass = classifyFmClass(repoRel);
+  if (!fmClass) return null;
+
+  const content = readFileSafe(absPath);
+  if (content === null) return null;
+
+  const match = FRONTMATTER_FENCE_RE.exec(content);
+  return { fm_class: fmClass, path: repoRel, rawFrontmatter: match ? match[1] : "" };
+}
+
+/**
+ * Enumerate the schema-bearing corpus (principles, .canon/principles, agents,
+ * templates, docs/adr), slice each file's raw frontmatter block, classify it, and
+ * run the pure per-class schema check (R1, ADR-0021).
+ *
+ * Files that don't classify (index docs, loops/routines — own validation) are
+ * skipped. I/O lives here; computation in services/frontmatter-schema.ts.
+ */
+function runFrontmatterSchemaCheck(
+  projectDir: string,
+  pluginDir: string,
+): FrontmatterSchemaFinding[] {
+  // Class roots: principles ship from pluginDir; .canon/principles is project-local.
+  const roots = [
+    join(pluginDir, "principles"),
+    join(projectDir, ".canon", "principles"),
+    join(pluginDir, "agents"),
+    join(pluginDir, "templates"),
+    join(projectDir, "docs", "adr"),
+  ];
+
+  const inputs: FrontmatterSchemaInput[] = [];
+  for (const root of roots) {
+    for (const absPath of findFiles(root, (_fp, name) => name.endsWith(".md"))) {
+      const input = toFrontmatterSchemaInput(absPath, projectDir, pluginDir);
+      if (input) inputs.push(input);
+    }
+  }
+
+  return checkFrontmatterSchema(inputs);
+}
+
+// ---- Link integrity (R2, ADR-0019) ----
+
+/** Strip the leading `projectDir/` from an absolute path → repo-relative form. */
+function toRepoRel(absPath: string, projectDir: string): string {
+  const prefix = `${projectDir}/`;
+  return absPath.startsWith(prefix) ? absPath.slice(prefix.length) : absPath;
+}
+
+/** File stem without the `.md` extension (e.g. `prd` for `…/templates/prd.md`). */
+function fileStem(absPath: string): string {
+  const base = absPath.slice(absPath.lastIndexOf("/") + 1);
+  return base.replace(/\.md$/, "");
+}
+
+/** ADR number (`0017`) when the filename matches `NNNN-*.md`, else null. */
+function adrNumberOf(absPath: string): string | null {
+  const base = absPath.slice(absPath.lastIndexOf("/") + 1);
+  const m = /^(\d{4})-.+\.md$/.exec(base);
+  return m ? m[1] : null;
+}
+
+/**
+ * Build the corpus link graph once: scan all project `.md` files (standard
+ * exclusions) PLUS the plugin corpus when `pluginDir` differs from `projectDir`
+ * (the normal user-project case). Construct `KnownTargets` (principle ids + file
+ * stems + ADR numbers + file paths), and run the pure graph builder with an
+ * injected `existsOnDisk`.
+ *
+ * When `projectDir` and `pluginDir` resolve to the same real directory (e.g. when
+ * developing Canon itself), the plugin corpus is not scanned a second time —
+ * de-duplication is handled by normalised-path comparison so each file is a link
+ * source and resolution target at most once.
+ *
+ * The single result is shared by both `link_integrity` (broken-link findings) and
+ * `orphan_principles` (inbound-link orphan source-of-truth, ADR-0019) so the corpus
+ * is parsed only once.
+ *
+ * Exported for unit testing (I/O boundary — kept in the tool layer, not the service).
+ */
+// canon:allow-unwired: exported for unit testing; called from runEnabledChecks in this module
+export function buildCorpusLinkGraph(
+  projectDir: string,
+  pluginDir: string,
+  principles: Principle[],
+): LinkGraphResult {
+  /** Normalise a directory for same-root comparison: resolve symlinks + trailing slashes.
+   * Fail-open: falls back to raw string on ENOENT or other fs errors. */
+  function normDir(d: string): string {
+    try {
+      return realpathSync(d).replace(/\/+$/, "");
+    } catch {
+      return d.replace(/\/+$/, "");
+    }
+  }
+
+  const projectDirNorm = normDir(projectDir);
+  const pluginDirNorm = normDir(pluginDir);
+  const sameRoot = projectDirNorm === pluginDirNorm;
+
+  const stems = new Set<string>();
+  const adrNumbers = new Set<string>();
+  const filePaths = new Set<string>();
+  const docs: LinkGraphInput[] = [];
+
+  /** Ingest one .md file from a root dir: populate resolution targets + doc list. */
+  function ingestFile(absPath: string, root: string): void {
+    const repoRel = toRepoRel(absPath, root);
+    // Resolution targets (stems / adr numbers / file paths) include EVERY corpus file
+    // so a link into docs/explore/ still resolves — but docs/explore/ files are NOT
+    // scanned as link SOURCES below (frozen, stale-by-design records; mirrors the
+    // docs/explore/ exclusion already applied by stale_refs / cited_paths).
+    filePaths.add(repoRel);
+    stems.add(fileStem(absPath));
+    const adr = adrNumberOf(absPath);
+    if (adr) adrNumbers.add(adr);
+
+    if (repoRel.startsWith("docs/explore/")) return;
+    const content = readFileSafe(absPath);
+    if (content !== null) docs.push({ content, path: repoRel });
+  }
+
+  // 1. Project corpus.
+  for (const absPath of findFiles(projectDir, (_fp, name) => name.endsWith(".md"))) {
+    ingestFile(absPath, projectDir);
+  }
+
+  // 2. Plugin corpus — only when not the same root (avoids double-counting the
+  //    already-scanned project files when developing Canon itself).
+  if (!sameRoot) {
+    for (const absPath of findFiles(pluginDir, (_fp, name) => name.endsWith(".md"))) {
+      ingestFile(absPath, pluginDir);
+    }
+  }
+
+  const known: KnownTargets = {
+    adrNumbers,
+    filePaths,
+    principleIds: new Set(principles.map((p) => p.id)),
+    stems,
+  };
+
+  // Check both roots: a relative md link inside a plugin-shipped file resolves against
+  // pluginDir, not projectDir. When sameRoot, both checks hit the same directory.
+  const existsOnDisk = (refPath: string): boolean =>
+    existsSync(join(projectDir, refPath)) || existsSync(join(pluginDir, refPath));
+  return buildLinkGraph(docs, known, existsOnDisk);
+}
+
 // ---- Main tool function ----
 
 type CheckContext = {
@@ -281,6 +466,7 @@ type CheckContext = {
   claudeMdFiles: FileRecord[];
   dddDocFiles: FileRecord[];
   enabled: Set<CheckName>;
+  pluginDir: string;
   principles: Principle[];
   projectDir: string;
 };
@@ -289,40 +475,58 @@ type CheckContext = {
 async function runEnabledChecks(
   ctx: CheckContext,
 ): Promise<Parameters<typeof assembleWikiLintOutput>[0]> {
-  const { agentFiles, claudeMdFiles, dddDocFiles, enabled, principles, projectDir } = ctx;
+  const { agentFiles, claudeMdFiles, dddDocFiles, enabled, pluginDir, principles, projectDir } =
+    ctx;
 
-  const contradictions = enabled.has("contradictions") ? checkContradictions(claudeMdFiles) : [];
-  const orphans = enabled.has("orphan_principles")
-    ? await runOrphanCheck(projectDir, principles, claudeMdFiles, agentFiles)
-    : [];
-  const staleRefs = enabled.has("stale_refs")
-    ? runStaleRefCheck(projectDir, claudeMdFiles, dddDocFiles)
-    : [];
-  const missingExamples = enabled.has("missing_examples") ? checkMissingExamples(principles) : [];
-  const citedPaths = enabled.has("cited_paths") ? runCitedPathCheck(projectDir, dddDocFiles) : [];
+  // `gate` runs `fn` only when its check is enabled, else yields []. Collapsing each
+  // per-check `enabled.has(...) ? fn() : []` into one call keeps this assembler below
+  // the cognitive-complexity ceiling as checks are added.
+  const gate = <T>(name: CheckName, fn: () => T): T | [] => (enabled.has(name) ? fn() : []);
+  const gateAsync = async <T>(name: CheckName, fn: () => Promise<T>): Promise<T | []> =>
+    enabled.has(name) ? fn() : [];
+
+  // The corpus link graph (R2, ADR-0019) backs BOTH link_integrity and
+  // orphan_principles. Built once; both roots scanned so plugin principles are
+  // not falsely orphaned when projectDir != pluginDir (the normal user-project case).
+  const linkGraph =
+    enabled.has("link_integrity") || enabled.has("orphan_principles")
+      ? buildCorpusLinkGraph(projectDir, pluginDir, principles)
+      : null;
+  const linkIntegrity = enabled.has("link_integrity") && linkGraph ? linkGraph.findings : [];
+
+  const contradictions = gate("contradictions", () => checkContradictions(claudeMdFiles));
+  const orphans = await gateAsync("orphan_principles", () =>
+    runOrphanCheck(projectDir, principles, linkGraph?.referencedPrincipleIds ?? new Set<string>()),
+  );
+  const staleRefs = gate("stale_refs", () =>
+    runStaleRefCheck(projectDir, claudeMdFiles, dddDocFiles),
+  );
+  const missingExamples = gate("missing_examples", () => checkMissingExamples(principles));
+  const citedPaths = gate("cited_paths", () => runCitedPathCheck(projectDir, dddDocFiles));
   const validLayers = enabled.has("scope_layers")
     ? Object.keys(await loadLayerMappings(projectDir))
     : [];
-  const scopeLayers = enabled.has("scope_layers") ? checkScopeLayers(principles, validLayers) : [];
-  const scopeTags = enabled.has("scope_tags")
-    ? checkScopeTags(principles, VALID_COMPUTED_TAGS)
-    : [];
-  const indexDrift = enabled.has("index_drift") ? await checkIndexDrift(projectDir) : [];
-  const glossaryConsistency = enabled.has("glossary_consistency")
-    ? runGlossaryCheck(projectDir)
-    : [];
-  const misroutedPrinciples = enabled.has("misrouted_principles")
-    ? checkMisroutedPrinciples(principles)
-    : [];
-  const duplicateTitles = enabled.has("duplicate_titles") ? checkDuplicateTitles(principles) : [];
+  const scopeLayers = gate("scope_layers", () => checkScopeLayers(principles, validLayers));
+  const scopeTags = gate("scope_tags", () => checkScopeTags(principles, VALID_COMPUTED_TAGS));
+  const indexDrift = await gateAsync("index_drift", () => checkIndexDrift(projectDir));
+  const glossaryConsistency = gate("glossary_consistency", () => runGlossaryCheck(projectDir));
+  const misroutedPrinciples = gate("misrouted_principles", () =>
+    checkMisroutedPrinciples(principles),
+  );
+  const duplicateTitles = gate("duplicate_titles", () => checkDuplicateTitles(principles));
+  const frontmatterSchema = gate("frontmatter_schema", () =>
+    runFrontmatterSchemaCheck(projectDir, pluginDir),
+  );
 
   return {
     citedPaths,
     contradictions,
     duplicateTitles,
     filesScanned: claudeMdFiles.length + agentFiles.length + dddDocFiles.length,
+    frontmatterSchema,
     glossaryConsistency,
     indexDrift,
+    linkIntegrity,
     misroutedPrinciples,
     missingExamples,
     orphans,
@@ -336,7 +540,7 @@ async function runEnabledChecks(
 /**
  * Run wiki lint checks against Canon's own meta-layer artifacts.
  *
- * @param input - Which checks to run (default: 8 checks, excluding index_drift; pass checks:["index_drift"] to run it)
+ * @param input - Which checks to run (default: all 12 checks except index_drift; pass checks:["index_drift"] to run it)
  * @param projectDir - Project root (for CLAUDE.md scanning, stale ref resolution, drift store)
  * @param pluginDir - Plugin directory (for principles loading, agent definitions)
  */
@@ -353,7 +557,9 @@ export async function wikiLint(
     "cited_paths",
     "contradictions",
     "duplicate_titles",
+    "frontmatter_schema",
     "glossary_consistency",
+    "link_integrity",
     "missing_examples",
     "misrouted_principles",
     "orphan_principles",
@@ -382,6 +588,7 @@ export async function wikiLint(
     claudeMdFiles,
     dddDocFiles,
     enabled,
+    pluginDir,
     principles,
     projectDir,
   });

@@ -84,3 +84,8 @@ Read replicas used for cross-service analytics and reporting are acceptable when
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[bounded-context-boundaries]] — data ownership is the infrastructure expression of a bounded context boundary: a service that shares its database with another service has a violated context boundary at the persistence layer.
+- [[explicit-transaction-boundaries]] — because each service owns its data exclusively, cross-service operations cannot use database transactions; explicit saga/compensating-action patterns become necessary, making this principle a precondition for correct transaction boundary design.

@@ -109,3 +109,7 @@ Property-based tests (e.g., fast-check) naturally verify a property across many 
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[tests-are-independent]] — a multi-behavior test that chains assertions is often also order-dependent: later assertions depend on the state set by earlier ones in the same test body. [[test-data-belongs-in-the-test]] — when each test verifies one focused behavior, the relevant test data for that behavior is small enough to express inline without a shared fixture.

@@ -99,3 +99,8 @@ Small utility functions that do one concrete thing (parse a date, format a numbe
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[functions-do-one-thing]] — a function mixing abstraction levels is usually doing more than one thing; consistent abstraction levels and single responsibility are two diagnostics for the same structural failure.
+- [[information-hiding]] — abstraction-level consistency is the runtime expression of information hiding: low-level details belong in the implementing function, not exposed at the orchestrating level.

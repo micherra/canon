@@ -103,3 +103,7 @@ A hook that is explicitly designed to run on ALL inputs (regardless of threat mo
 - [ ] Every PreToolUse hook that contains a fail-closed metacharacter or structural scan has a threat-model confirmation check at the start of its decision pipeline.
 - [ ] The threat-model check exits 0 immediately for non-matching inputs — it does NOT fall through to the scan.
 - [ ] The disguised-attack vectors covered by the scan are still covered after the threat-model gate is applied (no true-positive regression).
+
+## Related
+
+[[fail-closed-by-default]] — the parent rule this convention refines: fail-closed denial is correct policy; this convention adds that the scope of the check must be confirmed before denying. [[hooks-fail-closed]] — orthogonal companion rule covering internal hook error handling (extraction failure) rather than input scope; both govern correctness of the guard's decision.

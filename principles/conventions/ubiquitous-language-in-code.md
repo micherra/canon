@@ -88,3 +88,8 @@ Technical infrastructure code (database connections, HTTP clients, logging, seri
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[bounded-context-boundaries]] — ubiquitous language is scoped to a bounded context; the same word ("Account") legitimately means different things in different contexts, and the boundary is what makes that precision possible.
+- [[decompose-by-domain-not-layer]] — decomposing by domain creates the named modules where ubiquitous language applies; each domain module's namespace disambiguates the language of that context from technical layer names.

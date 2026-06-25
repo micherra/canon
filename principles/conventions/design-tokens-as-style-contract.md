@@ -102,3 +102,7 @@ Values with no semantic meaning that would never appear in a design token scale 
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[single-source-of-component-styles]] — design tokens are the coupling point between the token contract and a component's single style source; a component that owns its styles exclusively applies tokens from one place. [[compose-from-small-to-large]] — shared design tokens provide the visual cohesion that makes independently built atomic components look consistent when composed into larger structures.

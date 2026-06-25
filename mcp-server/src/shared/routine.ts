@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import matter from "gray-matter";
 import { CANON_DIR } from "./constants.ts";
+import { splitFrontmatter } from "./lib/frontmatter.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,11 +50,10 @@ export type Routine = {
  */
 export function parseRoutine(raw: string, filePath: string, source: "project" | "plugin"): Routine {
   try {
-    const parsed = matter(raw);
-    const fm = parsed.data as Record<string, unknown>;
+    const { data: fm, body } = splitFrontmatter(raw);
     const name = (fm.name as string) || "";
     if (!name) return makeEmptyRoutine(filePath, source);
-    return buildRoutine(fm, (parsed.content ?? "").trim(), filePath, source);
+    return buildRoutine(fm, body.trim(), filePath, source);
   } catch {
     return makeEmptyRoutine(filePath, source);
   }
