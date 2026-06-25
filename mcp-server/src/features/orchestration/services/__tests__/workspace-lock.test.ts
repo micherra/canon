@@ -7,19 +7,19 @@
  * All FS and clock operations are injected via LockSeams for determinism.
  */
 
-import { existsSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  DEFAULT_LOCK_TTL_MS,
   acquireLock,
+  DEFAULT_LOCK_TTL_MS,
   isStale,
-  readLock,
-  releaseLock,
   type LockRecord,
   type LockSeams,
+  readLock,
+  releaseLock,
 } from "../workspace-lock.ts";
 
 // ---------------------------------------------------------------------------

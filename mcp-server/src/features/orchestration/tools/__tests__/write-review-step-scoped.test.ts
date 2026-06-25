@@ -13,10 +13,9 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-
-import { type WriteReviewInput, writeReview } from "../write-review.ts";
 import { atomicWritePair } from "@shared/lib/atomic-write.ts";
+import { afterEach, describe, expect, it } from "vitest";
+import { type WriteReviewInput, writeReview } from "../write-review.ts";
 
 // ---------------------------------------------------------------------------
 // Fixture

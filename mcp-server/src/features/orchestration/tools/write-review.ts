@@ -1,7 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { atomicWritePair } from "@shared/lib/atomic-write.ts";
+import { mkdir } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { CORRECTNESS_SCAN_PRINCIPLE_ID } from "@shared/constants.ts";
+import { atomicWritePair } from "@shared/lib/atomic-write.ts";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";

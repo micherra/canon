@@ -17,17 +17,17 @@
  *   features/orchestration/tools/init-workspace.ts FOUR_HOURS_MS — TTL idiom
  */
 
+import { randomBytes } from "node:crypto";
 import {
   closeSync,
   openSync,
+  readFileSync,
   renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
-  readFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -48,6 +48,7 @@ export type LockRecord = {
  * - `reclaimed` — the prior lock was stale/dead; we replaced it.
  * - `gated` — a live foreign lock exists; orchestrator must HITL.
  */
+// canon:allow-unwired: type is inlined into init-workspace.ts InitWorkspaceResult (not imported directly); exposed for future diagnostic consumers
 export type LockOutcome =
   | { kind: "acquired"; record: LockRecord }
   | {
@@ -59,6 +60,7 @@ export type LockOutcome =
   | { kind: "gated"; owner: LockRecord };
 
 /** Injectable seams for tests — override clock and PID sources. */
+// canon:allow-unwired: test-only injection type; not imported by production code
 export type LockSeams = {
   now?: () => number; // default: Date.now
   pid?: () => number; // default: process.pid
@@ -70,6 +72,7 @@ export type LockSeams = {
 
 /** 2-hour default TTL for workspace mutex. Safely exceeds any real build step.
  * Q3 decision: TTL-primary staleness; PID-secondary. */
+// canon:allow-unwired: test-only constant for seam injection; not imported by production code
 export const DEFAULT_LOCK_TTL_MS = 2 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
@@ -123,6 +126,7 @@ function writeLockAtomic(workspace: string, record: LockRecord): void {
  * Returns null on ENOENT or when the file content cannot be parsed as a LockRecord.
  * Never throws.
  */
+// canon:allow-unwired: diagnostic helper; referenced in tests only today, reserved for future lock-inspector tooling
 export function readLock(workspace: string): LockRecord | null {
   try {
     const raw = readFileSync(lockPath(workspace), "utf-8");
@@ -179,7 +183,7 @@ export function acquireLock(
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code !== "EEXIST") throw err; // unexpected FS error — propagate
-    return handleExisting(workspace, owner, { nowMs, ttlMs, seams });
+    return handleExisting(workspace, owner, { nowMs, seams, ttlMs });
   }
 
   // We hold the exclusive fd. Write our record then close.
@@ -203,7 +207,7 @@ function handleExisting(
 
   if (existing === null) {
     // Corrupt — check mtime to decide if we can safely reclaim
-    return handleCorrupt(workspace, owner, { nowMs, ttlMs, seams });
+    return handleCorrupt(workspace, owner, { nowMs, seams, ttlMs });
   }
 
   // Same-session re-entry: if the new owner's session_id matches the existing lock's

@@ -217,13 +217,11 @@ function tryAcquireWorkspaceLock(
   workspace: string,
   input: Pick<InitWorkspaceInput, "session_id" | "job_id">,
   slug: string,
-  board: Board,
-  session: Session,
 ): InitWorkspaceResult | null {
   try {
     const outcome = acquireLock(workspace, {
-      session_id: input.session_id,
       job_id: input.job_id,
+      session_id: input.session_id,
     });
     if (outcome.kind === "gated") {
       // Foreign session owns this workspace — return gated result
@@ -295,13 +293,7 @@ function tryResumeWorkspace(
     const taskMatches = expectedTask === undefined || session?.task === expectedTask;
     if (session && session.status === "active" && board && taskMatches) {
       // Acquire the mutex before resuming — lock guards the workspace, not the worktree.
-      const gated = tryAcquireWorkspaceLock(
-        candidateWorkspace,
-        lockOwner ?? {},
-        session.slug,
-        board,
-        session,
-      );
+      const gated = tryAcquireWorkspaceLock(candidateWorkspace, lockOwner ?? {}, session.slug);
       if (gated) return gated;
 
       const worktreePath = resolveWorktreePath(candidateWorkspace, projectDir, session);
@@ -589,10 +581,8 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
   };
   const lockGated = tryAcquireWorkspaceLock(
     workspace,
-    { session_id: input.session_id, job_id: input.job_id },
+    { job_id: input.job_id, session_id: input.session_id },
     slug,
-    board,
-    session,
   );
   if (lockGated) return lockGated;
 
@@ -644,8 +634,8 @@ export async function initWorkspaceFlow(
   const candidateWorkspace = join(branchDir, baseSlug);
 
   const resumeResult = tryResumeWorkspace(candidateWorkspace, projectDir, input.task, {
-    session_id: input.session_id,
     job_id: input.job_id,
+    session_id: input.session_id,
   });
   if (resumeResult) return resumeResult;
 

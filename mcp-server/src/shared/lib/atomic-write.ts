@@ -76,10 +76,8 @@ export async function atomicWritePair(
     await writeFile(tmp1, data1, "utf-8");
     await writeFile(tmp2, data2, "utf-8");
   } catch (err) {
-    // Clean up any temps we managed to create
-    for (const t of [tmp1, tmp2]) {
-      try { await unlink(t); } catch { /* ignore */ }
-    }
+    // Clean up any temps we managed to create (parallel cleanup, not a loop)
+    await Promise.allSettled([unlink(tmp1), unlink(tmp2)]);
     throw err;
   }
 
@@ -88,8 +86,16 @@ export async function atomicWritePair(
   try {
     await renameWithWindowsRetry(tmp1, filePath1);
   } catch (err) {
-    try { await unlink(tmp1); } catch { /* ignore */ }
-    try { await unlink(tmp2); } catch { /* ignore */ }
+    try {
+      await unlink(tmp1);
+    } catch {
+      /* ignore */
+    }
+    try {
+      await unlink(tmp2);
+    } catch {
+      /* ignore */
+    }
     throw err;
   }
 
@@ -97,7 +103,11 @@ export async function atomicWritePair(
     await renameWithWindowsRetry(tmp2, filePath2);
   } catch (err) {
     // tmp1 rename already landed — we cannot undo filePath1. Clean up tmp2.
-    try { await unlink(tmp2); } catch { /* ignore */ }
+    try {
+      await unlink(tmp2);
+    } catch {
+      /* ignore */
+    }
     throw err;
   }
 }

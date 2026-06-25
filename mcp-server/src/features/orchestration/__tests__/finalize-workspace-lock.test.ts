@@ -19,7 +19,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // Mock git-adapter to prevent actual git calls during workspace archive steps.
 vi.mock("@platform/adapters/git-adapter.ts", async (importOriginal) => {
   const original = await importOriginal<typeof import("@platform/adapters/git-adapter.ts")>();
-  return { ...original, gitExec: vi.fn().mockReturnValue({ duration_ms: 5, exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false }) };
+  return {
+    ...original,
+    gitExec: vi.fn().mockReturnValue({
+      duration_ms: 5,
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "",
+      timedOut: false,
+    }),
+  };
 });
 
 import { acquireLock, releaseLock } from "../services/workspace-lock.ts";

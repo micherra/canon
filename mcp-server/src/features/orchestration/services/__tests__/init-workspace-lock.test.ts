@@ -12,10 +12,9 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
-import { DEFAULT_LOCK_TTL_MS } from "../workspace-lock.ts";
+import { afterEach, describe, expect, it } from "vitest";
 import { initWorkspaceFlow } from "../../tools/init-workspace.ts";
+import { DEFAULT_LOCK_TTL_MS } from "../workspace-lock.ts";
 
 // ---------------------------------------------------------------------------
 // Fixture — real temp dirs, no mocks (matches init-workspace.test.ts pattern)

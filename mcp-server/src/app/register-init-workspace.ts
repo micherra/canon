@@ -25,7 +25,7 @@ export function registerInitWorkspaceTool(server: McpServer): void {
           .describe(
             "Job identifier for the workspace mutex — first 8 chars of basename(CLAUDE_JOB_DIR). " +
               "The shared HTTP daemon cannot derive per-session identity from process.env; " +
-              "pass from the orchestrator's env. Omitting stores \"unknown\" in the lock.",
+              'pass from the orchestrator\'s env. Omitting stores "unknown" in the lock.',
           ),
         original_input: z.string().optional(),
         preflight: z
@@ -46,7 +46,7 @@ export function registerInitWorkspaceTool(server: McpServer): void {
           .describe(
             "Calling session's identity for the workspace mutex — value of CLAUDE_CODE_SESSION_ID " +
               "in the orchestrator's env. The shared HTTP daemon cannot derive per-session identity " +
-              "from process.env; pass explicitly. Omitting stores \"unknown\" in the lock.",
+              'from process.env; pass explicitly. Omitting stores "unknown" in the lock.',
           ),
         skip_flags: z.array(z.string()).optional(),
         task: z.string(),
