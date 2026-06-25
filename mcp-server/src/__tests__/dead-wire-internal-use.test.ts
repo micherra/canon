@@ -272,9 +272,9 @@ const x = deadFn();
   test("overloaded function: 2 signatures + impl, zero uses → use-count 0, exit 0 (DEAD)", async () => {
     const file = writeFixture(
       "overload-dead.ts",
-      `export function overloadFn(x: string): string;
-export function overloadFn(x: number): number;
-export function overloadFn(x: string | number): string | number { return x; }
+      `function overloadFn(x: string): string;
+function overloadFn(x: number): number;
+function overloadFn(x: string | number): string | number { return x; }
 `,
     );
     const { code, stdout } = await runHelper([file, "overloadFn"]);
@@ -285,9 +285,9 @@ export function overloadFn(x: string | number): string | number { return x; }
   test("overloaded function + genuine call → use-count ≥ 1, exit 0 (WIRED)", async () => {
     const file = writeFixture(
       "overload-wired.ts",
-      `export function overloadFn(x: string): string;
-export function overloadFn(x: number): number;
-export function overloadFn(x: string | number): string | number { return x; }
+      `function overloadFn(x: string): string;
+function overloadFn(x: number): number;
+function overloadFn(x: string | number): string | number { return x; }
 const result = overloadFn("hello");
 `,
     );
@@ -299,8 +299,8 @@ const result = overloadFn("hello");
   test("export type + export const (declaration merge), zero uses → use-count 0, exit 0 (DEAD)", async () => {
     const file = writeFixture(
       "type-const-dead.ts",
-      `export type MergedName = string;
-export const MergedName = "value";
+      `type MergedName = string;
+const MergedName = "value";
 `,
     );
     const { code, stdout } = await runHelper([file, "MergedName"]);
@@ -311,8 +311,8 @@ export const MergedName = "value";
   test("export type + export const + genuine use → use-count ≥ 1, exit 0 (WIRED)", async () => {
     const file = writeFixture(
       "type-const-wired.ts",
-      `export type MergedName = string;
-export const MergedName = "value";
+      `type MergedName = string;
+const MergedName = "value";
 const x: MergedName = MergedName;
 `,
     );
@@ -324,8 +324,8 @@ const x: MergedName = MergedName;
   test("export interface + export const (declaration merge), zero uses → use-count 0, exit 0 (DEAD)", async () => {
     const file = writeFixture(
       "iface-const-dead.ts",
-      `export interface IfaceConst { id: string; }
-export const IfaceConst = { id: "x" };
+      `interface IfaceConst { id: string; }
+const IfaceConst = { id: "x" };
 `,
     );
     const { code, stdout } = await runHelper([file, "IfaceConst"]);
@@ -336,8 +336,8 @@ export const IfaceConst = { id: "x" };
   test("export interface + export const + genuine use → use-count ≥ 1, exit 0 (WIRED)", async () => {
     const file = writeFixture(
       "iface-const-wired.ts",
-      `export interface IfaceConst { id: string; }
-export const IfaceConst = { id: "x" };
+      `interface IfaceConst { id: string; }
+const IfaceConst = { id: "x" };
 const x: IfaceConst = IfaceConst;
 `,
     );
@@ -349,8 +349,8 @@ const x: IfaceConst = IfaceConst;
   test("export interface + export class (declaration merge), zero uses → use-count 0, exit 0 (DEAD)", async () => {
     const file = writeFixture(
       "iface-class-dead.ts",
-      `export interface IfaceClass { id: string; }
-export class IfaceClass { id = "x"; }
+      `interface IfaceClass { id: string; }
+class IfaceClass { id = "x"; }
 `,
     );
     const { code, stdout } = await runHelper([file, "IfaceClass"]);
@@ -361,8 +361,8 @@ export class IfaceClass { id = "x"; }
   test("export interface + export class + genuine use → use-count ≥ 1, exit 0 (WIRED)", async () => {
     const file = writeFixture(
       "iface-class-wired.ts",
-      `export interface IfaceClass { id: string; }
-export class IfaceClass { id = "x"; }
+      `interface IfaceClass { id: string; }
+class IfaceClass { id = "x"; }
 const obj: IfaceClass = new IfaceClass();
 `,
     );
@@ -374,8 +374,8 @@ const obj: IfaceClass = new IfaceClass();
   test("export function + export namespace (declaration merge), zero uses → use-count 0, exit 0 (DEAD)", async () => {
     const file = writeFixture(
       "fn-namespace-dead.ts",
-      `export function FnNs(): void {}
-export namespace FnNs { export const version = 1; }
+      `function FnNs(): void {}
+namespace FnNs { export const version = 1; }
 `,
     );
     const { code, stdout } = await runHelper([file, "FnNs"]);
@@ -386,8 +386,8 @@ export namespace FnNs { export const version = 1; }
   test("export function + export namespace + genuine use → use-count ≥ 1, exit 0 (WIRED)", async () => {
     const file = writeFixture(
       "fn-namespace-wired.ts",
-      `export function FnNs(): void {}
-export namespace FnNs { export const version = 1; }
+      `function FnNs(): void {}
+namespace FnNs { export const version = 1; }
 FnNs();
 `,
     );
