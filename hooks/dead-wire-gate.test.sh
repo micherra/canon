@@ -1510,6 +1510,172 @@ export function deadFn(): void { return; }'
   rm -rf "$REPO"
 }
 
+# ===========================================================================
+# Multi-declaration false-WIRE gate tests (use-position counting fix)
+#
+# T16-T25: Gate-level tests for the 5 false-WIRE forms identified in the
+# adversarial review. Each false-WIRE form has:
+#   (a) zero-use variant → gate must exit 2 (DEAD)
+#   (b) genuine-use variant → gate must exit 0 (WIRED)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# T16: overloaded function (2 sigs + impl), zero uses → DEAD (exit 2)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T16: overloaded function, zero uses → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function overloadFn(x: string): string;
+export function overloadFn(x: number): number;
+export function overloadFn(x: string | number): string | number { return x; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T16: overloaded fn, zero uses → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T17: overloaded function + genuine call → WIRED (exit 0)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T17: overloaded function + genuine call → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function overloadFn(x: string): string;
+export function overloadFn(x: number): number;
+export function overloadFn(x: string | number): string | number { return x; }
+const result = overloadFn("hello");'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T17: overloaded fn + call → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T18: export type + export const (declaration merge), zero uses → DEAD (exit 2)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T18: export type + export const (decl merge), zero uses → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export type MergedName = string;
+export const MergedName = "value";'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T18: type+const merge, zero uses → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T19: export type + export const + genuine use → WIRED (exit 0)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T19: export type + export const + genuine use → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export type MergedName = string;
+export const MergedName = "value";
+const x: MergedName = MergedName;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T19: type+const merge + use → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T20: export interface + export const (declaration merge), zero uses → DEAD (exit 2)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T20: export interface + export const (decl merge), zero uses → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export interface IfaceConst { id: string; }
+export const IfaceConst = { id: "x" };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T20: interface+const merge, zero uses → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T21: export interface + export const + genuine use → WIRED (exit 0)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T21: export interface + export const + genuine use → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export interface IfaceConst { id: string; }
+export const IfaceConst = { id: "x" };
+const x: IfaceConst = IfaceConst;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T21: interface+const merge + use → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T22: export interface + export class (declaration merge), zero uses → DEAD (exit 2)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T22: export interface + export class (decl merge), zero uses → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export interface IfaceClass { id: string; }
+export class IfaceClass { id = "x"; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T22: interface+class merge, zero uses → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T23: export interface + export class + genuine use → WIRED (exit 0)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T23: export interface + export class + genuine use → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export interface IfaceClass { id: string; }
+export class IfaceClass { id = "x"; }
+const obj: IfaceClass = new IfaceClass();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T23: interface+class merge + use → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T24: export function + export namespace (declaration merge), zero uses → DEAD (exit 2)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T24: export function + export namespace (decl merge), zero uses → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function FnNs(): void {}
+export namespace FnNs { export const version = 1; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T24: function+namespace merge, zero uses → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T25: export function + export namespace + genuine use → WIRED (exit 0)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T25: export function + export namespace + genuine use → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function FnNs(): void {}
+export namespace FnNs { export const version = 1; }
+FnNs();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T25: function+namespace merge + use → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

@@ -317,12 +317,13 @@ while IFS= read -r entry; do
       # Output not a non-negative integer — treat as detection failure
       echo "CANON WARNING: [dead-wire-gate] internal-use helper returned non-integer output for ${local_symbol} — flagging DEAD (fail-closed)" >&2
       # Fall through to DEAD path below
-    elif [[ "$_code_refs" -ge 2 ]]; then
-      # count ≥ 2: definition occurrence + ≥1 same-file code use → WIRED
-      echo "same-file-wired: ${local_symbol} has ${_code_refs} code refs in ${local_file} (same-file internal use detected)"
+    elif [[ "$_code_refs" -ge 1 ]]; then
+      # count ≥ 1: helper counts USE-POSITION refs only (declaration names excluded),
+      # so any count ≥ 1 means at least one genuine same-file code use → WIRED
+      echo "same-file-wired: ${local_symbol} has ${_code_refs} use-position code refs in ${local_file} (same-file internal use detected)"
       continue
     fi
-    # count ≤ 1: definition only, or helper succeeded but no code use found
+    # count = 0: no genuine uses found (declaration names excluded by helper)
     # Fall through to DEAD path below
   fi
 

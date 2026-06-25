@@ -60,8 +60,10 @@ function writeFixture(name: string, content: string): string {
 describe("dead-wire-internal-use.mjs — subprocess tests", () => {
   // -------------------------------------------------------------------
   // Happy path: genuine code references
+  // With use-position counting, the definition name is excluded.
+  // A call is a genuine USE → count ≥ 1.
   // -------------------------------------------------------------------
-  test("genuine code use: def + call → count ≥ 2, exit 0 (R1)", async () => {
+  test("genuine code use: def + call → count ≥ 1, exit 0 (R1)", async () => {
     const file = writeFixture(
       "genuine-use.ts",
       `export function deadFn(): void {}
@@ -70,13 +72,14 @@ const x = deadFn();
     );
     const { code, stdout } = await runHelper([file, "deadFn"]);
     expect(code).toBe(0);
-    expect(Number(stdout)).toBeGreaterThanOrEqual(2);
+    expect(Number(stdout)).toBeGreaterThanOrEqual(1);
   });
 
   // -------------------------------------------------------------------
-  // Comment-only mention → should NOT count as a code reference
+  // Comment-only mention → should NOT count as a code reference.
+  // With use-position counting, the def name is also excluded, so count = 0.
   // -------------------------------------------------------------------
-  test("block-comment-only mention → count = 1 (def only), exit 0 (bypass f1)", async () => {
+  test("block-comment-only mention → count = 0 (def excluded, comment excluded), exit 0 (bypass f1)", async () => {
     const file = writeFixture(
       "f1-block-comment.ts",
       `export function deadFn(): void {}
@@ -85,10 +88,10 @@ const x = deadFn();
     );
     const { code, stdout } = await runHelper([file, "deadFn"]);
     expect(code).toBe(0);
-    expect(Number(stdout)).toBe(1); // only the definition
+    expect(Number(stdout)).toBe(0); // def name excluded, comment excluded
   });
 
-  test("line-comment-only mention → count = 1 (def only), exit 0 (bypass f5 variant)", async () => {
+  test("line-comment-only mention → count = 0 (def excluded, comment excluded), exit 0 (bypass f5 variant)", async () => {
     const file = writeFixture(
       "f5-line-comment.ts",
       `export function deadFn(): void {}
@@ -97,10 +100,10 @@ const x = deadFn();
     );
     const { code, stdout } = await runHelper([file, "deadFn"]);
     expect(code).toBe(0);
-    expect(Number(stdout)).toBe(1);
+    expect(Number(stdout)).toBe(0);
   });
 
-  test("comment-inside-string → count = 1 (def only), exit 0 (bypass f3)", async () => {
+  test("comment-inside-string → count = 0 (def excluded, string excluded), exit 0 (bypass f3)", async () => {
     const file = writeFixture(
       "f3-comment-in-string.ts",
       `export function deadFn(): void {}
@@ -109,10 +112,10 @@ const s = "/* deadFn */";
     );
     const { code, stdout } = await runHelper([file, "deadFn"]);
     expect(code).toBe(0);
-    expect(Number(stdout)).toBe(1);
+    expect(Number(stdout)).toBe(0);
   });
 
-  test("string-literal-only mention → count = 1 (def only), exit 0", async () => {
+  test("string-literal-only mention → count = 0 (def excluded, string excluded), exit 0", async () => {
     const file = writeFixture(
       "string-literal.ts",
       `export function deadFn(): void {}
@@ -121,10 +124,10 @@ const s = "deadFn";
     );
     const { code, stdout } = await runHelper([file, "deadFn"]);
     expect(code).toBe(0);
-    expect(Number(stdout)).toBe(1);
+    expect(Number(stdout)).toBe(0);
   });
 
-  test("regex-only mention → count = 1 (def only), exit 0 (bypass f4)", async () => {
+  test("regex-only mention → count = 0 (def excluded, regex excluded), exit 0 (bypass f4)", async () => {
     const file = writeFixture(
       "f4-regex.ts",
       `export function deadFn(): void {}
@@ -133,26 +136,30 @@ const r = /deadFn/;
     );
     const { code, stdout } = await runHelper([file, "deadFn"]);
     expect(code).toBe(0);
-    expect(Number(stdout)).toBe(1);
+    expect(Number(stdout)).toBe(0);
   });
 
   // -------------------------------------------------------------------
   // Template substitution — MUST count as a code reference (f7)
+  // With use-position counting: def name excluded, call in template counted.
+  // count ≥ 1.
   // -------------------------------------------------------------------
-  test("template substitution ${deadFn()} → count ≥ 2, exit 0 (bypass f7)", async () => {
+  test("template substitution ${deadFn()} → count ≥ 1, exit 0 (bypass f7)", async () => {
     const file = writeFixture(
       "f7-template-sub.ts",
       "export function deadFn(): string { return ''; }\nconst s = `${deadFn()}`;\n",
     );
     const { code, stdout } = await runHelper([file, "deadFn"]);
     expect(code).toBe(0);
-    expect(Number(stdout)).toBeGreaterThanOrEqual(2);
+    expect(Number(stdout)).toBeGreaterThanOrEqual(1);
   });
 
   // -------------------------------------------------------------------
-  // Zero-reference (def only) — R2
+  // Zero genuine uses (def only) — R2
+  // With use-position counting: def name excluded → count = 0.
+  // Gate receives 0 → DEAD (correct behavior preserved).
   // -------------------------------------------------------------------
-  test("def only, zero other references → count = 1, exit 0 (R2)", async () => {
+  test("def only, zero genuine uses → count = 0, exit 0 (R2)", async () => {
     const file = writeFixture(
       "def-only.ts",
       `export function deadFn(): void {}
@@ -160,7 +167,7 @@ const r = /deadFn/;
     );
     const { code, stdout } = await runHelper([file, "deadFn"]);
     expect(code).toBe(0);
-    expect(Number(stdout)).toBe(1);
+    expect(Number(stdout)).toBe(0);
   });
 
   // -------------------------------------------------------------------
@@ -240,6 +247,7 @@ const r = /deadFn/;
 
   // -------------------------------------------------------------------
   // .tsx files parsed with tsx grammar (no error)
+  // def name excluded, call counted → count ≥ 1
   // -------------------------------------------------------------------
   test("tsx file extension uses tsx grammar → exit 0", async () => {
     const file = writeFixture(
@@ -250,6 +258,169 @@ const x = deadFn();
     );
     const { code, stdout } = await runHelper([file, "deadFn"]);
     expect(code).toBe(0);
-    expect(Number(stdout)).toBeGreaterThanOrEqual(2);
+    expect(Number(stdout)).toBeGreaterThanOrEqual(1);
+  });
+
+  // -------------------------------------------------------------------
+  // Multi-declaration false-WIRE tests (use-position counting fix)
+  //
+  // Each of these forms has multiple declaration-name occurrences of the
+  // symbol but ZERO genuine uses. With use-position counting the helper
+  // must return count = 0 for each.
+  // -------------------------------------------------------------------
+
+  test("overloaded function: 2 signatures + impl, zero uses → use-count 0, exit 0 (DEAD)", async () => {
+    const file = writeFixture(
+      "overload-dead.ts",
+      `export function overloadFn(x: string): string;
+export function overloadFn(x: number): number;
+export function overloadFn(x: string | number): string | number { return x; }
+`,
+    );
+    const { code, stdout } = await runHelper([file, "overloadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  test("overloaded function + genuine call → use-count ≥ 1, exit 0 (WIRED)", async () => {
+    const file = writeFixture(
+      "overload-wired.ts",
+      `export function overloadFn(x: string): string;
+export function overloadFn(x: number): number;
+export function overloadFn(x: string | number): string | number { return x; }
+const result = overloadFn("hello");
+`,
+    );
+    const { code, stdout } = await runHelper([file, "overloadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBeGreaterThanOrEqual(1);
+  });
+
+  test("export type + export const (declaration merge), zero uses → use-count 0, exit 0 (DEAD)", async () => {
+    const file = writeFixture(
+      "type-const-dead.ts",
+      `export type MergedName = string;
+export const MergedName = "value";
+`,
+    );
+    const { code, stdout } = await runHelper([file, "MergedName"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  test("export type + export const + genuine use → use-count ≥ 1, exit 0 (WIRED)", async () => {
+    const file = writeFixture(
+      "type-const-wired.ts",
+      `export type MergedName = string;
+export const MergedName = "value";
+const x: MergedName = MergedName;
+`,
+    );
+    const { code, stdout } = await runHelper([file, "MergedName"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBeGreaterThanOrEqual(1);
+  });
+
+  test("export interface + export const (declaration merge), zero uses → use-count 0, exit 0 (DEAD)", async () => {
+    const file = writeFixture(
+      "iface-const-dead.ts",
+      `export interface IfaceConst { id: string; }
+export const IfaceConst = { id: "x" };
+`,
+    );
+    const { code, stdout } = await runHelper([file, "IfaceConst"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  test("export interface + export const + genuine use → use-count ≥ 1, exit 0 (WIRED)", async () => {
+    const file = writeFixture(
+      "iface-const-wired.ts",
+      `export interface IfaceConst { id: string; }
+export const IfaceConst = { id: "x" };
+const x: IfaceConst = IfaceConst;
+`,
+    );
+    const { code, stdout } = await runHelper([file, "IfaceConst"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBeGreaterThanOrEqual(1);
+  });
+
+  test("export interface + export class (declaration merge), zero uses → use-count 0, exit 0 (DEAD)", async () => {
+    const file = writeFixture(
+      "iface-class-dead.ts",
+      `export interface IfaceClass { id: string; }
+export class IfaceClass { id = "x"; }
+`,
+    );
+    const { code, stdout } = await runHelper([file, "IfaceClass"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  test("export interface + export class + genuine use → use-count ≥ 1, exit 0 (WIRED)", async () => {
+    const file = writeFixture(
+      "iface-class-wired.ts",
+      `export interface IfaceClass { id: string; }
+export class IfaceClass { id = "x"; }
+const obj: IfaceClass = new IfaceClass();
+`,
+    );
+    const { code, stdout } = await runHelper([file, "IfaceClass"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBeGreaterThanOrEqual(1);
+  });
+
+  test("export function + export namespace (declaration merge), zero uses → use-count 0, exit 0 (DEAD)", async () => {
+    const file = writeFixture(
+      "fn-namespace-dead.ts",
+      `export function FnNs(): void {}
+export namespace FnNs { export const version = 1; }
+`,
+    );
+    const { code, stdout } = await runHelper([file, "FnNs"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  test("export function + export namespace + genuine use → use-count ≥ 1, exit 0 (WIRED)", async () => {
+    const file = writeFixture(
+      "fn-namespace-wired.ts",
+      `export function FnNs(): void {}
+export namespace FnNs { export const version = 1; }
+FnNs();
+`,
+    );
+    const { code, stdout } = await runHelper([file, "FnNs"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBeGreaterThanOrEqual(1);
+  });
+
+  // -------------------------------------------------------------------
+  // Single def → use-count 0 (regression guard: previous logic gave count=1)
+  // With use-position counting: def name is excluded, so count = 0 for
+  // a symbol with only its own declaration and no genuine uses.
+  // -------------------------------------------------------------------
+  test("single export function def only → use-count 0, exit 0 (DEAD)", async () => {
+    const file = writeFixture(
+      "single-def-only.ts",
+      `export function singleDeadFn(): void {}
+`,
+    );
+    const { code, stdout } = await runHelper([file, "singleDeadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  test("single export function def + call → use-count ≥ 1, exit 0 (WIRED)", async () => {
+    const file = writeFixture(
+      "single-def-wired.ts",
+      `export function singleDeadFn(): void {}
+singleDeadFn();
+`,
+    );
+    const { code, stdout } = await runHelper([file, "singleDeadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBeGreaterThanOrEqual(1);
   });
 });
