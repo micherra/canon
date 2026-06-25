@@ -25,7 +25,7 @@
 // Result type
 // ---------------------------------------------------------------------------
 
-export type OverlayScanResult =
+type OverlayScanResult =
   | { ok: true }
   | {
       ok: false;

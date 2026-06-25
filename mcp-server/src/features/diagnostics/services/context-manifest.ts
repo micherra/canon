@@ -164,6 +164,7 @@ async function hashFile(fullPath: string): Promise<string | null> {
  * @param rootDir — absolute path to the repo root (or any dir that contains
  *   the 6 corpus directories + .claude-plugin/plugin.json).
  */
+// canon:allow-unwired: manifest generator invoked manually / by a future regen routine — see context-manifest.ts docstring
 export async function buildContextManifest(rootDir: string): Promise<ContextManifest> {
   const version = await readPluginVersion(rootDir);
 
