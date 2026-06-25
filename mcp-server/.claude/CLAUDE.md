@@ -237,6 +237,11 @@ src/
 
 **Recursive filesystem scanners — root threading**: Scanners that exclude paths by relative prefix must thread the original scan root through all recursive calls. Never update the root to the current directory. Pattern: `scanFn(currentDir, rootDir)` where `rootDir` never changes. The bug class (root-drift) is silent — exclusion logic passes at depth 0 and silently fails at depth 1+. See `tools/wiki-lint.ts` (`FindFilesCtx.originalRoot`) and `services/doc-gap-detect.ts` as reference implementations.
 
+## Scripts
+<!-- last-updated: 2026-06-24 -->
+
+- `scripts/dead-wire-internal-use.mjs` — TS compiler-API same-file use resolver; invoked by `hooks/dead-wire-gate.sh` as `node dead-wire-internal-use.mjs <file> <symbol>`; returns integer code-ref count on stdout + exit 0 on success, non-zero on any error (fail-closed); counts an identifier as a use ONLY when `ts.TypeChecker.getSymbolAtLocation` resolves it to the top-level exported binding — member-property names, shadowing locals, declaration sites, strings, and comments are all correctly excluded by construction; bails fail-closed on non-empty `sourceFile.parseDiagnostics` (syntactic parse errors) before building the Program; no tsconfig dependency (`noResolve/noLib/types:[]` in-memory Program). <!-- last-updated: 2026-06-24 -->
+
 ## Development
 <!-- last-updated: 2026-06-09 -->
 
