@@ -79,6 +79,9 @@ describe("initWorkspaceFlow — task-identity guard in tryResumeWorkspace", {
       base_commit: baseCommit,
       branch: "main",
       flow_name: "fast-path",
+      // Real single-session id so the same session resuming its own workspace
+      // re-acquires its own mutex (same-session re-entry, workspace-lock P1 #2).
+      session_id: "session-fixture",
       task: "fix the authentication bug",
       tier: "small" as const,
     };

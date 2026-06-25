@@ -93,7 +93,7 @@ function registerWriteReviewTool(server: McpServer): void {
     "write_review",
     {
       description:
-        "Write a structured code review. Accepts typed review data with verdict, violations, and scores. Maps ADR-010 verdict vocabulary to DriftStore vocabulary. Produces REVIEW.md + .meta.json sidecar.",
+        "Write a structured code review. Accepts typed review data with verdict, violations, and scores. Maps ADR-010 verdict vocabulary to DriftStore vocabulary. Produces REVIEW.md + .meta.json sidecar. When step_id is provided, also writes a step-scoped pair (REVIEW-{step_id}.md + REVIEW-{step_id}.meta.json) to prevent concurrent reviewer overwrite races.",
       inputSchema: {
         files: z.array(z.string()),
         honored: z.array(z.string()),
@@ -106,6 +106,16 @@ function registerWriteReviewTool(server: McpServer): void {
           rules: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
         }),
         slug: z.string(),
+        step_id: z
+          .string()
+          .optional()
+          .describe(
+            "Step identifier for multi-reviewer concurrency safety. When provided, writes a " +
+              "step-scoped review pair (REVIEW-{step_id}.md + REVIEW-{step_id}.meta.json) in " +
+              "addition to the fixed canonical pair (REVIEW.md + REVIEW.meta.json). Use with " +
+              "the reviewer number in team-dispatch flows (e.g. 'reviewer-1', 'reviewer-2') so " +
+              "concurrent reviewers write to distinct paths instead of overwriting each other.",
+          ),
         verdict: z.enum([
           "approved",
           "approved_with_concerns",
