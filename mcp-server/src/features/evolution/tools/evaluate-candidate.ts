@@ -37,16 +37,17 @@ export const EvaluateCandidateInputSchema = z.object({
     ),
 });
 
-export type EvaluateCandidateInput = z.input<typeof EvaluateCandidateInputSchema>;
+type EvaluateCandidateInput = z.input<typeof EvaluateCandidateInputSchema>;
 
 /** Per-split scoring detail returned in the result. */
-export type PerSplitResult = {
+type PerSplitResult = {
   baseline_passed: number;
   candidate_passed: number;
   total: number;
 };
 
 /** Full result shape for evaluate_candidate. */
+// canon:allow-unwired: evaluate_candidate contract type consumed by the future evolve-loop (Phase-1 deliverable 4/5, out of scope this build) + evolution tests
 export type EvaluateCandidateResult = {
   /** Holdout baseline pass count (convenience — matches per_split.holdout.baseline_passed). */
   baseline_score: number;
