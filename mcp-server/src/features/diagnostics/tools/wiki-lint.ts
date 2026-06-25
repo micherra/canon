@@ -374,23 +374,45 @@ function adrNumberOf(absPath: string): string | null {
 
 /**
  * Build the corpus link graph once: scan all project `.md` files (standard
- * exclusions), construct `KnownTargets` (principle ids + file stems + ADR numbers +
- * file paths), and run the pure graph builder with an injected `existsOnDisk`.
+ * exclusions) PLUS the plugin corpus when `pluginDir` differs from `projectDir`
+ * (the normal user-project case). Construct `KnownTargets` (principle ids + file
+ * stems + ADR numbers + file paths), and run the pure graph builder with an
+ * injected `existsOnDisk`.
+ *
+ * When `projectDir` and `pluginDir` resolve to the same real directory (e.g. when
+ * developing Canon itself), the plugin corpus is not scanned a second time —
+ * de-duplication is handled by normalised-path comparison so each file is a link
+ * source and resolution target at most once.
  *
  * The single result is shared by both `link_integrity` (broken-link findings) and
  * `orphan_principles` (inbound-link orphan source-of-truth, ADR-0019) so the corpus
  * is parsed only once.
+ *
+ * Exported for unit testing (I/O boundary — kept in the tool layer, not the service).
  */
-function buildCorpusLinkGraph(projectDir: string, principles: Principle[]): LinkGraphResult {
-  const mdPaths = findFiles(projectDir, (_fp, name) => name.endsWith(".md"));
+// canon:allow-unwired: exported for unit testing; called from runEnabledChecks in this module
+export function buildCorpusLinkGraph(
+  projectDir: string,
+  pluginDir: string,
+  principles: Principle[],
+): LinkGraphResult {
+  /** Normalise a directory for same-root comparison (resolve trailing slashes). */
+  function normDir(d: string): string {
+    return d.replace(/\/+$/, "");
+  }
+
+  const projectDirNorm = normDir(projectDir);
+  const pluginDirNorm = normDir(pluginDir);
+  const sameRoot = projectDirNorm === pluginDirNorm;
 
   const stems = new Set<string>();
   const adrNumbers = new Set<string>();
   const filePaths = new Set<string>();
   const docs: LinkGraphInput[] = [];
 
-  for (const absPath of mdPaths) {
-    const repoRel = toRepoRel(absPath, projectDir);
+  /** Ingest one .md file from a root dir: populate resolution targets + doc list. */
+  function ingestFile(absPath: string, root: string): void {
+    const repoRel = toRepoRel(absPath, root);
     // Resolution targets (stems / adr numbers / file paths) include EVERY corpus file
     // so a link into docs/explore/ still resolves — but docs/explore/ files are NOT
     // scanned as link SOURCES below (frozen, stale-by-design records; mirrors the
@@ -400,9 +422,22 @@ function buildCorpusLinkGraph(projectDir: string, principles: Principle[]): Link
     const adr = adrNumberOf(absPath);
     if (adr) adrNumbers.add(adr);
 
-    if (repoRel.startsWith("docs/explore/")) continue;
+    if (repoRel.startsWith("docs/explore/")) return;
     const content = readFileSafe(absPath);
     if (content !== null) docs.push({ content, path: repoRel });
+  }
+
+  // 1. Project corpus.
+  for (const absPath of findFiles(projectDir, (_fp, name) => name.endsWith(".md"))) {
+    ingestFile(absPath, projectDir);
+  }
+
+  // 2. Plugin corpus — only when not the same root (avoids double-counting the
+  //    already-scanned project files when developing Canon itself).
+  if (!sameRoot) {
+    for (const absPath of findFiles(pluginDir, (_fp, name) => name.endsWith(".md"))) {
+      ingestFile(absPath, pluginDir);
+    }
   }
 
   const known: KnownTargets = {
@@ -442,12 +477,12 @@ async function runEnabledChecks(
   const gateAsync = async <T>(name: CheckName, fn: () => Promise<T>): Promise<T | []> =>
     enabled.has(name) ? fn() : [];
 
-  // The corpus link graph (R2, ADR-0019) backs BOTH link_integrity (broken-link
-  // findings) and orphan_principles (inbound-link orphan source-of-truth). Build it
-  // once when either check is enabled so the corpus is parsed a single time.
+  // The corpus link graph (R2, ADR-0019) backs BOTH link_integrity and
+  // orphan_principles. Built once; both roots scanned so plugin principles are
+  // not falsely orphaned when projectDir != pluginDir (the normal user-project case).
   const linkGraph =
     enabled.has("link_integrity") || enabled.has("orphan_principles")
-      ? buildCorpusLinkGraph(projectDir, principles)
+      ? buildCorpusLinkGraph(projectDir, pluginDir, principles)
       : null;
   const linkIntegrity = enabled.has("link_integrity") && linkGraph ? linkGraph.findings : [];
 

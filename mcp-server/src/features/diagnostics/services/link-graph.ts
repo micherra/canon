@@ -162,9 +162,12 @@ function resolveRelative(sourceFile: string, url: string): string {
   return stack.join("/");
 }
 
-/** True if a `[[target]]` resolves to a known principle id or a known file stem. */
+/**
+ * True if a `[[target]]` resolves to a known principle id, a known file stem,
+ * or a known repo-relative file path (ADR-0019: filePaths contract).
+ */
 function wikiLinkResolves(target: string, known: KnownTargets): boolean {
-  return known.principleIds.has(target) || known.stems.has(target);
+  return known.principleIds.has(target) || known.stems.has(target) || known.filePaths.has(target);
 }
 
 /**

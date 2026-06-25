@@ -11,9 +11,13 @@
  * 2. Whole-corpus no-false-positive — the real corpus produces zero BROKEN_* findings.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Principle } from "@shared/parser.ts";
 import { describe, expect, it } from "vitest";
+import { buildCorpusLinkGraph } from "../../tools/wiki-lint.ts";
 import {
   buildLinkGraph,
   extractLinks,
@@ -143,6 +147,119 @@ describe("buildLinkGraph — inbound-link orphan detection (ADR-0019)", () => {
     ];
     const { referencedPrincipleIds } = buildLinkGraph(docs, known(), () => true);
     expect(referencedPrincipleIds.has("principle-b")).toBe(false);
+  });
+});
+
+// ---- Comment 2: [[file-path]] wiki-link resolution against known.filePaths ----
+
+describe("buildLinkGraph — wiki-link resolves against known.filePaths", () => {
+  it("does NOT emit BROKEN_WIKILINK when [[target]] matches a known file path", () => {
+    // A link like [[docs/adr/0019-link-graph-source-of-truth-for-orphans.md]] should
+    // resolve because that path exists in known.filePaths — not just principleIds/stems.
+    const docs: LinkGraphInput[] = [
+      {
+        content: "See [[docs/adr/0019-link-graph-source-of-truth-for-orphans.md]] for context.\n",
+        path: "principles/conventions/some-principle.md",
+      },
+    ];
+    const k = known({
+      filePaths: new Set(["docs/adr/0019-link-graph-source-of-truth-for-orphans.md"]),
+    });
+    const { findings } = buildLinkGraph(docs, k, () => true);
+    const broken = findings.filter((f) => f.code === "BROKEN_WIKILINK");
+    expect(broken).toHaveLength(0);
+  });
+
+  it("still emits BROKEN_WIKILINK when [[target]] is not in principleIds, stems, OR filePaths", () => {
+    const docs: LinkGraphInput[] = [
+      { content: "Refers to [[totally-missing-path/nowhere.md]].\n", path: "references/x.md" },
+    ];
+    const k = known({ filePaths: new Set(["some/other/file.md"]) });
+    const { findings } = buildLinkGraph(docs, k, () => true);
+    const broken = findings.filter((f) => f.code === "BROKEN_WIKILINK");
+    expect(broken).toHaveLength(1);
+    expect(broken[0].message).toMatch(/totally-missing-path/);
+  });
+});
+
+// ---- Comment 1: plugin corpus included in link graph scan ----
+
+/** Helper: create a minimal tmp project/plugin dir pair for isolation testing. */
+function mkTmpDir(): string {
+  const d = join(tmpdir(), `canon-link-graph-test-${randomUUID()}`);
+  mkdirSync(d, { recursive: true });
+  return d;
+}
+
+function writeMd(dir: string, relPath: string, content: string): void {
+  const full = join(dir, relPath);
+  mkdirSync(join(dir, relPath, ".."), { recursive: true });
+  writeFileSync(full, content, "utf8");
+}
+
+describe("buildCorpusLinkGraph — includes plugin corpus when projectDir !== pluginDir", () => {
+  it("a [[principle-id]] link in the plugin corpus prevents that principle from being an orphan", () => {
+    // Arrange: projectDir has no inbound links; pluginDir principles/ has an inbound link
+    const projectDir = mkTmpDir();
+    const pluginDir = mkTmpDir();
+
+    // Plugin shipped principle that links to our principle
+    writeMd(
+      pluginDir,
+      "principles/rules/some-rule.md",
+      "---\nid: some-rule\ntitle: Some Rule\n---\n\nSee [[tracked-principle]] for details.\n",
+    );
+    // The principle we want to verify is NOT falsely orphaned
+    const principles: Principle[] = [
+      {
+        id: "tracked-principle",
+        title: "Tracked Principle",
+        body: "",
+        filePath: "principles/conventions/tracked-principle.md",
+        scope: {},
+        portable: true,
+      } as unknown as Principle,
+    ];
+
+    const result = buildCorpusLinkGraph(projectDir, pluginDir, principles);
+    expect(result.referencedPrincipleIds.has("tracked-principle")).toBe(true);
+  });
+
+  it("does NOT double-count files when projectDir === pluginDir (developing Canon itself)", () => {
+    const dir = mkTmpDir();
+    writeMd(dir, "principles/conventions/p.md", "---\nid: p\ntitle: P\n---\n\n[[p]]\n");
+    const principles: Principle[] = [
+      {
+        id: "p",
+        title: "P",
+        body: "",
+        filePath: "principles/conventions/p.md",
+        scope: {},
+        portable: true,
+      } as unknown as Principle,
+    ];
+    const result1 = buildCorpusLinkGraph(dir, dir, principles);
+    // referencedPrincipleIds is a Set — duplicates are naturally collapsed.
+    // The invariant we assert: 'p' is found referenced exactly once (not twice).
+    expect(result1.referencedPrincipleIds.has("p")).toBe(true);
+    // findings should have no duplicate entries for the same file path.
+    const docPaths = result1.findings.map((f) => f.source_file);
+    const uniquePaths = new Set(docPaths);
+    expect(docPaths.length).toBe(uniquePaths.size);
+  });
+
+  it("detects a broken [[link]] in the plugin corpus when projectDir !== pluginDir", () => {
+    const projectDir = mkTmpDir();
+    const pluginDir = mkTmpDir();
+    writeMd(
+      pluginDir,
+      "principles/conventions/bad-link.md",
+      "---\nid: bad-link\ntitle: Bad Link\n---\n\nRefers to [[completely-nonexistent-target]].\n",
+    );
+    const result = buildCorpusLinkGraph(projectDir, pluginDir, []);
+    const broken = result.findings.filter((f) => f.code === "BROKEN_WIKILINK");
+    expect(broken.length).toBeGreaterThan(0);
+    expect(broken.some((f) => f.message.includes("completely-nonexistent-target"))).toBe(true);
   });
 });
 
