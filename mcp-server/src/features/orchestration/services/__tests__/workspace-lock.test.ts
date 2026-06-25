@@ -280,3 +280,155 @@ describe("acquireLock — corrupt AND stale", () => {
     expect(outcome.reason).toBe("corrupt_and_stale");
   });
 });
+
+// ---------------------------------------------------------------------------
+// P1 #1 — Stale-lock reclaim must be exclusive (compare-and-acquire).
+//
+// Two concurrent reclaimers of the SAME stale lock must not both win. Only one
+// may return reclaimed; the loser must re-read and gate (it must NOT proceed as
+// if it co-owns the workspace). And a stale lock that is replaced by a FRESH
+// foreign lock between observe-and-reclaim must NOT be clobbered → gate.
+//
+// Concurrency is simulated deterministically via the `beforeReclaim` seam, which
+// fires once, after this caller has observed-and-judged the lock stale but before
+// it claims the reclaim — the exact TOCTOU window.
+// ---------------------------------------------------------------------------
+
+describe("acquireLock — exclusive stale reclaim (P1 #1)", () => {
+  /** Write a stale lock (started_at past TTL) directly to disk. */
+  function writeStaleLock(overrides: Partial<LockRecord> = {}): LockRecord {
+    const staleStarted = new Date(Date.now() - DEFAULT_LOCK_TTL_MS - 5000).toISOString();
+    const stale = makeLockRecord({
+      job_id: "old-job",
+      session_id: "old-session",
+      started_at: staleStarted,
+      ...overrides,
+    });
+    writeFileSync(join(tmpDir, ".lock"), JSON.stringify(stale), "utf-8");
+    return stale;
+  }
+
+  it("lets exactly ONE of two concurrent reclaimers win; the loser gates", () => {
+    writeStaleLock();
+
+    // Simulate the OTHER reclaimer winning the race during our TOCTOU window:
+    // it reclaims the same stale lock and writes its own FRESH lock first.
+    let raced = false;
+    const seams: LockSeams = {
+      now: () => Date.now(),
+      pid: () => process.pid,
+      beforeReclaim: () => {
+        if (raced) return;
+        raced = true;
+        const winner = acquireLock(tmpDir, { session_id: "winner", job_id: "job-w" });
+        expect(winner.kind).toBe("reclaimed"); // the other reclaimer wins cleanly
+      },
+    };
+
+    // This caller observed the stale lock, then (in the window) the winner reclaimed.
+    const loser = acquireLock(tmpDir, { session_id: "loser", job_id: "job-l" }, { seams });
+
+    // The loser must NOT have clobbered the winner's fresh lock.
+    expect(loser.kind).toBe("gated");
+
+    // On-disk lock belongs to the winner — the loser left it intact.
+    const onDisk = readLock(tmpDir);
+    expect(onDisk?.session_id).toBe("winner");
+  });
+
+  it("gates without clobbering when the stale lock was replaced by a FRESH foreign lock", () => {
+    writeStaleLock();
+
+    // During our window, a fresh foreign lock appears (e.g. another session
+    // reclaimed and is actively driving). We must detect the change and gate.
+    const seams: LockSeams = {
+      now: () => Date.now(),
+      pid: () => process.pid,
+      beforeReclaim: () => {
+        const fresh: LockRecord = makeLockRecord({
+          job_id: "fresh-job",
+          session_id: "fresh-session",
+          started_at: new Date().toISOString(),
+        });
+        writeFileSync(join(tmpDir, ".lock"), JSON.stringify(fresh), "utf-8");
+      },
+    };
+
+    const outcome = acquireLock(tmpDir, { session_id: "late", job_id: "job-late" }, { seams });
+
+    expect(outcome.kind).toBe("gated");
+    // The fresh foreign lock must survive untouched.
+    const onDisk = readLock(tmpDir);
+    expect(onDisk?.session_id).toBe("fresh-session");
+  });
+
+  it("a single session still reclaims an expired lock → acquired/reclaimed (no regression)", () => {
+    writeStaleLock();
+    const outcome = acquireLock(tmpDir, { session_id: "solo", job_id: "job-solo" });
+    expect(outcome.kind).toBe("reclaimed");
+    if (outcome.kind !== "reclaimed") return;
+    expect(outcome.record.session_id).toBe("solo");
+    // No stray reclaim-temp files left behind.
+    expect(existsSync(join(tmpDir, ".lock"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P1 #2 — Same-session re-entry requires a REAL caller-supplied session_id.
+//
+// A defaulted/omitted identity normalizes to "unknown"; "unknown" must never
+// satisfy the same-session predicate. Two callers both omitting session_id
+// against a live lock → the second must gate, not refresh-and-proceed.
+// ---------------------------------------------------------------------------
+
+describe("acquireLock — same-session re-entry identity (P1 #2)", () => {
+  it("gates a second caller that omits session_id against a live foreign lock", () => {
+    // First caller omits session_id → stored as "unknown".
+    const first = acquireLock(tmpDir, {}, { seams: realSeams });
+    expect(first.kind).toBe("acquired");
+
+    // Second caller also omits session_id. It must NOT be treated as the same
+    // session — "unknown" !== "unknown" for same-session purposes.
+    const second = acquireLock(tmpDir, {}, { seams: realSeams });
+    expect(second.kind).toBe("gated");
+  });
+
+  it("gates when the on-disk lock has a real id but the caller omits one", () => {
+    acquireLock(tmpDir, { session_id: "real-owner", job_id: "j" }, { seams: realSeams });
+    const outcome = acquireLock(tmpDir, {}, { seams: realSeams });
+    expect(outcome.kind).toBe("gated");
+  });
+
+  it("gates when the caller has a real id but the on-disk lock is unknown", () => {
+    acquireLock(tmpDir, {}, { seams: realSeams }); // on-disk session_id === "unknown"
+    const outcome = acquireLock(
+      tmpDir,
+      { session_id: "real-caller", job_id: "j" },
+      { seams: realSeams },
+    );
+    expect(outcome.kind).toBe("gated");
+  });
+
+  it("treats an empty-string session_id as non-real (gates)", () => {
+    acquireLock(tmpDir, { session_id: "", job_id: "j" }, { seams: realSeams });
+    const outcome = acquireLock(tmpDir, { session_id: "", job_id: "j2" }, { seams: realSeams });
+    expect(outcome.kind).toBe("gated");
+  });
+
+  it("refreshes-and-proceeds when the SAME real session_id re-acquires (no regression)", () => {
+    const owner = { session_id: "session-real", job_id: "job-1" };
+    const first = acquireLock(tmpDir, owner, { seams: realSeams });
+    expect(first.kind).toBe("acquired");
+
+    // Same real session re-acquires (e.g. init after preflight) → refresh, proceed.
+    const again = acquireLock(
+      tmpDir,
+      { session_id: "session-real", job_id: "job-2" },
+      { seams: realSeams },
+    );
+    expect(again.kind).toBe("acquired");
+    if (again.kind !== "acquired") return;
+    expect(again.record.session_id).toBe("session-real");
+    expect(again.record.job_id).toBe("job-2"); // refreshed with new job_id
+  });
+});

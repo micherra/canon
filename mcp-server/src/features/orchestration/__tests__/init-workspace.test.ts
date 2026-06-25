@@ -40,6 +40,10 @@ const baseInput = {
   base_commit: "abc123",
   branch: "main",
   flow_name: "fast-path",
+  // A real single-session id: the same session creating then resuming its own
+  // workspace must re-acquire its own mutex (same-session re-entry). Omitted ids
+  // no longer satisfy the same-session predicate (workspace-lock P1 #2).
+  session_id: "session-fixture",
   task: "fix the bug",
   tier: "small" as const,
 };

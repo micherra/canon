@@ -64,6 +64,13 @@ export type LockOutcome =
 export type LockSeams = {
   now?: () => number; // default: Date.now
   pid?: () => number; // default: process.pid
+  /**
+   * Test-only hook fired once inside the reclaim path, AFTER this caller has
+   * observed-and-judged the lock stale but BEFORE it claims the reclaim. Lets a
+   * test inject a concurrent reclaimer into the exact TOCTOU window. Never set
+   * in production.
+   */
+  beforeReclaim?: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -117,6 +124,114 @@ function writeLockAtomic(workspace: string, record: LockRecord): void {
   renameSync(tmp, target);
 }
 
+/**
+ * A real, caller-supplied session id is a non-empty string other than the
+ * `"unknown"` default that `buildRecord` substitutes for an omitted id.
+ *
+ * Same-session re-entry must require a real id on BOTH sides: a defaulted
+ * `"unknown"` must never equal another `"unknown"` (two distinct
+ * missed-parameter callers are NOT the same session). See ADR-0021 P1 #2.
+ */
+function isRealSessionId(sessionId: string | undefined): sessionId is string {
+  return typeof sessionId === "string" && sessionId !== "" && sessionId !== "unknown";
+}
+
+/** A reclaim that fell through to a re-read-and-gate (lost the race / lock changed). */
+const RECLAIM_GATED = Symbol("reclaim_gated");
+
+/**
+ * Exclusively reclaim a lock we have judged stale, keyed to the EXACT bytes we
+ * observed on disk (`observedRaw`). Compare-and-acquire — only one concurrent
+ * reclaimer of the same observed stale lock can win:
+ *
+ * 1. Move the current `.lock` aside to a per-caller-unique reclaim path. On
+ *    POSIX, the rename of the specific target is atomic: if another reclaimer
+ *    already moved/removed it, ours fails `ENOENT` → we lost → gate.
+ * 2. Verify the bytes we moved aside still match what we observed. If they
+ *    differ, a FRESH foreign lock was written between observe-and-reclaim — we
+ *    must not clobber it: restore it and gate.
+ * 3. Exclusively create a new `.lock` (`wx`) and write our record. Then remove
+ *    the moved-aside file.
+ *
+ * Returns the new `LockRecord` on success, or `RECLAIM_GATED` when this caller
+ * lost the race / the observed lock changed. Fail-safe (D7): any ambiguity or
+ * subsystem error during reclaim resolves to GATED, never a silent co-drive.
+ */
+function reclaimExclusive(
+  workspace: string,
+  observedRaw: string,
+  record: LockRecord,
+  seams: LockSeams,
+): LockRecord | typeof RECLAIM_GATED {
+  const target = lockPath(workspace);
+  const suffix = randomBytes(8).toString("hex");
+  const asidePath = `${target}.reclaiming.${process.pid}.${suffix}`;
+
+  // Test hook: simulate a concurrent reclaimer entering our TOCTOU window.
+  seams.beforeReclaim?.();
+
+  // Step 1 — claim the right to reclaim by moving the observed lock aside.
+  try {
+    renameSync(target, asidePath);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return RECLAIM_GATED; // another reclaimer already moved it — we lost
+    }
+    throw err; // genuinely unexpected FS error — propagate
+  }
+
+  // Step 2 — verify we moved aside the SAME bytes we observed. A mismatch means
+  // a fresh foreign lock landed between observe and our rename: restore + gate.
+  let asideRaw: string;
+  try {
+    asideRaw = readFileSync(asidePath, "utf-8");
+  } catch {
+    // Cannot read what we just moved — fail-safe: try to restore, then gate.
+    tryRestore(asidePath, target);
+    return RECLAIM_GATED;
+  }
+  if (asideRaw !== observedRaw) {
+    tryRestore(asidePath, target);
+    return RECLAIM_GATED;
+  }
+
+  // Step 3 — we own the reclaim. Exclusively create the new lock.
+  let fd: number;
+  try {
+    fd = openSync(target, "wx");
+  } catch {
+    // Someone re-created the lock between our move-aside and now — fail-safe:
+    // do not clobber it. Drop our aside copy and gate.
+    tryUnlink(asidePath);
+    return RECLAIM_GATED;
+  }
+  try {
+    writeFileSync(target, JSON.stringify(record), "utf-8");
+  } finally {
+    closeSync(fd);
+  }
+  tryUnlink(asidePath);
+  return record;
+}
+
+/** Best-effort restore of a moved-aside lock; swallows errors (fail-safe gate). */
+function tryRestore(asidePath: string, target: string): void {
+  try {
+    renameSync(asidePath, target);
+  } catch {
+    tryUnlink(asidePath);
+  }
+}
+
+/** Best-effort unlink; swallows errors. */
+function tryUnlink(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch {
+    /* already gone — ignore */
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
@@ -129,16 +244,7 @@ function writeLockAtomic(workspace: string, record: LockRecord): void {
 // canon:allow-unwired: diagnostic helper; referenced in tests only today, reserved for future lock-inspector tooling
 export function readLock(workspace: string): LockRecord | null {
   try {
-    const raw = readFileSync(lockPath(workspace), "utf-8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      typeof (parsed as Record<string, unknown>).session_id !== "string"
-    ) {
-      return null;
-    }
-    return parsed as LockRecord;
+    return parseLock(readFileSync(lockPath(workspace), "utf-8"));
   } catch {
     return null;
   }
@@ -203,20 +309,33 @@ function handleExisting(
   ctx: { nowMs: number; ttlMs: number; seams: LockSeams },
 ): LockOutcome {
   const { nowMs, ttlMs, seams } = ctx;
-  const existing = readLock(workspace);
 
-  if (existing === null) {
-    // Corrupt — check mtime to decide if we can safely reclaim
-    return handleCorrupt(workspace, owner, { nowMs, seams, ttlMs });
+  // Read the EXACT bytes once — the same bytes drive the staleness judgement and
+  // the compare-and-acquire reclaim (so reclaim is keyed to what we observed).
+  let observedRaw: string;
+  try {
+    observedRaw = readFileSync(lockPath(workspace), "utf-8");
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      // Lock vanished between the failed exclusive-create and this read — let
+      // the caller retry from the top by treating it as a gate (fail-safe).
+      return { kind: "gated", owner: buildFallbackOwner() };
+    }
+    throw err;
   }
 
-  // Same-session re-entry: if the new owner's session_id matches the existing lock's
-  // session_id, this is the same orchestrator re-acquiring (e.g. a resume after init,
-  // or an init after preflight). Refresh the lock with the new record.
-  // Note: when both are "unknown" (session_id omitted by caller) this same-session path
-  // fires — single-session flows work correctly without a HITL gate.
-  const newSessionId = owner.session_id ?? "unknown";
-  if (newSessionId === existing.session_id) {
+  const existing = parseLock(observedRaw);
+  if (existing === null) {
+    // Corrupt — check mtime to decide if we can safely reclaim
+    return handleCorrupt(workspace, owner, observedRaw, { nowMs, seams, ttlMs });
+  }
+
+  // Same-session re-entry: only when BOTH the caller and the on-disk lock carry a
+  // REAL (non-"unknown", non-empty) session id AND they match. A defaulted
+  // "unknown" must never satisfy this — two distinct missed-parameter callers are
+  // NOT the same session (ADR-0021 P1 #2). Same-session refresh is intentionally
+  // non-exclusive: a session racing only itself may clobber its own lock safely.
+  if (isRealSessionId(owner.session_id) && owner.session_id === existing.session_id) {
     const record = buildRecord(owner, seams);
     writeLockAtomic(workspace, record);
     return { kind: "acquired", record };
@@ -224,26 +343,77 @@ function handleExisting(
 
   // Valid record: check staleness (TTL primary)
   if (isStale(existing, nowMs, ttlMs)) {
-    const record = buildRecord(owner, seams);
-    writeLockAtomic(workspace, record);
-    return { kind: "reclaimed", previous: existing, reason: "ttl", record };
+    return reclaimWithReason({
+      observedRaw,
+      owner,
+      previous: existing,
+      reason: "ttl",
+      seams,
+      workspace,
+    });
   }
 
   // Valid record: check PID liveness (secondary — useful only for fully-dead daemon)
   if (isPidDead(existing.pid)) {
-    const record = buildRecord(owner, seams);
-    writeLockAtomic(workspace, record);
-    return { kind: "reclaimed", previous: existing, reason: "pid_dead", record };
+    return reclaimWithReason({
+      observedRaw,
+      owner,
+      previous: existing,
+      reason: "pid_dead",
+      seams,
+      workspace,
+    });
   }
 
   // Live foreign lock — HITL gate required
   return { kind: "gated", owner: existing };
 }
 
+/**
+ * Run an exclusive compare-and-acquire reclaim for a stale/dead-PID lock,
+ * mapping the outcome to a `LockOutcome`. A lost race / changed lock gates.
+ */
+function reclaimWithReason(args: {
+  workspace: string;
+  owner: { session_id?: string; job_id?: string };
+  observedRaw: string;
+  previous: LockRecord;
+  reason: "ttl" | "pid_dead";
+  seams: LockSeams;
+}): LockOutcome {
+  const { workspace, owner, observedRaw, previous, reason, seams } = args;
+  const record = buildRecord(owner, seams);
+  const result = reclaimExclusive(workspace, observedRaw, record, seams);
+  if (result === RECLAIM_GATED) {
+    // Lost the reclaim race (or the lock changed under us). Re-read so the gate
+    // surfaces the current owner rather than the stale one we observed.
+    return { kind: "gated", owner: readLock(workspace) ?? previous };
+  }
+  return { kind: "reclaimed", previous, reason, record };
+}
+
+/** Parse raw lock bytes into a LockRecord, or null when corrupt/invalid. */
+function parseLock(raw: string): LockRecord | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      typeof (parsed as Record<string, unknown>).session_id !== "string"
+    ) {
+      return null;
+    }
+    return parsed as LockRecord;
+  } catch {
+    return null;
+  }
+}
+
 /** Handle a corrupt (unparseable) lock file — fail-safe unless mtime is past TTL. */
 function handleCorrupt(
   workspace: string,
   owner: { session_id?: string; job_id?: string },
+  observedRaw: string,
   ctx: { nowMs: number; ttlMs: number; seams: LockSeams },
 ): LockOutcome {
   const { nowMs, ttlMs, seams } = ctx;
@@ -259,9 +429,13 @@ function handleCorrupt(
   }
 
   if (nowMs - mtimeMs > ttlMs) {
-    // Corrupt AND mtime is past TTL — safe to reclaim
+    // Corrupt AND mtime is past TTL — safe to reclaim, but exclusively: two
+    // concurrent reclaimers of the same corrupt lock must not both win.
     const record = buildRecord(owner, seams);
-    writeLockAtomic(workspace, record);
+    const result = reclaimExclusive(workspace, observedRaw, record, seams);
+    if (result === RECLAIM_GATED) {
+      return { kind: "gated", owner: readLock(workspace) ?? buildFallbackOwner() };
+    }
     // previous cannot be a LockRecord (it was corrupt) — synthesize a placeholder
     const previous: LockRecord = {
       job_id: "corrupt",
