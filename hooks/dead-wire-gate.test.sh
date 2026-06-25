@@ -2022,6 +2022,57 @@ function h(): void {
   rm -rf "$REPO"
 }
 
+# ===========================================================================
+# Intra-declaration self-reference tests (recursive-export bypass fix)
+#
+# T44–T45: Gate-level tests for the recursive-export false-WIRE bypass.
+#
+# When a newly-added export is ONLY referenced from inside its own declaration
+# body (e.g. a recursive function calling itself), the resolver must NOT count
+# that as an internal use.  A purely self-referential export with no external
+# caller must be DEAD.
+#
+# T44: purely recursive export → DEAD (exit 2)
+# T45: recursive export + genuine sibling call → WIRED (exit 0)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# T44: purely self-referential recursive export → DEAD (exit 2)
+#
+# `export function deadFn(){ return deadFn(); }` — the only occurrence of
+# deadFn inside the file is the recursive call inside its own body.
+# The resolver must skip intra-declaration references; count = 0 → DEAD.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T44: purely recursive export (self-call only) → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return deadFn(); }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T44: self-recursive export, no external caller → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T45: recursive export that IS also called from a sibling declaration → WIRED (exit 0)
+#
+# The recursive call inside deadFn's own body must not count, but a genuine
+# call from an outer sibling function DOES count → WIRED.  This guards
+# against over-correction (the fix must not suppress legitimate sibling uses).
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T45: recursive export + sibling caller → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return deadFn(); }
+function caller(): void { deadFn(); }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T45: self-recursive export + sibling caller → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

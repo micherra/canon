@@ -17,14 +17,20 @@
  *
  *   A genuine USE is an identifier whose resolved symbol (via
  *   `checker.getSymbolAtLocation`, with `getShorthandAssignmentValueSymbol`
- *   for shorthand-property contexts) equals the top-level export symbol.
+ *   for shorthand-property contexts) equals the top-level export symbol AND
+ *   whose position falls OUTSIDE the target symbol's own declaration node.
+ *   References lexically contained within the target declaration are excluded —
+ *   this closes the recursive-export false-WIRE bypass where a function calling
+ *   itself (or referencing itself in a default parameter) would otherwise register
+ *   as an internal use even with no external caller.
  *   This means:
  *     - `res.deadFn`  → NOT a use (resolves to property on `res`, not the export)
  *     - `res?.deadFn` → NOT a use (same — optional-chain property)
  *     - `a.b.deadFn`  → NOT a use (nested member property)
  *     - shadowing local `const deadFn = 2; return deadFn` → NOT a use (resolves to local)
  *     - shadowing param `function h(deadFn) { return deadFn }` → NOT a use (resolves to param)
- *     - `deadFn()`    → IS a use (resolves to the export)
+ *     - `function deadFn() { return deadFn(); }` → NOT a use (intra-declaration self-reference)
+ *     - `deadFn()`    → IS a use (resolves to the export, outside the declaration)
  *     - `deadFn.bind` → IS a use (deadFn as object, resolves to export)
  *     - `let x: DeadT`→ IS a use (type-reference, resolves to export)
  *     - `{ deadFn }`  → IS a use (shorthand reading the export binding)
@@ -215,6 +221,26 @@ async function main() {
     return;
   }
 
+  // Collect the declaration node(s) of targetSym so that intra-declaration
+  // self-references can be excluded from the use count.  A recursive call
+  // inside a function's own body, a default-parameter self-reference, or any
+  // other identifier that appears lexically inside the target's own declaration
+  // node is NOT an external use and must not increment the count.
+  const targetDeclNodes = targetSym.declarations ?? [];
+
+  // Returns true when `node` is lexically contained inside any of the target
+  // symbol's own declaration nodes (i.e., the reference is a self-reference).
+  // Uses parent-chain walk — O(depth) but depth is bounded by file nesting.
+  function isInsideTargetDeclaration(node) {
+    if (targetDeclNodes.length === 0) return false;
+    let current = node.parent;
+    while (current) {
+      if (targetDeclNodes.includes(current)) return true;
+      current = current.parent;
+    }
+    return false;
+  }
+
   // Walk every identifier in the file and count uses that resolve to targetSym
   let count = 0;
 
@@ -268,7 +294,7 @@ async function main() {
           resolved = s ? aliasRoot(s) : null;
         }
 
-        if (resolved && resolved === targetSym) {
+        if (resolved && resolved === targetSym && !isInsideTargetDeclaration(node)) {
           count++;
         }
       }
