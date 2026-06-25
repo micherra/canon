@@ -22,7 +22,7 @@ src/
 │   └── workspaces/       # Workspace and execution store (SQLite persistence)
 ├── features/             # Tool implementations grouped by bounded context
 │   ├── diagnostics/      # Drift reports, agent metrics, summary storage, wiki lint
-│   ├── evolution/        # evaluate_candidate MCP tool — §7 strict-holdout fitness gate, temp-dir candidate injection (ADR-0022)
+│   ├── evolution/        # evaluate_candidate (§7 holdout, ADR-0022) + attribute_failure attribution consumer (provenance⋈failure join, ADR-0023)
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
@@ -47,7 +47,7 @@ src/
 - **Archive storage** (`platform/storage/archive/`) — build-archive persistence (ADR-0006 relocation from `features/history/services/`): `archiveWorkspace`, `buildRunSummary`, pure extractors, shared archive types. See `src/platform/storage/archive/.claude/CLAUDE.md`.
 - **Orchestration tools** (`features/orchestration/`) — workspace lifecycle, artifact writing, agent skill resolution. See `src/features/orchestration/.claude/CLAUDE.md`.
 - **Diagnostics tools** (`features/diagnostics/`) — drift reports, wiki lint, signal compiler, area memory, doc freshness. See `src/features/diagnostics/.claude/CLAUDE.md`.
-- **Evolution tools** (`features/evolution/`) — `evaluate_candidate` fitness gate; temp-dir candidate injection, `run-evals.sh` per split, §7 holdout gate. See `src/features/evolution/.claude/CLAUDE.md`.
+- **Evolution tools** (`features/evolution/`) — `evaluate_candidate` fitness gate (§7 holdout, ADR-0022) + `attribute_failure` attribution consumer (provenance⋈failure join, content_hash byte-identity, ADR-0023). See `src/features/evolution/.claude/CLAUDE.md`.
 - **History tools + RecurringViolation types** → `src/features/history/.claude/CLAUDE.md`.
 - **History services** (`features/history/services/`) — cross-run analysis, craft drift, judge-weight, consolidate-policy. See `src/features/history/services/.claude/CLAUDE.md`.
 - **Loop tools** (`features/loops/`) — loop-definition schema, registry loader, list_loops/get_loop_definition. See `src/features/loops/.claude/CLAUDE.md`.
@@ -190,11 +190,12 @@ src/
 | `get_routine` | Retrieve a single routine by name; returns frontmatter + body; `INVALID_INPUT` when not found |
 | `sync_routines` | Sync routine state to `.canon/routines/`; returns drift summary |
 
-**Evolution tools** (`src/features/evolution/`): <!-- last-updated: 2026-06-24 -->
+**Evolution tools** (`src/features/evolution/`): <!-- last-updated: 2026-06-25 -->
 
 | Tool | Purpose |
 |------|---------|
 | `evaluate_candidate` | Inject candidate text into a temp-dir copy of the eval surface, run `run-evals.sh` per split, apply §7 strict-holdout gate; returns `EvaluateCandidateResult` (`baseline_score`, `candidate_score`, `per_split`, `accepted`, `regressed`, `size_delta`, `judge_votes_holdout`); fail-closed on subprocess error or timeout; registered via `register-evolution.ts` |
+| `attribute_failure` | Join recorded `context_provenance` events with review violations + cliff events to localize each failure to the in-context artifact; accepts `workspace` OR `archive_id` + `project_dir`; returns `AttributeFailureResult` with `attributions[]`, `unattributed[]`, `flagged[]`, `ambiguous[]`; content_hash byte-identity re-check (fail-closed); fail-open on absent provenance/reviews → partial result; `FailureKind = "review_violation" \| "cliff_event"` (ADR-0023) |
 
 ## Dependencies
 <!-- last-updated: 2026-06-24 -->
