@@ -53,7 +53,7 @@ describe("wiki_lint zod schema: WIKI_LINT_CHECK_NAMES parity", () => {
     expect(WIKI_LINT_CHECK_NAMES).toContain("duplicate_titles");
   });
 
-  it("WIKI_LINT_CHECK_NAMES includes all 11 CheckName values with no extras", async () => {
+  it("WIKI_LINT_CHECK_NAMES includes all 13 CheckName values with no extras", async () => {
     const { WIKI_LINT_CHECK_NAMES } = await import("../../../app/register-knowledge.ts");
 
     // Authoritative set derived from wiki-lint.ts CheckName union
@@ -61,7 +61,9 @@ describe("wiki_lint zod schema: WIKI_LINT_CHECK_NAMES parity", () => {
       "cited_paths",
       "contradictions",
       "duplicate_titles",
+      "frontmatter_schema",
       "glossary_consistency",
+      "link_integrity",
       "missing_examples",
       "misrouted_principles",
       "orphan_principles",

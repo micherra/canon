@@ -70,6 +70,10 @@ The optimization is scoped to the measured hot path, and the before/after benchm
 | "The user reported it's slow, so this code path must be the problem." | User reports identify symptoms, not causes. A user saying "the dashboard loads slowly" does not identify which of dozens of code paths is responsible. | Use the report as a starting point for profiling, not as a diagnosis. Trace the slow request from entry point to response. |
 | "I know this pattern is faster — I've seen it in performance guides." | General patterns apply in general contexts. The pattern may be irrelevant to this codebase's actual bottleneck, or already handled by the runtime. | Verify the pattern applies here with a benchmark. If the benchmark shows no improvement, revert and keep looking. |
 
+## Related
+
+[[simplicity-first]] is the natural precondition — prefer the simplest solution until measurement proves a faster one is needed. Optimizing without measuring violates both principles: it adds complexity without evidence that the complexity buys anything. [[no-hidden-side-effects]] is a structural guard — performance "improvements" that cache results or introduce shared mutable state create hidden side effects that are harder to debug than the original bottleneck.
+
 ## Verification
 
 - [ ] Every performance-motivated change has a corresponding before/after measurement (profile output, benchmark result, or timing log) committed alongside the code.

@@ -97,4 +97,4 @@ prior snapshot) is never a transition, not even for any-change or `to:`-matching
 |---------|---------|
 | **Workflow** | Intra-turn fan-out (parallel agents in one session); loops are inter-session periodic observation |
 | **Inc-6 canon-maintenance cron** | Standing/unattended/detached; loops are attended/self-terminating/session-local |
-| **Principles** | Loops mirror the principle artifact class exactly (markdown + YAML frontmatter, directory-as-registry, gray-matter, register-*.ts) |
+| **Principles** | Loops mirror the principle artifact class exactly (markdown + YAML frontmatter, directory-as-registry, splitFrontmatter seam, register-*.ts) |

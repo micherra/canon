@@ -76,7 +76,9 @@ stack.remove();
 
 Fluent/builder APIs intentionally return `this` to enable chaining (`builder.setName("x").setAge(5).build()`) — the return value is for API ergonomics, not for conveying information. Also, atomic operations like `compareAndSwap`, `getAndIncrement`, or `Map.computeIfAbsent` justifiably combine query and command for correctness in concurrent contexts.
 
-**Related:** `no-hidden-side-effects` is the broader principle — all side effects must be visible in the function's name or signature. CQS is a specific structural rule: don't mix mutation and return values in the same method. A function can satisfy CQS (returns void, clearly a command) but violate no-hidden-side-effects if its name doesn't reveal what it mutates.
+## Related
+
+[[no-hidden-side-effects]] is the broader principle — all side effects must be visible in the function's name or signature. CQS is a specific structural rule: don't mix mutation and return values in the same method. A function can satisfy CQS (returns void, clearly a command) but violate no-hidden-side-effects if its name doesn't reveal what it mutates.
 
 ## Anti-Rationalization
 

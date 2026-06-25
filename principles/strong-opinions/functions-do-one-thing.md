@@ -102,3 +102,8 @@ Pure data transformation pipelines (map/filter/reduce chains) can be longer with
 
 - [ ] No functions exceed 40 lines of logic (excluding blank lines and declarations) — check for functions with high line counts in domain and service files, treating this as a smell requiring inspection.
 - [ ] Function names do not use conjunctions suggesting multiple purposes — grep for function names containing `And`, `AndThen`, `AndSend`, `AndSave`, or similar compound verbs in domain and service layers.
+
+## Related
+
+- [[consistent-abstraction-levels]] — a function that mixes abstraction levels typically does so because it is doing more than one thing; the two principles diagnose the same failure mode from different angles.
+- [[simplicity-first]] — keeping functions to one responsibility is the simplest design choice; adding a second responsibility to an existing function is the most common form of incidental complexity.

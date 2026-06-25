@@ -11,9 +11,9 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { splitFrontmatter } from "@shared/lib/frontmatter.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
-import matter from "gray-matter";
 import { type LoopDefinition, parseLoopDefinition } from "../loop-schema.ts";
 
 export type GetLoopDefinitionInput = {
@@ -51,9 +51,9 @@ export async function getLoopDefinitionHandler(
     );
   }
 
-  let parsed: ReturnType<typeof matter>;
+  let parsed: ReturnType<typeof splitFrontmatter>;
   try {
-    parsed = matter(content);
+    parsed = splitFrontmatter(content);
   } catch (err) {
     return toolError(
       "INVALID_INPUT",
@@ -72,7 +72,7 @@ export async function getLoopDefinitionHandler(
   }
 
   return toolOk({
-    body: parsed.content.trim(),
+    body: parsed.body.trim(),
     definition: result.definition,
   });
 }

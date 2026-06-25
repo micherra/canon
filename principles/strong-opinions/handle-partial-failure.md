@@ -79,8 +79,6 @@ const userServiceBreaker = new CircuitBreaker(getUser, {
 
 Local function calls and in-process operations do not need distributed failure handling. Calls to co-located databases with well-understood, bounded latency may use simpler timeout strategies (though they still need timeouts). Startup initialization code that must connect to dependencies before serving traffic can use longer timeouts and fail-fast rather than degrade.
 
-**Related:** `prefer-async-between-services` reduces the need for this principle by converting synchronous calls to async events — but the synchronous calls that remain still need full partial-failure handling.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -95,3 +93,8 @@ Local function calls and in-process operations do not need distributed failure h
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[prefer-async-between-services]] — reduces the need for this principle by converting synchronous calls to async events; the synchronous calls that remain still need full partial-failure handling.
+- [[observable-best-effort]] — when a fallback or degraded response is returned on partial failure, the failure itself must be observable via a log or result field; silent degradation is a violation of the companion principle.

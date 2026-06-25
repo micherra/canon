@@ -96,3 +96,8 @@ Patterns are justified when they solve a real, present problem that language fea
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[simplicity-first]] — applies the same lens at the abstraction level: both principles guard against complexity added before its value is demonstrated, one targeting patterns and one targeting abstractions.
+- [[prefer-composition-over-inheritance]] — many classic patterns (Decorator, Template Method) exist to work around inheritance limitations; when composition is used natively, those patterns lose their justification.

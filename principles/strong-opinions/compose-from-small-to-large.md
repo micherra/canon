@@ -119,8 +119,6 @@ function SettingsPage() {
 
 Prototypes and one-off internal tools where speed outweighs reusability can be built top-down. Highly unique, page-specific layouts that genuinely won't repeat (a marketing landing page with a bespoke hero section) don't need to be decomposed into atoms. The principle applies most strongly to product UI where components recur across features.
 
-**Related:** `component-single-responsibility` ensures each composed piece has one job. `props-are-the-component-contract` ensures each piece has a minimal, stable API that makes composition frictionless. `design-tokens-as-style-contract` provides the visual consistency that makes small components look cohesive when composed together.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -135,3 +133,7 @@ Prototypes and one-off internal tools where speed outweighs reusability can be b
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[props-are-the-component-contract]] — each composed piece needs a minimal, stable props API to make composition frictionless. [[design-tokens-as-style-contract]] — shared design tokens provide the visual consistency that makes small components look cohesive when assembled into larger ones. `component-single-responsibility` ensures each composed piece has one job (not a tracked principle id — kept as prose).

@@ -15,7 +15,7 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import matter from "gray-matter";
+import { splitFrontmatter } from "@shared/lib/frontmatter.ts";
 import { type LoopDefinition, parseLoopDefinition } from "./loop-schema.ts";
 
 export type LoadLoopsResult = {
@@ -54,9 +54,9 @@ async function parseLoopFile(filePath: string): Promise<LoopFileResult> {
     };
   }
 
-  let parsed: ReturnType<typeof matter>;
+  let parsed: ReturnType<typeof splitFrontmatter>;
   try {
-    parsed = matter(content);
+    parsed = splitFrontmatter(content);
   } catch (err) {
     return {
       error: `failed to parse frontmatter: ${err instanceof Error ? err.message : String(err)}`,
@@ -67,7 +67,7 @@ async function parseLoopFile(filePath: string): Promise<LoopFileResult> {
 
   // Skip documentation files (CLAUDE.md, README.md) that lack an `id` field.
   // Only files with a non-empty string `id` in frontmatter are treated as loop definitions.
-  const rawId = (parsed.data as Record<string, unknown>).id;
+  const rawId = parsed.data.id;
   if (typeof rawId !== "string" || rawId.trim() === "") {
     return { skip: true };
   }
@@ -77,7 +77,7 @@ async function parseLoopFile(filePath: string): Promise<LoopFileResult> {
     return { error: result.error, file: filePath, ok: false };
   }
 
-  return { body: parsed.content.trim(), definition: result.definition, ok: true };
+  return { body: parsed.body.trim(), definition: result.definition, ok: true };
 }
 
 /**

@@ -90,3 +90,9 @@ Throwaway scripts, spikes, and proof-of-concept code where no reviewer trust is 
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[information-hiding]] — the grey-box seam IS information hiding applied: the interface is small and human-owned, the implementation body is hidden from the reviewer's trust calculus.
+- [[deep-modules]] — the grey-box model works precisely because the module is deep: a shallow module has no implementation worth delegating, and nothing meaningful to hide behind the test contract.
+- [[per-folder-public-interface]] — the single folder entry point is the structural enforcement of the grey-box boundary; the public interface file is the grey-box seam at the module-folder level.
