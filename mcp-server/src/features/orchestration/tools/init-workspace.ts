@@ -262,23 +262,45 @@ function resolveWorktreePath(
   if (existsSync(legacyPath)) return legacyPath;
   return newPath;
 }
+/**
+ * Build the resume result for an active session. Pure — no side effects.
+ * Resolves the worktree path and returns a complete InitWorkspaceResult.
+ *
+ * Separated from tryResumeWorkspace to reduce its cognitive complexity
+ * (ternary expressions for worktree_branch and worktree_path are extracted
+ * here so the caller stays under the noExcessiveCognitiveComplexity limit).
+ */
+function buildResumeResult(
+  ws: string,
+  projectDir: string,
+  session: Session,
+  board: Board,
+): InitWorkspaceResult {
+  const worktreePath = resolveWorktreePath(ws, projectDir, session);
+  const worktreeExists = existsSync(worktreePath);
+  return {
+    board,
+    created: false,
+    resume_state: board.current_state,
+    session,
+    slug: session.slug,
+    workspace: ws,
+    worktree_branch: worktreeExists
+      ? (session.worktree_branch ?? `canon/${session.slug}`)
+      : undefined,
+    worktree_path: worktreeExists ? worktreePath : undefined,
+  };
+}
 
 /**
  * Try to resume an existing workspace. Returns result if resume succeeds, null otherwise.
  *
  * Task-identity invariant: when `expectedTask` is provided, the stored session's task
- * must match exactly. If it does not match, returns `null` (no resume) — this prevents
- * a truncated slug collision from resuming the wrong workspace. The generateSlug function
- * truncates long task strings to 72 characters, which can produce identical slugs for
- * distinct tasks; the guard here is the defense-in-depth layer against that failure mode.
+ * must match exactly. Returns `null` on mismatch — prevents truncated slug collisions
+ * (generateSlug truncates at 72 chars; the guard here is the defense-in-depth layer).
  *
- * Lock invariant: acquires the workspace mutex before resuming. If a live foreign lock
- * exists, returns a gated result instead of resuming.
- *
- * @param candidateWorkspace - Absolute path to the candidate workspace directory
- * @param projectDir - Absolute path to the project root
- * @param expectedTask - When provided, resume is blocked if `session.task !== expectedTask`
- * @param lockOwner - Optional session_id/job_id to record in the workspace lock
+ * Lock invariant: acquires the workspace mutex before resuming. Returns a gated result
+ * when a live foreign lock exists (orchestrator MUST present the gated state to user).
  */
 function tryResumeWorkspace(
   candidateWorkspace: string,
@@ -292,24 +314,9 @@ function tryResumeWorkspace(
     const board = store.getBoard();
     const taskMatches = expectedTask === undefined || session?.task === expectedTask;
     if (session && session.status === "active" && board && taskMatches) {
-      // Acquire the mutex before resuming — lock guards the workspace, not the worktree.
       const gated = tryAcquireWorkspaceLock(candidateWorkspace, lockOwner ?? {}, session.slug);
       if (gated) return gated;
-
-      const worktreePath = resolveWorktreePath(candidateWorkspace, projectDir, session);
-      const worktreeExists = existsSync(worktreePath);
-      return {
-        board,
-        created: false,
-        resume_state: board.current_state,
-        session,
-        slug: session.slug,
-        workspace: candidateWorkspace,
-        worktree_branch: worktreeExists
-          ? (session.worktree_branch ?? `canon/${session.slug}`)
-          : undefined,
-        worktree_path: worktreeExists ? worktreePath : undefined,
-      };
+      return buildResumeResult(candidateWorkspace, projectDir, session, board);
     }
   } catch (err) {
     if (!isExpectedNoDbError(err)) throw err;

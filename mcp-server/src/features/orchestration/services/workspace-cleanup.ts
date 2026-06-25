@@ -10,6 +10,8 @@ import { generateId } from "@shared/lib/id.ts";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
 import type { JournalStep } from "../tools/orchestration-journal.ts";
 import { computeFlowOutcome } from "../tools/orchestration-journal.ts";
+import { tryWriteBuildTrendSummary } from "./build-trend-summary-writer.ts";
+import { tryWriteBuildDigest } from "./digest-writer.ts";
 
 /** Optional diff-size fields for a FlowRunEntry. Both absent = "could not measure". */
 export type DiffStatFields = {
@@ -270,4 +272,22 @@ export async function tryRunJanitor(projectDir: string): Promise<void> {
       err instanceof Error ? err.message : err,
     );
   }
+}
+
+/**
+ * Run completion side-effects after a workspace finalizes successfully.
+ * digest MUST run before archiveWorkspaceOnly — it reads workspace files that archive copies.
+ */
+export async function runCompletionSideEffects(
+  workspace: string,
+  steps: JournalStep[],
+  projectDir: string,
+) {
+  const digest_written = await tryWriteBuildDigest(workspace, projectDir);
+  const analytics_recorded = await tryAppendAnalytics(workspace, steps, projectDir);
+  const trend_summary_written = await tryWriteBuildTrendSummary(workspace, projectDir);
+  const claims_released = await tryReleaseClaims(workspace, projectDir);
+  await tryRemoveCliffLedger(workspace); // best-effort cleanup (loops-phase-c-03)
+  await tryRunJanitor(projectDir);
+  return { analytics_recorded, claims_released, digest_written, trend_summary_written };
 }

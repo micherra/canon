@@ -478,6 +478,35 @@ export type ConfidenceAdapter = {
   }) => ConfidenceAnnotation;
 };
 
+/**
+ * Write the review artifact pair(s) to disk.
+ * Always writes the canonical pair (REVIEW.md + REVIEW.meta.json).
+ * When step_id is provided, also writes a step-scoped pair so concurrent
+ * reviewer agents do not overwrite each other's output.
+ */
+async function writeReviewArtifacts(
+  reviewsDir: string,
+  markdown: string,
+  metaJson: string,
+  stepId: string | undefined,
+): Promise<{ reviewPath: string; metaPath: string }> {
+  await mkdir(reviewsDir, { recursive: true });
+  const reviewPath = join(reviewsDir, "REVIEW.md");
+  const metaPath = join(reviewsDir, "REVIEW.meta.json");
+
+  // Write the step-scoped pair first when step_id is provided.
+  if (stepId) {
+    const stepReviewPath = join(reviewsDir, `REVIEW-${stepId}.md`);
+    const stepMetaPath = join(reviewsDir, `REVIEW-${stepId}.meta.json`);
+    await atomicWritePair(stepReviewPath, markdown, stepMetaPath, metaJson);
+  }
+
+  // Always refresh the fixed canonical pair so the consolidator and renderer
+  // have a stable well-known read target.
+  await atomicWritePair(reviewPath, markdown, metaPath, metaJson);
+  return { metaPath, reviewPath };
+}
+
 export async function writeReview(
   input: WriteReviewInput,
   signals?: SignalWriter,
@@ -500,11 +529,6 @@ export async function writeReview(
 
   const mappedVerdict = VERDICT_MAP[input.verdict];
   const markdown = generateMarkdown(input, mappedVerdict);
-
-  await mkdir(reviewsDir, { recursive: true });
-  const reviewPath = join(reviewsDir, "REVIEW.md");
-  const metaPath = join(reviewsDir, "REVIEW.meta.json");
-
   const meta = {
     _type: "review" as const,
     _version: 1,
@@ -516,20 +540,12 @@ export async function writeReview(
     verdict_original: input.verdict,
     violations: input.violations,
   };
-  const metaJson = JSON.stringify(meta, null, 2);
-
-  // Write the step-scoped pair first when step_id is provided.
-  // Each reviewer writes to a unique path (REVIEW-{step_id}.md) so concurrent
-  // reviewer agents do not overwrite each other's output.
-  if (input.step_id) {
-    const stepReviewPath = join(reviewsDir, `REVIEW-${input.step_id}.md`);
-    const stepMetaPath = join(reviewsDir, `REVIEW-${input.step_id}.meta.json`);
-    await atomicWritePair(stepReviewPath, markdown, stepMetaPath, metaJson);
-  }
-
-  // Always refresh the fixed canonical pair (REVIEW.md + REVIEW.meta.json) so
-  // the consolidator and renderer have a stable well-known read target.
-  await atomicWritePair(reviewPath, markdown, metaPath, metaJson);
+  const { metaPath, reviewPath } = await writeReviewArtifacts(
+    reviewsDir,
+    markdown,
+    JSON.stringify(meta, null, 2),
+    input.step_id,
+  );
 
   // Exclude correctness-scan from analytics/signal paths only.
   // The human-facing REVIEW output (markdown + meta JSON) keeps the full list.

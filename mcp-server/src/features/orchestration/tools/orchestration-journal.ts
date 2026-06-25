@@ -29,20 +29,12 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import { releaseLock } from "../services/workspace-lock.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { scanArtifactList, scanArtifacts } from "../services/artifact-matching.ts";
-import { tryWriteBuildTrendSummary } from "../services/build-trend-summary-writer.ts";
-import { tryWriteBuildDigest } from "../services/digest-writer.ts";
-import {
-  archiveWorkspaceOnly,
-  tryAppendAnalytics,
-  tryReleaseClaims,
-  tryRemoveCliffLedger,
-  tryRunJanitor,
-} from "../services/workspace-cleanup.ts";
+import { archiveWorkspaceOnly, runCompletionSideEffects } from "../services/workspace-cleanup.ts";
+import { releaseLock } from "../services/workspace-lock.ts";
 import { captureTranscript } from "./capture-transcript.ts";
 
 export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
@@ -592,19 +584,35 @@ function getStepsMissingSkipReason(skipped: readonly JournalStep[]): string[] {
 }
 
 // Best-effort side effects on workspace completion: digest, analytics, trend summary, claims.
-// digest MUST run before archiveWorkspaceOnly — it reads workspace files that archive copies.
-async function runCompletionSideEffects(
-  workspace: string,
-  steps: JournalStep[],
-  projectDir: string,
-) {
-  const digest_written = await tryWriteBuildDigest(workspace, projectDir);
-  const analytics_recorded = await tryAppendAnalytics(workspace, steps, projectDir);
-  const trend_summary_written = await tryWriteBuildTrendSummary(workspace, projectDir);
-  const claims_released = await tryReleaseClaims(workspace, projectDir);
-  await tryRemoveCliffLedger(workspace); // best-effort cleanup (loops-phase-c-03)
-  await tryRunJanitor(projectDir);
-  return { analytics_recorded, claims_released, digest_written, trend_summary_written };
+async function analyzeJournalSteps(workspace: string, steps: JournalStep[], projectDir: string) {
+  const completed = steps.filter((s) => s.status === "completed");
+  const skipped = steps.filter((s) => s.status === "skipped");
+  const stepsMissing = steps
+    .filter((s) => s.status === "planned" || s.status === "started")
+    .map((s) => ({ status: s.status, step_id: s.step_id }));
+  const stepsSkipped = skipped.map((s) => s.step_id);
+  const stepsMissingSkipReason = getStepsMissingSkipReason(skipped);
+  const stepsGhost = steps.filter((s) => s.status === "planned").map((s) => s.step_id);
+  const artifacts = scanArtifacts(workspace, completed);
+  const complete =
+    stepsMissing.length === 0 &&
+    stepsMissingSkipReason.length === 0 &&
+    artifacts.missing.length === 0;
+  const sideEffects = complete
+    ? await runCompletionSideEffects(workspace, steps, projectDir)
+    : undefined;
+  const cleanup = complete ? await archiveWorkspaceOnly(workspace, projectDir) : undefined;
+  return {
+    artifacts,
+    cleanup,
+    complete,
+    completed,
+    sideEffects,
+    stepsGhost,
+    stepsMissing,
+    stepsMissingSkipReason,
+    stepsSkipped,
+  };
 }
 
 export async function finalizeWorkspace(
@@ -626,26 +634,17 @@ export async function finalizeWorkspace(
   }
 
   const { steps } = await readJournal(workspace);
-
-  const completed = steps.filter((s) => s.status === "completed");
-  const stepsMissing = steps
-    .filter((s) => s.status === "planned" || s.status === "started")
-    .map((s) => ({ status: s.status, step_id: s.step_id }));
-  const skipped = steps.filter((s) => s.status === "skipped");
-  const stepsSkipped = skipped.map((s) => s.step_id);
-  const stepsMissingSkipReason = getStepsMissingSkipReason(skipped);
-  const stepsGhost = steps.filter((s) => s.status === "planned").map((s) => s.step_id);
-
-  const artifacts = scanArtifacts(workspace, completed);
-  const complete =
-    stepsMissing.length === 0 &&
-    stepsMissingSkipReason.length === 0 &&
-    artifacts.missing.length === 0;
-
-  const sideEffects = complete
-    ? await runCompletionSideEffects(workspace, steps, projectDir)
-    : undefined;
-  const cleanup = complete ? await archiveWorkspaceOnly(workspace, projectDir) : undefined;
+  const {
+    artifacts,
+    cleanup,
+    complete,
+    completed,
+    sideEffects,
+    stepsGhost,
+    stepsMissing,
+    stepsMissingSkipReason,
+    stepsSkipped,
+  } = await analyzeJournalSteps(workspace, steps, projectDir);
 
   // Release the workspace mutex. Run regardless of `complete` so an incomplete
   // finalize (e.g. a cancelled build) still unlocks the workspace.
