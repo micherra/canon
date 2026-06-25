@@ -125,6 +125,26 @@ async function main() {
     },
   };
 
+  // Parse-diagnostic guard (fail-closed on malformed input):
+  // If the source file has syntactic parse errors, the compiler produces a
+  // partial/recovered AST in which a shadowing binding can mis-bind to the
+  // exported symbol, yielding a false use-count >= 1 (false-WIRE).
+  // Guard against this by checking sourceFile.parseDiagnostics — the
+  // syntactic parse-error list populated by the scanner/parser (NOT semantic
+  // diagnostics, which would false-DEAD valid files referencing lib types).
+  // A non-empty parseDiagnostics list → bail fail-closed (exit 1, DEAD).
+  const parseDiags = sourceFile.parseDiagnostics;
+  if (parseDiags && parseDiags.length > 0) {
+    const firstMsg =
+      typeof parseDiags[0]?.messageText === "string"
+        ? parseDiags[0].messageText
+        : parseDiags[0]?.messageText?.messageText ?? "(unknown)";
+    process.stderr.write(
+      `CANON ERROR [dead-wire-internal-use]: file '${filePath}' has ${parseDiags.length} syntactic parse error(s); cannot reliably resolve bindings. First error: ${firstMsg}\n`,
+    );
+    process.exit(1);
+  }
+
   const program = ts.createProgram([filePath], compilerOptions, customHost);
   const checker = program.getTypeChecker();
 

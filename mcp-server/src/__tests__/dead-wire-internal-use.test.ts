@@ -544,4 +544,47 @@ const obj = { deadFn };
     expect(code).toBe(0);
     expect(Number(stdout)).toBeGreaterThanOrEqual(1);
   });
+
+  // -------------------------------------------------------------------
+  // Parse-diagnostic guard: MALFORMED TypeScript → fail-closed (non-zero exit)
+  //
+  // When the target file has syntactic parse errors, the helper must bail
+  // fail-closed (exit non-zero, DEAD) rather than risk a false-WIRE from
+  // a partial/recovered AST in which shadowing can mis-bind to the export.
+  // -------------------------------------------------------------------
+  test("malformed TS (unbalanced parens around shadow) → non-zero exit, DEAD (parse-diagnostic guard)", async () => {
+    // Syntactically invalid: `function f(((` is malformed — unbalanced parens.
+    // In the recovered tree, the compiler may mis-bind the shadowing `const deadFn`
+    // to the exported symbol, producing a false use-count >= 1.
+    // The parse-diagnostic guard must catch this and exit non-zero before counting.
+    const file = writeFixture(
+      "malformed-parse.ts",
+      `export function deadFn(): void {}
+function f((( {
+  const deadFn = 9;
+  return deadFn;
+}
+`,
+    );
+    const { code, stderr } = await runHelper([file, "deadFn"]);
+    expect(code).not.toBe(0);
+    expect(stderr.length).toBeGreaterThan(0); // diagnostic emitted to stderr
+  });
+
+  // -------------------------------------------------------------------
+  // Parse-diagnostic guard regression: VALID TS with genuine same-file use
+  // must still WIRE (exit 0, count >= 1) after the guard is added.
+  // Proves the parse-diagnostic check does NOT trip on well-formed input.
+  // -------------------------------------------------------------------
+  test("valid TS with genuine same-file use → exit 0, count >= 1 (parse-guard regression)", async () => {
+    const file = writeFixture(
+      "valid-with-use.ts",
+      `export function deadFn(): void {}
+const result = deadFn();
+`,
+    );
+    const { code, stdout } = await runHelper([file, "deadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBeGreaterThanOrEqual(1);
+  });
 });
