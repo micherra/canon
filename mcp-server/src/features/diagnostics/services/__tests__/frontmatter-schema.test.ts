@@ -161,6 +161,126 @@ describe("classifyFmClass — directory-prefix resolution", () => {
     expect(classifyFmClass("principles/conventions/README.md")).toBeNull();
     expect(classifyFmClass("README.md")).toBeNull();
   });
+
+  // Dot-dir exclusion boundary: only `.canon/` is exempt; other dot-dirs return null.
+  it("dot-dir skip: principles/.claude/CLAUDE.md → null (tooling doc, not schema-bearing)", () => {
+    // `.claude` is a dot-dir other than `.canon` — must be skipped.
+    expect(classifyFmClass("principles/.claude/CLAUDE.md")).toBeNull();
+  });
+
+  it("dot-dir skip: .github/CODEOWNERS → null", () => {
+    expect(classifyFmClass(".github/CODEOWNERS")).toBeNull();
+  });
+
+  it("dot-dir pass: .canon/principles/conventions/internal.md → principle (exempt dot-dir)", () => {
+    // `.canon/` is explicitly exempted: `.canon/principles/` is a real principle tree.
+    expect(classifyFmClass(".canon/principles/conventions/internal.md")).toBe("principle");
+  });
+
+  it("ADR path without 4-digit prefix → null (classifyFmClass does not validate adr number)", () => {
+    // The path pattern requires `docs/adr/NNNN-*.md`; a non-numeric prefix does not match.
+    expect(classifyFmClass("docs/adr/some-decision.md")).toBeNull();
+  });
+});
+
+describe("checkFrontmatterSchema — per-class malformed fixtures", () => {
+  it("agent missing required 'name' field → SCHEMA_ERROR", () => {
+    const findings = checkFrontmatterSchema([
+      {
+        fm_class: "agent",
+        path: "agents/missing-name.md",
+        // Remove the 'name' key from an otherwise valid agent frontmatter.
+        rawFrontmatter: `description: An example agent.
+model: sonnet
+rules:
+  - some-rule
+`,
+      },
+    ]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].code).toBe("SCHEMA_ERROR");
+    expect(findings[0].message).toMatch(/name/);
+  });
+
+  it("template missing required 'template' field → SCHEMA_ERROR", () => {
+    const findings = checkFrontmatterSchema([
+      {
+        fm_class: "template",
+        path: "templates/missing-template.md",
+        rawFrontmatter: `description: A template without the template key.
+used-by:
+  - architect
+`,
+      },
+    ]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].code).toBe("SCHEMA_ERROR");
+    expect(findings[0].message).toMatch(/template/);
+  });
+
+  it("ADR with invalid status value → SCHEMA_ERROR", () => {
+    const findings = checkFrontmatterSchema([
+      {
+        fm_class: "adr",
+        path: "docs/adr/0099-bad-status.md",
+        rawFrontmatter: `adr: "0099"
+title: Bad Status ADR
+status: draft
+date: "2026-06-24"
+build: some-build
+`,
+      },
+    ]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].code).toBe("SCHEMA_ERROR");
+    expect(findings[0].message).toMatch(/status/);
+  });
+
+  it("principle with scope.layers as a scalar string → SCHEMA_ERROR (must be array)", () => {
+    // A common typo: `layers: hooks` instead of `layers: [hooks]`.
+    const findings = checkFrontmatterSchema([
+      {
+        fm_class: "principle",
+        path: "principles/conventions/scalar-layers.md",
+        rawFrontmatter: `id: scalar-layers-principle
+title: Scalar Layers
+severity: convention
+scope:
+  layers: hooks
+`,
+      },
+    ]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].code).toBe("SCHEMA_ERROR");
+    // Zod reports the path as scope.layers.
+    expect(findings[0].message).toMatch(/scope\.layers|layers/);
+  });
+
+  it("empty rawFrontmatter string (no fence in file) → no finding (skip, not error)", () => {
+    // The tool layer passes "" when the file has no frontmatter fence; the service
+    // must treat this as "skip" rather than "schema error for missing required fields".
+    const findings = checkFrontmatterSchema([
+      {
+        fm_class: "principle",
+        path: "principles/conventions/prose-template.md",
+        rawFrontmatter: "",
+      },
+    ]);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("whitespace-only rawFrontmatter → no finding (same skip rule as empty string)", () => {
+    // A fence that contains only whitespace parses to null → coalesced to {}.
+    // But .trim().length === 0 hits the early-return skip in checkOne — no finding.
+    const findings = checkFrontmatterSchema([
+      {
+        fm_class: "template",
+        path: "templates/whitespace-only.md",
+        rawFrontmatter: "   \n  \n",
+      },
+    ]);
+    expect(findings).toHaveLength(0);
+  });
 });
 
 // ---- Whole-corpus no-false-positive assertion (AC) ----
