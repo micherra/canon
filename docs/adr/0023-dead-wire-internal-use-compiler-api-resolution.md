@@ -1,12 +1,12 @@
 ---
-adr: "0022"
+adr: "0023"
 title: "Same-file dead-wire internal-use detection uses TypeScript compiler-API binding resolution, not regex or syntactic allowlists"
 status: accepted
 date: "2026-06-24"
 build: "rethink-the-dead-wire-gates-same-file-internal-use-detector-replace-the"
 ---
 
-# ADR-0022: Same-file dead-wire internal-use detection uses TypeScript compiler-API binding resolution, not regex or syntactic allowlists
+# ADR-0023: Same-file dead-wire internal-use detection uses TypeScript compiler-API binding resolution, not regex or syntactic allowlists
 
 ## Context
 

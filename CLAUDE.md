@@ -597,7 +597,7 @@ to `.canon/`. dc-06 holds: the `harness-watch` loop only surfaces the signal via
 `ORCHESTRATOR_ACTION: run-learner field=learner_due loop=harness-watch`; the orchestrator
 spawns the learner.
 
-## Project Structure <!-- last-updated: 2026-06-12 -->
+## Project Structure <!-- last-updated: 2026-06-24 -->
 
 ```
 canon/
@@ -619,6 +619,7 @@ canon/
 │       │   ├── file-context/    # get_file_context
 │       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase D current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes
+│       │   ├── evolution/       # evaluate_candidate fitness gate — §7 strict-holdout, temp-dir injection (ADR-0022)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
