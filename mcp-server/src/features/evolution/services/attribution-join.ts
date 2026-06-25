@@ -43,7 +43,7 @@ import type {
 // Public API
 // ---------------------------------------------------------------------------
 
-export type AttributeFailuresInput = {
+type AttributeFailuresInput = {
   provenance: ContextProvenanceSummary[];
   violations: ReviewViolation[];
   cliffEvents: CliffEventRow[];

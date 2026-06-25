@@ -30,7 +30,7 @@ import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 // Public API
 // ---------------------------------------------------------------------------
 
-export type ProvenanceSourceInput =
+type ProvenanceSourceInput =
   | { kind: "live"; workspace: string }
   | { kind: "archived"; archive_id: string; project_dir: string };
 

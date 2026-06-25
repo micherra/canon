@@ -31,8 +31,10 @@ export type { ReviewViolation };
 // Failure kind — discriminant on FailureAttribution
 // ---------------------------------------------------------------------------
 
+// canon:allow-unwired: part of mutator-facing AttributeFailureResult contract; consumed by deliverable 5 (the mutator), not yet built
 export const FAILURE_KINDS = ["review_violation", "cliff_event"] as const;
 // NOTE: test_failure deferred — no joinable key in current trace; re-add per ADR-0023 Revisit-If
+// canon:allow-unwired: part of mutator-facing AttributeFailureResult contract; consumed by deliverable 5 (the mutator), not yet built
 export type FailureKind = (typeof FAILURE_KINDS)[number];
 
 // ---------------------------------------------------------------------------
@@ -41,6 +43,7 @@ export type FailureKind = (typeof FAILURE_KINDS)[number];
 
 export type AttributionConfidence = "high" | "medium" | "low";
 export type HashStatus = "verified" | "mismatch" | "artifact_missing";
+// canon:allow-unwired: part of mutator-facing AttributeFailureResult contract; consumed by deliverable 5 (the mutator), not yet built
 export type ApplicationDisposition = "applied" | "ignored" | "indeterminate";
 
 // ---------------------------------------------------------------------------

@@ -51,7 +51,7 @@ export const AttributeFailureInputSchema = z.object({
     ),
 });
 
-export type AttributeFailureInput = z.input<typeof AttributeFailureInputSchema>;
+type AttributeFailureInput = z.input<typeof AttributeFailureInputSchema>;
 
 // ---------------------------------------------------------------------------
 // Handler

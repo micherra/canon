@@ -28,7 +28,7 @@ import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 // Public API
 // ---------------------------------------------------------------------------
 
-export type FailureSources = {
+type FailureSources = {
   violations: ReviewViolation[];
   cliffEvents: CliffEventRow[];
 };
