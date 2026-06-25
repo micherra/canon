@@ -44,7 +44,13 @@ export function readProvenance(input: ProvenanceSourceInput): ContextProvenanceS
       return readLiveProvenance(input.workspace);
     }
     return readArchivedProvenance(input.archive_id, input.project_dir);
-  } catch {
+  } catch (err: unknown) {
+    const src =
+      input.kind === "live" ? `workspace=${input.workspace}` : `archive_id=${input.archive_id}`;
+    console.warn(
+      `[attribution] readProvenance failed for ${src}:`,
+      err instanceof Error ? err.message : err,
+    );
     return [];
   }
 }
@@ -77,7 +83,11 @@ function readLiveProvenance(workspace: string): ContextProvenanceSummary[] {
     }
 
     return provEvents.map((ev) => mapProvenanceEvent(ev, agentByStep));
-  } catch {
+  } catch (err: unknown) {
+    console.warn(
+      `[attribution] readLiveProvenance failed for workspace=${workspace}:`,
+      err instanceof Error ? err.message : err,
+    );
     return [];
   }
 }
@@ -133,7 +143,11 @@ function readArchivedProvenance(archiveId: string, projectDir: string): ContextP
     const cp = (parsed as { context_provenance?: unknown }).context_provenance;
     if (!Array.isArray(cp)) return [];
     return cp as ContextProvenanceSummary[];
-  } catch {
+  } catch (err: unknown) {
+    console.warn(
+      `[attribution] readArchivedProvenance failed for archive_id=${archiveId}:`,
+      err instanceof Error ? err.message : err,
+    );
     return [];
   }
 }

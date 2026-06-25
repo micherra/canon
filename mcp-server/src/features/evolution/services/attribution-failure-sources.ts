@@ -12,7 +12,8 @@
  * Never throws.
  *
  * Canon principles:
- *   - observable-best-effort: absent REVIEW.md or cliff events → [] (not error)
+ *   - observable-best-effort: absent REVIEW.md or cliff events → [] (not error);
+ *     genuine read faults emit console.warn so they're distinguishable from clean absence
  *   - errors-are-values: errors in one source do not block the other
  *   - bounded-context-boundaries: imports from platform (archive, drift) not from features
  */
@@ -52,30 +53,40 @@ export function collectFailureSources(workspace: string, projectDir: string): Fa
 /** Collect review violations from all *.md files in reviews/ directory. */
 function collectReviewViolations(workspace: string): ReviewViolation[] {
   const reviewsDir = join(workspace, "reviews");
-  if (!existsSync(reviewsDir)) return [];
+  if (!existsSync(reviewsDir)) return []; // legitimate absence — not an error
 
-  const violations: ReviewViolation[] = [];
   let entries: string[];
   try {
     entries = readdirSync(reviewsDir);
-  } catch {
+  } catch (err: unknown) {
+    console.warn(
+      `[attribution] collectReviewViolations: failed to list reviews dir ${reviewsDir}:`,
+      err instanceof Error ? err.message : err,
+    );
     return [];
   }
 
+  const violations: ReviewViolation[] = [];
   for (const entry of entries) {
     if (!entry.endsWith(".md")) continue;
-    try {
-      const content = readFileSync(join(reviewsDir, entry), "utf-8");
-      const result = parseReviewFile(content);
-      if (result !== null) {
-        violations.push(...result.violations);
-      }
-    } catch {
-      // Fail-open: skip unreadable review files
-    }
+    violations.push(...parseOneReviewFile(join(reviewsDir, entry)));
   }
-
   return violations;
+}
+
+/** Parse violations from a single review file. Fail-open: returns [] on any read/parse error. */
+function parseOneReviewFile(filePath: string): ReviewViolation[] {
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    const result = parseReviewFile(content);
+    return result !== null ? result.violations : [];
+  } catch (err: unknown) {
+    console.warn(
+      `[attribution] collectReviewViolations: failed to read/parse ${filePath}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
 }
 
 /**
@@ -87,7 +98,11 @@ function collectCliffEvents(workspace: string, projectDir: string): CliffEventRo
     const slug = basename(workspace);
     const db = getDriftDb(projectDir);
     return db.getCliffEvents().getByWorkspace(slug);
-  } catch {
+  } catch (err: unknown) {
+    console.warn(
+      `[attribution] collectCliffEvents: failed to read cliff events for workspace=${basename(workspace)} project_dir=${projectDir}:`,
+      err instanceof Error ? err.message : err,
+    );
     return [];
   }
 }
