@@ -16,14 +16,14 @@ import { runShell } from "@platform/adapters/process-adapter.ts";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
 
 /** Explicit timeout for eval runs — 10 minutes. The default 30s is too short. */
-export const EVAL_TIMEOUT_MS = 600_000;
+const EVAL_TIMEOUT_MS = 600_000;
 
 /** Summary regex — captures Total, Passed, Failed counts from run-evals.sh output. */
 const SUMMARY_RE =
   /Total:\s*(\d+)\s*\|\s*Passed:\s*(\d+)\s*\|\s*Failed:\s*(\d+)\s*\|\s*Errors:\s*\d+\s*\|\s*Skipped:\s*\d+/g;
 
 /** Per-split scoring record. */
-export type SplitScore = {
+type SplitScore = {
   baseline_passed: number;
   candidate_passed: number;
   total: number;
@@ -37,7 +37,7 @@ export type PerSplit = {
 };
 
 /** Options for runSplit. */
-export type RunSplitOpts = {
+type RunSplitOpts = {
   /** Number of judge votes. Default 1. Holdout gate should use 3. */
   judgeVotes?: number;
   /** Whether to pass --dry-run (skips real LLM calls). */
