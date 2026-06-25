@@ -432,3 +432,91 @@ describe("acquireLock — same-session re-entry identity (P1 #2)", () => {
     expect(again.record.job_id).toBe("job-2"); // refreshed with new job_id
   });
 });
+
+// ---------------------------------------------------------------------------
+// P1 #1 (residual) — gap-free reclaim re-verifies and never clobbers a fresh lock.
+//
+// The reclaim is token-serialized + atomic-replace (no move-aside / restore). If a
+// fresh foreign lock appears during the reclaim window, the under-token re-verify
+// must observe the change and gate WITHOUT clobbering it. (The earlier move-aside
+// scheme had a restore path that could clobber a third acquirer; that path no
+// longer exists, so this asserts the replacement's non-clobber guarantee.)
+// ---------------------------------------------------------------------------
+
+describe("acquireLock — gap-free reclaim re-verify (P1 #1 residual)", () => {
+  it("gates and preserves a fresh foreign lock that lands during the reclaim window", () => {
+    const lockFile = join(tmpDir, ".lock");
+    // Stale lock the reclaimer observes and judges reclaimable.
+    const staleStarted = new Date(Date.now() - DEFAULT_LOCK_TTL_MS - 5000).toISOString();
+    writeFileSync(
+      lockFile,
+      JSON.stringify(makeLockRecord({ session_id: "old", started_at: staleStarted })),
+      "utf-8",
+    );
+
+    const seams: LockSeams = {
+      now: () => Date.now(),
+      pid: () => process.pid,
+      // A fresh foreign lock lands after we observed stale, before we take the
+      // token. The under-token re-verify must see it and gate, not clobber.
+      beforeReclaim: () => {
+        writeFileSync(
+          lockFile,
+          JSON.stringify(
+            makeLockRecord({ session_id: "racer-c", started_at: new Date().toISOString() }),
+          ),
+          "utf-8",
+        );
+      },
+    };
+
+    const outcome = acquireLock(tmpDir, { session_id: "A", job_id: "job-a" }, { seams });
+
+    expect(outcome.kind).toBe("gated");
+    // The fresh foreign lock must survive untouched.
+    expect(readLock(tmpDir)?.session_id).toBe("racer-c");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P1 #1 (residual) — orphaned reclaim tokens are swept; live ones survive.
+//
+// A reclaimer that crashes holding the reclaim token orphans a `.lock.reclaiming`
+// file (or a legacy `.lock.reclaiming.<pid>.<rand>` sidecar). Reclaim entry sweeps
+// such orphans (dead-PID or aged-out) but must NOT remove a live concurrent
+// reclaimer's in-flight token.
+// ---------------------------------------------------------------------------
+
+describe("acquireLock — stale reclaim-token sweep (P1 #1 residual)", () => {
+  it("removes a dead-PID orphan sidecar but leaves a live, fresh one", () => {
+    const lockFile = join(tmpDir, ".lock");
+    // Stale lock so acquireLock enters the reclaim path (which runs the sweep).
+    const staleStarted = new Date(Date.now() - DEFAULT_LOCK_TTL_MS - 5000).toISOString();
+    writeFileSync(
+      lockFile,
+      JSON.stringify(makeLockRecord({ session_id: "old", started_at: staleStarted })),
+      "utf-8",
+    );
+
+    // Orphan: owner PID is provably dead → must be swept regardless of age.
+    const deadSidecar = `${lockFile}.reclaiming.999999999.deadbeef`;
+    writeFileSync(deadSidecar, "orphan", "utf-8");
+    // Live: owner PID is this (alive) process, just created → must survive.
+    const liveSidecar = `${lockFile}.reclaiming.${process.pid}.cafef00d`;
+    writeFileSync(liveSidecar, "in-flight", "utf-8");
+
+    const outcome = acquireLock(
+      tmpDir,
+      { session_id: "new", job_id: "job-new" },
+      { seams: realSeams },
+    );
+
+    expect(outcome.kind).toBe("reclaimed"); // reclaim still succeeds
+    expect(existsSync(deadSidecar)).toBe(false); // dead-PID orphan swept
+    expect(existsSync(liveSidecar)).toBe(true); // live in-flight sidecar untouched
+  });
+});
+
+// Real-FS, multi-process concurrent-reclaim exclusivity lives in the sibling
+// workspace-lock-concurrency.test.ts (spawns OS processes — kept separate from
+// these seam-driven single-process unit tests).

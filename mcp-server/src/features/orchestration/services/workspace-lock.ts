@@ -21,13 +21,15 @@ import { randomBytes } from "node:crypto";
 import {
   closeSync,
   openSync,
+  readdirSync,
   readFileSync,
   renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -66,9 +68,9 @@ export type LockSeams = {
   pid?: () => number; // default: process.pid
   /**
    * Test-only hook fired once inside the reclaim path, AFTER this caller has
-   * observed-and-judged the lock stale but BEFORE it claims the reclaim. Lets a
-   * test inject a concurrent reclaimer into the exact TOCTOU window. Never set
-   * in production.
+   * observed-and-judged the lock stale but BEFORE it takes the reclaim token.
+   * Lets a test inject a concurrent actor (another reclaimer winning, or a fresh
+   * foreign lock landing) into the reclaim window. Never set in production.
    */
   beforeReclaim?: () => void;
 };
@@ -81,6 +83,17 @@ export type LockSeams = {
  * Q3 decision: TTL-primary staleness; PID-secondary. */
 // canon:allow-unwired: test-only constant for seam injection; not imported by production code
 export const DEFAULT_LOCK_TTL_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Orphan-sweep threshold for `.lock.reclaiming.*` sidecars. A reclaim's
+ * move-aside→wx window is microseconds (fully synchronous), so any sidecar older
+ * than this is a crashed reclaimer's orphan, never a live in-flight one. Kept far
+ * below `DEFAULT_LOCK_TTL_MS` so orphans cannot accumulate for hours, and far
+ * above any real reclaim duration so a concurrent reclaimer's sidecar is never
+ * swept. Under the shared daemon all reclaimers share one PID, so age (not
+ * dead-PID) is the primary criterion here.
+ */
+const RECLAIMING_SIDECAR_TTL_MS = 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -141,21 +154,25 @@ const RECLAIM_GATED = Symbol("reclaim_gated");
 
 /**
  * Exclusively reclaim a lock we have judged stale, keyed to the EXACT bytes we
- * observed on disk (`observedRaw`). Compare-and-acquire — only one concurrent
- * reclaimer of the same observed stale lock can win:
+ * observed on disk (`observedRaw`). Token-serialized, gap-free compare-and-swap —
+ * only one reclaimer can replace the lock and a concurrent fresh acquirer can
+ * never slip into a gap and co-drive:
  *
- * 1. Move the current `.lock` aside to a per-caller-unique reclaim path. On
- *    POSIX, the rename of the specific target is atomic: if another reclaimer
- *    already moved/removed it, ours fails `ENOENT` → we lost → gate.
- * 2. Verify the bytes we moved aside still match what we observed. If they
- *    differ, a FRESH foreign lock was written between observe-and-reclaim — we
- *    must not clobber it: restore it and gate.
- * 3. Exclusively create a new `.lock` (`wx`) and write our record. Then remove
- *    the moved-aside file.
+ * 1. Win the exclusive reclaim token (`.lock.reclaiming`, `wx`). Concurrent
+ *    reclaimers fail `EEXIST` and gate — exactly one reclaims at a time.
+ * 2. Under the token, RE-VERIFY `target` still equals the bytes we observed. If
+ *    it changed (an earlier reclaimer already installed a fresh lock, or it was
+ *    released) → gate without clobbering the fresh lock.
+ * 3. Install atomically with `rename(tmp → target)`. `rename` replaces in one
+ *    step — `target` is never absent, so no fresh `wx` acquirer can win a gap.
  *
  * Returns the new `LockRecord` on success, or `RECLAIM_GATED` when this caller
- * lost the race / the observed lock changed. Fail-safe (D7): any ambiguity or
- * subsystem error during reclaim resolves to GATED, never a silent co-drive.
+ * lost the token race / the observed lock changed. Fail-safe (D7): any ambiguity
+ * or subsystem error during reclaim resolves to GATED, never a silent co-drive.
+ *
+ * This replaces an earlier move-aside+restore scheme whose transient
+ * target-absent window let a concurrent fresh acquirer co-drive (it could win the
+ * empty slot while a reclaimer that had already installed its lock was displaced).
  */
 function reclaimExclusive(
   workspace: string,
@@ -164,62 +181,93 @@ function reclaimExclusive(
   seams: LockSeams,
 ): LockRecord | typeof RECLAIM_GATED {
   const target = lockPath(workspace);
-  const suffix = randomBytes(8).toString("hex");
-  const asidePath = `${target}.reclaiming.${process.pid}.${suffix}`;
+  const tokenPath = `${target}.reclaiming`;
 
-  // Test hook: simulate a concurrent reclaimer entering our TOCTOU window.
+  // Bounded cleanup: remove orphaned reclaim tokens left by crashed reclaimers so
+  // they cannot wedge future reclaims unboundedly. Keyed on dead-PID/age — never
+  // removes a live concurrent reclaimer's in-flight token.
+  sweepStaleReclaimSidecars(workspace, seams);
+
+  // Test hook: simulate a concurrent actor acting before we take the token.
   seams.beforeReclaim?.();
 
-  // Step 1 — claim the right to reclaim by moving the observed lock aside.
+  // Step 1 — win the exclusive right to reclaim. Only one reclaimer holds the
+  // token; the rest gate (fail-safe — never two reclaimers replacing at once).
+  let tokenFd: number;
   try {
-    renameSync(target, asidePath);
+    tokenFd = openSync(tokenPath, "wx");
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return RECLAIM_GATED; // another reclaimer already moved it — we lost
-    }
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") return RECLAIM_GATED;
     throw err; // genuinely unexpected FS error — propagate
   }
 
-  // Step 2 — verify we moved aside the SAME bytes we observed. A mismatch means
-  // a fresh foreign lock landed between observe and our rename: restore + gate.
-  let asideRaw: string;
   try {
-    asideRaw = readFileSync(asidePath, "utf-8");
-  } catch {
-    // Cannot read what we just moved — fail-safe: try to restore, then gate.
-    tryRestore(asidePath, target);
-    return RECLAIM_GATED;
-  }
-  if (asideRaw !== observedRaw) {
-    tryRestore(asidePath, target);
-    return RECLAIM_GATED;
-  }
+    // Step 2 — re-verify UNDER the token. If the lock is no longer the exact
+    // stale bytes we observed (e.g. an earlier reclaimer already installed a
+    // fresh one, or it vanished), do NOT clobber — gate. Any read error → gate.
+    let current: string | null;
+    try {
+      current = readFileSync(target, "utf-8");
+    } catch {
+      current = null;
+    }
+    if (current !== observedRaw) return RECLAIM_GATED;
 
-  // Step 3 — we own the reclaim. Exclusively create the new lock.
-  let fd: number;
-  try {
-    fd = openSync(target, "wx");
-  } catch {
-    // Someone re-created the lock between our move-aside and now — fail-safe:
-    // do not clobber it. Drop our aside copy and gate.
-    tryUnlink(asidePath);
-    return RECLAIM_GATED;
-  }
-  try {
-    writeFileSync(target, JSON.stringify(record), "utf-8");
+    // Step 3 — install atomically. Write a temp then rename OVER target: rename
+    // is atomic and leaves no window where target is absent, so a fresh acquirer
+    // can never win a gap. We verified target is still the observed stale lock,
+    // so this replace does not clobber a fresh foreign lock.
+    const suffix = randomBytes(8).toString("hex");
+    const tmp = `${target}.tmp.${process.pid}.${suffix}`;
+    writeFileSync(tmp, JSON.stringify(record), "utf-8");
+    try {
+      renameSync(tmp, target);
+    } catch (err) {
+      tryUnlink(tmp);
+      throw err;
+    }
+    return record;
   } finally {
-    closeSync(fd);
+    closeSync(tokenFd);
+    tryUnlink(tokenPath); // release the reclaim token
   }
-  tryUnlink(asidePath);
-  return record;
 }
 
-/** Best-effort restore of a moved-aside lock; swallows errors (fail-safe gate). */
-function tryRestore(asidePath: string, target: string): void {
+/**
+ * Sweep orphaned `.lock.reclaiming*` tokens left by reclaimers that crashed while
+ * holding the reclaim token. An orphan is identified by a dead owner PID (when the
+ * name carries one) or an age beyond `RECLAIMING_SIDECAR_TTL_MS`; a live, recent
+ * token (a concurrent reclaimer's in-flight file) is left untouched. Best-effort
+ * and fail-open — any error aborts the sweep silently (cleanup, never correctness).
+ */
+function sweepStaleReclaimSidecars(workspace: string, seams: LockSeams): void {
+  const nowMs = seams.now?.() ?? Date.now();
+  const prefix = `${basename(lockPath(workspace))}.reclaiming`; // ".lock.reclaiming"
+  let entries: string[];
   try {
-    renameSync(asidePath, target);
+    entries = readdirSync(workspace);
   } catch {
-    tryUnlink(asidePath);
+    return; // cannot list — nothing to sweep
+  }
+  for (const name of entries) {
+    if (!name.startsWith(prefix)) continue;
+    const full = join(workspace, name);
+    if (isOrphanedSidecar(full, name, prefix, nowMs)) tryUnlink(full);
+  }
+}
+
+/** True when a `.lock.reclaiming*` token is a crashed orphan (dead PID or aged out). */
+function isOrphanedSidecar(fullPath: string, name: string, prefix: string, nowMs: number): boolean {
+  // Names may be the bare token ("<prefix>") or carry an owner PID
+  // ("<prefix>.<pid>.<rand>"). Parse the PID segment when present.
+  const rest = name.slice(prefix.length).replace(/^\./, "");
+  const ownerPid = Number.parseInt(rest.split(".")[0] ?? "", 10);
+  if (Number.isInteger(ownerPid) && ownerPid > 0 && isPidDead(ownerPid)) return true;
+  // Age fallback (primary under the shared daemon, where all PIDs are alive).
+  try {
+    return nowMs - statSync(fullPath).mtimeMs > RECLAIMING_SIDECAR_TTL_MS;
+  } catch {
+    return false; // cannot stat — leave it (fail-open)
   }
 }
 
@@ -292,10 +340,11 @@ export function acquireLock(
     return handleExisting(workspace, owner, { nowMs, seams, ttlMs });
   }
 
-  // We hold the exclusive fd. Write our record then close.
+  // We hold the exclusive fd. Write through it (not by re-opening the path) so a
+  // concurrent rename of `path` cannot redirect our write to another inode.
   const record = buildRecord(owner, seams);
   try {
-    writeFileSync(path, JSON.stringify(record), "utf-8");
+    writeSync(fd, JSON.stringify(record));
   } finally {
     closeSync(fd);
   }
