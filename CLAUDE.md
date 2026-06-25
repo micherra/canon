@@ -481,7 +481,7 @@ Before any agent mutates a shared workspace artifact (journal, board, checkpoint
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
 
-**Spawn pattern**: Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`.
+**Spawn pattern**: Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`. Agent `name` MUST be session-unique: use `{agent-type}-{step_id}-{job_suffix}` where `job_suffix` is the first 8 chars of `basename($CLAUDE_JOB_DIR)` (read from the orchestrator's env) — e.g. `reviewer-review-72f2b372` not `reviewer-1`. `SendMessage` routes by bare agent name, so two concurrent sessions both spawning `reviewer-1` cross each other's mailboxes (D5 / watch_OOOOOOOOOO2).
 
 **Exceptions (no worktree needed):**
 - Agents writing exclusively to `.canon/` (gitignored). Currently: learner.
