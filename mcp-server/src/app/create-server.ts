@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { installFuzzyValidation } from "@shared/lib/fuzzy-field-validation.ts";
 import { registerArtifactTools } from "./register-artifacts.ts";
+import { registerEvolutionTools } from "./register-evolution.ts";
 import { registerKnowledgeTools } from "./register-knowledge.ts";
 import { registerLoopTools } from "./register-loops.ts";
 import { registerOrchestrationTools } from "./register-orchestration.ts";
@@ -30,13 +31,14 @@ export function createCanonServer(): McpServer {
   // Patch validation to detect unknown fields with fuzzy "did you mean?" suggestions.
   installFuzzyValidation(server);
 
-  // Register all tool groups — 6 groups (loops + routines added).
+  // Register all tool groups — 7 groups (evolution added).
   registerOrchestrationTools(server);
   registerKnowledgeTools(server);
   registerArtifactTools(server);
   registerPrincipleTools(server);
   registerLoopTools(server);
   registerRoutineTools(server);
+  registerEvolutionTools(server);
 
   return server;
 }
