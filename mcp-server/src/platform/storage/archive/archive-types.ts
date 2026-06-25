@@ -12,6 +12,11 @@
  *   - bounded-context-boundaries: platform types may not import from @features
  */
 
+import type { ContextProvenanceSummary } from "../../../domains/workspaces/context-provenance.ts";
+
+// Re-export so callers that need the summary type can import from here.
+export type { ContextProvenanceSummary };
+
 // ---- Run summary sub-types (used by run-summary-extractors and run-summary-builder) ----
 
 /** A single step in the runbook extracted from runbook.md. */
@@ -95,4 +100,7 @@ export type RunSummary = {
   /** Always empty — retained for version: 1 backward compatibility. */
   decision_summaries: [];
   artifact_inventory: ArtifactInventory;
+  /** Per-step context provenance (hashes + spans only; agent_id joined from back-fill events).
+   *  Optional + defaults to [] — additive for version: 1 backward compatibility. */
+  context_provenance?: ContextProvenanceSummary[];
 };

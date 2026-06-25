@@ -83,3 +83,9 @@ Utility modules that intentionally provide a flat collection of independent func
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[information-hiding]] — a module is "deep" precisely because it hides a large implementation behind a small interface; the two principles are two facets of the same design goal.
+- [[grey-box-module]] — the grey-box model explicitly applies the deep-module contract: the human owns the small interface (depth's public face), the AI fills the deep implementation body.
+- [[simplicity-first]] — a simple interface is the external signature of a deep module; simplicity-first keeps the interface from growing until the module's depth advantage is lost.

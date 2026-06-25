@@ -35,7 +35,9 @@ export const WIKI_LINT_CHECK_NAMES = [
   "cited_paths",
   "contradictions",
   "duplicate_titles",
+  "frontmatter_schema",
   "glossary_consistency",
+  "link_integrity",
   "missing_examples",
   "misrouted_principles",
   "orphan_principles",
@@ -198,13 +200,13 @@ function registerWikiLintTool(server: McpServer): void {
     "wiki_lint",
     {
       description:
-        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, invalid scope.layers values, invalid scope.tags values outside the KG computed-tag vocabulary, glossary self-consistency (duplicate or ambiguous CONTEXT.md terms), index_drift (inventory block mismatch or missing sentinel markers in sibling artifact-class indexes), duplicate_titles (two principles sharing the same title), and misrouted_principles (portable:false principles living in the shipped principles/ tree).",
+        "Lint Canon's own meta-layer artifacts — detects contradictions between CLAUDE.md files, orphan principles, stale file references, principles missing examples, cited paths in references/ that do not resolve, invalid scope.layers values, invalid scope.tags values outside the KG computed-tag vocabulary, glossary self-consistency (duplicate or ambiguous CONTEXT.md terms), index_drift (inventory block mismatch or missing sentinel markers in sibling artifact-class indexes), duplicate_titles (two principles sharing the same title), misrouted_principles (portable:false principles living in the shipped principles/ tree), frontmatter_schema (per-class Zod validation of principle/agent/template/ADR frontmatter), and link_integrity (broken [[wiki-link]]/relative-md/ADR references and true orphan principles via the inbound-link graph).",
       inputSchema: {
         checks: z
           .array(z.enum(WIKI_LINT_CHECK_NAMES))
           .optional()
           .describe(
-            "Checks to run (default: 8 checks excluding index_drift — pass ['index_drift'] explicitly to run it). Options: cited_paths, contradictions, duplicate_titles, glossary_consistency, index_drift, missing_examples, misrouted_principles, orphan_principles, scope_layers, scope_tags, stale_refs",
+            "Checks to run (default: all except index_drift — pass ['index_drift'] explicitly to run it). Options: cited_paths, contradictions, duplicate_titles, frontmatter_schema, glossary_consistency, index_drift, link_integrity, missing_examples, misrouted_principles, orphan_principles, scope_layers, scope_tags, stale_refs",
           ),
       },
     },

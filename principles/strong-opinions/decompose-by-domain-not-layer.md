@@ -100,3 +100,8 @@ Genuinely shared infrastructure — logging, monitoring, authentication, API gat
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[bounded-context-boundaries]] — decomposing by domain creates the bounded contexts; enforcing those context boundaries in code is the next necessary step, otherwise the domain decomposition is organizational, not structural.
+- [[ubiquitous-language-in-code]] — domain decomposition and ubiquitous language are inseparable: each domain module must name its concepts in the language of that domain, and the decomposition creates the namespace that makes those names unambiguous.

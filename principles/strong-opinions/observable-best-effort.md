@@ -25,12 +25,6 @@ This is the failure mode that silent catch blocks produce: bugs that survive cod
 
 The same pattern was found in 10+ locations across the codebase: event store appends, progress file writes, session persistence, metric recording. Each was individually reasonable ("this isn't critical path"). Collectively they created a system where a large class of failures produced no signal at all.
 
-**Related principles:**
-
-- `fail-closed-by-default` — that principle is about security policy (deny access when checks fail). This principle is about observability (make failures visible even when the operation is non-fatal). Orthogonal.
-- `structured-logging-with-levels` — that principle is about log format and level discipline. This principle is about whether to surface failures at all. Complementary: when you decide to log a best-effort failure, `structured-logging-with-levels` governs which level and what format to use.
-- `no-hidden-side-effects` — that principle is about API contract visibility (side effects should be declared). This principle is about failure visibility (when a side effect fails, the failure should be observable). Complementary.
-
 ## Examples
 
 **Bad — silent catch (the actual pattern found across 10+ locations):**
@@ -143,3 +137,9 @@ Truly optional cosmetic operations where failure has zero impact on correctness 
 - [ ] Functions that perform best-effort operations return a typed result (`boolean`, `Result`, or an object with a `warning` field) rather than `Promise<void>` when the caller could meaningfully react to failure.
 - [ ] No catch block contains only a comment (`/* best-effort */`, `// ignore`, `// non-critical`) with no logging and no return value change.
 - [ ] Background tasks and side-effect helpers (progress writes, metric flushes, event store appends) produce at least one observable signal on failure — grep for `catch` blocks in non-domain utility code and confirm each one logs or returns.
+
+## Related
+
+- [[fail-closed-by-default]] — orthogonal principle: fail-closed is about security policy (deny access when checks fail); this principle is about observability (make failures visible even when the operation is non-fatal).
+- [[structured-logging-with-levels]] — complementary principle: when you decide to log a best-effort failure, structured-logging-with-levels governs which level and what format to use.
+- [[no-hidden-side-effects]] — complementary principle: no-hidden-side-effects is about API contract visibility (side effects should be declared); this principle is about failure visibility (when a side effect fails, the failure should be observable).

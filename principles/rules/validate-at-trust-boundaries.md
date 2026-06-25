@@ -96,3 +96,7 @@ Internal function calls within the same trust boundary (same service, same proce
 - [ ] Every route handler validates `req.body`, `req.params`, and `req.query` before use — grep for `req.body` and confirm each is preceded by a `.safeParse(` or `.parse(` call.
 - [ ] Service-to-service responses are validated — grep for `response.json()` and confirm results are passed through a schema before field access.
 - [ ] No raw `as SomeType` casts on externally sourced data — grep for `as ` in handler and service files and check each cast site for prior schema validation.
+
+## Related
+
+[[fail-closed-by-default]] — when validation fails at a trust boundary, the default must be to reject the request; validation that silently passes on schema failure is fail-open. [[minimize-attack-surface]] — every trust boundary where input is not validated is an exploitable entry point; validation closes the surface each exposed boundary creates.

@@ -57,7 +57,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect
 
 ## Contracts
-<!-- last-updated: 2026-06-12 -->
+<!-- last-updated: 2026-06-24 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -76,7 +76,9 @@ src/
 
 **Flow parser** (`src/orchestration/flow-parser.ts`) — ADR-004: `loadAndResolveFlow` throws on hard validation errors. Exports: `validateSpawnCoverage`, `analyzeReachability`, `checkUnresolvedRefs`, `validateStateIdParams`, `VIRTUAL_SINKS`, `RUNTIME_VARIABLES`.
 
-**Execution store** (`src/domains/workspaces/execution-store.ts`) — optimistic locking via `updateExecutionVersioned(fields, expectedVersion)` (returns `{ updated: true|false }`); `SQLITE_BUSY` retry via `withRetry`; all board mutations use `updateExecutionVersioned`; `isStuck` is SQL-based. SCHEMA_VERSION = '11'.
+**Execution store** (`src/domains/workspaces/execution-store.ts`) — optimistic locking via `updateExecutionVersioned(fields, expectedVersion)` (returns `{ updated: true|false }`); `SQLITE_BUSY` retry via `withRetry`; all board mutations use `updateExecutionVersioned`; `isStuck` is SQL-based. SCHEMA_VERSION = '11'. Event types added 2026-06-24: `context_provenance` (emitted per agent spawn by `resolve_agent_skills` post-disclosure, keyed by `step_id`); `context_provenance_agent_id` (back-filled by `log_step`/`batch_log_steps` on step completion with `agent_id`, keyed by `step_id`).
+
+**Context provenance module** (`src/domains/workspaces/context-provenance.ts`) — `ContextProvenanceRecord` / `ContextProvenanceSummary` types; `hashContent(s)` (deterministic sha256 hex); `buildContextProvenanceRecord(opts)` — pure; builds hashes + char spans for each artifact, never stores content; blanked artifacts carry `char_span: null` + `source:"sidecar"` + `sidecar_path`; fail-open: `indexOf === -1` yields `char_span: null`. Added 2026-06-24. (ADR-0018)
 
 **KG schema** (`src/graph/kg-schema.ts`) — SCHEMA_VERSION = "5"; v5 adds `community_id`, `file_tags`, `hotspot_scores`, `co_change_edges`. Freshness marker in `meta` table under key `graph_head_commit`; stamped on full-project runs only — scoped runs skip orphan pruning and marker stamping.
 
@@ -110,7 +112,7 @@ src/
 
 **`CANON_FILES` constants** — remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`.
 
-**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks plus `checkGlossaryConsistency` in sibling `wiki-lint-glossary.ts`, `checkIndexDrift` in `index-inventory.ts`, and `checkMisroutedPrinciples`/`checkDuplicateTitles` in new sibling `wiki-lint-principle-tier.ts` (10 DEFAULT_CHECKS + `index_drift` = 11 total `CheckName` values; `WIKI_LINT_CHECK_NAMES` const exported from `register-knowledge.ts` with schema-parity enforcement): `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `checkGlossaryConsistency`, `checkIndexDrift`, `checkMisroutedPrinciples`, `checkDuplicateTitles`; `wiki-lint-principle-tier.ts` is a pure sibling split per `line-limit-split-into-siblings`; both `checkScopeLayers` and `checkScopeTags` guard scalar (non-array) input with a "must be a YAML list" finding; `stale_refs` and `cited_paths` now include the DDD doc set (`docs/**/*.md` excl. `docs/explore/`, `mcp-server/src/domains/*/README.md`, `CONTEXT.md`); `checkGlossaryConsistency` parses CONTEXT.md H2 headings, flags exact-duplicate and naked-vs-qualified collisions; see `src/features/diagnostics/.claude/CLAUDE.md` for `CheckName` details.
+**Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks plus `checkGlossaryConsistency` in sibling `wiki-lint-glossary.ts`, `checkIndexDrift` in `index-inventory.ts`, `checkMisroutedPrinciples`/`checkDuplicateTitles` in sibling `wiki-lint-principle-tier.ts`, `runFrontmatterSchemaCheck` in sibling `frontmatter-schema.ts`, and corpus link graph in sibling `link-graph.ts` (12 DEFAULT_CHECKS + `index_drift` = 13 total `CheckName` values; `WIKI_LINT_CHECK_NAMES` const exported from `register-knowledge.ts` with schema-parity enforcement): `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `checkGlossaryConsistency`, `checkIndexDrift`, `checkMisroutedPrinciples`, `checkDuplicateTitles`, `frontmatter_schema` (ADR-0021), `link_integrity` (ADR-0019); `orphan_principles` now inbound-`[[id]]`-link-based (ADR-0019) — the link graph's `referencedPrincipleIds` replaces the prior prose-substring scan; see `src/features/diagnostics/.claude/CLAUDE.md` for full `CheckName` details. <!-- last-updated: 2026-06-24 -->
 
 **Agent Provenance** (`src/shared/lib/commit-trailers.ts`, `src/shared/lib/file-claims.ts`) — `formatCommitTrailers`/`buildCommitMessage` produce Canon trailer blocks; `ClaimsFile` persisted to `.canon/claims.json`; 24h-TTL file ownership claims. See `src/shared/.claude/CLAUDE.md`.
 
@@ -187,13 +189,13 @@ src/
 | `sync_routines` | Sync routine state to `.canon/routines/`; returns drift summary |
 
 ## Dependencies
-<!-- last-updated: 2026-05-16 -->
+<!-- last-updated: 2026-06-24 -->
 
 | Package | Purpose |
 |---------|---------|
 | `@modelcontextprotocol/sdk` | MCP server/client implementation |
 | `zod` | Runtime schema validation |
-| `gray-matter` | YAML frontmatter parsing in `parser.ts` |
+| `yaml` | YAML frontmatter parsing via `splitFrontmatter`/`readFrontmatter` seam in `shared/lib/frontmatter.ts` (replaced `gray-matter` — R0) |
 | `tsx` | TypeScript execution (runtime dependency — server launched via boot.sh → tsx) |
 | `vitest` | Unit testing (dev) |
 

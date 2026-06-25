@@ -108,6 +108,10 @@ Whitespace and comment style may be adjusted as part of a broader style normaliz
 | "The circular import problem is too complex to fix the right direction — an intermediary file is pragmatic." | An intermediary file does not fix a circular dependency; it hides it. The coupling is still there, now just indirected through a shared file. | Identify which direction the dependency should flow. The downstream context should receive what it needs as arguments or events, never by importing from the upstream context. |
 | "This PR was about line count, not full DDD decomposition." | There is no such thing as a line-count refactoring. The only valid reason to split a file is responsibility separation. If the split doesn't produce files with single, articulable responsibilities, it is not a valid split. | Either do the genuine decomposition, or leave the file as-is and document why decomposition is not yet warranted. |
 
+## Related
+
+[[leave-touched-files-better]] is the incremental companion — while refactoring-integrity governs deliberate structural splits, leave-touched-files-better ensures routine edits also nudge quality upward. Both principles reinforce that improvements should be genuine, not cosmetic.
+
 ## Verification
 
 - [ ] Every new file produced by the split can be described in one sentence without using "and" — write that sentence as a comment at the top of the file or in the PR description and confirm it holds.

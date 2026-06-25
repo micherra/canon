@@ -99,3 +99,7 @@ Performance benchmarks and load tests are inherently non-deterministic — they 
 
 - [ ] No `Date.now()` or `new Date()` calls in test files — grep for `Date.now()` and `new Date()` in `**/*.test.*` and `**/*.spec.*` files. Each match should use an injected clock, not the real clock.
 - [ ] No real `setTimeout` or `setInterval` in tests without fake timers — grep for `setTimeout(` in test files and confirm each is either wrapped in `vi.useFakeTimers()` / `jest.useFakeTimers()` or is an explicit integration test in a `benchmarks/` directory.
+
+## Related
+
+[[tests-are-independent]] — a non-deterministic test that produces different results on re-run is a special case of order-dependence: the implicit dependency is on timing or environment rather than on another test's side effect. [[one-behavior-per-test]] — deterministic tests that verify one focused behavior are easier to isolate and reproduce when they do fail.

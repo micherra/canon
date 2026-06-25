@@ -23,7 +23,6 @@
     "better-sqlite3": "^12.11.1",
     "graphology": "^0.26",
     "graphology-communities-louvain": "^2.0.2",
-    "gray-matter": "^4.0.3",
     "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",

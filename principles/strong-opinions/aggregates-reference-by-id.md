@@ -83,8 +83,6 @@ Loading an `Order` is now a single query. The `DiscountCalculator` explicitly lo
 
 Within the same aggregate, direct references are expected — that defines the aggregate boundary. Value objects embedded within an aggregate (`Address` inside `Customer`, `OrderItem` inside `Order`) are direct references by design. In read models or DTOs projected for display purposes, denormalized object graphs are acceptable — they are not domain aggregates and carry no consistency invariants.
 
-**Related:** `law-of-demeter` is the general OOP version of this constraint — don't reach through object chains. This principle is the DDD-specific, stronger form: aggregates must not hold direct references to other aggregates at all, preventing cascade loading and preserving transactional boundaries. Demeter says "don't traverse"; this says "don't even hold the reference."
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -99,3 +97,8 @@ Within the same aggregate, direct references are expected — that defines the a
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[law-of-demeter]] — the general OOP version of this constraint: don't reach through object chains. This principle is the DDD-specific, stronger form — Demeter says "don't traverse"; this says "don't even hold the reference."
+- [[bounded-context-boundaries]] — companion principle at the service/context level: just as aggregates must not hold direct references across aggregate roots, bounded contexts must not import domain types across context boundaries.

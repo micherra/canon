@@ -90,7 +90,9 @@ Every side effect is visible: `recordFailedLogin` clearly modifies state, `track
 
 Logging and telemetry at a debug/trace level are acceptable hidden side effects — they observe the system without changing its behavior. Memoization and caching are also acceptable: the function's observable behavior is the same, the cache is an optimization detail. The line is: if removing the side effect would change the program's functional behavior, it must be visible.
 
-**Related:** `command-query-separation` addresses a specific case of side-effect discipline — separating state changes (commands) from data retrieval (queries). This principle is broader: a command may have multiple side effects, all of which must be visible in its name. CQS forbids mixing mutation and return values; this principle forbids hiding any mutation behind a misleading name.
+## Related
+
+[[command-query-separation]] addresses a specific case of side-effect discipline — separating state changes (commands) from data retrieval (queries). This principle is broader: a command may have multiple side effects, all of which must be visible in its name. CQS forbids mixing mutation and return values; this principle forbids hiding any mutation behind a misleading name. [[measure-before-optimizing]] — speculative caching and memoization introduced without measurement are hidden side effects; measure first to confirm the optimization is needed before introducing the state change.
 
 ## Anti-Rationalization
 

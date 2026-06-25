@@ -91,6 +91,10 @@ Allow direct construction only for:
 - Factories whose job is controlled object creation.
 - Composition-root code that assembles the object graph.
 
+## Related
+
+[[externalize-configuration]] is the companion at the config level — environment-specific values must come from outside the codebase; constructor injection is how those externalized values reach the services that need them without coupling business logic to the config source.
+
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |

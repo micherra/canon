@@ -15,13 +15,14 @@ Shared kernel — cross-cutting utilities, constants, parsers, and low-level hel
 | `constants.ts` | Canonical constants: `CANON_DIR`, `CANON_FILES` (now includes `JANITOR_LOCK`), `LAYER_CENTRALITY`, file extension sets, embedding config, `JOB_TIMEOUT_MS`, `PRINCIPLE_SECTIONS`, `GRAPH_HEAD_COMMIT_KEY` (KG freshness marker key) |
 | `schema.ts` | Shared Zod schemas: `reportInputSchema`, `ReportInput`, `ReviewEntry` (includes optional `craft_profile?: CraftProfile`), `ReviewViolation`, `CraftProfile`, `CraftProfileSchema`, `CraftDimensionRating` — cross-boundary types used by pr-review, diagnostics, and orchestration |
 | `matcher.ts` | Principle matching engine: `matchPrinciples`, `inferLayer`, `loadPrinciplesFromDir`, `loadAllPrinciples` |
-| `parser.ts` | Principle file parser: `Principle` (includes `portable?: boolean` field added 2026-06-12), `parsePrinciple`, `parsePortable`, `loadPrincipleFile`, `parseFrontmatter`, `extractSections`, `filterBodyBySections` |
+| `parser.ts` | Principle file parser: `Principle` (includes `portable?: boolean` field added 2026-06-12), `parsePrinciple`, `parsePortable`, `loadPrincipleFile`, `parseFrontmatter`, `extractSections`, `filterBodyBySections`; `parseFrontmatter` now delegates to `splitFrontmatter` from `lib/frontmatter.ts` (was `gray-matter`; R0) |
 
 **`lib/`** — Focused utility modules with no cross-context knowledge:
-<!-- last-updated: 2026-06-04 -->
+<!-- last-updated: 2026-06-24 -->
 
 | File | Key exports |
 |------|-------------|
+| `frontmatter.ts` | `splitFrontmatter(content)` → `{ data, body }` pure seam (replaces `gray-matter` across all call sites); `readFrontmatter(filePath)` I/O boundary wrapper; backed by `yaml` lib — preserves exact `gray-matter` `{ data, body }` contract including throw-on-malformed-YAML, empty/comment-only block → `{}`, block scalars, inline arrays, nested maps; added 2026-06-24 (R0) |
 | `craft-rubric.ts` | `CRAFT_DIMENSIONS` (6 strings), `CRAFT_BANDS`, `CRAFT_DIMENSION_PRINCIPLES`, `craftBandOrdinal(band)`, `craftRollup(ratings)` — craft scoring primitives; added 2026-06-03 |
 | `tool-result.ts` | `ToolResult<T>`, `CanonToolError`, `CanonErrorCode`, `toolOk`, `toolError`, `isToolError`, `assertOk` |
 | `wrap-handler.ts` | `wrapHandler` — wraps MCP tool handlers, converts unexpected throws to `UNEXPECTED` errors |

@@ -40,6 +40,9 @@ The Workspaces context is responsible for **workspace initialization and executi
 | `sanitizeBranch(branch)` | `workspace.ts` | Converts a git branch name to a filesystem-safe string |
 | `generateSlug(task)` | `workspace.ts` | Converts a task description to a URL-style slug |
 | `checkSlugCollision(parentDir, slug)` | `workspace.ts` | Returns a deduplicated slug (appends `-2`, `-3`, …) if the candidate already exists |
+| `ContextProvenanceRecord` / `ContextProvenanceSummary` | `context-provenance.ts` | Types for agent-context provenance (hashes + spans, never content); consumed by `run-summary-builder.ts` |
+| `hashContent(s)` | `context-provenance.ts` | Deterministic sha256 hex digest of a string |
+| `buildContextProvenanceRecord(opts)` | `context-provenance.ts` | Pure builder — hashes + char spans per artifact; blanked artifacts get `char_span:null` + sidecar fields; fail-open (ADR-0018) |
 
 ### Schema
 

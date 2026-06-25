@@ -18,7 +18,9 @@
  */
 
 import type { Principle } from "@shared/parser.ts";
+import type { FrontmatterSchemaFinding } from "./frontmatter-schema.ts";
 import type { IndexDriftFinding } from "./index-inventory.ts";
+import type { LinkIntegrityFinding } from "./link-graph.ts";
 import type { GlossaryConsistencyFinding } from "./wiki-lint-glossary.ts";
 import type {
   DuplicateTitleFinding,
@@ -77,13 +79,15 @@ export type ScopeTagFinding = {
   message: string;
 };
 
-export type { IndexDriftFinding };
+export type { FrontmatterSchemaFinding, IndexDriftFinding, LinkIntegrityFinding };
 
 export type WikiLintOutput = {
   cited_paths: CitedPathFinding[];
   contradictions: ContradictionFinding[];
   duplicate_titles: DuplicateTitleFinding[];
+  frontmatter_schema: FrontmatterSchemaFinding[];
   glossary_consistency: import("./wiki-lint-glossary.ts").GlossaryConsistencyFinding[];
+  link_integrity: LinkIntegrityFinding[];
   missing_examples: MissingExampleFinding[];
   misrouted_principles: MisroutedPrincipleFinding[];
   orphan_principles: OrphanPrincipleFinding[];
@@ -103,7 +107,9 @@ export type AssembleWikiLintInput = {
   contradictions: ContradictionFinding[];
   duplicateTitles: DuplicateTitleFinding[];
   filesScanned: number;
+  frontmatterSchema: FrontmatterSchemaFinding[];
   glossaryConsistency: import("./wiki-lint-glossary.ts").GlossaryConsistencyFinding[];
+  linkIntegrity: LinkIntegrityFinding[];
   missingExamples: MissingExampleFinding[];
   misroutedPrinciples: MisroutedPrincipleFinding[];
   orphans: OrphanPrincipleFinding[];
@@ -580,7 +586,9 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
     contradictions,
     duplicateTitles,
     filesScanned,
+    frontmatterSchema,
     glossaryConsistency,
+    linkIntegrity,
     missingExamples,
     misroutedPrinciples,
     orphans,
@@ -594,8 +602,10 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
     cited_paths: citedPaths,
     contradictions,
     duplicate_titles: duplicateTitles,
+    frontmatter_schema: frontmatterSchema,
     glossary_consistency: glossaryConsistency,
     index_drift: indexDrift,
+    link_integrity: linkIntegrity,
     misrouted_principles: misroutedPrinciples,
     missing_examples: missingExamples,
     orphan_principles: orphans,
@@ -616,7 +626,9 @@ export function assembleWikiLintOutput(input: AssembleWikiLintInput): WikiLintOu
         indexDrift.length +
         glossaryConsistency.length +
         misroutedPrinciples.length +
-        duplicateTitles.length,
+        duplicateTitles.length +
+        frontmatterSchema.length +
+        linkIntegrity.length,
     },
   };
 }
