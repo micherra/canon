@@ -18,6 +18,16 @@
 #   origin/main unresolvable + ADRs:    exit 2 (FAIL-CLOSED — missed collision is unsafe)
 #   origin/main unresolvable + no ADRs: exit 0 (early-out; fail-closed scoped to ADR adds)
 #   Open-PR check (DEFERRED):           FAIL-OPEN-WITH-WARNING when implemented
+#
+# Parser-fail-open justification (security-hook-parser-allowlist-posture):
+# The non-push gate and the parse-fail path (lines 37–43) are denylist-shaped:
+# unrecognised or unparseable commands exit 0 silently. This is safe because the
+# COLLISION-DETECTION SURFACE is the git diff at Step 1 (origin/main...HEAD with
+# --diff-filter=A --no-renames), not the command string. A parse miss means the diff
+# check runs unnecessarily — it cannot cause a real ADR-number collision to be missed.
+# The only fail-closed scope is: "a push that adds a new docs/adr/NNNN-*.md whose NNNN
+# already exists on origin/main." That surface is fail-CLOSED (exit 2). The command
+# parse is a coarse pre-filter only; its fail-open posture is therefore consequence-safe.
 
 set -euo pipefail
 
@@ -51,11 +61,9 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 _DIFF_RAW=""
 _DIFF_EXIT=0
-_DIFF_RAW=$(git diff --name-only --diff-filter=A origin/main...HEAD -- docs/adr/ 2>/dev/null) || _DIFF_EXIT=$?
+_DIFF_RAW=$(git diff --name-only --diff-filter=A --no-renames origin/main...HEAD -- docs/adr/ 2>/dev/null) || _DIFF_EXIT=$?
 
-NEW_ADRS=$(echo "$_DIFF_RAW" | grep -E 'docs/adr/[0-9]{4}-.*\.md$' || true)
-# DOCUMENTED FAIL-OPEN: grep exits 1 on no match; || true converts to 0.
-# An empty result means either no ADRs were added or the diff itself failed.
+NEW_ADRS=$(echo "$_DIFF_RAW" | grep -E 'docs/adr/[0-9]{4}-.*\.md$' || true)  # DOCUMENTED FAIL-OPEN -- grep exits 1 on no-match; empty = no ADRs added or diff failed
 
 if [[ "$_DIFF_EXIT" -ne 0 ]]; then
   # git diff failed — most likely because origin/main does not exist locally.
@@ -65,8 +73,7 @@ if [[ "$_DIFF_EXIT" -ne 0 ]]; then
   # check below (which will also fail → exit 2, FAIL-CLOSED).
   # If it doesn't, no collision is possible → exit 0.
   _BRANCH_ADRS=$(git ls-tree -r HEAD --name-only -- docs/adr/ 2>/dev/null \
-    | grep -E 'docs/adr/[0-9]{4}-.*\.md$' || true)
-  # DOCUMENTED FAIL-OPEN: if ls-tree fails or docs/adr/ is absent → empty → no risk
+    | grep -E 'docs/adr/[0-9]{4}-.*\.md$' || true)  # DOCUMENTED FAIL-OPEN -- empty = ls-tree failed or docs/adr/ absent; no ADRs = no collision risk
 
   if [[ -z "$_BRANCH_ADRS" ]]; then
     exit 0 # No ADR files on branch HEAD → no collision possible
@@ -105,8 +112,7 @@ fi
 ORIGIN_NUMS=$(echo "$_LS_TREE_RAW" \
   | grep -oE 'docs/adr/[0-9]{4}' \
   | grep -oE '[0-9]{4}' \
-  | sort -u || true)
-# DOCUMENTED FAIL-OPEN: empty ORIGIN_NUMS = no ADRs on origin/main; no collision possible
+  | sort -u || true)  # DOCUMENTED FAIL-OPEN -- empty ORIGIN_NUMS = no ADRs on origin/main; no collision possible
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 3: Check each newly-added ADR for number collision with origin/main.
@@ -120,7 +126,7 @@ while IFS= read -r _branch_path; do
   [[ -z "$_branch_path" ]] && continue
 
   _branch_base=$(basename "$_branch_path")
-  _adr_num=$(echo "$_branch_base" | grep -oE '^[0-9]{4}' || true)
+  _adr_num=$(echo "$_branch_base" | grep -oE '^[0-9]{4}' || true)  # DOCUMENTED FAIL-OPEN -- grep exits 1 on no-match; non-ADR basename dropped by [[ -z "$_adr_num" ]] guard below
   [[ -z "$_adr_num" ]] && continue
 
   # Check if this 4-digit number already exists on origin/main
@@ -128,7 +134,7 @@ while IFS= read -r _branch_path; do
     # Find the origin/main filename for this number
     _origin_path=$(echo "$_LS_TREE_RAW" \
       | grep -oE "docs/adr/${_adr_num}-[^[:space:]]+" \
-      | head -1 || true)
+      | head -1 || true)  # DOCUMENTED FAIL-OPEN -- empty _origin_path skips collision block; [[ -n "$_origin_path" ]] guard below
 
     if [[ -n "$_origin_path" ]]; then
       _origin_base=$(basename "$_origin_path")
@@ -152,7 +158,7 @@ if [[ "$_COLLISION_FOUND" == "true" ]]; then
   _BRANCH_NUMS=$(echo "$NEW_ADRS" \
     | grep -oE 'docs/adr/[0-9]{4}' \
     | grep -oE '[0-9]{4}' \
-    | sort -u || true)
+    | sort -u || true)  # DOCUMENTED FAIL-OPEN -- empty _BRANCH_NUMS is union-safe; printf '%s\n%s\n' with empty arg produces only ORIGIN_NUMS lines
   _ALL_NUMS=$(printf '%s\n%s\n' "$ORIGIN_NUMS" "$_BRANCH_NUMS" \
     | grep -E '^[0-9]{4}$' | sort -u)
   _MAX_NUM=$(echo "$_ALL_NUMS" | tail -1)

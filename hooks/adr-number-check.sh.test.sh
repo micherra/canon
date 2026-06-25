@@ -173,6 +173,17 @@ edit_adr() {
   git -C "$workdir" commit -q -m "edit $adr_path"
 }
 
+# rename_adr <workdir> <from_path> <to_path>
+# Renames an ADR file using git mv on the current branch.
+rename_adr() {
+  local workdir="$1"
+  local from_path="$2"
+  local to_path="$3"
+  mkdir -p "$workdir/$(dirname "$to_path")"
+  git -C "$workdir" mv "$from_path" "$to_path"
+  git -C "$workdir" commit -q -m "rename $from_path to $to_path"
+}
+
 echo ""
 echo "=== adr-number-check.sh tests ==="
 echo ""
@@ -363,6 +374,52 @@ run_test_in_dir "collision with 0023 also on branch → exit 2" 2 \
 
 run_test_in_dir_with_output "suggested next-free is 0024" 2 \
   "0024" "$CASE11_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 12: Rename-into-collision via git mv → exit 2 (BLOCKING regression test)
+# origin/main has 0022-candidate-injection.md + 0099-old-slug.md (feature branch
+# inherits both). Branch: git mv 0099-old-slug.md 0022-other-slug.md — this renames
+# into 0022, which already exists on origin/main.
+# Without --no-renames: git classifies the mv as R (rename); --diff-filter=A
+# EXCLUDES R entries → hook exits 0 (WRONG — the collision slips past).
+# With --no-renames: classified as A (0022-other-slug.md) + D (0099-old-slug.md);
+# 0022-other-slug.md enters NEW_ADRS and the collision is caught → exit 2.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 12: Rename-into-collision (git mv 0099→0022) → exit 2 [BLOCKING regression] --"
+
+CASE12_REPO="$MASTER_TMP/case12"
+setup_repo_with_origin "$CASE12_REPO" \
+  "docs/adr/0022-candidate-injection.md" \
+  "docs/adr/0099-old-slug.md"
+rename_adr "$CASE12_REPO" \
+  "docs/adr/0099-old-slug.md" \
+  "docs/adr/0022-other-slug.md"
+
+run_test_in_dir "rename-into-collision → exit 2" 2 \
+  "$CASE12_REPO" '{"command":"git push origin feature"}'
+
+run_test_in_dir_with_output "rename-collision output names 0022" 2 \
+  "0022" "$CASE12_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 13: Benign rename (target number not on origin/main) → exit 0
+# origin/main has 0022-existing.md only; branch adds 0099-old-slug.md then renames
+# it to 0099-new-slug.md — 0099 is not on origin/main so no collision → exit 0.
+# Verifies that --no-renames does not over-block non-colliding renames.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 13: Benign rename (0099 not on origin/main) → exit 0 --"
+
+CASE13_REPO="$MASTER_TMP/case13"
+setup_repo_with_origin "$CASE13_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE13_REPO" "docs/adr/0099-old-slug.md"
+rename_adr "$CASE13_REPO" \
+  "docs/adr/0099-old-slug.md" \
+  "docs/adr/0099-new-slug.md"
+
+run_test_in_dir "benign rename (non-colliding number) → exit 0" 0 \
+  "$CASE13_REPO" '{"command":"git push origin feature"}'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summary
