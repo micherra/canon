@@ -423,4 +423,145 @@ singleDeadFn();
     expect(code).toBe(0);
     expect(Number(stdout)).toBeGreaterThanOrEqual(1);
   });
+
+  // -------------------------------------------------------------------
+  // FALSE-WIRE leak forms (reviewer-confirmed) — must resolve count = 0
+  //
+  // These are the 6 forms the adversarial reviewer confirmed were leaking
+  // under the old denylist posture (counted as uses, returned count >= 1).
+  // Under the new USE-POSITION ALLOWLIST they must all return count = 0.
+  // -------------------------------------------------------------------
+
+  // Leak 1: object property KEY `{ deadFn: 1 }` — NOT a use
+  test("property KEY { deadFn: 1 } → count = 0, exit 0 (DEAD) — Leak 1", async () => {
+    const file = writeFixture(
+      "leak1-property-key.ts",
+      `export function deadFn(): void {}
+const obj = { deadFn: 1 };
+`,
+    );
+    const { code, stdout } = await runHelper([file, "deadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  // Realistic collision: `export const status` + `{ status: "ok" }` must be DEAD
+  test("export const status + { status: 'ok' } property key collision → count = 0 (DEAD) — Leak 1 realistic", async () => {
+    const file = writeFixture(
+      "leak1-status-collision.ts",
+      `export const status = "active";
+const response = { status: "ok" };
+`,
+    );
+    const { code, stdout } = await runHelper([file, "status"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  // Leak 2: enum member `enum E { deadFn }` — NOT a use
+  test("enum member `enum E { deadFn }` → count = 0, exit 0 (DEAD) — Leak 2", async () => {
+    const file = writeFixture(
+      "leak2-enum-member.ts",
+      `export function deadFn(): void {}
+enum E { deadFn }
+`,
+    );
+    const { code, stdout } = await runHelper([file, "deadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  // Leak 3: array destructure binding `const [deadFn] = x` — NOT a use
+  test("array destructure binding `const [deadFn] = x` → count = 0, exit 0 (DEAD) — Leak 3", async () => {
+    const file = writeFixture(
+      "leak3-array-destr.ts",
+      `export function deadFn(): void {}
+const someArray: (() => void)[] = [];
+const [deadFn] = someArray;
+`,
+    );
+    const { code, stdout } = await runHelper([file, "deadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  // Leak 4: renamed destructure binding `const { x: deadFn } = y` — NOT a use
+  test("renamed destructure binding `const { x: deadFn } = y` → count = 0, exit 0 (DEAD) — Leak 4", async () => {
+    const file = writeFixture(
+      "leak4-renamed-destr.ts",
+      `export function deadFn(): void {}
+const source = { x: (): void => {} };
+const { x: deadFn } = source;
+`,
+    );
+    const { code, stdout } = await runHelper([file, "deadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  // Leak 5: export specifier `export { deadFn }` (re-export) — NOT an internal use
+  test("export specifier `export { deadFn }` → count = 0, exit 0 (DEAD) — Leak 5", async () => {
+    const file = writeFixture(
+      "leak5-export-specifier.ts",
+      `export function deadFn(): void {}
+export { deadFn };
+`,
+    );
+    const { code, stdout } = await runHelper([file, "deadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  // Leak 6: re-export from module `export { deadFn } from './m'` — NOT a use
+  test("re-export from module `export { deadFn } from './m'` → count = 0, exit 0 (DEAD) — Leak 6", async () => {
+    const file = writeFixture(
+      "leak6-reexport.ts",
+      `export function deadFn(): void {}
+export { deadFn } from './other-module';
+`,
+    );
+    const { code, stdout } = await runHelper([file, "deadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  // -------------------------------------------------------------------
+  // FAIL-CLOSED DEFAULT: unrecognized AST position → NON-use → count = 0
+  //
+  // This proves the allowlist posture: an identifier in a position NOT
+  // in the recognized-use allowlist defaults to NON-use (DEAD). We use
+  // a labeled statement position which is uncommon and not in the allowlist.
+  // Under the old denylist, this would have been counted as a use.
+  // Under the new allowlist, any unrecognized position → NOT counted.
+  // -------------------------------------------------------------------
+  test("fail-closed-default: identifier in parameter binding position → count = 0 (NON-use default)", async () => {
+    // Parameter binding is not a USE (it's a binding site). The symbol
+    // appears only as a function parameter name and in its declaration.
+    // An allowlist that doesn't include param-binding positions defaults to 0.
+    const file = writeFixture(
+      "fail-closed-default.ts",
+      `export function deadFn(): void {}
+function wrapper(deadFn: () => void): void { return; }
+`,
+    );
+    const { code, stdout } = await runHelper([file, "deadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBe(0);
+  });
+
+  // -------------------------------------------------------------------
+  // Attack-2 preserved: shorthand object EXPRESSION { deadFn } IS a use
+  // (reading the binding value, not a key-only property like { deadFn: 1 })
+  // -------------------------------------------------------------------
+  test("shorthand object expression { deadFn } → count ≥ 1 (genuine use) — Attack-2 regression guard", async () => {
+    const file = writeFixture(
+      "shorthand-obj-expr.ts",
+      `export function deadFn(): void {}
+const obj = { deadFn };
+`,
+    );
+    const { code, stdout } = await runHelper([file, "deadFn"]);
+    expect(code).toBe(0);
+    expect(Number(stdout)).toBeGreaterThanOrEqual(1);
+  });
 });

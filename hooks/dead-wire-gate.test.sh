@@ -1676,6 +1676,203 @@ FnNs();'
   rm -rf "$REPO"
 }
 
+# ===========================================================================
+# FALSE-WIRE leak tests (adversarial re-review, reviewer-confirmed)
+#
+# T26-T36: Gate-level tests for the 6 FALSE-WIRE forms identified in the
+# second adversarial review. Each form previously caused a genuinely-dead
+# export to register count >= 1 under the old denylist, silently passing
+# the gate (FALSE-WIRE). Under the inverted USE-POSITION ALLOWLIST they
+# must all exit 2 (DEAD).
+#
+# Also tests:
+#   - The `export const status` + `{ status: 'ok' }` realistic collision
+#   - Fail-closed-default: an unrecognized position defaults to NON-use
+#   - Attack-2 preserved: shorthand object EXPRESSION { deadFn } still WIRED
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# T26: Leak 1 — property KEY { deadFn: 1 } → DEAD (exit 2)
+# The property key is NOT a use of the symbol; only the value would be.
+# Realistic collision: `export function handleFoo` + `const c = { handleFoo: true }`
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T26: property KEY { deadFn: 1 } → DEAD (exit 2) [Leak 1] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const obj = { deadFn: 1 };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T26: property key { deadFn: 1 } → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T27: Leak 1 realistic — export const status + { status: 'ok' } → DEAD (exit 2)
+# The most common real collision: short status/type/kind names as property keys.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T27: export const status + { status: 'ok' } key collision → DEAD (exit 2) [Leak 1 realistic] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export const status = "active";
+const response = { status: "ok" };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T27: status key collision → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T28: Leak 2 — enum member `enum E { deadFn }` → DEAD (exit 2)
+# enum_body not in old DECLARATION_NODE_TYPES_WITH_NAME_FIELD → leaked.
+# Under the new allowlist, enum_body is explicitly a NON-use.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T28: enum member enum E { deadFn } → DEAD (exit 2) [Leak 2] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+enum E { deadFn }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T28: enum member → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T29: Leak 3 — array destructure binding `const [deadFn] = x` → DEAD (exit 2)
+# array_pattern is a binding context; identifier here is the local binding name.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T29: array destructure binding const [deadFn] = x → DEAD (exit 2) [Leak 3] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const arr: (() => void)[] = [];
+const [deadFn] = arr;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T29: array destructure binding → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T30: Leak 4 — renamed destructure binding `const { x: deadFn } = y` → DEAD (exit 2)
+# pair_pattern value field is the renamed local binding, not a use of the symbol.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T30: renamed destructure binding const { x: deadFn } = y → DEAD (exit 2) [Leak 4] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const source = { x: (): void => {} };
+const { x: deadFn } = source;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T30: renamed destructure binding → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T31: Leak 5 — export specifier `export { deadFn }` → DEAD (exit 2)
+# Re-exporting a symbol is not an internal USE of it in the same file.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T31: export specifier export { deadFn } → DEAD (exit 2) [Leak 5] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+export { deadFn };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T31: export specifier → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T32: Leak 6 — re-export `export { deadFn } from './m'` → DEAD (exit 2)
+# Same root cause as Leak 5: export_specifier name field is not an internal use.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T32: re-export export { deadFn } from './m' → DEAD (exit 2) [Leak 6] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    "export function deadFn(): void { return; }
+export { deadFn } from './other';"
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T32: re-export specifier → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T33: Fail-closed-default — unrecognized position defaults to NON-use → DEAD (exit 2)
+# A symbol that appears only in a binding position (parameter name in a nested
+# function) is NOT a use. The allowlist posture: unrecognized → NON-use → DEAD.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T33: fail-closed-default — parameter binding NOT a use → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+function wrapper(deadFn: () => void): void { return; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T33: parameter binding is NOT a use → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T34: Attack-2 preserved — shorthand object EXPRESSION { deadFn } → WIRED (exit 0)
+# `const obj = { deadFn }` reads the value of deadFn — a genuine use.
+# This was correctly classified in the first review and must stay WIRED.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T34: shorthand object expression { deadFn } → WIRED (exit 0) [Attack-2] --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const obj = { deadFn };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T34: shorthand object expression → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T35: Type annotation use IS a use → WIRED (exit 0)
+# `let x: DeadFn` — type reference position.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T35: type annotation use (let x: DeadFn) → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export type DeadFn = () => void;
+let x: DeadFn;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T35: type annotation → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T36: Extends-clause use IS a use → WIRED (exit 0)
+# `class C extends DeadFn` — heritage clause.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T36: class extends DeadFn → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export class DeadFn {}
+class Child extends DeadFn {}'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T36: extends clause → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

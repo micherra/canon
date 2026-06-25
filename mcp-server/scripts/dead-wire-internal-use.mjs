@@ -10,25 +10,48 @@
  *
  * OUTPUT (stdout)
  *   A single integer: the count of genuine USE-POSITION code-identifier occurrences
- *   of <symbol> in <file>. Declaration-name positions are excluded.
+ *   of <symbol> in <file>. Only explicitly recognized use positions are counted.
  *
- *   A genuine USE is an identifier in expression or type-reference position:
- *     - a call target, new target, member-access subject
- *     - a type annotation reference (e.g. `: Foo`, `as Foo`, `extends Foo`)
- *     - a template substitution reference (${...})
- *     - any other value/type reference that is NOT the name-binding site of a declaration
+ *   A genuine USE is an identifier in a RECOGNIZED use position (allowlist):
+ *     - call callee: `deadFn(...)` (call_expression function: field)
+ *     - new target: `new DeadFn()` (new_expression constructor: field)
+ *     - member access: `deadFn.x`, `x.deadFn` (member_expression object: or property: field)
+ *     - argument position: `f(deadFn)`, array element `[deadFn]` (expression context)
+ *     - template substitution: `${deadFn()}` (always recursed into uniformly)
+ *     - heritage: `class C extends DeadFn`, `implements DeadFn`
+ *     - decorator: `@deadFn`
+ *     - type reference: `let x: DeadFn`, `interface I extends DeadFn`, `typeof deadFn`
+ *     - shorthand object value: `const o = { deadFn }` (reading the binding)
+ *     - computed key: `{ [deadFn]: 1 }` (expression position)
+ *     - export-default value: `export default deadFn`, `export = deadFn`
+ *     - assignment/binary/unary expression operand
+ *     - return/yield/await expression value
  *
- *   Excluded (NOT counted as a use):
- *     - Declaration-name nodes: the `name:` field identifier of function/class/interface/
- *       type-alias/enum/namespace/module declarations, variable declarators, method and
- *       property definitions, function overload signatures, import specifiers, and the
- *       names in `export { X }` export specifiers and re-exports.
- *     - Comment leaves (comment), string content (string_fragment), and regex content
- *       (regex_pattern, regex) — these are non-code positions.
- *     - Template chars (template_chars) and escape sequences.
+ *   NOT counted (non-use positions — anything not in the above allowlist):
+ *     - Declaration-name nodes: function/class/interface/type-alias/enum/namespace/
+ *       module declaration names, variable declarator names, method/property definition
+ *       names, function overload signature names
+ *     - Import specifiers (both name and alias positions)
+ *     - Export specifiers (name field — `export { foo }`, re-export `export { foo } from`)
+ *     - Every destructuring binding position (object/array/renamed/rest patterns)
+ *     - Object property keys (non-computed): `{ deadFn: 1 }` — key is NOT a use
+ *     - Enum member names: `enum E { deadFn }`
+ *     - Parameter binding names
+ *     - Any other position NOT in the recognized-use allowlist (fail-closed default)
+ *
+ *   Comment leaves (comment), string content (string_fragment), and regex content
+ *   (regex_pattern, regex) are NOT code-identifier leaf types and are never counted.
+ *   Template chars (template_chars) and escape sequences are also non-code.
  *
  *   Template substitutions (${...}) ARE counted — the walker recurses uniformly
- *   and keys on the leaf's own type + its declaration-position status, NOT ancestor type.
+ *   and keys on the leaf's own type, NOT ancestor type.
+ *
+ * POSTURE — USE-POSITION ALLOWLIST (fail-closed by default)
+ *   Only RECOGNIZED use positions are counted. An unrecognized/unclassified position
+ *   defaults to NON-use (not counted). This makes incompleteness fail-CLOSED:
+ *   a use form the allowlist doesn't cover → not counted → over-flags DEAD → SAFE.
+ *   The `// canon:allow-unwired: <reason>` marker provides the escape hatch for
+ *   legitimate over-flagging.
  *
  * EXIT CODES
  *   0  Success: count printed to stdout. Count = 0 means zero genuine uses.
@@ -62,14 +85,6 @@
  *   CRUCIAL: do NOT skip the template_string subtree. template_substitution (${...})
  *   children are real code and must be recursed into. The walker recurses uniformly
  *   and classifies by the leaf's OWN type — it never inherits a "skip" flag.
- *
- * DECLARATION-NAME EXCLUSION (use-position counting)
- *   The walker excludes any code-identifier leaf that sits in the `name:` field of a
- *   declaration node, or is the bound identifier in a variable declarator's pattern,
- *   or appears in an import/export specifier's name position. This is determined by
- *   checking whether a leaf's parent is a known declaration node type AND whether the
- *   child's field name (from the parent's perspective) marks it as the declaration name.
- *   See isDeclarationNameNode() for the full node-type / field-name pairs.
  */
 
 import { readFileSync } from "node:fs";
@@ -90,133 +105,369 @@ const CODE_IDENTIFIER_TYPES = new Set([
 ]);
 
 // ---------------------------------------------------------------------------
-// Declaration-name exclusion
+// USE-POSITION ALLOWLIST
 //
-// These are the (parent.type, child.fieldName) pairs where the child
-// identifier is the BINDING NAME of the declaration, not a reference.
-// Any CODE_IDENTIFIER_TYPES leaf matching one of these pairs is excluded
-// from the use-count.
+// POSTURE: Count an identifier occurrence as a genuine same-file USE **only**
+// when its AST role is a RECOGNIZED use position. Every unrecognized /
+// unclassified position defaults to NON-use (not counted). This makes
+// incompleteness FAIL-CLOSED: a use-form you forgot → not counted → over-flags
+// DEAD → safe. The `// canon:allow-unwired: <reason>` escape hatch handles
+// legitimate over-flagging.
 //
-// Node types sourced from the TypeScript tree-sitter grammar:
-//   function_declaration, function_signature      → name: identifier
-//   class_declaration                              → name: type_identifier
-//   interface_declaration                          → name: type_identifier
-//   type_alias_declaration                         → name: type_identifier
-//   enum_declaration                               → name: identifier
-//   module (namespace)                             → name: identifier | string
-//   internal_module (namespace block variant)      → name: identifier | string
-//   variable_declarator                            → name: identifier (pattern)
-//   method_definition, method_signature            → name: property_identifier
-//   public_field_definition                        → name: property_identifier
-//   import_specifier (named import binding)        → name: identifier
-//   export_specifier (named export binding)        → name: identifier
-//   required_parameter, optional_parameter         → pattern: identifier
+// The implementation uses a two-step approach:
+//   1. Check explicit NON-USE positions (fast early exits for the most
+//      common binding/key positions that could otherwise be miscounted).
+//   2. Check explicit USE positions (allowlist) — if none match, default = NON-use.
 //
-// Note: we match on the field name as reported by tree-sitter's
-// `node.fields[n].fieldName` via childForFieldName / children iteration.
-// Since web-tree-sitter exposes children via .child(i) and field names via
-// .childForFieldName(name), we use the parent-child relationship to determine
-// whether a leaf is at a declaration-name position.
+// This is structurally opposite to the old denylist: the old code returned
+// "NOT a use" for known declaration positions and counted everything else.
+// The new code returns "IS a use" for known use positions and rejects everything else.
 // ---------------------------------------------------------------------------
 
 /**
- * Returns true if `node` (a leaf) is at a declaration-name position within
- * its parent — meaning it is the identifier that NAMES a declaration, not a
- * reference to an existing name.
+ * Returns true if `node` (a leaf) is at a RECOGNIZED USE position — meaning
+ * it is genuinely reading or referencing the symbol, not just naming it.
+ *
+ * Incompleteness is FAIL-CLOSED: an unrecognized position returns false
+ * (NOT counted), which over-flags DEAD — the safe side for a security gate.
  *
  * This function is called only for leaf nodes whose type is in CODE_IDENTIFIER_TYPES.
  *
  * @param {import('web-tree-sitter').SyntaxNode} node - The leaf node.
- * @returns {boolean} True if this leaf is a declaration-name node.
+ * @returns {boolean} True if this leaf is in a recognized use position.
  */
-function isDeclarationNameNode(node) {
+function isUsePosition(node) {
   const parent = node.parent;
   if (parent === null) return false;
 
   const parentType = parent.type;
 
-  // For node types that expose a `name` field, check whether this child IS
-  // that `name` field.
+  // -------------------------------------------------------------------------
+  // Step 1: Explicit NON-USE positions — fast rejection for common cases.
   //
-  // We check identity by comparing startIndex, since web-tree-sitter SyntaxNode
-  // objects may not be reference-equal across calls.
+  // These are the positions that are DEFINITELY not uses. Checking them
+  // first provides clarity and prevents reaching the allowlist for obvious
+  // non-use positions.
+  // -------------------------------------------------------------------------
+
+  // Declaration name positions: function/class/interface/type/enum/namespace/method/field names.
+  // The `name:` field of any declaration-producing node type is a binding, not a use.
   const nameField = tryGetField(parent, "name");
   if (nameField !== null && nameField.startIndex === node.startIndex) {
-    // This leaf is the `name:` field of its parent.
-    // Now check if the parent is a declaration-producing node type.
     if (DECLARATION_NODE_TYPES_WITH_NAME_FIELD.has(parentType)) {
-      return true;
+      return false; // declaration name — NOT a use
     }
   }
 
-  // variable_declarator: the bound pattern is the `name:` field
+  // variable_declarator name: the `name:` field (may be a pattern)
   if (parentType === "variable_declarator") {
     const nameFieldVD = tryGetField(parent, "name");
     if (nameFieldVD !== null && nameFieldVD.startIndex === node.startIndex) {
-      return true;
+      return false; // binding in `const/let/var name = ...` — NOT a use
     }
   }
 
-  // required_parameter / optional_parameter: `pattern:` field is the binding
+  // Parameter binding: `pattern:` field of required_parameter / optional_parameter
   if (parentType === "required_parameter" || parentType === "optional_parameter") {
     const patternField = tryGetField(parent, "pattern");
     if (patternField !== null && patternField.startIndex === node.startIndex) {
-      return true;
+      return false; // parameter name binding — NOT a use
     }
   }
 
-  // import_specifier: name/alias binding
-  // In `import { Foo }`, the identifier `Foo` is the local binding.
-  // In `import { Foo as Bar }`, `Bar` is the binding (alias field), `Foo` is reference.
-  // We exclude the alias (local binding name) — it's a binding, not a use.
-  // We also exclude the name field when no alias is present (it IS the binding).
+  // import_specifier: both the name binding and alias binding are NOT uses.
+  // `import { Foo }` — Foo is the local binding.
+  // `import { Foo as Bar }` — Bar is the local binding; Foo is an external ref (NOT same-file use).
   if (parentType === "import_specifier") {
-    const aliasField = tryGetField(parent, "alias");
-    if (aliasField !== null) {
-      // `import { Foo as Bar }` — Bar is the local binding (alias), Foo is the import ref
-      if (aliasField.startIndex === node.startIndex) {
-        return true; // this is the local binding name
-      }
-      // Foo (name field) is a reference to the imported symbol — count it as a use
-    } else {
-      // `import { Foo }` — no alias, the name IS the binding
-      const nameFieldIS = tryGetField(parent, "name");
-      if (nameFieldIS !== null && nameFieldIS.startIndex === node.startIndex) {
-        return true;
-      }
-    }
+    return false; // all import specifier positions are bindings — NOT a use
   }
 
-  // export_specifier: `export { Foo }` or `export { Foo as Bar }`
-  // `Foo` in `export { Foo }` is a reference (we READ Foo to export it) — count it
-  // But `Bar` in `export { Foo as Bar }` (the exported name) is a renaming, not a use
+  // export_specifier: `export { foo }` or `export { foo } from './m'`
+  // Both the name field (foo) and alias field (bar in `foo as bar`) are NOT internal uses.
+  // `export { foo }` — foo is being re-exported, not called/used internally.
   if (parentType === "export_specifier") {
-    const aliasFieldES = tryGetField(parent, "alias");
-    if (aliasFieldES !== null && aliasFieldES.startIndex === node.startIndex) {
-      // The `as Bar` part — Bar is the exported name, not a local reference
-      return true;
+    return false; // export specifier name/alias — NOT an internal use
+  }
+
+  // Object property key (non-computed): `{ deadFn: 1 }` — the key is NOT a use.
+  // Tree-sitter: in a `pair` node, the `key:` field is the property name.
+  // A non-computed key is a property_identifier or identifier, not a value read.
+  if (parentType === "pair") {
+    const keyField = tryGetField(parent, "key");
+    if (keyField !== null && keyField.startIndex === node.startIndex) {
+      // This is the key position in { key: value }
+      // Non-computed keys are not uses; computed keys are handled in the allowlist below.
+      // Check if this is a computed key (has [ ] wrapper) — if not, it's NOT a use.
+      // In tree-sitter, a computed property key has node type `computed_property_name`
+      // wrapping the expression. A bare identifier/property_identifier key is non-computed.
+      if (
+        node.type === "identifier" ||
+        node.type === "property_identifier" ||
+        node.type === "string" ||
+        node.type === "type_identifier"
+      ) {
+        return false; // non-computed property key — NOT a use
+      }
     }
-    // The `Foo` part (name field) IS a reference to the local binding — count it
   }
 
-  // shorthand_property_identifier in an object pattern (destructuring) is a binding
-  // e.g. `const { foo } = obj` — `foo` here is bound, not a use of `foo` the function.
-  // However, shorthand_property_identifier in object EXPRESSION `{ foo }` is a use.
-  // Distinguish: parent of shorthand_property_identifier in a pattern is
-  // `object_pattern`; in an expression it is `object`.
+  // Enum member name: `enum E { deadFn }` — the member name is a binding, not a use.
+  // Tree-sitter: enum_body contains enum_assignment nodes (name: field) or bare identifiers.
   if (
-    node.type === "shorthand_property_identifier" &&
-    (parentType === "object_pattern" || parentType === "pair_pattern")
+    parentType === "enum_body" ||
+    (parentType === "enum_assignment" &&
+      (() => {
+        const enumNameField = tryGetField(parent, "name");
+        return enumNameField !== null && enumNameField.startIndex === node.startIndex;
+      })())
   ) {
-    return true;
+    return false; // enum member name — NOT a use
   }
 
+  // Destructuring patterns — all binding positions, NOT uses:
+  //   array_pattern: `const [deadFn] = x`
+  //   object_pattern: `const { deadFn } = x` (shorthand binding)
+  //   pair_pattern: `const { x: deadFn } = y` (renamed binding, value field)
+  //   rest_pattern: `const [...deadFn] = x`, `const { ...deadFn } = x`
+  if (
+    parentType === "array_pattern" ||
+    (parentType === "object_pattern" && node.type === "shorthand_property_identifier") ||
+    (parentType === "pair_pattern" &&
+      (() => {
+        const valueField = tryGetField(parent, "value");
+        return valueField !== null && valueField.startIndex === node.startIndex;
+      })()) ||
+    parentType === "rest_pattern"
+  ) {
+    return false; // destructuring binding — NOT a use
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 2: USE-POSITION ALLOWLIST — recognized use positions.
+  //
+  // If a node reaches here (not rejected above) AND matches one of these
+  // explicit use positions, it IS a genuine use. Otherwise: default = NOT a use.
+  // -------------------------------------------------------------------------
+
+  // Call expression callee: `deadFn(...)`
+  // Tree-sitter: call_expression has function: field for the callee.
+  if (parentType === "call_expression") {
+    const calleeField = tryGetField(parent, "function");
+    if (calleeField !== null && calleeField.startIndex === node.startIndex) {
+      return true; // call callee — IS a use
+    }
+  }
+
+  // New expression constructor: `new DeadFn()`
+  if (parentType === "new_expression") {
+    const ctorField = tryGetField(parent, "constructor");
+    if (ctorField !== null && ctorField.startIndex === node.startIndex) {
+      return true; // new target — IS a use
+    }
+  }
+
+  // Member expression: `deadFn.x` (object:) or `x.deadFn` (property: in accessed position)
+  // Both the object and property positions in a member_expression are uses.
+  if (parentType === "member_expression") {
+    return true; // member access — IS a use
+  }
+
+  // Assignment expression: `x = deadFn` or `deadFn = x` — both sides are uses.
+  // (Left side could be the symbol being assigned; right side is a value read.)
+  if (parentType === "assignment_expression") {
+    return true; // assignment operand — IS a use
+  }
+
+  // Binary/unary expressions: `deadFn + x`, `!deadFn`, `deadFn === null`
+  if (
+    parentType === "binary_expression" ||
+    parentType === "unary_expression" ||
+    parentType === "augmented_assignment_expression" ||
+    parentType === "ternary_expression"
+  ) {
+    return true; // expression operand — IS a use
+  }
+
+  // Arguments in a call: `f(deadFn)` — the identifier is an argument.
+  // Tree-sitter: arguments node wraps the argument list.
+  if (parentType === "arguments") {
+    return true; // argument to a call — IS a use
+  }
+
+  // Array literal element (NOT array_pattern binding): `[deadFn, x]`
+  // Tree-sitter: array node (expression context) vs array_pattern (binding context).
+  if (parentType === "array") {
+    return true; // array element expression — IS a use
+  }
+
+  // Parenthesized expression: `(deadFn)`
+  if (parentType === "parenthesized_expression") {
+    return true; // parenthesized value — IS a use
+  }
+
+  // Return statement value: `return deadFn`
+  if (parentType === "return_statement") {
+    return true; // return value — IS a use
+  }
+
+  // Yield/await expression: `yield deadFn`, `await deadFn`
+  if (parentType === "yield_expression" || parentType === "await_expression") {
+    return true; // yield/await value — IS a use
+  }
+
+  // Spread element: `...deadFn` in expression position
+  if (parentType === "spread_element") {
+    return true; // spread value — IS a use
+  }
+
+  // Shorthand property in an object EXPRESSION (not pattern):
+  //   `const o = { deadFn }` — this IS a use (reading the value of deadFn).
+  //   Tree-sitter: shorthand_property_identifier inside `object` (expression) vs
+  //   inside `object_pattern` (binding — handled above in NON-USE).
+  // Note: `object` parent + shorthand_property_identifier = reading the binding value.
+  if (node.type === "shorthand_property_identifier" && parentType === "object") {
+    return true; // shorthand object property value — IS a use
+  }
+
+  // Computed property key: `{ [deadFn]: 1 }` — the expression inside [] is a use.
+  // Tree-sitter: computed_property_name wraps the key expression.
+  if (parentType === "computed_property_name") {
+    return true; // computed key expression — IS a use
+  }
+
+  // Heritage clause: `class C extends DeadFn` or `implements DeadFn`
+  if (
+    parentType === "class_heritage" ||
+    parentType === "extends_clause" ||
+    parentType === "implements_clause"
+  ) {
+    return true; // extends/implements target — IS a use
+  }
+
+  // Decorator: `@deadFn` or `@deadFn.method`
+  if (parentType === "decorator") {
+    return true; // decorator reference — IS a use
+  }
+
+  // Type annotation (type reference): `: DeadFn`, `as DeadFn`, `DeadFn[]`, etc.
+  // Tree-sitter uses many type node types; most have the identifier as a direct child.
+  if (
+    parentType === "type_annotation" ||
+    parentType === "type_identifier" ||
+    parentType === "generic_type" ||
+    parentType === "array_type" ||
+    parentType === "union_type" ||
+    parentType === "intersection_type" ||
+    parentType === "tuple_type" ||
+    parentType === "type_predicate" ||
+    parentType === "index_signature" ||
+    parentType === "lookup_type" ||
+    parentType === "conditional_type" ||
+    parentType === "infer_type" ||
+    parentType === "mapped_type_clause" ||
+    parentType === "type_arguments" ||
+    parentType === "constraint" ||
+    parentType === "default_type" ||
+    parentType === "as_expression" ||
+    parentType === "satisfies_expression" ||
+    parentType === "type_assertion" ||
+    parentType === "non_null_expression"
+  ) {
+    return true; // type reference — IS a use
+  }
+
+  // typeof expression: `typeof deadFn`
+  if (parentType === "typeof_expression" || parentType === "type_query") {
+    return true; // typeof target — IS a use
+  }
+
+  // Expression statement: bare `deadFn;` (uncommon but valid)
+  if (parentType === "expression_statement") {
+    return true; // bare expression — IS a use
+  }
+
+  // Sequence expression: `x, deadFn`
+  if (parentType === "sequence_expression") {
+    return true; // sequence operand — IS a use
+  }
+
+  // Template substitution: `${deadFn}` inside a template literal.
+  // The template_substitution node's direct child is the expression.
+  if (parentType === "template_substitution") {
+    return true; // template substitution expression — IS a use
+  }
+
+  // JSX expression container: `{deadFn}` in TSX
+  if (parentType === "jsx_expression") {
+    return true; // JSX expression — IS a use
+  }
+
+  // Object value (non-shorthand): `{ key: deadFn }` — the value is a use.
+  // Tree-sitter: pair node, value: field.
+  if (parentType === "pair") {
+    const valueField = tryGetField(parent, "value");
+    if (valueField !== null && valueField.startIndex === node.startIndex) {
+      return true; // object property value — IS a use
+    }
+  }
+
+  // Export statement value: `export default deadFn` or `export = deadFn`
+  if (
+    parentType === "export_default" ||
+    parentType === "export_statement" ||
+    parentType === "assignment_expression"
+  ) {
+    // For export_statement we need to be careful — the symbol name in
+    // `export function foo` would have been caught by the declaration name check above.
+    // If we reach here, it's a value context (e.g. export = foo).
+    return true; // export value — IS a use
+  }
+
+  // Variable initializer: `const x = deadFn` — the right-hand side is a use.
+  // Tree-sitter: variable_declarator has value: field for the initializer.
+  if (parentType === "variable_declarator") {
+    const valueFieldVD = tryGetField(parent, "value");
+    if (valueFieldVD !== null && valueFieldVD.startIndex === node.startIndex) {
+      return true; // variable initializer — IS a use
+    }
+  }
+
+  // Subscript expression: `x[deadFn]`
+  if (parentType === "subscript_expression") {
+    return true; // subscript index — IS a use
+  }
+
+  // Throw statement: `throw deadFn`
+  if (parentType === "throw_statement") {
+    return true; // throw value — IS a use
+  }
+
+  // Conditional / switch / if / while / for: expression parts
+  if (
+    parentType === "if_statement" ||
+    parentType === "while_statement" ||
+    parentType === "do_statement" ||
+    parentType === "for_statement" ||
+    parentType === "for_in_statement" ||
+    parentType === "switch_statement"
+  ) {
+    return true; // control-flow expression — IS a use
+  }
+
+  // -------------------------------------------------------------------------
+  // DEFAULT: unrecognized position → NOT a use (FAIL-CLOSED).
+  //
+  // Any position not explicitly recognized above defaults to NON-use.
+  // This is the core of the allowlist posture: incompleteness over-flags
+  // DEAD (safe), never false-WIRE (unsafe).
+  // -------------------------------------------------------------------------
   return false;
 }
 
 /**
  * Declaration node types that have a `name:` field which binds the symbol.
  * Checking the parent type + field name gives us declaration-name positions.
+ * These are used by isUsePosition() Step 1 to fast-reject declaration names.
  */
 const DECLARATION_NODE_TYPES_WITH_NAME_FIELD = new Set([
   "function_declaration",
@@ -284,9 +535,9 @@ function resolveRuntimeWasm(scriptName) {
 /**
  * Walk the CST and count USE-POSITION occurrences of `symbol`.
  *
- * Declaration-name positions are excluded: the walker calls isDeclarationNameNode()
- * for every code-identifier leaf to determine whether it is a binding site. If so,
- * the leaf is skipped even if its text matches the symbol.
+ * USE-POSITION ALLOWLIST posture: the walker calls isUsePosition() for every
+ * code-identifier leaf to determine whether it is a genuine use. Only recognized
+ * use positions are counted; unrecognized positions default to NON-use (fail-closed).
  *
  * Recurses uniformly through all node types — including template_string and
  * template_substitution — so that ${symbol()} inside a template literal is
@@ -303,8 +554,9 @@ function countCodeRefs(node, symbol) {
   if (node.childCount === 0) {
     // Leaf node: classify by own type
     if (CODE_IDENTIFIER_TYPES.has(node.type) && node.text === symbol) {
-      // Only count if this is a USE position, not a declaration-name position
-      if (!isDeclarationNameNode(node)) {
+      // Only count if this is a recognized USE position (allowlist)
+      // Unrecognized positions default to NON-use (fail-closed posture)
+      if (isUsePosition(node)) {
         count += 1;
       }
     }
