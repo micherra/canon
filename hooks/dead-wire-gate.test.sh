@@ -1143,6 +1143,373 @@ echo "-- Defect 1 regression: top-level src/*.ts wired export => exit 0 --"
   rm -rf "$REPO"
 }
 
+# ===========================================================================
+# Parse-aware same-file internal-use tests (dwparse-02 — T1-T15)
+#
+# These tests exercise the new is_internally_used() path that calls the
+# node dead-wire-internal-use.mjs helper instead of a regex comment-strip.
+#
+# Helper path (must be under mcp-server/ for ESM resolution):
+HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/mcp-server/scripts/dead-wire-internal-use.mjs"
+#
+# Each fixture adds a newly-exported symbol (so the gate sees it as a
+# candidate) and controls whether the same-file content is a code use or a
+# comment/string/non-code mention.  The cross-file grep finds no other
+# references, so the decision falls to the same-file check.
+#
+# Bypass-class tests (T1-T6) expect exit 2 (DEAD).
+# Genuine-use tests (T7-T8) expect exit 0 (WIRED via same-file use).
+# Invariant tests (T9-T11) exercise R2 / R3 / cross-file WIRED.
+# Fail-closed tests (T12-T14) expect exit 2 (DEAD on any helper failure).
+# Suppression test (T15) expects exit 0 (suppressed despite true dead).
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Helper: make a minimal fixture repo with only the definition file.
+# The caller passes the file content; the export symbol name is "deadFn"
+# throughout the bypass tests so that any inline occurrence is detectable.
+# ---------------------------------------------------------------------------
+make_same_file_repo() {
+  local dir="$1"
+  local file_content="$2"
+  mkdir -p "$dir/mcp-server/src/features" "$dir/mcp-server/src/app"
+  git -C "$dir" init -q
+  git -C "$dir" config user.email "test@example.com"
+  git -C "$dir" config user.name "Test"
+  git -C "$dir" config commit.gpgsign false
+  # Initial commit so HEAD~1 exists
+  printf '// placeholder\n' > "$dir/mcp-server/src/features/placeholder.ts"
+  git -C "$dir" add .
+  git -C "$dir" commit -q -m "init"
+  # The definition file with the specified content
+  printf '%s\n' "$file_content" > "$dir/mcp-server/src/features/target.ts"
+  git -C "$dir" add .
+  git -C "$dir" commit -q -m "add target"
+}
+
+# ---------------------------------------------------------------------------
+# T1: block-comment-only mention — "/* deadFn */" → exit 2 (DEAD)
+#
+# OLD regex: comment stripping on plain grep may or may not strip block
+# comments correctly depending on generation.  The parse-aware helper
+# correctly classifies this as a comment leaf → count = 1 (def only) → DEAD.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T1: block-comment-only mention → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  # Export definition + only a block comment mention (no code use)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+// This uses deadFn in a comment: /* deadFn */'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T1: block-comment mention only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T2: unterminated /* mention — "/* deadFn" …EOF → exit 2 (DEAD)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T2: unterminated /* mention → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+/* deadFn'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T2: unterminated /* mention only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T3: comment-inside-string — 'const s = "/* deadFn */"' → exit 2 (DEAD)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T3: comment-inside-string mention → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const s = "/* deadFn */";'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T3: comment-inside-string only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T4: comment-inside-regex — 'const r = /\/\* deadFn \*\//' → exit 2 (DEAD)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T4: comment-inside-regex mention → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const r = /\/\* deadFn \*\//;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T4: comment-inside-regex only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T5: bare-token-after-comment — "/* x */ // deadFn" → exit 2 (DEAD)
+# The entire second line is a line comment; the token after // is not code.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T5: bare-token-after-line-comment → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+/* x */ // deadFn'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T5: token after line-comment only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T6: nested comment — "/* /* deadFn */" → exit 2 (DEAD)
+# Tree-sitter error-recovers; deadFn still ends up inside a comment leaf.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T6: nested /* /* mention → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+/* /* deadFn */'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T6: nested /* /* mention only → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T7: template substitution — `${deadFn()}` → exit 0 (WIRED)
+# The expression inside ${...} is real code; the helper counts it as a code
+# ref.  count ≥ 2 (def + template use) → WIRED.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T7: template substitution \${deadFn()} → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): string { return "x"; }
+const msg = `result: ${deadFn()}`;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T7: template substitution → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T8: genuine same-file call — "const x = deadFn()" → exit 0 (WIRED)
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T8: genuine same-file call → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): number { return 42; }
+const x = deadFn();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T8: genuine same-file call → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T9: zero reference (def only) — no extra mention at all → exit 2 (DEAD)
+# Invariant R2: a symbol with only its own definition is DEAD.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T9: zero reference (def only) → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T9: zero reference (def only) → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T10: test-file-only reference → exit 2 (DEAD)
+# Invariant R3: the gate excludes *.test.ts from cross-file grep;
+# the same-file check runs on the def file, so a *.test.ts mention never
+# WIREs the symbol.  Simulate: def only in target.ts, use in target.test.ts.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T10: test-file-only reference → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  mkdir -p "$REPO/mcp-server/src/features" "$REPO/mcp-server/src/app"
+  git -C "$REPO" init -q
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test"
+  git -C "$REPO" config commit.gpgsign false
+  printf '// placeholder\n' > "$REPO/mcp-server/src/features/placeholder.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "init"
+  # def file (no same-file code use)
+  printf 'export function deadFn(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/target.ts"
+  # test file with a code use (excluded by gate)
+  printf 'import { deadFn } from "./target"; deadFn();\n' \
+    > "$REPO/mcp-server/src/features/target.test.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "add target + test ref"
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T10: test-file-only reference → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T11: cross-file wired — used in a non-test sibling .ts → exit 0
+# Existing cross-file grep path; verify the same-file check does NOT
+# interfere with the already-wired path.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T11: cross-file wired (non-test sibling) → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  mkdir -p "$REPO/mcp-server/src/features" "$REPO/mcp-server/src/app"
+  git -C "$REPO" init -q
+  git -C "$REPO" config user.email "test@example.com"
+  git -C "$REPO" config user.name "Test"
+  git -C "$REPO" config commit.gpgsign false
+  printf '// placeholder\n' > "$REPO/mcp-server/src/features/placeholder.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "init"
+  # def file (no same-file code use)
+  printf 'export function deadFn(): void { return; }\n' \
+    > "$REPO/mcp-server/src/features/target.ts"
+  # non-test sibling with a code use → cross-file grep finds it → WIRED
+  printf 'import { deadFn } from "./target"; deadFn();\n' \
+    > "$REPO/mcp-server/src/features/consumer.ts"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -q -m "add target + consumer"
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T11: cross-file wired → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T12: node absent — PATH stripped of node → exit 2 (fail-closed)
+# The gate's "command -v node" guard must fire and flag DEAD.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T12: node absent from PATH → DEAD (fail-closed, exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const x = deadFn();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+
+  # Strip node from PATH by keeping only dirs that do NOT contain a "node" binary
+  NO_NODE_PATH=""
+  IFS=: read -ra path_dirs <<< "$PATH"
+  for d in "${path_dirs[@]}"; do
+    if [[ ! -x "$d/node" ]]; then
+      NO_NODE_PATH="${NO_NODE_PATH:+$NO_NODE_PATH:}$d"
+    fi
+  done
+
+  _t12_exit=0
+  (cd "$REPO" && PATH="$NO_NODE_PATH" bash "$GATE" "$BASE") >/dev/null 2>&1 || _t12_exit=$?
+  if [[ "$_t12_exit" -eq 2 ]]; then
+    echo "  PASS: T12: node absent → exit 2 (fail-closed)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: T12: node absent → expected exit 2, got exit $_t12_exit"
+    FAIL=$((FAIL + 1))
+  fi
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T13: helper returns non-zero (stub helper exits 1) → exit 2 (fail-closed)
+# Shadow the real helper with a stub script that always exits 1.
+# The gate must treat helper non-zero as DEAD, never as WIRED.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T13: helper exits 1 (stub) → DEAD (fail-closed, exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const x = deadFn();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+
+  # Create a stub helper that always exits 1 (any error)
+  STUB_DIR=$(mktemp -d)
+  mkdir -p "$STUB_DIR/mcp-server/scripts"
+  cat > "$STUB_DIR/mcp-server/scripts/dead-wire-internal-use.mjs" <<'STUB'
+#!/usr/bin/env node
+process.stderr.write("CANON ERROR [stub]: simulated helper failure\n");
+process.exit(1);
+STUB
+
+  # Run gate from repo, but override the helper path via env var
+  _t13_exit=0
+  (cd "$REPO" && DEAD_WIRE_HELPER_PATH="$STUB_DIR/mcp-server/scripts/dead-wire-internal-use.mjs" \
+    bash "$GATE" "$BASE") >/dev/null 2>&1 || _t13_exit=$?
+  if [[ "$_t13_exit" -eq 2 ]]; then
+    echo "  PASS: T13: helper exits 1 → exit 2 (fail-closed)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: T13: helper exits 1 → expected exit 2, got exit $_t13_exit"
+    FAIL=$((FAIL + 1))
+  fi
+  rm -rf "$REPO" "$STUB_DIR"
+}
+
+# ---------------------------------------------------------------------------
+# T14: missing grammar — DEAD_WIRE_GRAMMARS_DIR points at empty dir → exit 2
+# The helper uses this env var to locate WASM grammars; missing wasm causes
+# Language.load to throw → helper exits 1 → gate flags DEAD.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T14: missing grammar (empty DEAD_WIRE_GRAMMARS_DIR) → DEAD (fail-closed, exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const x = deadFn();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+
+  # Empty directory — no WASM files present
+  EMPTY_GRAMMARS=$(mktemp -d)
+
+  _t14_exit=0
+  (cd "$REPO" && DEAD_WIRE_GRAMMARS_DIR="$EMPTY_GRAMMARS" \
+    bash "$GATE" "$BASE") >/dev/null 2>&1 || _t14_exit=$?
+  if [[ "$_t14_exit" -eq 2 ]]; then
+    echo "  PASS: T14: missing grammar → exit 2 (fail-closed)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: T14: missing grammar → expected exit 2, got exit $_t14_exit"
+    FAIL=$((FAIL + 1))
+  fi
+  rm -rf "$REPO" "$EMPTY_GRAMMARS"
+}
+
+# ---------------------------------------------------------------------------
+# T15: suppression marker on a true dead export → exit 0 (suppressed)
+# Verifies that the canon:allow-unwired: path is untouched by the new logic.
+# The symbol has no cross-file or same-file code refs, but is suppressed.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T15: suppression marker on true dead → suppressed (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    '// canon:allow-unwired: test fixture — intentional dead export
+export function deadFn(): void { return; }'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T15: suppression marker on true dead → exit 0 (suppressed)"
+  rm -rf "$REPO"
+}
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
