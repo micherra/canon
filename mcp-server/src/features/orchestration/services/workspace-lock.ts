@@ -206,6 +206,18 @@ function handleExisting(
     return handleCorrupt(workspace, owner, { nowMs, ttlMs, seams });
   }
 
+  // Same-session re-entry: if the new owner's session_id matches the existing lock's
+  // session_id, this is the same orchestrator re-acquiring (e.g. a resume after init,
+  // or an init after preflight). Refresh the lock with the new record.
+  // Note: when both are "unknown" (session_id omitted by caller) this same-session path
+  // fires — single-session flows work correctly without a HITL gate.
+  const newSessionId = owner.session_id ?? "unknown";
+  if (newSessionId === existing.session_id) {
+    const record = buildRecord(owner, seams);
+    writeLockAtomic(workspace, record);
+    return { kind: "acquired", record };
+  }
+
   // Valid record: check staleness (TTL primary)
   if (isStale(existing, nowMs, ttlMs)) {
     const record = buildRecord(owner, seams);

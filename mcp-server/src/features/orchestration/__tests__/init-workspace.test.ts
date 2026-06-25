@@ -64,12 +64,13 @@ describe("initWorkspaceFlow — SQLite creation", () => {
     expect(existsSync(boardPath)).toBe(false);
   });
 
-  it("does NOT create a .lock file", async () => {
+  it("creates a .lock file for the workspace mutex (S2 lock wiring)", async () => {
     const projectDir = makeTmpProjectDir();
     const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
 
+    // init_workspace now acquires the workspace mutex — .lock is expected
     const lockPath = join(result.workspace, ".lock");
-    expect(existsSync(lockPath)).toBe(false);
+    expect(existsSync(lockPath)).toBe(true);
   });
 
   it("progress entry exists in DB after init", async () => {

@@ -18,6 +18,7 @@ import {
 } from "@domains/workspaces/workspace.ts";
 import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
 import { CANON_DIR } from "@shared/constants.ts";
+import { acquireLock } from "../services/workspace-lock.ts";
 import { validateSeedPath } from "./seed-workspace.ts";
 
 type InitWorkspaceInput = {
@@ -32,6 +33,17 @@ type InitWorkspaceInput = {
   seed_from?: string;
   runbook_content?: string;
   brief_content?: string;
+  /**
+   * Calling session's identity — read from CLAUDE_CODE_SESSION_ID in the
+   * orchestrator's env and passed explicitly (the shared HTTP daemon cannot
+   * derive per-session identity from process.env; see PROBE-FINDINGS.md Probe 1).
+   */
+  session_id?: string;
+  /**
+   * Job identifier — first 8 chars of basename(CLAUDE_JOB_DIR) in the
+   * orchestrator's env. Stored in the workspace lock for audit.
+   */
+  job_id?: string;
 };
 
 type InitWorkspaceResult = {
@@ -47,6 +59,21 @@ type InitWorkspaceResult = {
   worktree_branch?: string;
   cache_prefix_hash?: string;
   seeded_from?: string;
+  /**
+   * Set to true when a live foreign lock exists on the workspace.
+   * Callers must NOT proceed; present the lock_owner to the user via HITL.
+   */
+  lock_gated?: boolean;
+  /**
+   * The record of the session currently holding the lock.
+   * Present when lock_gated is true.
+   */
+  lock_owner?: import("../services/workspace-lock.ts").LockRecord;
+  /**
+   * Set to "reclaimed" when init reclaimed a stale lock before proceeding.
+   * Informational only — proceed normally.
+   */
+  lock_reclaimed?: "ttl" | "pid_dead" | "corrupt_and_stale";
 };
 
 /**
@@ -177,6 +204,51 @@ function isSqliteConstraintError(err: unknown): boolean {
 }
 
 /**
+ * Attempt to acquire the workspace mutex for `workspace`.
+ *
+ * Returns `null` on success (acquired or reclaimed — caller proceeds).
+ * Returns a gated `InitWorkspaceResult` when a live foreign lock exists.
+ *
+ * Acquire is best-effort: any unexpected error is warned and treated as proceed
+ * (fail-open for the lock acquisition itself, not the fail-safe posture of the lock
+ * content — D7 fail-safe applies inside acquireLock, not here).
+ */
+function tryAcquireWorkspaceLock(
+  workspace: string,
+  input: Pick<InitWorkspaceInput, "session_id" | "job_id">,
+  slug: string,
+  board: Board,
+  session: Session,
+): InitWorkspaceResult | null {
+  try {
+    const outcome = acquireLock(workspace, {
+      session_id: input.session_id,
+      job_id: input.job_id,
+    });
+    if (outcome.kind === "gated") {
+      // Foreign session owns this workspace — return gated result
+      return {
+        board: {} as Board,
+        created: false,
+        lock_gated: true,
+        lock_owner: outcome.owner,
+        session: {} as Session,
+        slug,
+        workspace: "",
+      };
+    }
+    // acquired or reclaimed — proceed; surface reclaim reason for log_decision
+    return null;
+  } catch (err) {
+    console.warn(
+      "[init-workspace] workspace lock acquire failed (proceeding):",
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
+/**
  * Resolve the worktree path for a resumed session.
  * Priority: persisted path → new {workspace}/worktree → legacy .canon/worktrees/{slug}
  */
@@ -202,14 +274,19 @@ function resolveWorktreePath(
  * truncates long task strings to 72 characters, which can produce identical slugs for
  * distinct tasks; the guard here is the defense-in-depth layer against that failure mode.
  *
+ * Lock invariant: acquires the workspace mutex before resuming. If a live foreign lock
+ * exists, returns a gated result instead of resuming.
+ *
  * @param candidateWorkspace - Absolute path to the candidate workspace directory
  * @param projectDir - Absolute path to the project root
  * @param expectedTask - When provided, resume is blocked if `session.task !== expectedTask`
+ * @param lockOwner - Optional session_id/job_id to record in the workspace lock
  */
 function tryResumeWorkspace(
   candidateWorkspace: string,
   projectDir: string,
   expectedTask?: string,
+  lockOwner?: { session_id?: string; job_id?: string },
 ): InitWorkspaceResult | null {
   try {
     const store = getExecutionStore(candidateWorkspace);
@@ -217,6 +294,16 @@ function tryResumeWorkspace(
     const board = store.getBoard();
     const taskMatches = expectedTask === undefined || session?.task === expectedTask;
     if (session && session.status === "active" && board && taskMatches) {
+      // Acquire the mutex before resuming — lock guards the workspace, not the worktree.
+      const gated = tryAcquireWorkspaceLock(
+        candidateWorkspace,
+        lockOwner ?? {},
+        session.slug,
+        board,
+        session,
+      );
+      if (gated) return gated;
+
       const worktreePath = resolveWorktreePath(candidateWorkspace, projectDir, session);
       const worktreeExists = existsSync(worktreePath);
       return {
@@ -484,6 +571,31 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
   const workspace = join(branchDir, slug);
   await createWorkspace(projectDir, join(sanitized, slug));
 
+  // Acquire mutex AFTER workspace dir is created (lock lives at workspace root).
+  // Robust to the known created-true-no-worktree quirk: lock guards the workspace
+  // dir, not the worktree — so we always attempt the lock here even if the worktree
+  // creation fails later.
+  const board = initBoard(input.flow_name, input.task, input.base_commit);
+  const session: Session = {
+    branch: input.branch,
+    created: new Date().toISOString(),
+    flow: input.flow_name,
+    original_task: input.original_input,
+    sanitized,
+    slug,
+    status: "active",
+    task: input.task,
+    tier: input.tier,
+  };
+  const lockGated = tryAcquireWorkspaceLock(
+    workspace,
+    { session_id: input.session_id, job_id: input.job_id },
+    slug,
+    board,
+    session,
+  );
+  if (lockGated) return lockGated;
+
   const store = getExecutionStore(workspace);
   const existingSession = store.getSession();
   if (existingSession?.status === "active") {
@@ -498,8 +610,6 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
     };
   }
 
-  const board = initBoard(input.flow_name, input.task, input.base_commit);
-
   await mkdir(join(workspace, "plans", slug), { recursive: true });
   if (input.runbook_content) {
     await writeFile(join(workspace, "plans", slug, "runbook.md"), input.runbook_content);
@@ -507,18 +617,6 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
   if (input.brief_content) {
     await writeFile(join(workspace, "plans", slug, "planning-brief.md"), input.brief_content);
   }
-  const now = new Date().toISOString();
-  const session: Session = {
-    branch: input.branch,
-    created: now,
-    flow: input.flow_name,
-    original_task: input.original_input,
-    sanitized,
-    slug,
-    status: "active",
-    task: input.task,
-    tier: input.tier,
-  };
 
   const result = await finalizeNewWorkspace(store, input, {
     board,
@@ -545,7 +643,10 @@ export async function initWorkspaceFlow(
   const branchDir = join(projectDir, ".canon", "workspaces", sanitized);
   const candidateWorkspace = join(branchDir, baseSlug);
 
-  const resumeResult = tryResumeWorkspace(candidateWorkspace, projectDir, input.task);
+  const resumeResult = tryResumeWorkspace(candidateWorkspace, projectDir, input.task, {
+    session_id: input.session_id,
+    job_id: input.job_id,
+  });
   if (resumeResult) return resumeResult;
 
   const result = await createNewWorkspace({
