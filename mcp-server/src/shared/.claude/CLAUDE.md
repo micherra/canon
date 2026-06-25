@@ -26,7 +26,7 @@ Shared kernel — cross-cutting utilities, constants, parsers, and low-level hel
 | `tool-result.ts` | `ToolResult<T>`, `CanonToolError`, `CanonErrorCode`, `toolOk`, `toolError`, `isToolError`, `assertOk` |
 | `wrap-handler.ts` | `wrapHandler` — wraps MCP tool handlers, converts unexpected throws to `UNEXPECTED` errors |
 | `config.ts` | `buildLayerInferrer`, `loadLayerMappings`, `loadLayerMappingsStrict`, `loadGraphCompositionConfig`, `loadConfigNumber`, `loadJanitorConfig`, `JanitorConfig`, `VALID_LAYERS` — janitor config from `.canon/config.json` `janitor` key; `VALID_LAYERS` = `Object.keys(DEFAULT_LAYER_MAPPINGS)` (derived valid set for `scope.layers`); added 2026-04-23, `VALID_LAYERS` added 2026-06-05 |
-| `atomic-write.ts` | `atomicWriteFile` — write-then-rename for concurrent-safe file writes |
+| `atomic-write.ts` | `atomicWriteFile` — write-then-rename for concurrent-safe single-file writes; `atomicWritePair(path1, data1, path2, data2)` — writes both temp files first then renames both, so callers see either both old files or both new files (prevents the md-new/meta-old divergence window); used by `write_review` for REVIEW.md + REVIEW.meta.json pairs. Added `atomicWritePair` 2026-06-24. |
 | `id.ts` | `generateId` — prefixed, date-stamped ID generation |
 | `env.ts` | `isSyncMode`, `isCI` — environment detection predicates |
 | `errors.ts` | `isNotFound` — type guard for `ENOENT` filesystem errors |
