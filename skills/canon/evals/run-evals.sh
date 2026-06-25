@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # Canon Skill Eval Runner
 # Runs eval cases from eval-set.json using the claude CLI in print mode.
-# Usage: bash skills/canon/evals/run-evals.sh [--filter <id-substring>] [--model <model>] [--parallel] [--jobs <n>] [--dry-run] [--no-judge] [--structured-judge]
+# Usage: bash skills/canon/evals/run-evals.sh [--filter <id-substring>] [--split <name>] [--model <model>]
+#          [--parallel] [--jobs <n>] [--dry-run] [--no-judge] [--structured-judge]
+#          [--judge-votes <N>] [--emit-baseline <path>]
 #
 # Examples:
-#   bash skills/canon/evals/run-evals.sh                    # Run all evals
-#   bash skills/canon/evals/run-evals.sh --filter trigger   # Run only trigger evals
-#   bash skills/canon/evals/run-evals.sh --model sonnet     # Use sonnet model
-#   bash skills/canon/evals/run-evals.sh --parallel         # Run cases in parallel (max 4)
+#   bash skills/canon/evals/run-evals.sh                          # Run all evals
+#   bash skills/canon/evals/run-evals.sh --filter trigger         # Run only trigger evals
+#   bash skills/canon/evals/run-evals.sh --split holdout          # Run only holdout-split cases
+#   bash skills/canon/evals/run-evals.sh --model sonnet           # Use sonnet model
+#   bash skills/canon/evals/run-evals.sh --parallel               # Run cases in parallel (max 4)
 #   bash skills/canon/evals/run-evals.sh --parallel --jobs 8
+#   bash skills/canon/evals/run-evals.sh --judge-votes 3          # Majority-of-3 judging (tie → FAIL)
+#   bash skills/canon/evals/run-evals.sh --emit-baseline out.json # Write machine-readable per-split counts
 
 set -euo pipefail
 
@@ -18,16 +23,20 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 MODEL="sonnet"
 FILTER=""
+SPLIT_FILTER=""
 VERBOSE=false
 PARALLEL=false
 MAX_PARALLEL_JOBS=4
 DRY_RUN=false
 NO_JUDGE=false
 STRUCTURED_JUDGE=false
+JUDGE_VOTES=1
+EMIT_BASELINE=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --filter) FILTER="$2"; shift 2 ;;
+    --split) SPLIT_FILTER="$2"; shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;
     --verbose) VERBOSE=true; shift ;;
     --parallel) PARALLEL=true; shift ;;
@@ -42,6 +51,15 @@ while [[ $# -gt 0 ]]; do
       fi
       shift 2
       ;;
+    --judge-votes)
+      JUDGE_VOTES="$2"
+      if ! [[ "$JUDGE_VOTES" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: --judge-votes must be a positive integer" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --emit-baseline) EMIT_BASELINE="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -208,58 +226,79 @@ $file_content
       "Does the actual output satisfy the expected behavior? Reply with ONLY 'PASS' or 'FAIL' on the first line, followed by a one-sentence explanation.")
   fi
 
-  local verdict=""
-  verdict=$(cd /tmp && claude -p "$judge_prompt" \
-    --model haiku \
-    --output-format text \
-    --no-session-persistence \
-    --disable-slash-commands \
-    --max-turns 1 \
-    --max-budget-usd 0.05 \
-    2>&1) || true
-
-  if $STRUCTURED_JUDGE; then
-    local verdict_json verdict_token explanation
-    verdict_token=""
-    explanation=""
-    verdict_json=$(printf '%s\n' "$verdict")
-
-    verdict_token=$(printf '%s\n' "$verdict_json" | jq -r '.verdict // empty' 2>/dev/null || true)
-    explanation=$(printf '%s\n' "$verdict_json" | jq -r '.explanation // empty' 2>/dev/null || true)
-
-    if [[ -z "$verdict_token" ]]; then
-      # Fallback for mixed output: try parsing just the first line as JSON.
-      verdict_json=$(printf '%s\n' "$verdict" | head -n 1)
-      verdict_token=$(printf '%s\n' "$verdict_json" | jq -r '.verdict // empty' 2>/dev/null || true)
-      explanation=$(printf '%s\n' "$verdict_json" | jq -r '.explanation // empty' 2>/dev/null || true)
-    fi
-
-    if [[ "$verdict_token" == "PASS" ]]; then
-      echo "PASS   $id" > "$result_file"
-    elif [[ "$verdict_token" == "FAIL" ]]; then
-      echo "FAIL   $id  ($explanation)" > "$result_file"
-    else
-      # Fallback for cases where the judge doesn't return JSON.
-      if judge_first_token_is_pass "$verdict"; then
-        echo "PASS   $id" > "$result_file"
+  # Parse a single raw judge response into PASS or FAIL.
+  # Outputs "PASS" or "FAIL" to stdout.
+  parse_single_verdict() {
+    local raw="$1"
+    if $STRUCTURED_JUDGE; then
+      local vt
+      vt=$(printf '%s\n' "$raw" | jq -r '.verdict // empty' 2>/dev/null || true)
+      if [[ -z "$vt" ]]; then
+        local firstline
+        firstline=$(printf '%s\n' "$raw" | head -n 1)
+        vt=$(printf '%s\n' "$firstline" | jq -r '.verdict // empty' 2>/dev/null || true)
+      fi
+      if [[ "$vt" == "PASS" ]]; then
+        echo "PASS"
+      elif [[ "$vt" == "FAIL" ]]; then
+        echo "FAIL"
       else
-        local explanation_fallback
-        explanation_fallback=$(printf '%s\n' "$verdict" | tail -n +2 | head -1)
-        echo "FAIL   $id  ($explanation_fallback)" > "$result_file"
+        if judge_first_token_is_pass "$raw"; then echo "PASS"; else echo "FAIL"; fi
+      fi
+    else
+      if judge_first_token_is_pass "$raw"; then echo "PASS"; else echo "FAIL"; fi
+    fi
+  }
+
+  # Collect N votes and apply majority (tie → FAIL, fail-closed).
+  # Bash 3.2 compatible: no associative arrays; use integer counters.
+  local vote_passes=0
+  local vote_fails=0
+  local vote_num=0
+  local last_raw_verdict=""
+  while (( vote_num < JUDGE_VOTES )); do
+    local raw_v=""
+    raw_v=$(cd /tmp && claude -p "$judge_prompt" \
+      --model haiku \
+      --output-format text \
+      --no-session-persistence \
+      --disable-slash-commands \
+      --max-turns 1 \
+      --max-budget-usd 0.05 \
+      2>&1) || true
+    last_raw_verdict="$raw_v"
+    local single
+    single=$(parse_single_verdict "$raw_v")
+    if [[ "$single" == "PASS" ]]; then
+      vote_passes=$((vote_passes + 1))
+    else
+      vote_fails=$((vote_fails + 1))
+    fi
+    vote_num=$((vote_num + 1))
+  done
+
+  # Majority decision (tie → FAIL)
+  if (( vote_passes > vote_fails )); then
+    echo "PASS   $id" > "$result_file"
+  else
+    # Extract explanation from the last raw verdict for the result line.
+    local explanation_final=""
+    if $STRUCTURED_JUDGE; then
+      explanation_final=$(printf '%s\n' "$last_raw_verdict" | jq -r '.explanation // empty' 2>/dev/null || true)
+      if [[ -z "$explanation_final" ]]; then
+        local firstline_f
+        firstline_f=$(printf '%s\n' "$last_raw_verdict" | head -n 1)
+        explanation_final=$(printf '%s\n' "$firstline_f" | jq -r '.explanation // empty' 2>/dev/null || true)
       fi
     fi
-  else
-    if judge_first_token_is_pass "$verdict"; then
-      echo "PASS   $id" > "$result_file"
-    else
-      local explanation
-      explanation=$(printf '%s\n' "$verdict" | tail -n +2 | head -1)
-      echo "FAIL   $id  ($explanation)" > "$result_file"
+    if [[ -z "$explanation_final" ]]; then
+      explanation_final=$(printf '%s\n' "$last_raw_verdict" | tail -n +2 | head -1)
     fi
+    echo "FAIL   $id  ($explanation_final)" > "$result_file"
   fi
 
   if $VERBOSE; then
-    echo "  JUDGE ($id): $verdict" >&2
+    echo "  JUDGE ($id): votes=$JUDGE_VOTES passes=$vote_passes fails=$vote_fails last_verdict=${last_raw_verdict:0:200}" >&2
     echo "" >&2
   fi
 }
@@ -269,6 +308,7 @@ echo "=================="
 echo "Model: $MODEL"
 echo "Eval file: $EVAL_FILE"
 [[ -n "$FILTER" ]] && echo "Filter: $FILTER"
+[[ -n "$SPLIT_FILTER" ]] && echo "Split: $SPLIT_FILTER"
 if $PARALLEL; then
   echo "Mode: parallel (max jobs: $MAX_PARALLEL_JOBS)"
 fi
@@ -280,6 +320,9 @@ if $NO_JUDGE; then
 fi
 if $STRUCTURED_JUDGE; then
   echo "Judge format: structured JSON"
+fi
+if [[ $JUDGE_VOTES -gt 1 ]]; then
+  echo "Judge votes: $JUDGE_VOTES (majority; tie → FAIL)"
 fi
 echo ""
 
@@ -295,8 +338,13 @@ while IFS= read -r case_json; do
   expected=$(jq -r '.expected_output' <<<"$case_json")
   should_trigger=$(jq -r '.should_trigger // "true"' <<<"$case_json")
   files_json=$(jq -c '.files // []' <<<"$case_json")
+  case_split=$(jq -r '.split // "train"' <<<"$case_json")
 
   if [[ -n "$FILTER" ]] && [[ "$id" != *"$FILTER"* ]]; then
+    continue
+  fi
+
+  if [[ -n "$SPLIT_FILTER" ]] && [[ "$case_split" != "$SPLIT_FILTER" ]]; then
     continue
   fi
 
@@ -356,6 +404,19 @@ for r in "${results[@]}"; do
 done
 echo ""
 echo "Total: $TOTAL | Passed: $PASSED | Failed: $FAILED | Errors: $ERRORS | Skipped: $SKIPPED"
+
+if [[ -n "$EMIT_BASELINE" ]]; then
+  local_split_label="${SPLIT_FILTER:-all}"
+  jq -n \
+    --arg split "$local_split_label" \
+    --argjson passed "$PASSED" \
+    --argjson failed "$FAILED" \
+    --argjson errors "$ERRORS" \
+    --argjson skipped "$SKIPPED" \
+    --argjson total "$TOTAL" \
+    '{split: $split, passed: $passed, failed: $failed, errors: $errors, skipped: $skipped, total: $total}' \
+    > "$EMIT_BASELINE"
+fi
 
 if [[ $FAILED -gt 0 || $ERRORS -gt 0 ]]; then
   exit 1
