@@ -1,5 +1,5 @@
 /**
- * candidate-injection.ts — ADR-0019: Throwaway temp-dir candidate injection.
+ * candidate-injection.ts — ADR-0022: Throwaway temp-dir candidate injection.
  *
  * Copies the eval surface (skills/canon/evals/) to a temp dir, writes the
  * candidate file at its target_path, runs the caller's function, then
@@ -8,7 +8,7 @@
  * NEVER mutates the real skills/canon/evals/ tree. NEVER writes outside the temp dir.
  * Path-traversal protection: rejects any target_path that resolves outside the temp root.
  *
- * ADR-0019: uses fs.cp (in-process, no shell) — never shell cp.
+ * ADR-0022: uses fs.cp (in-process, no shell) — never shell cp.
  */
 
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";

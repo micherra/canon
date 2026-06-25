@@ -1,12 +1,12 @@
 ---
-adr: "0019"
+adr: "0022"
 title: "Candidate injection for the fitness gate uses a throwaway temp-dir copy, not a git worktree"
 status: accepted
 date: "2026-06-24"
 build: "phase-1-deliverables-23-trace-driven-evolution-the-fitness-hard-gate-2"
 ---
 
-# ADR-0019: Candidate injection for the fitness gate uses a throwaway temp-dir copy, not a git worktree
+# ADR-0022: Candidate injection for the fitness gate uses a throwaway temp-dir copy, not a git worktree
 
 ## Context
 

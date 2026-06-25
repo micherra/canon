@@ -19,7 +19,7 @@ features/evolution/
 │   └── evaluate-candidate.ts   # MCP tool handler (thin wrapper over services)
 ├── services/
 │   ├── eval-runner.ts          # parseSummary, decideGate, runSplit (pure + one I/O fn)
-│   └── candidate-injection.ts  # withInjectedCandidate (ADR-0019 temp-dir injection)
+│   └── candidate-injection.ts  # withInjectedCandidate (ADR-0022 temp-dir injection)
 └── __tests__/
     ├── decide-gate.test.ts      # §7 invariant tests (pure, no I/O)
     ├── parse-summary.test.ts    # parseSummary tests (pure, no I/O)
@@ -46,7 +46,7 @@ Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
 - `size_delta` — Candidate length minus baseline file length (chars). Signal only, not a gate.
 - `judge_votes_holdout` — Always `3` (documents AC#7, evaluate-candidate-04).
 
-## Injection Contract (ADR-0019)
+## Injection Contract (ADR-0022)
 
 `withInjectedCandidate(projectDir, candidateText, targetPath, fn)`:
 
