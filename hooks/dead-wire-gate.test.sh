@@ -1464,12 +1464,13 @@ STUB
 }
 
 # ---------------------------------------------------------------------------
-# T14: missing grammar — DEAD_WIRE_GRAMMARS_DIR points at empty dir → exit 2
-# The helper uses this env var to locate WASM grammars; missing wasm causes
-# Language.load to throw → helper exits 1 → gate flags DEAD.
+# T14: helper exits non-zero — stub helper exits 1 → DEAD (fail-closed, exit 2)
+# The TS-compiler resolver no longer uses WASM grammars; the DEAD_WIRE_GRAMMARS_DIR
+# env var is unused. We test fail-closed by using a stub helper that exits 1
+# (same as T13 but focused on the gate's fail-closed guarantee, not grammar loading).
 # ---------------------------------------------------------------------------
 echo ""
-echo "-- T14: missing grammar (empty DEAD_WIRE_GRAMMARS_DIR) → DEAD (fail-closed, exit 2) --"
+echo "-- T14: stub helper exits 1 (fail-closed — no WASM grammar dependency) → DEAD (exit 2) --"
 {
   REPO=$(mktemp -d)
   make_same_file_repo "$REPO" \
@@ -1477,20 +1478,26 @@ echo "-- T14: missing grammar (empty DEAD_WIRE_GRAMMARS_DIR) → DEAD (fail-clos
 const x = deadFn();'
   BASE=$(git -C "$REPO" rev-parse HEAD~1)
 
-  # Empty directory — no WASM files present
-  EMPTY_GRAMMARS=$(mktemp -d)
+  # Create a stub helper that always exits 1 — gate must treat as DEAD
+  STUB_DIR_T14=$(mktemp -d)
+  mkdir -p "$STUB_DIR_T14/mcp-server/scripts"
+  cat > "$STUB_DIR_T14/mcp-server/scripts/dead-wire-internal-use.mjs" <<'STUB14'
+#!/usr/bin/env node
+process.stderr.write("CANON ERROR [stub-t14]: simulated helper failure\n");
+process.exit(1);
+STUB14
 
   _t14_exit=0
-  (cd "$REPO" && DEAD_WIRE_GRAMMARS_DIR="$EMPTY_GRAMMARS" \
+  (cd "$REPO" && DEAD_WIRE_HELPER_PATH="$STUB_DIR_T14/mcp-server/scripts/dead-wire-internal-use.mjs" \
     bash "$GATE" "$BASE") >/dev/null 2>&1 || _t14_exit=$?
   if [[ "$_t14_exit" -eq 2 ]]; then
-    echo "  PASS: T14: missing grammar → exit 2 (fail-closed)"
+    echo "  PASS: T14: stub helper exits 1 → exit 2 (fail-closed)"
     PASS=$((PASS + 1))
   else
-    echo "  FAIL: T14: missing grammar → expected exit 2, got exit $_t14_exit"
+    echo "  FAIL: T14: stub helper exits 1 → expected exit 2, got exit $_t14_exit"
     FAIL=$((FAIL + 1))
   fi
-  rm -rf "$REPO" "$EMPTY_GRAMMARS"
+  rm -rf "$REPO" "$STUB_DIR_T14"
 }
 
 # ---------------------------------------------------------------------------
@@ -1870,6 +1877,148 @@ echo "-- T36: class extends DeadFn → WIRED (exit 0) --"
 class Child extends DeadFn {}'
   BASE=$(git -C "$REPO" rev-parse HEAD~1)
   run_gate 0 "$REPO" "$BASE" "T36: extends clause → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ===========================================================================
+# Scope-aware resolver tests (S1/S4/S5/S9 gate-level discriminating guards)
+#
+# T37–T43: Gate-level end-to-end tests for the TS-compiler binding resolver.
+# Each fixture creates a repo with a newly-exported symbol whose same-file
+# content contains the discriminating pattern.  The cross-file grep finds
+# nothing, so the decision falls to the same-file resolver.
+#
+# Member-property and shadowing cases → DEAD (exit 2)
+# Member-OBJECT and genuine call cases → WIRED (exit 0)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# T37: S1 gate — member-property res.deadFn → DEAD (exit 2)
+# The symbol appears as a property NAME on an unrelated object, not as a
+# direct use of the exported binding.  The resolver returns count 0.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T37: S1 gate — member-property res.deadFn → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const res = { deadFn: () => {} };
+const x = res.deadFn;'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T37: S1 gate — res.deadFn → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T38: S4 gate — export function status + res.status realistic collision → DEAD (exit 2)
+# The most common real-world false-WIRE: short property names like status/type/id.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T38: S4 gate — function status + res.status collision → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function status(): string { return "active"; }
+function handleReq(res: { status: string }): string {
+  return res.status;
+}'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T38: S4 gate — res.status collision → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T39: S5 gate — export function deadFn + shadowing local (used) → DEAD (exit 2)
+# A local const named deadFn is declared and used inside wrapper(); the
+# resolver correctly resolves the use to the local binding, not the export.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T39: S5 gate — shadowing local const → DEAD (exit 2) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+function wrapper(): number {
+  const deadFn = 42;
+  return deadFn;
+}'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 2 "$REPO" "$BASE" "T39: S5 gate — shadowing local → DEAD (exit 2)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T40: S9 gate — export function deadFn + deadFn.bind(null) member-OBJECT → WIRED (exit 0)
+# deadFn is the object of the member expression (not the property name),
+# so the resolver correctly counts this as a use of the export binding.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T40: S9 gate — deadFn.bind(null) member-OBJECT → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const bound = deadFn.bind(null);'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T40: S9 gate — deadFn.bind → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T41: S10 gate — export function deadFn + shorthand { deadFn } reading export → WIRED (exit 0)
+# `const o = { deadFn }` reads the export binding; getShorthandAssignmentValueSymbol
+# resolves this correctly to the export symbol.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T41: S10 gate — shorthand { deadFn } reading export → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const o = { deadFn };'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T41: S10 gate — shorthand reading export → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T42: S1 variant gate — member-property + genuine call mixed → WIRED (exit 0)
+# res.deadFn alone would be DEAD, but a real deadFn() call wires it.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T42: S1 variant + genuine call → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+const res = { deadFn: () => {} };
+res.deadFn;
+deadFn();'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T42: member-property + genuine call → WIRED (exit 0)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T43: S5 variant gate — shadow in g() + genuine call in h() → WIRED (exit 0)
+# Same as S8: the shadow is DEAD locally but the real call in h() wires it.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T43: S5+S8 variant — shadow + genuine call → WIRED (exit 0) --"
+{
+  REPO=$(mktemp -d)
+  make_same_file_repo "$REPO" \
+    'export function deadFn(): void { return; }
+function g(): number {
+  const deadFn = 99;
+  return deadFn;
+}
+function h(): void {
+  deadFn();
+}'
+  BASE=$(git -C "$REPO" rev-parse HEAD~1)
+  run_gate 0 "$REPO" "$BASE" "T43: shadow-in-g + genuine-call-in-h → WIRED (exit 0)"
   rm -rf "$REPO"
 }
 

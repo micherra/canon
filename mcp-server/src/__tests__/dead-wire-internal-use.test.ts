@@ -8,7 +8,7 @@
  */
 
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -206,29 +206,9 @@ const r = /deadFn/;
     expect(stderr.length).toBeGreaterThan(0);
   });
 
-  test("bad/missing grammar path via env override → non-zero exit (fail-closed)", async () => {
-    // We point the grammar at a temp dir that has no wasm files
-    const emptyGrammarsDir = join(FIXTURES_DIR, "empty-grammars");
-    mkdirSync(emptyGrammarsDir, { recursive: true });
-    const file = writeFixture("gram-test.ts", `export function deadFn(): void {}\n`);
-
-    const { code, stderr } = await new Promise<{ code: number; stdout: string; stderr: string }>(
-      (resolveP) => {
-        execFile(
-          process.execPath,
-          [HELPER, file, "deadFn"],
-          {
-            timeout: 10_000,
-            env: { ...process.env, DEAD_WIRE_GRAMMARS_DIR: emptyGrammarsDir },
-          },
-          (err, stdout, stderr) => {
-            const code = typeof err?.code === "number" ? err.code : err?.code ? 1 : 0;
-            resolveP({ code, stdout: stdout.trim(), stderr: stderr.trim() });
-          },
-        );
-      },
-    );
-
+  test("non-existent input file → non-zero exit (fail-closed)", async () => {
+    // New TS-compiler resolver: missing file → readFileSync throws → non-zero exit
+    const { code, stderr } = await runHelper(["/nonexistent/path/missing-file.ts", "deadFn"]);
     expect(code).not.toBe(0);
     expect(stderr.length).toBeGreaterThan(0);
   });
