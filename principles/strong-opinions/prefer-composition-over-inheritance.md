@@ -101,3 +101,8 @@ Framework-mandated inheritance (React class components in legacy code, Django vi
 
 - [ ] No class `extends` another application class (non-framework) with more than one level of depth — grep for `extends` in non-test TypeScript files, excluding known framework base classes (Error, React.Component, etc.), and check for multi-level chains.
 - [ ] No subclass overrides more than 30% of parent methods — for any `extends` relationship found, compare the method count of the parent against the number of `override` or same-named methods in the child.
+
+## Related
+
+- [[patterns-need-justification]] — many classical inheritance-based patterns (Template Method, Strategy via subclassing) lose their justification when the language offers first-class functions; composition and this principle are the modern alternative.
+- [[information-hiding]] — composition hides the implementation of each injected dependency behind its own interface; inheritance exposes the parent's internals to every subclass, violating the principle.

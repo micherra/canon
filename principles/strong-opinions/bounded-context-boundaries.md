@@ -88,3 +88,9 @@ Deliberately shared kernels — where two contexts agree to share a small, stabl
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[decompose-by-domain-not-layer]] — bounded contexts are the strategic design; domain decomposition is the tactical implementation: you decompose by domain precisely in order to create and respect bounded context boundaries.
+- [[services-own-their-data]] — a service that owns its data store exclusively is the deployment-level enforcement of a bounded context boundary; sharing a database across services violates the context boundary in code AND at the infrastructure level.
+- [[aggregates-reference-by-id]] — within a bounded context, aggregates must reference other aggregates by ID only; across context boundaries, direct model imports are forbidden entirely — both principles enforce the same isolation at different scopes.

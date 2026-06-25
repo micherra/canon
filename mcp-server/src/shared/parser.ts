@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import matter from "gray-matter";
 import { PRINCIPLE_SECTIONS } from "./constants.ts";
+import { splitFrontmatter } from "./lib/frontmatter.ts";
 
 type PrincipleScope = {
   layers: string[];
@@ -113,10 +113,10 @@ export function parseFrontmatter(content: string): {
   frontmatter: Record<string, unknown>;
   body: string;
 } {
-  const parsed = matter(content);
+  const { data, body } = splitFrontmatter(content);
   return {
-    body: parsed.content.trim(),
-    frontmatter: parsed.data as Record<string, unknown>,
+    body: body.trim(),
+    frontmatter: data,
   };
 }
 

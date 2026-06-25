@@ -118,3 +118,7 @@ End-to-end workflow tests that verify a multi-step user journey (create account 
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[tests-are-deterministic]] — shared mutable state between tests is one of the primary sources of non-determinism: when test A mutates shared state and test B reads it, results depend on execution order. [[test-data-belongs-in-the-test]] — putting test data inline in each test eliminates the shared fixture pattern that is the most common source of inter-test coupling.

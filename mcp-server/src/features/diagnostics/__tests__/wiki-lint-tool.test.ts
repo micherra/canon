@@ -422,15 +422,23 @@ const x = 1;
     mkdirSync(principlesDir, { recursive: true });
     writePrincipleWithExamples(principlesDir, "clean-principle");
 
-    // One CLAUDE.md with no contradictions and no stale refs
-    writeFileSync(join(tmp, "CLAUDE.md"), "# Clean\nUse clean-principle as your guide.\n", "utf8");
+    // One CLAUDE.md with no contradictions and no stale refs. The principle is
+    // referenced via a real [[wiki-link]] so it is not flagged as an orphan — under
+    // ADR-0019, inbound [[ ]] links (not prose substrings) are the orphan source-of-truth.
+    writeFileSync(
+      join(tmp, "CLAUDE.md"),
+      "# Clean\nUse [[clean-principle]] as your guide.\n",
+      "utf8",
+    );
 
     // Agents dir referencing the principle so it isn't orphaned
     const agentsDir = join(tmp, "agents");
     mkdirSync(agentsDir, { recursive: true });
     writeFileSync(
       join(agentsDir, "test-agent.md"),
-      "---\nname: test\n---\n\nApplies clean-principle.\n",
+      // Schema-valid agent frontmatter (name/description/model/rules) so the
+      // frontmatter_schema check stays CLEAN on this minimal fixture.
+      "---\nname: test\ndescription: A test agent.\nmodel: sonnet\nrules: []\n---\n\nApplies clean-principle.\n",
       "utf8",
     );
 

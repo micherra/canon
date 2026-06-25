@@ -88,3 +88,8 @@ Some information is intentionally shared as a contract — API schemas, database
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[deep-modules]] — information-hiding is the mechanism by which a module becomes "deep": hiding the decision behind a small interface is what creates the depth.
+- [[consistent-abstraction-levels]] — information-hiding and abstraction-level consistency are companions: a function that mixes levels often does so because hidden decisions leaked into the wrong place.

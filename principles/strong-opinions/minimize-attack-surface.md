@@ -126,3 +126,7 @@ Development environments may have broader access for convenience (exposing datab
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+[[secrets-never-in-code]] — hardcoded credentials in source files are one of the most common forms of accidental attack-surface expansion; keeping secrets external is a direct application of minimizing exposed surface. [[validate-at-trust-boundaries]] — every exposed endpoint is an entry point; validating input at each boundary limits what an attacker can do with the surface that must remain open. [[fail-closed-by-default]] — a minimal attack surface combined with fail-closed behavior means that both the exposed area and its failure modes are constrained to the minimum required.

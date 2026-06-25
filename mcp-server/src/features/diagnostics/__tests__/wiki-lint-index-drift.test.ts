@@ -58,7 +58,9 @@ describe("wiki_lint index_drift check — default exclusion and explicit selecti
     mkdirSync(principlesDir, { recursive: true });
     writePrincipleWithExamples(principlesDir, "some-principle");
 
-    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies some-principle.\n", "utf8");
+    // Reference via a real [[wiki-link]] — under ADR-0019 a prose substring no longer
+    // counts as a reference, so an inbound [[ ]] edge is required to avoid an orphan finding.
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies [[some-principle]].\n", "utf8");
 
     // No rules/, agents/, templates/, references/ indexes — intentionally absent.
     // Default run must not emit MISSING_MARKERS for them because index_drift
@@ -76,7 +78,9 @@ describe("wiki_lint index_drift check — default exclusion and explicit selecti
     mkdirSync(principlesDir, { recursive: true });
     writePrincipleWithExamples(principlesDir, "some-principle");
 
-    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies some-principle.\n", "utf8");
+    // Reference via a real [[wiki-link]] — under ADR-0019 a prose substring no longer
+    // counts as a reference, so an inbound [[ ]] edge is required to avoid an orphan finding.
+    writeFileSync(join(tmp, "CLAUDE.md"), "# Root\nApplies [[some-principle]].\n", "utf8");
 
     const result = await wikiLint({ checks: ["index_drift"] }, tmp, tmp);
 

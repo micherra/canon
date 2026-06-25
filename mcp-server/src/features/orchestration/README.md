@@ -53,7 +53,7 @@ All tool functions return `ToolResult<T>` (see `@shared/lib/tool-result.ts`). Ex
 | `@domains/*` — flow, board, workspace, message types | Other features (e.g., `@features/principles/`) |
 | `@shared/*` — utilities, constants, error handling | Direct imports from `platform/` internals |
 | `@graph/*` — KG querying for context enrichment | Relative imports crossing feature boundaries |
-| External npm packages (`zod`, `gray-matter`, `better-sqlite3`) | |
+| External npm packages (`zod`, `yaml`, `better-sqlite3`) | |
 
 The KG import (`@graph/*`) is permitted specifically for the `context-enrichment.ts` and `learn-gate.ts` services, which need file metrics for prompt assembly. All other features that need KG data should go through `@domains/*` types.
 

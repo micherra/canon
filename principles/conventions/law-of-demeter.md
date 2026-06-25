@@ -62,8 +62,6 @@ if (order.qualifiesForDiscount()) {
 
 Fluent APIs and builder patterns are designed for chaining and don't violate this principle — each call returns the same or a new builder object, not a different internal component. Data-only objects (DTOs, records, plain data structures) without behavior are also fine to navigate — `config.database.host` is reading a data structure, not reaching through encapsulated behavior.
 
-**Related:** `aggregates-reference-by-id` is the DDD-specific, stronger form of this principle — aggregates must not even hold direct object references to other aggregates, using IDs instead. This prevents cascade loading and preserves transactional boundaries at the domain modeling level.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -78,3 +76,7 @@ Fluent APIs and builder patterns are designed for chaining and don't violate thi
 - [ ] Updated files satisfy this principle's core constraint in behavior and structure.
 - [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
 - [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
+
+## Related
+
+- [[aggregates-reference-by-id]] — the DDD-specific, stronger form of this principle: aggregates must not even hold direct object references to other aggregates, using IDs instead, preventing cascade loading and preserving transactional boundaries at the domain modeling level.

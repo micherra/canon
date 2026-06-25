@@ -75,7 +75,9 @@ active_user = User(id=user.id, name=user.name, status="active")
 
 Performance-critical inner loops where allocation matters (e.g., game engines, real-time audio processing) may justify mutable buffers. Builder patterns for constructing complex objects are acceptable — the mutability is scoped to the construction phase. State management stores (Redux, Zustand) have controlled mutation through reducers/actions — this is acceptable because mutation is channeled through a single controlled path.
 
-**Related:** `no-hidden-side-effects` — mutating shared objects is a hidden side effect. `information-hiding` — immutable data simplifies the contract a module exposes.
+## Related
+
+[[no-hidden-side-effects]] — mutating shared objects is a hidden side effect. [[information-hiding]] — immutable data simplifies the contract a module exposes. [[version-public-apis]] — both principles protect consumers from surprise changes: immutability at the data level, versioning at the API contract level.
 
 ## Anti-Rationalization
 

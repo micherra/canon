@@ -75,8 +75,6 @@ secrets:
 
 Test fixtures using obviously fake values (`"test-api-key"`, `"password123"`, `"sk_test_..."`) are exempt — these are not real secrets. Example configuration files with placeholder values (`"YOUR_API_KEY_HERE"`, `"changeme"`) are acceptable. Public keys (designed to be shared) are not secrets. `.env.example` files with placeholder values are acceptable; `.env` files with real values must be gitignored.
 
-**Related:** `externalize-configuration` addresses the same solution (environment variables, config stores) but for a different reason — deployment flexibility rather than security. A hardcoded `API_URL = "https://api.prod.example.com"` violates externalize-configuration but not this principle (no secret). A hardcoded `DATABASE_URL = "postgres://admin:password@host/db"` violates both.
-
 ## Anti-Rationalization
 
 | Excuse | Why It's Wrong | Correct Action |
@@ -91,3 +89,7 @@ Test fixtures using obviously fake values (`"test-api-key"`, `"password123"`, `"
 - [ ] No API key patterns in source files — grep for `sk_live_`, `sk_test_`, `AKIA`, `Bearer `, and common credential prefixes in non-test source files.
 - [ ] No connection strings with embedded credentials — grep for `postgres://`, `mysql://`, `mongodb://` patterns that contain `@` (indicating user:password in the URL).
 - [ ] `.env` files are gitignored — check `.gitignore` includes `*.env` or `.env` and that no `.env` files appear in `git ls-files`.
+
+## Related
+
+[[externalize-configuration]] — companion principle using the same solution (environment variables, config stores) for a different reason: deployment flexibility vs. security. [[minimize-attack-surface]] — secrets in code expand the attack surface because every repository fork, log, and error message becomes a potential credential leak surface. [[fail-closed-by-default]] — a leaked credential that grants access without the intended auth check is the credentials equivalent of a fail-open: both allow unintended access through a security control failing in the wrong direction.
