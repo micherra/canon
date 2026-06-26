@@ -4,11 +4,12 @@
 # subcommand. Blocks any git push that adds a docs/adr/NNNN-*.md whose NNNN
 # already exists on origin/main under a different filename (network-free local check).
 #
-# Push detection: per-segment canon_git_subcommand (replaces the coarse
-#   grep -qE '\bgit\b.*\bpush\b' that over-matched e.g. git commit -m "push fix").
-#   Leading group-openers ( and { AND trailing group-closers ) and } are stripped
-#   per segment before subcommand resolution so that "(git push)" is correctly
-#   detected as a push.
+# Push detection: delegates to canon_command_invokes_subcommand (lib/canon-hook-lib.sh)
+#   which handles plain "git push", compound commands (&&/||/;/|), grouping forms
+#   ((git push), { git push; }), AND string-executing wrappers (bash -c "git push",
+#   eval "git push", sh -c "git push") via canon_unwrap_string_exec_arg recursion with
+#   a depth cap.  Replaces the former per-segment strip-both-ends detector that missed
+#   the wrapper class (REVIEW-6 BLOCKING finding).
 #
 # Input:  JSON on stdin with the tool call details
 # Output: CANON BLOCK message on stdout (if collision or unresolvable origin/main)
@@ -19,6 +20,10 @@
 #   Non-push command gate:              exit 0 (silent)
 #   Command extraction (parse fail):    exit 0 (DOCUMENTED FAIL-OPEN — not analyzable;
 #                                         gate authority is the diff, not the parse)
+#   String-exec wrapper (unparseable):  exit 2 (FAIL-CLOSED — recognised wrapper whose
+#                                         inner command cannot be safely parsed; same
+#                                         posture as push-to-main-guard.sh for the
+#                                         unanalyzable-wrapper class)
 #   No newly-added ADRs:                exit 0 (early-out before fail-closed scope)
 #   Local origin/main NNNN collision:   exit 2 on collision (FAIL-CLOSED)
 #   origin/main unresolvable + ADRs:    exit 2 (FAIL-CLOSED — missed collision is unsafe)
@@ -64,35 +69,29 @@ if [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-# Strip shell comments, then detect a REAL 'git push' subcommand per clause.
-# Delegates to canon_git_subcommand (the authoritative global-option-aware parser)
-# instead of a coarse 'git ... push' regex that over-matches e.g. git commit -m "push fix".
-# Per-segment detection is required because canon_git_subcommand resolves only the FIRST
-# git token in a compound command — a compound "... && git push" would be missed by a
-# single whole-command call (Probe D / DESIGN.md).
-# Leading group-openers ( and { AND trailing group-closers ) and } are stripped per
-# segment before subcommand resolution so that "(git push)" is correctly detected.
-# Stripping both ends is required: stripping only the leading ( leaves "git push)"
-# whose final token "push)" fails canon_git_subcommand's shape gate (Case 17 fix).
-COMMAND=$(printf '%s' "$COMMAND" | canon_strip_comments)
-_IS_PUSH=false
-while IFS= read -r _seg; do
-  _seg=$(printf '%s' "$_seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
-  [[ -z "$_seg" ]] && continue
-  # Strip leading group-openers AND trailing group-closers before subcommand
-  # resolution. Stripping both ends handles "(git push)": the leading ( is
-  # stripped by the first expression and the trailing ) (which would cause
-  # canon_git_subcommand to see "push)" and fail the shape gate) is stripped
-  # by the second. Surrounding whitespace is also stripped for robustness.
-  _seg_for_sub=$(printf '%s' "$_seg" | sed -E 's/^[({[:space:]]+//; s/[)}[:space:]]+$//')
-  if [[ "$(canon_git_subcommand "$_seg_for_sub" || true)" == "push" ]]; then  # DOCUMENTED FAIL-OPEN -- non-push segment returns empty/non-push; loop continues
-    _IS_PUSH=true
-    break
-  fi
-done <<< "$(printf '%s' "$COMMAND" | sed -E 's/(&&|\|\||;|\|)/\n/g')"
-
-if [[ "$_IS_PUSH" != "true" ]]; then
-  exit 0
+# Delegate push-detection to the shared authority: canon_command_invokes_subcommand
+# (lib/canon-hook-lib.sh) handles plain git push, compound commands (&&/||/;/|),
+# grouping forms ((git push), { git push; }), AND string-executing wrappers
+# (bash -c "git push", sh -c "git push", eval "git push") via the shared
+# canon_unwrap_string_exec_arg pipeline with a depth cap.  This is the single
+# authoritative detector — replaces the former per-segment strip-both-ends loop
+# that missed the wrapper class (three-way return: 0=push, 1=no-push, 2=fail-closed).
+_IS_PUSH_RC=0
+canon_command_invokes_subcommand "$COMMAND" "push" || _IS_PUSH_RC=$?
+if [[ "$_IS_PUSH_RC" -eq 1 ]]; then
+  exit 0  # not a push — normal silent pass
+fi
+if [[ "$_IS_PUSH_RC" -eq 2 ]]; then
+  # Recognised string-executing wrapper whose inner command could not be safely
+  # parsed (empty arg, ambiguous -c cluster, depth exceeded, or command substitution
+  # inner form).  Fail-closed: a missed collision is unsafe.
+  cat <<EOF
+CANON BLOCK: [adr-number-check] unanalyzable push wrapper — cannot verify ADR collision safety.
+  The command uses a string-executing wrapper (bash -c / sh -c / eval) whose inner
+  command could not be safely parsed. Run the push directly or simplify the command.
+  (fail-closed: a missed collision is unsafe)
+EOF
+  exit 2
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

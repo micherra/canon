@@ -583,6 +583,68 @@ run_test_in_dir "subshell (git push origin feature) with collision → exit 2" 2
   "$CASE19_REPO" '{"command":"(git push origin feature)"}'
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Case 20: bash -c "git push …" with collision → exit 2 [string-exec wrapper]
+# Before fix: "bash -c \"git push origin feature\"" tokenizes the quoted payload
+# as ONE token ("git push origin feature") so canon_has_git_token finds no
+# standalone "git" token → _IS_PUSH stays false → gate exits 0 (FAIL-OPEN).
+# After fix (delegate to canon_command_invokes_subcommand): the wrapper is
+# recognised via canon_unwrap_string_exec_arg, inner="git push origin feature"
+# is recursed into → push detected → exit 2.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 20: bash -c \"git push origin feature\" with collision → exit 2 [string-exec wrapper] --"
+
+CASE20_REPO="$MASTER_TMP/case20"
+setup_repo_with_origin "$CASE20_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE20_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir 'bash -c "git push origin feature" with collision → exit 2' 2 \
+  "$CASE20_REPO" '{"command":"bash -c \"git push origin feature\""}'
+
+run_test_in_dir_with_output 'bash -c wrapper collision output names 0022' 2 \
+  "0022" "$CASE20_REPO" '{"command":"bash -c \"git push origin feature\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 21: sh -c "git push" with collision → exit 2 [string-exec wrapper]
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 21: sh -c \"git push\" with collision → exit 2 [string-exec wrapper] --"
+
+CASE21_REPO="$MASTER_TMP/case21"
+setup_repo_with_origin "$CASE21_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE21_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir 'sh -c "git push" with collision → exit 2' 2 \
+  "$CASE21_REPO" '{"command":"sh -c \"git push\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 22: eval "git push origin feature" with collision → exit 2 [eval wrapper]
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 22: eval \"git push origin feature\" with collision → exit 2 [eval wrapper] --"
+
+CASE22_REPO="$MASTER_TMP/case22"
+setup_repo_with_origin "$CASE22_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE22_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir 'eval "git push origin feature" with collision → exit 2' 2 \
+  "$CASE22_REPO" '{"command":"eval \"git push origin feature\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 23: Nested wrapper bash -c "bash -c 'git push'" → exit 2 [depth-1 nesting]
+# Verifies that one level of wrapper recursion is followed correctly.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 23: bash -c \"bash -c 'git push'\" (nested) with collision → exit 2 --"
+
+CASE23_REPO="$MASTER_TMP/case23"
+setup_repo_with_origin "$CASE23_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE23_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir 'bash -c "bash -c '"'"'git push'"'"'" nested → exit 2' 2 \
+  "$CASE23_REPO" '{"command":"bash -c \"bash -c '"'"'git push'"'"'\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""

@@ -1324,3 +1324,161 @@ canon_git_subcommand() {
   # Ran out of tokens without finding a subcommand → unresolved.
   return 1
 }
+
+# ---------------------------------------------------------------------------
+# _CANON_INVOKES_MAX_DEPTH
+# ---------------------------------------------------------------------------
+# Recursion cap for _canon_seg_invokes_subcmd / canon_command_invokes_subcommand.
+# Matches the CANON_WRAPPER_MAX_DEPTH value used in push-to-main-guard.sh (3).
+_CANON_INVOKES_MAX_DEPTH=3
+
+# ---------------------------------------------------------------------------
+# _canon_seg_invokes_subcmd <segment> <subcommand> <depth>
+# ---------------------------------------------------------------------------
+# Internal recursive helper — do NOT call directly; use
+# canon_command_invokes_subcommand.
+#
+# Evaluates a single (already-segmented) raw command segment to determine
+# whether it invokes "git <subcommand>". Handles:
+#   - Direct git invocations: "git push", "sudo git push", "(git push)"
+#   - String-executing wrappers: "bash -c \"git push\"", "eval \"git push\""
+#   - Depth-capped recursion into the inner command of wrapper forms
+#
+# Return codes:
+#   0  — this segment invokes git <subcommand>
+#   1  — this segment does NOT invoke git <subcommand>
+#   2  — fail-closed: recognised wrapper with unparseable/empty/expansion inner
+#         command, or depth cap exceeded; caller must treat this as BLOCKED
+#
+# Implementation notes:
+# The segment-strip → canon_has_git_token → canon_git_subcommand path handles
+# plain and grouped forms; the canon_unwrap_string_exec_arg path handles string-
+# executing wrappers.  Both reuse shared lib primitives — no ad-hoc char-strip.
+_canon_seg_invokes_subcmd() {
+  local seg="$1"
+  local subcmd="$2"
+  local depth="$3"
+
+  # Trim leading/trailing whitespace; skip empty segments.
+  seg=$(printf '%s' "$seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  [[ -z "$seg" ]] && return 1
+
+  # Strip leading group-openers ( { and trailing group-closers ) } plus surrounding
+  # whitespace.  This is required so that "(git push)" is correctly identified as a
+  # push — without stripping, the first token would be "(git" which does not pass
+  # the exact-match check in canon_has_git_token.  Stripping BOTH ends (not just
+  # leading) prevents "push)" from reaching canon_git_subcommand's shape gate
+  # (^[A-Za-z][A-Za-z0-9_-]*$ would reject the trailing ')' → returns empty →
+  # push missed).
+  local seg_stripped
+  seg_stripped=$(printf '%s' "$seg" | sed -E 's/^[({[:space:]]+//; s/[)}[:space:]]+$//')
+
+  # Check for a direct standalone "git" token (quote-aware via canon_has_git_token).
+  if canon_has_git_token "$seg_stripped"; then
+    local sub
+    sub=$(canon_git_subcommand "$seg_stripped" || true) # DOCUMENTED FAIL-OPEN -- empty sub: subcommand unresolvable (e.g. git $VAR); treat as non-match (shape validation already fired inside canon_git_subcommand)
+    if [[ "$sub" == "$subcmd" ]]; then
+      return 0
+    fi
+    return 1
+  fi
+
+  # No direct git token in this segment.  Check whether it is a string-executing
+  # wrapper (bash -c / sh -c / eval / zsh -c / ksh -c) whose quoted inner string
+  # may contain a git command.  canon_unwrap_string_exec_arg uses the same shared
+  # primitives (canon_tokenize, basename resolution, scan-forward) as push-to-
+  # main-guard.sh — this is the single authoritative detector.
+  local inner_cmd
+  local _unwrap_rc=0
+  inner_cmd=$(canon_unwrap_string_exec_arg "$seg_stripped") || _unwrap_rc=$?
+
+  if [[ "$_unwrap_rc" -eq 2 ]]; then
+    # Recognised wrapper; inner command unparseable / empty → fail-closed.
+    return 2
+  fi
+
+  if [[ "$_unwrap_rc" -eq 0 ]] && [[ -n "$inner_cmd" ]]; then
+    # Recognised wrapper; inner command cleanly extracted.
+
+    # F1: inner command that starts with $( or ` is a command substitution —
+    # cannot evaluate statically → fail-closed (mirrors push-to-main-guard F1).
+    if [[ "$inner_cmd" == '$('* || "$inner_cmd" == '`'* ]]; then
+      return 2
+    fi
+
+    # Depth guard: cap recursion to prevent pathological nesting.
+    if [[ "$depth" -ge "${_CANON_INVOKES_MAX_DEPTH:-3}" ]]; then
+      return 2
+    fi
+
+    # Re-segment the inner command on && || ; | and recurse into each segment.
+    local _sub_depth
+    _sub_depth=$(( depth + 1 ))
+    local _inner_found=1
+    while IFS= read -r _inner_seg; do
+      _inner_seg=$(printf '%s' "$_inner_seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+      [[ -z "$_inner_seg" ]] && continue
+      _canon_seg_invokes_subcmd "$_inner_seg" "$subcmd" "$_sub_depth"
+      local _seg_rc=$?
+      if [[ "$_seg_rc" -eq 0 ]]; then
+        _inner_found=0
+        break
+      elif [[ "$_seg_rc" -eq 2 ]]; then
+        return 2
+      fi
+    done <<< "$(printf '%s' "$inner_cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g')"
+    return "$_inner_found"
+  fi
+
+  # Not a string-executing wrapper, no direct git token → not a match.
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# canon_command_invokes_subcommand <command> <subcommand>
+# ---------------------------------------------------------------------------
+# Returns 0 if <command> contains any clause that invokes "git <subcommand>",
+# handling:
+#   - Compound commands (&&, ||, ;, |): each clause evaluated independently
+#   - Grouping forms: (git push), { git push; }, ((git push))
+#   - String-executing wrappers: bash -c "…", sh -c "…", eval "…", zsh -c "…"
+#     and path-qualified variants (/bin/bash -c "…")
+#   - Nested wrappers: bash -c "bash -c '...'" up to _CANON_INVOKES_MAX_DEPTH
+#
+# Returns 1 if no such invocation is found (non-match — the normal case).
+# Returns 2 if a recognised wrapper's inner command is unparseable, a shell
+# expansion ($(...)/backtick), or the depth cap is exceeded (fail-closed;
+# callers should treat the command as a BLOCKED push).
+#
+# Reuses canon_strip_comments, canon_has_git_token, canon_unwrap_string_exec_arg,
+# and canon_git_subcommand — the single shared source of truth for string-exec
+# wrapper detection.  Replaces ad-hoc per-segment strip-only detectors in hook
+# scripts and eliminates the divergence that allowed bash -c / eval wrappers to
+# bypass per-hook push-detection (security-hook-parser-allowlist-posture).
+#
+# Usage:
+#   canon_command_invokes_subcommand "$COMMAND" "push"
+#   rc=$?
+#   # 0 → push detected; 1 → no push; 2 → fail-closed (treat as blocked)
+canon_command_invokes_subcommand() {
+  local command="$1"
+  local subcmd="$2"
+
+  # Strip shell comments before processing.
+  command=$(printf '%s' "$command" | canon_strip_comments)
+
+  # Segment the command on && || ; | and evaluate each segment independently.
+  local _found=1
+  while IFS= read -r _seg; do
+    _canon_seg_invokes_subcmd "$_seg" "$subcmd" 0
+    local _seg_rc=$?
+    if [[ "$_seg_rc" -eq 0 ]]; then
+      _found=0
+      break
+    elif [[ "$_seg_rc" -eq 2 ]]; then
+      return 2
+    fi
+  done <<< "$(printf '%s' "$command" | sed -E 's/(&&|\|\||;|\|)/\n/g')"
+
+  return "$_found"
+}
