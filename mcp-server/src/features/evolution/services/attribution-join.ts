@@ -8,7 +8,7 @@
  *   - "cliff_event":      join on cliff.step_id == provenance.step_id (exact, clean)
  *
  * test_failure is DEFERRED — no durable test_failure event keyed by step_id exists
- * in the current trace schema (ADR-0023 Revisit-If).
+ * in the current trace schema (ADR-0024 Revisit-If).
  *
  * Byte-identity trap (PROBE §1): hash verification calls hashContent(rawBody) where
  * rawBody is the UNTRIMMED current file content — NOT a span/prefix form. The recorded

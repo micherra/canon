@@ -6,7 +6,7 @@
  *   - cliff_events:      getDriftDb(projectDir).getCliffEvents().getByWorkspace(slug)
  *
  * test_failure is DEFERRED — no durable test_failure event keyed by step_id exists
- * in the current trace schema (ADR-0023 Revisit-If).
+ * in the current trace schema (ADR-0024 Revisit-If).
  *
  * Fail-open per source: any error returns [] for that source.
  * Never throws.

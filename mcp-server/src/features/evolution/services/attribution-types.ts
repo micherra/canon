@@ -12,7 +12,7 @@
  *   - "review_violation" — joined via principle_id == in-context artifact_id (inferred, lossy)
  *   - "cliff_event"      — joined via cliff.step_id == provenance.step_id (exact, clean)
  *   - test_failure is a DEFERRED variant — no durable test_failure event keyed by step_id
- *     exists in the current trace schema (ADR-0023 Revisit-If). Re-add once a joinable
+ *     exists in the current trace schema (ADR-0024 Revisit-If). Re-add once a joinable
  *     key is available.
  *
  * Canon principles:
@@ -33,7 +33,7 @@ export type { ReviewViolation };
 
 // canon:allow-unwired: part of mutator-facing AttributeFailureResult contract; consumed by deliverable 5 (the mutator), not yet built
 export const FAILURE_KINDS = ["review_violation", "cliff_event"] as const;
-// NOTE: test_failure deferred — no joinable key in current trace; re-add per ADR-0023 Revisit-If
+// NOTE: test_failure deferred — no joinable key in current trace; re-add per ADR-0024 Revisit-If
 // canon:allow-unwired: part of mutator-facing AttributeFailureResult contract; consumed by deliverable 5 (the mutator), not yet built
 export type FailureKind = (typeof FAILURE_KINDS)[number];
 

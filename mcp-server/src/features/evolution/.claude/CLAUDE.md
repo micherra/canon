@@ -7,7 +7,7 @@
 The `evolution/` feature module implements Canon's trace-driven evolution
 pipeline (Phase 1). It provides two MCP tools:
 - `evaluate_candidate` — offline fitness gate (§7 strict-holdout, ADR-0022)
-- `attribute_failure` — attribution consumer: joins recorded `context_provenance` with review violations + cliff events to localize each failure to the in-context artifact (ADR-0023)
+- `attribute_failure` — attribution consumer: joins recorded `context_provenance` with review violations + cliff events to localize each failure to the in-context artifact (ADR-0024)
 
 Both tools are **offline** — never called on the build hot path.
 
@@ -117,11 +117,11 @@ return empty output.
 
 **Fail behavior**: fail-open — absent provenance, reviews, or cliff events yield empty sub-arrays, not errors. `INVALID_INPUT` when both or neither of `workspace`/`archive_id` are given.
 
-## Attribution Join Contract (ADR-0023)
+## Attribution Join Contract (ADR-0024)
 
 - **`review_violation`** — joined on `violation.principle_id == assembled_artifacts[].id`; the only edge the recorded data supports; lossy cases become `unattributed[]` or `ambiguous[]`.
 - **`cliff_event`** — joined on `cliff.step_id == provenance.step_id`; exact, high-confidence.
-- **`test_failure`** — DEFERRED; no durable joinable key in current trace schema. Re-add per ADR-0023 Revisit-If once a `step_id`-keyed test_failure event type is available.
+- **`test_failure`** — DEFERRED; no durable joinable key in current trace schema. Re-add per ADR-0024 Revisit-If once a `step_id`-keyed test_failure event type is available.
 - **content_hash** — re-hashed from the raw (untrimmed) pre-disclosure artifact body via `hashContent`; mismatch → `flagged[]` with `hash_verified: false`; exact match → `hash_verified: true`. Fail-closed: only exact SHA256 match counts.
 - **Hypothesis vocabulary** — all `hypothesis` strings use presence/context vocabulary; "caused"/"causes" are prohibited (verified by grep on every build).
 

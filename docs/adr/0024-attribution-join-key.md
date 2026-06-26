@@ -1,12 +1,12 @@
 ---
-adr: "0023"
+adr: "0024"
 title: "Failure→artifact attribution joins on principle_id == in-context artifact_id"
 status: accepted
 date: "2026-06-24"
 build: "build-the-attribution-consumer-attribute-step-for-trace-driven"
 ---
 
-# ADR-0023: Failure→artifact attribution joins on principle_id == in-context artifact_id
+# ADR-0024: Failure→artifact attribution joins on principle_id == in-context artifact_id
 
 ## Context
 

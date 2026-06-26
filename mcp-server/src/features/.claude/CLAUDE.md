@@ -14,7 +14,7 @@ Features are structured around bounded contexts. Each feature directory is an in
 | Directory | Description |
 |-----------|-------------|
 | `diagnostics/` | Drift tracking tools — flow run analytics, compliance rates, drift reports |
-| `evolution/` | Trace-driven evolution — `evaluate_candidate` fitness gate (§7 holdout, ADR-0022) + `attribute_failure` attribution consumer (provenance⋈failure join, content_hash byte-identity, ADR-0023). See `.claude/CLAUDE.md`. |
+| `evolution/` | Trace-driven evolution — `evaluate_candidate` fitness gate (§7 holdout, ADR-0022) + `attribute_failure` attribution consumer (provenance⋈failure join, content_hash byte-identity, ADR-0024). See `.claude/CLAUDE.md`. |
 | `file-context/` | File context tool — structural metrics, imports/exports, blast radius, hotspot data |
 | `history/` | Cross-run analysis — `get_build_history`, `get_historical_artifacts`, `get_cross_run_analysis`; services split across `cross-run-analyzer.ts`, `cross-run-craft-drift.ts`, `cross-run-patterns.ts` |
 | `knowledge-graph/` | Codebase graph — scanner, KG query, import resolution, git intelligence pipeline |

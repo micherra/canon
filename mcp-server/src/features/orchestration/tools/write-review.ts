@@ -1,6 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { CORRECTNESS_SCAN_PRINCIPLE_ID } from "@shared/constants.ts";
+import { atomicWritePair } from "@shared/lib/atomic-write.ts";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
@@ -149,6 +150,17 @@ export type WriteReviewInput = {
     conventions: { passed: number; total: number };
   };
   files: string[];
+  /**
+   * Optional step identifier for multi-reviewer concurrency safety. When provided,
+   * `write_review` writes a step-scoped pair (`REVIEW-{step_id}.md` +
+   * `REVIEW-{step_id}.meta.json`) AND refreshes the fixed canonical pair
+   * (`REVIEW.md` + `REVIEW.meta.json`). The step-scoped pair eliminates the
+   * overwrite race when concurrent reviewer agents write to the same workspace
+   * (R0–R2 each write to distinct paths). The fixed pair is refreshed so the
+   * consolidator has a stable well-known read target.
+   * When omitted, only the fixed pair is written (single-reviewer backward compat).
+   */
+  step_id?: string;
 };
 
 export type WriteReviewResult = {
@@ -205,6 +217,13 @@ function validateInput(input: WriteReviewInput): { reviewsDir: string } | ToolRe
         `Invalid honored principle ID "${id}": must match /^[a-zA-Z0-9_\\-/.]+$/`,
       );
     }
+  }
+
+  if (input.step_id !== undefined && !SLUG_PATTERN.test(input.step_id)) {
+    return toolError(
+      "INVALID_INPUT",
+      `Invalid step_id "${input.step_id}": must match /^[a-zA-Z0-9_-]+$/`,
+    );
   }
 
   return { reviewsDir };
@@ -459,6 +478,35 @@ export type ConfidenceAdapter = {
   }) => ConfidenceAnnotation;
 };
 
+/**
+ * Write the review artifact pair(s) to disk.
+ * Always writes the canonical pair (REVIEW.md + REVIEW.meta.json).
+ * When step_id is provided, also writes a step-scoped pair so concurrent
+ * reviewer agents do not overwrite each other's output.
+ */
+async function writeReviewArtifacts(
+  reviewsDir: string,
+  markdown: string,
+  metaJson: string,
+  stepId: string | undefined,
+): Promise<{ reviewPath: string; metaPath: string }> {
+  await mkdir(reviewsDir, { recursive: true });
+  const reviewPath = join(reviewsDir, "REVIEW.md");
+  const metaPath = join(reviewsDir, "REVIEW.meta.json");
+
+  // Write the step-scoped pair first when step_id is provided.
+  if (stepId) {
+    const stepReviewPath = join(reviewsDir, `REVIEW-${stepId}.md`);
+    const stepMetaPath = join(reviewsDir, `REVIEW-${stepId}.meta.json`);
+    await atomicWritePair(stepReviewPath, markdown, stepMetaPath, metaJson);
+  }
+
+  // Always refresh the fixed canonical pair so the consolidator and renderer
+  // have a stable well-known read target.
+  await atomicWritePair(reviewPath, markdown, metaPath, metaJson);
+  return { metaPath, reviewPath };
+}
+
 export async function writeReview(
   input: WriteReviewInput,
   signals?: SignalWriter,
@@ -481,13 +529,6 @@ export async function writeReview(
 
   const mappedVerdict = VERDICT_MAP[input.verdict];
   const markdown = generateMarkdown(input, mappedVerdict);
-
-  await mkdir(reviewsDir, { recursive: true });
-  const reviewPath = join(reviewsDir, "REVIEW.md");
-  const metaPath = join(reviewsDir, "REVIEW.meta.json");
-
-  await writeFile(reviewPath, markdown, "utf-8");
-
   const meta = {
     _type: "review" as const,
     _version: 1,
@@ -499,7 +540,12 @@ export async function writeReview(
     verdict_original: input.verdict,
     violations: input.violations,
   };
-  await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+  const { metaPath, reviewPath } = await writeReviewArtifacts(
+    reviewsDir,
+    markdown,
+    JSON.stringify(meta, null, 2),
+    input.step_id,
+  );
 
   // Exclude correctness-scan from analytics/signal paths only.
   // The human-facing REVIEW output (markdown + meta JSON) keeps the full list.
