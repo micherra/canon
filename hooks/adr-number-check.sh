@@ -1,8 +1,13 @@
 #!/bin/bash
 # Canon ADR Number Collision Gate
-# Runs as a PreToolUse hook on Bash commands containing "git push".
-# Blocks any git push that adds a docs/adr/NNNN-*.md whose NNNN already
-# exists on origin/main under a different filename (network-free local check).
+# Runs as a PreToolUse hook on Bash commands that invoke a real "git push"
+# subcommand. Blocks any git push that adds a docs/adr/NNNN-*.md whose NNNN
+# already exists on origin/main under a different filename (network-free local check).
+#
+# Push detection: per-segment canon_git_subcommand (replaces the coarse
+#   grep -qE '\bgit\b.*\bpush\b' that over-matched e.g. git commit -m "push fix").
+# cwd-scoping: git queries are scoped to the repo being pushed via
+#   canon_git_dir_directive_raw + the GDA array (fixes the cwd fail-OPEN).
 #
 # Input:  JSON on stdin with the tool call details
 # Output: CANON BLOCK message on stdout (if collision or unresolvable origin/main)
@@ -17,6 +22,8 @@
 #   Local origin/main NNNN collision:   exit 2 on collision (FAIL-CLOSED)
 #   origin/main unresolvable + ADRs:    exit 2 (FAIL-CLOSED — missed collision is unsafe)
 #   origin/main unresolvable + no ADRs: exit 0 (early-out; fail-closed scoped to ADR adds)
+#   cd/-C directive unresolvable+push:  exit 2 (FAIL-CLOSED — cannot scope collision check;
+#                                         decision adr-cwd-01)
 #   Open-PR check (DEFERRED):           FAIL-OPEN-WITH-WARNING when implemented
 #
 # Parser-fail-open justification (security-hook-parser-allowlist-posture):
@@ -58,8 +65,52 @@ if [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
-if ! echo "$COMMAND" | grep -qE '\bgit\b.*\bpush\b'; then
+# Strip shell comments, then detect a REAL 'git push' subcommand per clause.
+# Delegates to canon_git_subcommand (the authoritative global-option-aware parser)
+# instead of a coarse 'git ... push' regex that over-matches e.g. git commit -m "push fix".
+# Per-segment detection is required because canon_git_subcommand resolves only the FIRST
+# git token in a compound command — a compound "... && git push" would be missed by a
+# single whole-command call (Probe D / DESIGN.md).
+COMMAND=$(printf '%s' "$COMMAND" | canon_strip_comments)
+_IS_PUSH=false
+while IFS= read -r _seg; do
+  _seg=$(printf '%s' "$_seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  [[ -z "$_seg" ]] && continue
+  if [[ "$(canon_git_subcommand "$_seg" || true)" == "push" ]]; then  # DOCUMENTED FAIL-OPEN -- non-push segment returns empty/non-push; loop continues
+    _IS_PUSH=true
+    break
+  fi
+done <<< "$(printf '%s' "$COMMAND" | sed -E 's/(&&|\|\||;|\|)/\n/g')"
+
+if [[ "$_IS_PUSH" != "true" ]]; then
   exit 0
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resolve the git repo being pushed and build the GDA (-C <dir>) scoping array.
+# Existence-agnostic directive detection distinguishes "no directive" (use hook
+# cwd — the pushed repo) from "directive present but unresolvable" (fail-closed —
+# cannot scope the collision check, so a missed collision is unsafe).
+# This closes the cwd fail-OPEN flagged by Codex P2 #3 (decision adr-cwd-01).
+# ─────────────────────────────────────────────────────────────────────────────
+_GIT_DIR_RAW=$(canon_git_dir_directive_raw "$COMMAND" || true) # DOCUMENTED FAIL-OPEN -- empty = no cd/-C directive → run all git queries in hook cwd (the pushed repo)
+declare -a GDA=()
+if [[ -n "$_GIT_DIR_RAW" ]]; then
+  if [[ -d "$_GIT_DIR_RAW" ]]; then
+    GDA=(-C "$_GIT_DIR_RAW")
+  else
+    # Directive present but target directory unresolvable + this is a push →
+    # cannot scope the collision check to the target repo → FAIL-CLOSED.
+    # Silently using cwd would be a fail-OPEN: cwd may not be the pushed repo.
+    cat <<EOF
+CANON BLOCK: [adr-number-check] cannot resolve the push target directory '${_GIT_DIR_RAW}'.
+  The cd/-C target does not exist, so the ADR-number collision check cannot be
+  scoped to the repo being pushed. Use an absolute existing path, or run the
+  push from the repo directory.
+  (fail-closed: a missed collision is unsafe)
+EOF
+    exit 2
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -68,10 +119,12 @@ fi
 # 2>/dev/null: suppresses the git error message when origin/main is unresolvable;
 #   the exit code is captured separately to detect that failure case explicitly.
 # The unresolvable-ref case is NOT swallowed here — it is handled below.
+# All git queries use ${GDA[@]+"${GDA[@]}"} to scope to the pushed repo when
+# a -C or cd directive was resolved above (bash 3.2 / set -u safe idiom).
 # ─────────────────────────────────────────────────────────────────────────────
 _DIFF_RAW=""
 _DIFF_EXIT=0
-_DIFF_RAW=$(git diff --name-only --diff-filter=A --no-renames origin/main..HEAD -- docs/adr/ 2>/dev/null) || _DIFF_EXIT=$?
+_DIFF_RAW=$(git ${GDA[@]+"${GDA[@]}"} diff --name-only --diff-filter=A --no-renames origin/main..HEAD -- docs/adr/ 2>/dev/null) || _DIFF_EXIT=$?
 
 NEW_ADRS=$(echo "$_DIFF_RAW" | grep -E 'docs/adr/[0-9]{4}-.*\.md$' || true)  # DOCUMENTED FAIL-OPEN -- grep exits 1 on no-match; empty = no ADRs added or diff failed
 
@@ -82,7 +135,7 @@ if [[ "$_DIFF_EXIT" -ne 0 ]]; then
   # If it does, we cannot rule out a collision → fall through to the origin/main
   # check below (which will also fail → exit 2, FAIL-CLOSED).
   # If it doesn't, no collision is possible → exit 0.
-  _BRANCH_ADRS=$(git ls-tree -r HEAD --name-only -- docs/adr/ 2>/dev/null \
+  _BRANCH_ADRS=$(git ${GDA[@]+"${GDA[@]}"} ls-tree -r HEAD --name-only -- docs/adr/ 2>/dev/null \
     | grep -E 'docs/adr/[0-9]{4}-.*\.md$' || true)  # DOCUMENTED FAIL-OPEN -- empty = ls-tree failed or docs/adr/ absent; no ADRs = no collision risk
 
   if [[ -z "$_BRANCH_ADRS" ]]; then
@@ -105,7 +158,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 _LS_TREE_RAW=""
 _LS_TREE_EXIT=0
-_LS_TREE_RAW=$(git ls-tree origin/main docs/adr/ 2>/dev/null) || _LS_TREE_EXIT=$?
+_LS_TREE_RAW=$(git ${GDA[@]+"${GDA[@]}"} ls-tree origin/main docs/adr/ 2>/dev/null) || _LS_TREE_EXIT=$?
 # 2>/dev/null: suppresses the git error message; exit code captured above
 
 if [[ "$_LS_TREE_EXIT" -ne 0 ]]; then

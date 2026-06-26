@@ -36,6 +36,14 @@
 #       local -a gda=(); p=$(canon_git_dir_path "$cmd")
 #       [[ -n "$p" ]] && gda=(-C "$p"); git "${gda[@]}" ...
 #
+#   canon_git_dir_directive_raw "$COMMAND"
+#     Prints the RAW directory target (EXISTENCE-AGNOSTIC) for a leading "cd <dir> &&"
+#     prefix OR a "git -C <dir>" inline form. Prints nothing ONLY when no directive is
+#     present. Unlike canon_git_dir_path (which gates on [[ -d ]]), this helper lets
+#     callers distinguish "no directive" (empty) from "directive present but unresolvable"
+#     (non-empty + [[ ! -d ]]) — required for fail-closed cwd-scoping (decision adr-cwd-01).
+#     Precedence: cd-prefix first, then git -C (mirrors canon_git_dir_path).
+#
 #   canon_is_git_cmd "$COMMAND" "$SUBCMD"
 #     Returns 0 (true) when COMMAND invokes git with the exact subcommand SUBCMD,
 #     without false-positiving on filenames that contain SUBCMD (e.g. "commit" in
@@ -1067,6 +1075,62 @@ canon_git_dir_path() {
   if [[ -n "$c_path" ]] && [[ -d "$c_path" ]]; then
     printf '%s' "$c_path"
   fi
+}
+
+# ---------------------------------------------------------------------------
+# canon_git_dir_directive_raw <command>
+# ---------------------------------------------------------------------------
+# Prints the RAW directory target (EXISTENCE-AGNOSTIC) for a leading
+# "cd <dir> &&" prefix OR a "git -C <dir>" inline form. Prints nothing ONLY
+# when no directive is present at all.
+#
+# Unlike canon_git_dir_path (which applies [[ -d ]] and therefore returns
+# empty for BOTH "no directive" and "directive present but non-existent"),
+# this helper lets callers distinguish those two cases:
+#   empty result   → no cd/-C directive in the command → use hook cwd
+#   non-empty + [[ ! -d "$result" ]] → directive present but unresolvable
+#
+# This distinction is required for the fail-closed cwd-scoping guard in
+# adr-number-check.sh (decision adr-cwd-01): when a cd/-C directive is
+# present but the directory is unresolvable AND the command is a push, the
+# gate cannot scope its collision check to the target repo → exit 2 fail-closed.
+#
+# Precedence mirrors canon_git_dir_path: cd-prefix first, then git -C.
+# Composes existing primitives (the lib's own cd grep+sed+quote-strip, and
+# canon_git_C_path for the -C form) without new command-form regex.
+#
+# Handles:
+#   "cd /some/path && git push"         → "/some/path"   (exists or not)
+#   "cd \"$VAR\" && git push"           → "$VAR"         (unresolved var)
+#   "git -C /some/path push"            → "/some/path"   (exists or not)
+#   "git -C /no/such/dir push"          → "/no/such/dir" (non-existent)
+#   "git push origin feature"           → ""             (no directive)
+canon_git_dir_directive_raw() {
+  local command="$1"
+  local cd_target
+
+  # Extract the leading cd target (existence-agnostic: no [[ -d ]] gate).
+  # Mirrors the grep+sed extraction in canon_git_dir_path, but stops BEFORE
+  # the [[ -d ]] guard so that unresolvable targets are still returned.
+  cd_target=$(printf '%s' "$command" \
+    | grep -oE '^[[:space:]]*cd[[:space:]]+[^;&|]+' \
+    | sed 's/^[[:space:]]*cd[[:space:]]*//' \
+    | sed 's/[[:space:]]*$//' \
+    || true) # DOCUMENTED FAIL-OPEN -- no cd prefix in command is the normal case
+
+  # Strip one matched pair of surrounding quotes (same logic as canon_git_dir_path).
+  case $cd_target in
+    \"*\") cd_target=${cd_target#\"}; cd_target=${cd_target%\"} ;;
+    \'*\') cd_target=${cd_target#\'}; cd_target=${cd_target%\'} ;;
+  esac
+
+  if [[ -n "$cd_target" ]]; then
+    printf '%s' "$cd_target"
+    return
+  fi
+
+  # No cd-prefix — fall back to canon_git_C_path (already existence-agnostic).
+  canon_git_C_path "$command" || true # DOCUMENTED FAIL-OPEN -- absent -C is the normal case
 }
 
 # ---------------------------------------------------------------------------

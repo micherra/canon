@@ -92,6 +92,11 @@ setup_repo_with_origin() {
   local origin="${workdir}-origin.git"
   mkdir -p "$origin"
   git -C "$origin" init --bare -q
+  # Pin bare origin HEAD to refs/heads/main so that git clone --local (used by
+  # advance_origin_main) checks out the correct branch regardless of the system's
+  # init.defaultBranch setting (e.g. "master" on stock CI). Without this, Case 14
+  # aborts with exit 128 when the CI agent has init.defaultBranch=master. (fix #1 / dc-01)
+  git -C "$origin" symbolic-ref HEAD refs/heads/main
 
   mkdir -p "$workdir"
   git -C "$workdir" init -q
@@ -486,6 +491,122 @@ run_test_in_dir "three-dot miss: origin reused 0022 after branch diverged → ex
 
 run_test_in_dir_with_output "three-dot regression: output names 0022" 2 \
   "0022" "$CASE14_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 15: Push-precision — commit with "push" in message does NOT trigger
+# (fix #2 — canon_git_subcommand per-segment replaces the over-matching grep)
+# origin has 0022-existing.md; branch adds colliding 0022-other.md;
+# command: git commit -m "push fix" → NOT a real push → exit 0
+# NOTE: This test is RED before fix #2 — the old grep-based check sees "push"
+# in the commit message and falsely triggers, exiting 2 instead of 0.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 15: commit with 'push' in message, collision present → exit 0 (no trigger) --"
+
+CASE15_REPO="$MASTER_TMP/case15"
+setup_repo_with_origin "$CASE15_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE15_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir "commit -m 'push fix' does not trigger gate (not a push)" 0 \
+  "$CASE15_REPO" '{"command":"git commit -m \"push fix\""}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 16: Push-precision — compound real push with collision IS caught
+# (fix #2 — per-segment detection finds the real git push subcommand)
+# origin has 0022-existing.md; branch adds colliding 0022-other.md;
+# command: git add -A && git commit -m "x" && git push origin feature → exit 2
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 16: compound real push with collision → exit 2 --"
+
+CASE16_REPO="$MASTER_TMP/case16"
+setup_repo_with_origin "$CASE16_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE16_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir "compound git push collision → exit 2" 2 \
+  "$CASE16_REPO" '{"command":"git add -A && git commit -m \"x\" && git push origin feature"}'
+
+run_test_in_dir_with_output "compound push output names 0022" 2 \
+  "0022" "$CASE16_REPO" '{"command":"git add -A && git commit -m \"x\" && git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 17: cwd-scoping — git -C <repo> push from a DIFFERENT cwd
+# (fix #3 — git queries scoped to the -C target, not the invoking cwd)
+# Build two repos: R (has 0022 collision) and CLEAN_REPO (no collision).
+# From CLEAN_REPO's cwd: run hook with "git -C <R> push origin feature" → exit 2
+# (collision in R is detected even though cwd is clean).
+# Inverse: "git -C <CLEAN_REPO> push origin feature" from same cwd → exit 0
+# (proves scoping: cwd has no collision and neither does CLEAN_REPO).
+# NOTE: This test is RED before fix #3 — without scoping the queries run in cwd
+# (CLEAN_REPO), finding no collision and exiting 0 instead of 2.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 17: git -C <repo> push scoped to target repo, not invoking cwd --"
+
+CASE17_R="$MASTER_TMP/case17_R"
+CASE17_CLEAN="$MASTER_TMP/case17_clean"
+
+# Collision repo R: origin has 0022-existing.md; branch adds 0022-collision.md
+setup_repo_with_origin "$CASE17_R" "docs/adr/0022-existing.md"
+add_adr "$CASE17_R" "docs/adr/0022-collision.md"
+
+# Clean repo (no collision): origin has 0023-other.md; branch adds 0024-new.md
+setup_repo_with_origin "$CASE17_CLEAN" "docs/adr/0023-other.md"
+add_adr "$CASE17_CLEAN" "docs/adr/0024-new.md"
+
+# From CLEAN_REPO's cwd, push targeting the collision repo → exit 2
+run_test_in_dir_with_output "git -C <collision_repo> push from clean cwd → exit 2 (scoped)" 2 \
+  "0022" "$CASE17_CLEAN" "{\"command\":\"git -C ${CASE17_R} push origin feature\"}"
+
+# From CLEAN_REPO's cwd, push targeting the clean repo → exit 0 (no collision in target)
+run_test_in_dir "git -C <clean_repo> push from clean cwd → exit 0 (scoped, no collision)" 0 \
+  "$CASE17_CLEAN" "{\"command\":\"git -C ${CASE17_CLEAN} push origin feature\"}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 18: Q2 fail-closed — unresolvable cd directive + push → exit 2
+# (fix #3 — canon_git_dir_directive_raw detects directive presence; if the
+# directory is unresolvable the gate fails closed rather than silently using cwd)
+# collision present in cwd; command: cd "$VAR" && git push origin feature
+# where "$VAR" in the JSON is a literal string (variable not set / not a dir)
+# → exit 2, output mentions "cannot resolve the push target directory"
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 18: cd \"\$VAR\" && git push with unresolvable directive → exit 2 fail-closed --"
+
+CASE18_REPO="$MASTER_TMP/case18"
+setup_repo_with_origin "$CASE18_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE18_REPO" "docs/adr/0022-other.md"
+
+# The JSON string contains literal $VAR — it is NOT a shell variable here. The hook
+# extracts the raw cd target "$VAR", and [[ -d "$VAR" ]] fails (var not set → empty
+# string → not a dir) → fail-closed exit 2.
+run_test_in_dir_with_output "cd \"\$VAR\" && git push (unresolvable) → exit 2 fail-closed" 2 \
+  "cannot resolve the push target directory" \
+  "$CASE18_REPO" '{"command":"cd \"$VAR\" && git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 19: Regression guard — plain cwd push (no -C / cd directive) unaffected
+# (fix #3 — the no-directive path keeps current cwd behavior)
+# unique ADR (no collision); command: git push origin feature (plain) → exit 0
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 19: plain cwd push, no collision → exit 0 (cwd path unaffected) --"
+
+CASE19_REPO="$MASTER_TMP/case19"
+setup_repo_with_origin "$CASE19_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE19_REPO" "docs/adr/0023-new-unique.md"
+
+run_test_in_dir "plain git push, unique ADR, no directive → exit 0" 0 \
+  "$CASE19_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CI-condition note: Cases 14-19 (and all other cases) must pass under
+# init.defaultBranch=master. Run the suite with:
+#   env GIT_CONFIG_GLOBAL=<tmp-file-with-[init]\ndefaultBranch=master> \
+#     bash hooks/adr-number-check.sh.test.sh
+# The setup_repo_with_origin CI fix (symbolic-ref HEAD refs/heads/main) ensures
+# the bare origin always checks out main regardless of the system default. (dc-01)
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summary
