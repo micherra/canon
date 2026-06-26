@@ -168,6 +168,28 @@ For each workspace in `.canon/workspaces/`:
 **INFO** if failed state has transcript: "State '{state_id}' failed — transcript available at {path}. Last assistant message: {excerpt}"
 **WARN** if failed state has no transcript: "State '{state_id}' failed but no transcript recorded — unable to show diagnostic context"
 
+#### Check 13: Context staleness
+
+Call `check_context_staleness({ project_dir: ${CLAUDE_PLUGIN_ROOT} })` to compare the installed artifact corpus against the committed `context-manifest.json`.
+
+The tool returns a `StalenessReport` with three arrays:
+- `drifted` — files present in both the manifest and the installed tree but with different content hashes (file was modified post-install)
+- `missing` — files in the manifest that are absent or unreadable in the installed tree
+- `extra` — files in the installed corpus that are not listed in the manifest (new files added since the manifest was generated)
+
+Render one row per finding:
+
+| Finding | Status | Path |
+|---------|--------|------|
+| drifted | WARN | `{path}` |
+| missing | ERROR | `{path}` |
+| extra | WARN | `{path}` |
+
+**OK** if `clean: true`: "Context artifacts match manifest. No drift detected."
+**WARN** for drifted or extra paths: "Context artifact `{path}` has drifted from the committed manifest."
+**ERROR** for missing paths: "Context artifact `{path}` is listed in the manifest but absent from the installed tree."
+**ERROR** if `check_context_staleness` returns `MANIFEST_NOT_FOUND`: "context-manifest.json not found at `${CLAUDE_PLUGIN_ROOT}/context-manifest.json`. Run `cd mcp-server && npm run regen:context-manifest` from the repo root to regenerate it."
+
 ### Step 3: Present results
 
 ```markdown
@@ -189,6 +211,7 @@ For each workspace in `.canon/workspaces/`:
 | 10 | Convention bloat | OK | 12 conventions |
 | 11 | Data file size | OK | All within limits |
 | 12 | Failed state transcripts | INFO | 1 failed state with transcript available |
+| 13 | Context staleness | OK | Context artifacts match manifest |
 
 ### Issues
 
@@ -202,4 +225,4 @@ If all checks pass: "Canon is healthy. No issues found."
 If errors exist: "Found {N} error(s) that need fixing. {details}"
 If only warnings: "Canon is functional but has {N} warning(s) worth addressing."
 
-The summary count covers all 12 checks. Check 12 may produce INFO entries (not warnings or errors) when failed states have transcripts available for review.
+The summary count covers all 13 checks. Check 12 may produce INFO entries (not warnings or errors) when failed states have transcripts available for review. Check 13 reports context artifact drift between the installed plugin and the committed manifest.

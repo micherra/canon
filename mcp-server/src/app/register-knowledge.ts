@@ -1,7 +1,15 @@
+import {
+  type CheckContextStalenessInput,
+  checkContextStaleness,
+} from "@features/diagnostics/tools/check-context-staleness.ts";
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
-import { type SyncIndexesInput, syncIndexes } from "@features/diagnostics/tools/sync-indexes.ts";
+import {
+  ALL_CLASSES,
+  type SyncIndexesInput,
+  syncIndexes,
+} from "@features/diagnostics/tools/sync-indexes.ts";
 import { wikiLint } from "@features/diagnostics/tools/wiki-lint.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
 import { ensureGraphFresh } from "@features/knowledge-graph/ensure-graph-fresh.ts";
@@ -174,18 +182,38 @@ function registerDiagnosticsTools(server: McpServer): void {
   );
 }
 
+function registerContextStalenessTool(server: McpServer): void {
+  server.registerTool(
+    "check_context_staleness",
+    {
+      description:
+        "Check whether the installed Canon context artifacts (principles, rules, references, primers, agents, templates) match the committed context-manifest.json. Returns a StalenessReport listing drifted, missing, and extra files.",
+      inputSchema: {
+        manifest_path: z
+          .string()
+          .optional()
+          .describe(
+            "Explicit path to the committed manifest JSON file (default: <project_dir>/context-manifest.json)",
+          ),
+        project_dir: z.string().describe("Project root directory path"),
+      },
+    },
+    gatedWrapHandler(async (input: CheckContextStalenessInput) => checkContextStaleness(input)),
+  );
+}
+
 function registerSyncIndexesTool(server: McpServer): void {
   server.registerTool(
     "sync_indexes",
     {
       description:
-        "Regenerate the sentinel-delimited inventory block of one or all sibling artifact-class indexes (rules, principles, agents, templates, references), preserving prose outside the markers.",
+        "Regenerate the sentinel-delimited inventory block of one or all sibling artifact-class indexes (rules, principles, agents, templates, references, primers), preserving prose outside the markers.",
       inputSchema: {
         class: z
-          .enum(["rules", "principles", "agents", "templates", "references"])
+          .enum(ALL_CLASSES)
           .optional()
           .describe(
-            "Artifact class to sync (default: all 5). Options: rules, principles, agents, templates, references",
+            "Artifact class to sync (default: all 6). Options: rules, principles, agents, templates, references, primers",
           ),
       },
     },
@@ -368,6 +396,7 @@ export function registerKnowledgeTools(server: McpServer): void {
   registerDiagnosticsTools(server);
   registerWikiLintTool(server);
   registerSyncIndexesTool(server);
+  registerContextStalenessTool(server);
   registerGraphQueryTool(server);
   registerSemanticSearchTool(server);
   registerGraphJobTools(server);

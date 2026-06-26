@@ -116,6 +116,8 @@ src/
 
 **Wiki lint services** (`src/features/diagnostics/services/wiki-lint.ts`) — 7 checks plus `checkGlossaryConsistency` in sibling `wiki-lint-glossary.ts`, `checkIndexDrift` in `index-inventory.ts`, `checkMisroutedPrinciples`/`checkDuplicateTitles` in sibling `wiki-lint-principle-tier.ts`, `runFrontmatterSchemaCheck` in sibling `frontmatter-schema.ts`, and corpus link graph in sibling `link-graph.ts` (12 DEFAULT_CHECKS + `index_drift` = 13 total `CheckName` values; `WIKI_LINT_CHECK_NAMES` const exported from `register-knowledge.ts` with schema-parity enforcement): `checkContradictions`, `checkOrphanPrinciples`, `checkStaleRefs`, `checkMissingExamples`, `checkCitedPaths`, `checkScopeLayers`, `checkScopeTags`, `checkGlossaryConsistency`, `checkIndexDrift`, `checkMisroutedPrinciples`, `checkDuplicateTitles`, `frontmatter_schema` (ADR-0021), `link_integrity` (ADR-0019); `orphan_principles` now inbound-`[[id]]`-link-based (ADR-0019) — the link graph's `referencedPrincipleIds` replaces the prior prose-substring scan; see `src/features/diagnostics/.claude/CLAUDE.md` for full `CheckName` details. <!-- last-updated: 2026-06-24 -->
 
+**Context manifest** (`src/features/diagnostics/services/context-manifest.ts`) — `buildContextManifest(pluginDir)`: pure async; reads all `.md` files under corpus dirs, hashes each via `hashContent` (sha256, reused from `context-provenance.ts`), returns sorted `ContextManifest`; `checkContextStaleness(projectDir, manifest)`: compares live corpus against manifest, classifies each entry as drifted/missing/extra; returns `StalenessReport`. Both functions registered via `check_context_staleness` tool in `register-knowledge.ts` (added 2026-06-25). Committed source-of-truth manifest at `context-manifest.json` (repo root); regenerated via `npm run regen:context-manifest`. <!-- last-updated: 2026-06-25 -->
+
 **Agent Provenance** (`src/shared/lib/commit-trailers.ts`, `src/shared/lib/file-claims.ts`) — `formatCommitTrailers`/`buildCommitMessage` produce Canon trailer blocks; `ClaimsFile` persisted to `.canon/claims.json`; 24h-TTL file ownership claims. See `src/shared/.claude/CLAUDE.md`.
 
 **Confidence engine** (`src/shared/lib/confidence.ts`) — `deriveTier(score, sampleSize)` returns `"insufficient"` for sparse data; `computeConfidenceAnnotation(inputs[])` returns zero-confidence for empty input. Added 2026-05-25.
@@ -162,7 +164,8 @@ src/
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews, doc freshness |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
 | `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions, orphan principles, stale file refs, missing examples, cited-path accuracy in `references/**/*.md` and DDD doc set, invalid `scope.layers` values, invalid `scope.tags` values, CONTEXT.md glossary self-consistency, index inventory drift, misrouted principles (`portable:false` in shipped tree), duplicate titles across both principle tiers; optional `checks` array selects subset (default: 10 checks, `index_drift` excluded — pass explicitly to run it); returns `WikiLintOutput` |
-| `sync_indexes` | Regenerate sentinel-delimited `## Artifact Inventory` blocks in the 5 sibling artifact-class indexes (`rules/`, `principles/`, `agents/`, `templates/`, `references/`); skips indexes without sentinels; returns `{ synced[], skipped[] }` |
+| `sync_indexes` | Regenerate sentinel-delimited `## Artifact Inventory` blocks in the 6 sibling artifact-class indexes (`rules/`, `principles/`, `agents/`, `templates/`, `references/`, `primers/`); skips indexes without sentinels; returns `{ synced[], skipped[] }` |
+| `check_context_staleness` | Compare installed artifact corpus against committed `context-manifest.json`; returns `StalenessReport` with `drifted[]`, `missing[]`, `extra[]` entries; `INVALID_INPUT/MANIFEST_NOT_FOUND` when manifest unreadable |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `store_pr_review` | Store a PR review result; accepts optional `craft_profile` (persists one row per distinct subsystem area to `craft_profiles` with `source:"review"`) |
 | `get_context` | Batch context for multiple files — composes principles, file_context, drift, graph, signals in one call |
@@ -247,9 +250,10 @@ src/
 **Recursive filesystem scanners — root threading**: Scanners that exclude paths by relative prefix must thread the original scan root through all recursive calls. Never update the root to the current directory. Pattern: `scanFn(currentDir, rootDir)` where `rootDir` never changes. The bug class (root-drift) is silent — exclusion logic passes at depth 0 and silently fails at depth 1+. See `tools/wiki-lint.ts` (`FindFilesCtx.originalRoot`) and `services/doc-gap-detect.ts` as reference implementations.
 
 ## Scripts
-<!-- last-updated: 2026-06-24 -->
+<!-- last-updated: 2026-06-25 -->
 
 - `scripts/dead-wire-internal-use.mjs` — TS compiler-API same-file use resolver; invoked by `hooks/dead-wire-gate.sh` as `node dead-wire-internal-use.mjs <file> <symbol>`; returns integer code-ref count on stdout + exit 0 on success, non-zero on any error (fail-closed); counts an identifier as a use ONLY when `ts.TypeChecker.getSymbolAtLocation` resolves it to the top-level exported binding — member-property names, shadowing locals, declaration sites, strings, and comments are all correctly excluded by construction; bails fail-closed on non-empty `sourceFile.parseDiagnostics` (syntactic parse errors) before building the Program; no tsconfig dependency (`noResolve/noLib/types:[]` in-memory Program). <!-- last-updated: 2026-06-24 -->
+- `scripts/regen-context-manifest.ts` — regenerates `context-manifest.json` at repo root; invoked as `npm run regen:context-manifest`; calls `buildContextManifest` from `features/diagnostics/services/context-manifest.ts`; committed output is the source-of-truth for `check_context_staleness`. Added 2026-06-25.
 
 ## Development
 <!-- last-updated: 2026-06-09 -->

@@ -1,0 +1,153 @@
+/**
+ * check-context-staleness.test.ts
+ *
+ * Integration tests for the check_context_staleness MCP tool handler.
+ *
+ * Strategy: import the handler directly (no MCP server needed), mock the
+ * manifest-read seam via a temp dir. Covers:
+ * - Happy path (clean tree)
+ * - MANIFEST_NOT_FOUND on missing manifest file
+ * - Drift detected → report lists drifted path, clean:false (AC#3 verification)
+ */
+
+import { createHash } from "node:crypto";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { ContextManifest } from "../../services/context-manifest.ts";
+import { checkContextStaleness as checkContextStalenessHandler } from "../check-context-staleness.ts";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function sha256(s: string): string {
+  return createHash("sha256").update(s, "utf-8").digest("hex");
+}
+
+let tmpDir: string;
+
+beforeEach(async () => {
+  tmpDir = join(
+    "/tmp",
+    `check-staleness-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
+  await mkdir(tmpDir, { recursive: true });
+});
+
+afterEach(async () => {
+  await rm(tmpDir, { recursive: true, force: true });
+});
+
+async function writeManifest(manifest: ContextManifest): Promise<void> {
+  await writeFile(
+    join(tmpDir, "context-manifest.json"),
+    JSON.stringify(manifest, null, 2),
+    "utf-8",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe("check_context_staleness handler", () => {
+  it("happy path: clean tree returns ok with clean:true", async () => {
+    // Write a matching file + matching manifest
+    await mkdir(join(tmpDir, "rules"), { recursive: true });
+    const content = "# Rule A";
+    await writeFile(join(tmpDir, "rules/a.md"), content, "utf-8");
+
+    const manifest: ContextManifest = {
+      version: "1.0.0",
+      artifacts: { "rules/a.md": sha256(content) },
+    };
+    await writeManifest(manifest);
+
+    const result = await checkContextStalenessHandler({
+      project_dir: tmpDir,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.clean).toBe(true);
+      expect(result.drifted).toHaveLength(0);
+      expect(result.missing).toHaveLength(0);
+      expect(result.extra).toHaveLength(0);
+    }
+  });
+
+  it("MANIFEST_NOT_FOUND when manifest file is absent", async () => {
+    // No manifest written — should return toolError
+    const result = await checkContextStalenessHandler({
+      project_dir: tmpDir,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("MANIFEST_NOT_FOUND");
+    }
+  });
+
+  it("drift detected: stale file → report lists drifted path, clean:false (AC#3)", async () => {
+    await mkdir(join(tmpDir, "agents"), { recursive: true });
+
+    // Write a file with original content
+    const originalContent = "# Original Agent";
+    await writeFile(join(tmpDir, "agents/agent.md"), originalContent, "utf-8");
+
+    // Manifest references the original hash
+    const manifest: ContextManifest = {
+      version: "1.0.0",
+      artifacts: { "agents/agent.md": sha256(originalContent) },
+    };
+    await writeManifest(manifest);
+
+    // Tamper the file (simulate staleness between install and committed manifest)
+    await writeFile(join(tmpDir, "agents/agent.md"), "# Tampered Agent", "utf-8");
+
+    const result = await checkContextStalenessHandler({
+      project_dir: tmpDir,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.clean).toBe(false);
+      expect(result.drifted).toContain("agents/agent.md");
+    }
+  });
+
+  it("accepts explicit manifest_path override", async () => {
+    // Write manifest to a non-default location
+    const customManifestPath = join(tmpDir, "custom-manifest.json");
+    const manifest: ContextManifest = {
+      version: "2.0.0",
+      artifacts: {},
+    };
+    await writeFile(customManifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+
+    const result = await checkContextStalenessHandler({
+      project_dir: tmpDir,
+      manifest_path: customManifestPath,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.clean).toBe(true);
+    }
+  });
+
+  it("MANIFEST_NOT_FOUND when manifest_path points to a non-existent file", async () => {
+    const result = await checkContextStalenessHandler({
+      project_dir: tmpDir,
+      manifest_path: join(tmpDir, "no-such-file.json"),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("MANIFEST_NOT_FOUND");
+    }
+  });
+});
