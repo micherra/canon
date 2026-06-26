@@ -83,7 +83,7 @@ async function listEntries(dir: string): Promise<DirEntry[]> {
     names = await readdir(dir);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") return [];
+    if (code === "ENOENT" || code === "ENOTDIR" || code === "EACCES" || code === "EPERM") return [];
     throw err;
   }
   const results = await Promise.all(
