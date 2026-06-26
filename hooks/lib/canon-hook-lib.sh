@@ -1089,15 +1089,15 @@ canon_git_dir_path() {
 # This corrects the original cd-first ordering, which diverged from git for
 # commands like "cd CLEAN && git -C COLL push" (git operates on COLL, not CLEAN).
 #
-# Callers MUST also call canon_has_unmodeled_cwd_redirect BEFORE calling this
-# function to detect redirects (pushd, subshell, multi-cd, GIT_DIR= env, command
-# substitution) that this function does NOT model. When an unmodeled redirect is
-# present, callers must fail closed without invoking this function.
+# Callers MUST call canon_cwd_redirect_is_modeled AFTER the no-ADR early-out
+# and BEFORE using this function's output for collision scoping. When the
+# allowlist gate rejects the command (returns 1 / fail-closed), callers must
+# not invoke this function — fail closed at the allowlist gate instead.
 #
 # Returns:
 #   non-empty → effective push cwd (may not exist on disk)
 #   empty     → no modeled cwd directive found; use hook cwd (trusted ONLY
-#               when canon_has_unmodeled_cwd_redirect returned false/1)
+#               when canon_cwd_redirect_is_modeled returned 0 / safe)
 #
 # Handles:
 #   "cd /some/path && git push"             → "/some/path"   (cd only; exists or not)
@@ -1144,84 +1144,140 @@ canon_git_dir_directive_raw() {
 # ---------------------------------------------------------------------------
 # canon_cwd_redirect_is_modeled <command>
 # ---------------------------------------------------------------------------
-# Allowlist posture (security-hook-parser-allowlist-posture / watch_HHHHHHHHHHHHH1):
-# Returns 0 (true/success) ONLY when the command consists of provably-safe,
-# fully-modeled forms that canon_git_dir_directive_raw handles correctly.
-# Returns 1 (false/fail-closed) for ANY construct not explicitly verified as
-# safe — including forms not yet imagined. The default for an unrecognized form
-# is FAIL-CLOSED, not proceed.
+# TRUE POSITIVE ALLOWLIST (security-hook-parser-allowlist-posture / watch_UUUUUUUU2
+# / watch_HHHHHHHHHHHHH1): returns 0 (safe/modeled) when the comment-stripped
+# command contains no unmodeled cwd-redirecting construct.
 #
-# Modeled (safe) forms — returns 0:
-#   Optional single "cd <literal_path> &&"  — single leading cd-prefix (no $, no
-#     backtick, no command substitution in the path; resolver handles this form)
-#   "git [-C <literal_path>]* push ..."     — zero or more -C <literal> pairs
-#     as the only repo-affecting git global options
+# The function is intentionally about REDIRECTS, not about validating the entire
+# command shape. A compound git command with no cwd redirect (e.g. "git add -A &&
+# git commit -m 'x' && git push") is fully modeled because every segment runs in
+# the hook's own cwd.
 #
-# Returns 1 (fail-closed) for all of the following and for any other form:
-#   --git-dir / --work-tree / --namespace flags — redirect git's target repo;
-#     probe confirmed that git --git-dir=X/.git --work-tree=X operates on X
-#     regardless of shell cwd, identical to GIT_DIR= env form (adr-cwd-02)
-#   GIT_DIR= / GIT_WORK_TREE= / any GIT_*= env-var prefix — bypass cwd-based
-#     repo discovery
-#   pushd / popd     — directory-stack redirect; resolver does not track
-#   ( ... ) subshell — runs with its own cwd context
-#   $(...) / backtick — command substitution; cannot be resolved statically
-#   eval             — dynamic execution; cannot be statically analyzed
-#   Multiple cd occurrences — resolver handles only the leading one
-#   Dynamic dir in cd or -C: cd $VAR, cd $(...)
+# The only modeled cwd-redirect forms are:
+#   cd <literal-path> && git ( -C <literal-path> )* push <push-args>
+#   git -C <literal-path> push <push-args>
+#
+# Specifically, when a cd IS present the remainder after "cd LPATH &&" must be
+# a single clean push invocation — no trailing segments, no second git command.
+# When no cd is present, the command can contain arbitrary non-redirecting git
+# operations before the push.
+#
+# FAIL CLOSED (return 1) on any of:
+#   non-leading cd   — "git status && cd /x && git push" (cd after other cmds)
+#   second cd        — "cd a && git push && cd b && git push" (multi-cd)
+#   trailing segment after push — "cd OK && git push ; rm -rf z" (;-suffixed push)
+#   --git-dir / --work-tree / --namespace flags (always unmodeled)
+#   GIT_*= env prefix (always unmodeled)
+#   pushd (unmodeled redirect)
+#   subshell ( — unmodeled redirect, e.g. "(cd /x && git push)"
+#   $(...)/backtick — cannot be statically analyzed
+#   dynamic cd path — "cd $VAR && git push" (LPATH excludes $)
+#
+# Why positive match instead of denylist: each new enumerated rejection in a
+# denylist closes one form and leaves the next unlisted one open — that is the
+# Nth-patch trap (watch_UUUUUUUU2). A positive grammar match fails closed by
+# construction on all forms not explicitly in the grammar.
+#
+# Caller (adr-number-check.sh) already strips shell comments before calling;
+# inverted semantics: caller uses `if ! canon_cwd_redirect_is_modeled`.
 #
 # Replaces canon_has_unmodeled_cwd_redirect (denylist, watch_UUUUUUUU2 Nth-patch
 # trap). Inverted return-value semantics: caller uses `if ! canon_cwd_redirect_is_modeled`.
 canon_cwd_redirect_is_modeled() {
   local command="$1"
 
-  # Reject: repo-redirecting git global flags (--git-dir, --work-tree, --namespace).
-  # Probe confirmed: git --git-dir=X/.git --work-tree=X operates on X regardless of
-  # shell cwd — identical fail-open surface to GIT_DIR= env form. (adr-cwd-02)
-  if printf '%s' "$command" | grep -qE '\--(git-dir|work-tree|namespace)'; then
+  # Collapse any newlines to spaces (multi-line commands after comment stripping;
+  # newlines are not valid in any safe form).
+  local flat
+  flat=$(printf '%s' "$command" | tr '\n' ' ')
+  # Trim leading and trailing whitespace.
+  flat=$(printf '%s' "$flat" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+
+  # Fail closed on empty command.
+  if [[ -z "$flat" ]]; then
     return 1
   fi
 
-  # Reject: any GIT_* env-var prefix (bypasses cwd-based repo discovery)
-  if printf '%s' "$command" | grep -qE '\bGIT_[A-Z_]+='; then
+  # Pre-reject command substitution ($(...) and backtick): cannot be statically
+  # analyzed. Checked separately so that the character-class variables below
+  # need not contain a backtick — a backtick inside a double-quoted bash string
+  # triggers command substitution during expansion.
+  if printf '%s' "$flat" | grep -qE '\$\(|`'; then  # DOCUMENTED FAIL-OPEN -- $() or backtick present; fall through to return 1
     return 1
   fi
 
-  # Reject: pushd as a command word (directory-stack redirect; not modeled)
-  if printf '%s' "$command" | grep -qE '(^|&&|\|\||;)[[:space:]]*pushd[[:space:]]'; then
+  # Reject --git-dir / --work-tree / --namespace: these override the working repo
+  # in ways canon_git_dir_directive_raw does not model, regardless of position.
+  if printf '%s' "$flat" | grep -qE '\--(git-dir|work-tree|namespace)'; then
     return 1
   fi
 
-  # Reject: subshell group at command position (start of command or after connector)
-  if printf '%s' "$command" | grep -qE '(^[[:space:]]*\(|[&|;][[:space:]]*\()'; then
+  # Reject GIT_* environment-variable assignments: same unmodeled override class.
+  if printf '%s' "$flat" | grep -qE '\bGIT_[A-Z_]+='; then
     return 1
   fi
 
-  # Reject: command substitution ($(...) or backtick) anywhere in the command
-  if printf '%s' "$command" | grep -qE '\$\(|`'; then
+  # Reject subshells: any bare '(' creates a subprocess cwd context the hook
+  # cannot trace (e.g. "(cd /x && git push)").
+  if printf '%s' "$flat" | grep -qF '('; then
     return 1
   fi
 
-  # Reject: eval as a command word (dynamic execution; cannot be statically analyzed)
-  if printf '%s' "$command" | grep -qE '(^|&&|\|\||;)[[:space:]]*eval[[:space:]]'; then
+  # Reject pushd: changes the directory stack in a way the hook does not model.
+  if printf '%s' "$flat" | grep -qE '(^|[[:space:];|&])[[:space:]]*pushd[[:space:]]'; then
     return 1
   fi
 
-  # Reject: multiple cd occurrences — resolver handles only the leading one correctly
-  local _cwd_cd_count
-  _cwd_cd_count=$(printf '%s' "$command" | grep -oE '\bcd\b' | wc -l | tr -d ' ')
-  if [[ "$_cwd_cd_count" -gt 1 ]]; then
+  # <literal-path>: one or more characters carrying no shell metachar meaning.
+  # Excludes: space, *, ?, ;, |, &, (, ), $.
+  # PORTABILITY NOTE: \t is intentionally absent — BSD grep (macOS 2.6.0) treats
+  # \t inside [...] as the literal letter 't', not a tab character, which would
+  # incorrectly exclude the letter 't' from path names. Tab characters in git path
+  # directives are exotic enough that omitting the tab exclusion is safe in practice.
+  # $ is the last char so that bash does not mis-expand [^...$] as a positional-
+  # param substitution when the variable is used in a double-quoted pattern string.
+  # Backtick is excluded by the pre-check above rather than here.
+  local LPATH='[^ *?;|&()$]+'
+
+  # <push-arg>: a push argument token with no command connectors.
+  # Allows $ in push refspecs (e.g. $BRANCH) because $ in a refspec does not
+  # affect cwd resolution; only $ in a path directive is unsafe.
+  # \t also omitted for BSD grep portability (see LPATH note above).
+  local PARG='[^ ;&|()]+'
+
+  # Fast path: no cd anywhere → every segment runs in hook cwd → fully modeled.
+  if ! printf '%s' "$flat" | grep -qE '(^|[[:space:];|&])[[:space:]]*cd[[:space:]]'; then
+    return 0
+  fi
+
+  # There IS a cd. For it to be modeled it must be in the LEADING position:
+  # the flat command must start with "cd <literal-path> &&".
+  # A cd that appears after any other command (e.g. "git status && cd /x && git push")
+  # is the demonstrated fail-open case — the resolver would use the wrong cwd.
+  if ! printf '%s' "$flat" | grep -qE "^cd[[:space:]]+${LPATH}[[:space:]]*&&"; then
+    # cd is present but NOT at the front of the command → unmodeled → fail-closed.
     return 1
   fi
 
-  # Reject: dynamic directory in cd or -C argument (variable expansion without $()
-  # was already caught above; this catches bare $VAR forms)
-  if printf '%s' "$command" | grep -qE '(cd|git[[:space:]]+-C)[[:space:]]+[^&;|]*\$'; then
+  # Strip the leading "cd <path> && " to isolate the remainder.
+  local after_cd
+  after_cd=$(printf '%s' "$flat" | sed -E "s/^cd[[:space:]]+${LPATH}[[:space:]]*&&[[:space:]]*//" )
+
+  # Reject a second cd in the remainder (e.g. "cd a && git add && cd b && git push").
+  if printf '%s' "$after_cd" | grep -qE '(^|[[:space:];|&])[[:space:]]*cd[[:space:]]'; then
     return 1
   fi
 
-  # All known-unsafe forms rejected. The command consists of only modeled
-  # constructs (optional single literal cd-prefix and/or git -C with literal paths).
+  # The remainder must be exactly one clean push invocation (no trailing segments,
+  # no second git command — that would mean the push cwd is ambiguous or followed
+  # by unmodeled side-effects):
+  #   git ( -C <literal-path> )* push <push-args>  END-OF-STRING
+  # PARG excludes ; | & so "git push ; rm" is rejected by the trailing-segment test.
+  if ! printf '%s' "$after_cd" \
+       | grep -qE "^git([[:space:]]+-C[[:space:]]+${LPATH})*[[:space:]]+push([[:space:]]+${PARG})*[[:space:]]*$"; then
+    return 1
+  fi
+
   return 0
 }
 

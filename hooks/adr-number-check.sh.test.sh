@@ -781,6 +781,93 @@ run_test_in_dir \
   "{\"command\":\"pushd ${CASE26_OTHER} && git push origin feature\"}"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Case 27: non-leading cd (git status && cd /repoB && git push) → exit 2
+# Demonstrated fail-OPEN with prior denylist: hook runs from repoA, git actually
+# pushes repoB (the non-leading cd), repoB has 0022 collision, but the denylist
+# accepts the command (single cd, no $, no prohibited tokens) and the resolver
+# uses hook cwd (repoA), missing repoB's collision entirely.
+# RED test: denylist exits 0 (fail-open, collision in repoB missed), expected 2.
+# FIX: positive whole-command match rejects non-leading cd (anything before git
+# that is not exactly 'cd LITERAL &&' fails closed by grammar mismatch).
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 27: non-leading cd (git status && cd /repoB && git push) → exit 2 [RED until positive match] --"
+
+CASE27_REPOA="$MASTER_TMP/case27_a"
+CASE27_REPOB="$MASTER_TMP/case27_b"
+
+# repoA (hook cwd): origin has unique ADR 0030; branch adds unique ADR 0099 (no collision).
+# NEW_ADRS is non-empty → allowlist gate fires.
+setup_repo_with_origin "$CASE27_REPOA" "docs/adr/0030-existing.md"
+add_adr "$CASE27_REPOA" "docs/adr/0099-unique.md"
+
+# repoB (pushed repo via non-leading cd): origin has 0022; branch adds 0022 collision.
+setup_repo_with_origin "$CASE27_REPOB" "docs/adr/0022-existing.md"
+add_adr "$CASE27_REPOB" "docs/adr/0022-collision.md"
+
+# Hook runs from repoA; command has a non-leading cd pointing to repoB.
+# With denylist: cd count=1 → allowlist accepts → resolver uses repoA cwd →
+# collision in repoB is missed → exit 0 (FAIL-OPEN).
+# With positive match: 'git status &&' before 'cd' does not fit safe grammar → exit 2.
+run_test_in_dir_with_output \
+  "non-leading cd (git status && cd repoB && git push): positive match rejects → exit 2" \
+  2 "unrecognized cwd-redirect" "$CASE27_REPOA" \
+  "{\"command\":\"git status && cd ${CASE27_REPOB} && git push origin feature\"}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 28: second git after safe prefix (cd OK && git -C OK push && git --git-dir=COLL push)
+# → exit 2 (regression — --git-dir was already caught by denylist; positive match
+# also rejects because the second '&& git ...' trailing segment is not in the
+# safe grammar; verifies the positive match closes the same surface).
+# Not a RED test for denylist (--git-dir already blocked), but validates the
+# positive match as the PRIMARY gate for this surface class.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 28: cd OK && git -C OK push && git --git-dir=COLL push → exit 2 (regression) --"
+
+CASE28_OK="$MASTER_TMP/case28_ok"
+CASE28_COLL="$MASTER_TMP/case28_coll"
+
+# OK: no collision (safe repo)
+setup_repo_with_origin "$CASE28_OK" "docs/adr/0030-safe.md"
+add_adr "$CASE28_OK" "docs/adr/0099-unique.md"
+
+# COLL: 0022 collision
+setup_repo_with_origin "$CASE28_COLL" "docs/adr/0022-existing.md"
+add_adr "$CASE28_COLL" "docs/adr/0022-collision.md"
+
+# Hook runs from OK; command pushes OK first (safe) then COLL (collision) via --git-dir.
+# Both denylist (--git-dir caught) and positive match (trailing && git... rejected) → exit 2.
+run_test_in_dir \
+  "cd OK && git -C OK push && git --git-dir=COLL push (second git rejected) → exit 2" \
+  2 "$CASE28_OK" \
+  "{\"command\":\"cd ${CASE28_OK} && git -C ${CASE28_OK} push origin feature && git --git-dir=${CASE28_COLL}/.git --work-tree=${CASE28_COLL} push origin feature\"}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 29: trailing segment after push (cd OK && git push origin x ; rm -rf z) → exit 2
+# A trailing '; rm ...' after push is not part of the safe grammar. The denylist
+# does not catch this (cd count=1, no $, no --git-dir, no prohibited tokens).
+# RED test: denylist exits 0 (trailing segment allowed), expected 2.
+# FIX: positive match rejects anything that is not exactly 'cd LPATH && git push ARGS'
+# — the '; rm -rf z' trailing segment causes the grammar check to fail.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 29: cd OK && git push origin x ; rm -rf z (trailing segment) → exit 2 [RED until positive match] --"
+
+CASE29_OK="$MASTER_TMP/case29_ok"
+
+# OK: unique ADR added (so NEW_ADRS non-empty → allowlist fires); no collision.
+setup_repo_with_origin "$CASE29_OK" "docs/adr/0030-safe.md"
+add_adr "$CASE29_OK" "docs/adr/0099-unique.md"
+
+# Command has a trailing segment after push. Denylist: cd=1, no prohibited token → returns 0.
+# Positive match: '; rm -rf z' makes the grammar check fail → return 1 → exit 2.
+run_test_in_dir_with_output \
+  "trailing segment after push (cd OK && git push ; rm -rf z): positive match rejects → exit 2" \
+  2 "unrecognized cwd-redirect" "$CASE29_OK" \
+  "{\"command\":\"cd ${CASE29_OK} && git push origin feature ; rm -rf /tmp/evil\"}"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
