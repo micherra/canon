@@ -134,24 +134,34 @@ proposal = {
 2. Write the proposal to `${WORKSPACE}/plans/${SLUG}/evolve/${pad2(index)}-evolve-${slug(target_path)}.md`
    (or `.canon/proposed-evolution/${filename}` when no workspace is available).
 
-3. The proposal file format:
-   ```
-   ---
-   <YAML frontmatter: all proposal fields>
-   ---
+3. The proposal file format — canonical template (machine-parseable; tested by `proposal-shape-parity.test.ts`):
 
-   ## Observation
-   <what the attribution signal said; violation count; confidence; join basis>
+<!-- proposal-shape:begin -->
+```yaml
+# Frontmatter keys (all required, serialized in this order)
+id: example-string
+type: evolution-candidate
+confidence: 0.9
+target: example-string
+target_path: example-string
+artifact_class: principle
+holdout_baseline: 1
+holdout_candidate: 2
+accepted: true
+failure_kind: review_violation
+principle_id: example-string
+join_basis: example-string
+hash_verified: true
+apply_channel: writer
+```
 
-   ## Proposed Change
-   <fenced block with the full candidate text>
-
-   ## Evidence
-   <holdout gate table: baseline vs candidate passed counts; attribution evidence>
-
-   ## Impact
-   <apply_channel note; next-step routing>
-   ```
+```text
+## Observation
+## Proposed Change
+## Evidence
+## Impact
+```
+<!-- proposal-shape:end -->
 
 ---
 
