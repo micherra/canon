@@ -25,9 +25,8 @@ import type {
 /** Maximum number of mutation targets selected per pass. */
 export const DEFAULT_MAX_TARGETS_PER_PASS = 3;
 
-// canon:allow-unwired: budget constant consumed by the evolve-candidate SKILL.md procedure
-// (markdown, not TS code); pins single-shot candidates_per_target=1 per AC#6.
 /** Candidates generated per target (single-shot; no re-rolls in Phase 1). */
+// canon:allow-unwired: budget constant consumed by the evolve-candidate SKILL.md procedure (markdown, not TS code); pins single-shot candidates_per_target=1 per AC#6
 export const CANDIDATES_PER_TARGET = 1;
 
 // ---------------------------------------------------------------------------
