@@ -75,9 +75,9 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
     resetForTesting();
   });
 
-  it("factory produces a server with exactly 54 registered tools", () => {
+  it("factory produces a server with exactly 55 registered tools", () => {
     const server = createCanonServer();
-    expect(getToolCount(server)).toBe(54);
+    expect(getToolCount(server)).toBe(55);
   });
 
   it("tool names include a stable known subset", () => {
@@ -171,8 +171,8 @@ describe("createCanonServer(): factory independence", () => {
   it("each instance has the full tool count independently", () => {
     const s1 = createCanonServer();
     const s2 = createCanonServer();
-    expect(getToolCount(s1)).toBe(54);
-    expect(getToolCount(s2)).toBe(54);
+    expect(getToolCount(s1)).toBe(55);
+    expect(getToolCount(s2)).toBe(55);
   });
 });
 
