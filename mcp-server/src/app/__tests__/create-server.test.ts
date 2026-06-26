@@ -44,11 +44,12 @@ function getToolNames(server: McpServer): Set<string> {
 
 // ── Characterization: tool count pinned pre-refactor ─────────────────────────
 //
-// TOOL COUNT BASELINE (updated 2026-06-25):
+// TOOL COUNT BASELINE (updated 2026-06-26):
 //   Previous baseline: 54 tools (as of 2026-06-09 routines tools added).
-//   +1 check_context_staleness (this build, registerKnowledgeTools)
-//   +1 attribute_failure         (main PR #418, registerEvolutionTools)
-//   New total: 55 tools
+//   +1 check_context_staleness (PR #420, registerKnowledgeTools)
+//   +1 attribute_failure         (PR #418, registerEvolutionTools)
+//   +1 select_mutation_targets   (this build, registerEvolutionTools — mutator-02)
+//   New total: 56 tools
 //
 // To recount: run this test — the received value in the failure message is authoritative.
 //
@@ -70,9 +71,9 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
     resetForTesting();
   });
 
-  it("factory produces a server with exactly 55 registered tools", () => {
+  it("factory produces a server with exactly 56 registered tools", () => {
     const server = createCanonServer();
-    expect(getToolCount(server)).toBe(55);
+    expect(getToolCount(server)).toBe(56);
   });
 
   it("tool names include a stable known subset", () => {
@@ -166,8 +167,8 @@ describe("createCanonServer(): factory independence", () => {
   it("each instance has the full tool count independently", () => {
     const s1 = createCanonServer();
     const s2 = createCanonServer();
-    expect(getToolCount(s1)).toBe(55);
-    expect(getToolCount(s2)).toBe(55);
+    expect(getToolCount(s1)).toBe(56);
+    expect(getToolCount(s2)).toBe(56);
   });
 });
 
