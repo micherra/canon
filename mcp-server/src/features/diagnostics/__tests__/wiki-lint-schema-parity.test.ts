@@ -123,24 +123,27 @@ A portable principle for zod-path verification.
   });
 });
 
-// ---- Zod schema parity: SYNC_INDEXES_ARTIFACT_CLASSES vs ArtifactClass union ----
+// ---- Zod schema parity: sync_indexes ALL_CLASSES vs ArtifactClass union ----
 //
 // These tests verify that the zod enum in the sync_indexes MCP tool registration
 // includes all ArtifactClass values from index-inventory.ts, including "primers"
 // which was added as the 6th class. A missing value is silently rejected at the
 // MCP schema boundary, making the class unreachable via the tool interface.
+//
+// The Zod enum is built directly from ALL_CLASSES (the same array syncIndexes()
+// iterates over), so parity is structural — not a separate const that can drift.
 
-describe("sync_indexes zod schema: SYNC_INDEXES_ARTIFACT_CLASSES parity", () => {
-  it("primers is present in SYNC_INDEXES_ARTIFACT_CLASSES (accepted by zod schema)", async () => {
+describe("sync_indexes zod schema: ALL_CLASSES parity", () => {
+  it("primers is present in ALL_CLASSES (accepted by zod schema)", async () => {
     // If "primers" is absent here, MCP schema validation rejects
     // sync_indexes({ class: "primers" }) before it reaches syncIndexes().
-    const { SYNC_INDEXES_ARTIFACT_CLASSES } = await import("../../../app/register-knowledge.ts");
+    const { ALL_CLASSES } = await import("../../../features/diagnostics/tools/sync-indexes.ts");
 
-    expect(SYNC_INDEXES_ARTIFACT_CLASSES).toContain("primers");
+    expect(ALL_CLASSES).toContain("primers");
   });
 
-  it("SYNC_INDEXES_ARTIFACT_CLASSES includes all 6 ArtifactClass values with no extras", async () => {
-    const { SYNC_INDEXES_ARTIFACT_CLASSES } = await import("../../../app/register-knowledge.ts");
+  it("ALL_CLASSES includes all 6 ArtifactClass values with no extras", async () => {
+    const { ALL_CLASSES } = await import("../../../features/diagnostics/tools/sync-indexes.ts");
 
     // Authoritative set derived from index-inventory.ts ArtifactClass union
     const expectedClasses = new Set([
@@ -152,12 +155,12 @@ describe("sync_indexes zod schema: SYNC_INDEXES_ARTIFACT_CLASSES parity", () => 
       "primers",
     ]);
 
-    expect(SYNC_INDEXES_ARTIFACT_CLASSES).toHaveLength(expectedClasses.size);
-    for (const cls of SYNC_INDEXES_ARTIFACT_CLASSES) {
+    expect(ALL_CLASSES).toHaveLength(expectedClasses.size);
+    for (const cls of ALL_CLASSES) {
       expect(expectedClasses.has(cls)).toBe(true);
     }
     for (const cls of expectedClasses) {
-      expect(SYNC_INDEXES_ARTIFACT_CLASSES).toContain(cls);
+      expect(ALL_CLASSES).toContain(cls);
     }
   });
 });

@@ -150,14 +150,14 @@ async function processClass(
 
 // ---- Main handler ----
 
-const ALL_CLASSES: ArtifactClass[] = [
+export const ALL_CLASSES = [
   "rules",
   "principles",
   "agents",
   "templates",
   "references",
   "primers",
-];
+] as const;
 
 /**
  * Regenerate the sentinel-delimited inventory block of one or all sibling

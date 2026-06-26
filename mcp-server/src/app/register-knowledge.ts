@@ -5,7 +5,11 @@ import {
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
-import { type SyncIndexesInput, syncIndexes } from "@features/diagnostics/tools/sync-indexes.ts";
+import {
+  ALL_CLASSES,
+  type SyncIndexesInput,
+  syncIndexes,
+} from "@features/diagnostics/tools/sync-indexes.ts";
 import { wikiLint } from "@features/diagnostics/tools/wiki-lint.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
 import { ensureGraphFresh } from "@features/knowledge-graph/ensure-graph-fresh.ts";
@@ -52,22 +56,6 @@ export const WIKI_LINT_CHECK_NAMES = [
 ] as const;
 
 export type WikiLintCheckName = (typeof WIKI_LINT_CHECK_NAMES)[number];
-
-/**
- * Canonical list of all valid sync_indexes artifact classes.
- * Exported so tests can validate the zod schema's enum membership against the
- * ArtifactClass union in index-inventory.ts — the two must stay in sync.
- */
-export const SYNC_INDEXES_ARTIFACT_CLASSES = [
-  "rules",
-  "principles",
-  "agents",
-  "templates",
-  "references",
-  "primers",
-] as const;
-
-export type SyncIndexesArtifactClass = (typeof SYNC_INDEXES_ARTIFACT_CLASSES)[number];
 
 function registerCompositeContextTool(server: McpServer): void {
   server.registerTool(
@@ -222,7 +210,7 @@ function registerSyncIndexesTool(server: McpServer): void {
         "Regenerate the sentinel-delimited inventory block of one or all sibling artifact-class indexes (rules, principles, agents, templates, references, primers), preserving prose outside the markers.",
       inputSchema: {
         class: z
-          .enum(SYNC_INDEXES_ARTIFACT_CLASSES)
+          .enum(ALL_CLASSES)
           .optional()
           .describe(
             "Artifact class to sync (default: all 6). Options: rules, principles, agents, templates, references, primers",
