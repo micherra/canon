@@ -1,3 +1,4 @@
+import { fenceUntrustedOverlay } from "@shared/lib/overlay-fence.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { loadAllRoutines } from "@shared/routine.ts";
@@ -79,8 +80,21 @@ export async function getRoutine(
   const drift = computeBindingDrift(routine, env);
   const state = await readRoutineState(projectDir, routine.name);
 
+  // For project-local routines: fence the full projection (title + body together) so that
+  // untrusted content — including the title (old F4 under-scan) — never reaches instruction
+  // position. Plugin routines are trusted; they render unfenced.
+  const isProject = routine.source === "project";
+  const fencedBody = isProject
+    ? fenceUntrustedOverlay(`# ${routine.title}\n\n${routine.body}`, {
+        source: `.canon/routines/${routine.name}`,
+      })
+    : routine.body;
+  // For project-local routines, expose only the safe name identifier in the title field;
+  // the full untrusted title is inside the fenced body projection.
+  const safeTitle = isProject ? routine.name : routine.title;
+
   return toolOk({
-    body: routine.body,
+    body: fencedBody,
     drift,
     guardrails: routine.guardrails,
     name: routine.name,
@@ -92,7 +106,7 @@ export async function getRoutine(
     source: routine.source,
     state,
     status: routine.status,
-    title: routine.title,
+    title: safeTitle,
     trigger: routine.trigger,
   });
 }

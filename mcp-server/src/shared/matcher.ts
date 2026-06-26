@@ -375,8 +375,12 @@ export async function loadAllPrinciples(
     return principleCache.principles;
   }
 
-  const projectPrinciples = await loadPrinciplesFromDir(join(projectDir, CANON_DIR, "principles"));
-  const pluginPrinciples = await loadPrinciplesFromDir(join(pluginDir, "principles"));
+  const projectPrinciples = (
+    await loadPrinciplesFromDir(join(projectDir, CANON_DIR, "principles"))
+  ).map((p) => ({ ...p, source: "project" as const }));
+  const pluginPrinciples = (await loadPrinciplesFromDir(join(pluginDir, "principles"))).map(
+    (p) => ({ ...p, source: "plugin" as const }),
+  );
 
   // Project-local takes precedence on ID conflict
   const seenIds = new Set(projectPrinciples.map((p) => p.id));

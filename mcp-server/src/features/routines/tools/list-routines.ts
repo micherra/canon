@@ -1,3 +1,4 @@
+import { fenceUntrustedOverlay } from "@shared/lib/overlay-fence.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import { loadAllRoutines } from "@shared/routine.ts";
@@ -59,13 +60,19 @@ export async function listRoutines(
       const state = await readRoutineState(projectDir, routine.name);
       const last_run = state?.last_run ?? null;
 
+      // Fence project-local titles (untrusted content). Plugin titles are trusted — unfenced.
+      const safeTitle =
+        routine.source === "project"
+          ? fenceUntrustedOverlay(routine.title, { source: `.canon/routines/${routine.name}` })
+          : routine.title;
+
       return {
         drift,
         last_run,
         name: routine.name,
         resolved_binding,
         status: routine.status,
-        title: routine.title,
+        title: safeTitle,
       };
     }),
   );

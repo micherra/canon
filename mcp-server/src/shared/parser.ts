@@ -21,6 +21,10 @@ export type Principle = {
   filePath: string;
   anti_rationalization?: string;
   verification?: string;
+  /** Origin of the principle: "project" = project-local .canon/principles/ (untrusted),
+   *  "plugin" = built-in plugin/principles/ (trusted). Stamped by loadAllPrinciples;
+   *  undefined for principles loaded without origin context (treated as trusted). */
+  source?: "project" | "plugin";
 };
 
 /** Known section heading values for case-insensitive matching. */

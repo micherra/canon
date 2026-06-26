@@ -6,6 +6,7 @@ import { initDatabase } from "@graph/kg-schema.ts";
 import type { FileMetrics } from "@graph/kg-types.ts";
 import { CANON_DIR, CANON_FILES, extractSummary } from "@shared/constants.ts";
 import { loadConfigNumber } from "@shared/lib/config.ts";
+import { fenceUntrustedOverlay } from "@shared/lib/overlay-fence.ts";
 import { loadAllPrinciples, matchPrinciples } from "@shared/matcher.ts";
 import { filterBodyBySections } from "@shared/parser.ts";
 
@@ -97,12 +98,26 @@ function metricsToContext(metrics: FileMetrics): PrinciplesGraphContext {
 }
 
 function formatPrincipleBody(
-  p: { body: string; anti_rationalization?: string; verification?: string },
+  p: {
+    body: string;
+    anti_rationalization?: string;
+    verification?: string;
+    source?: "project" | "plugin";
+    id: string;
+  },
   summaryOnly: boolean | undefined,
   sections: string[],
 ): string {
-  if (summaryOnly) return extractSummary(p.body);
-  return filterBodyBySections(p.body, p.anti_rationalization, p.verification, sections);
+  const formatted = summaryOnly
+    ? extractSummary(p.body)
+    : filterBodyBySections(p.body, p.anti_rationalization, p.verification, sections);
+
+  // Fence untrusted project-local content. Plugin (trusted) and origin-unknown
+  // (treated as trusted per errors-are-values safe-default) content is returned as-is.
+  if (p.source === "project") {
+    return fenceUntrustedOverlay(formatted, { source: `.canon/principles/${p.id}` });
+  }
+  return formatted;
 }
 
 export async function getPrinciples(
