@@ -6,8 +6,9 @@
 #
 # Push detection: per-segment canon_git_subcommand (replaces the coarse
 #   grep -qE '\bgit\b.*\bpush\b' that over-matched e.g. git commit -m "push fix").
-#   Leading group-openers ( and { are stripped per segment before subcommand
-#   resolution so that "(git push)" is correctly detected as a push.
+#   Leading group-openers ( and { AND trailing group-closers ) and } are stripped
+#   per segment before subcommand resolution so that "(git push)" is correctly
+#   detected as a push.
 #
 # Input:  JSON on stdin with the tool call details
 # Output: CANON BLOCK message on stdout (if collision or unresolvable origin/main)
@@ -69,16 +70,21 @@ fi
 # Per-segment detection is required because canon_git_subcommand resolves only the FIRST
 # git token in a compound command — a compound "... && git push" would be missed by a
 # single whole-command call (Probe D / DESIGN.md).
-# Leading group-openers ( and { are stripped per segment so that "(git push)" is
-# correctly detected; the trailing ) in " git push)" after && splitting is not a
-# problem because canon_git_subcommand resolves the subcommand before trailing tokens.
+# Leading group-openers ( and { AND trailing group-closers ) and } are stripped per
+# segment before subcommand resolution so that "(git push)" is correctly detected.
+# Stripping both ends is required: stripping only the leading ( leaves "git push)"
+# whose final token "push)" fails canon_git_subcommand's shape gate (Case 17 fix).
 COMMAND=$(printf '%s' "$COMMAND" | canon_strip_comments)
 _IS_PUSH=false
 while IFS= read -r _seg; do
   _seg=$(printf '%s' "$_seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
   [[ -z "$_seg" ]] && continue
-  # Strip leading group-openers before subcommand resolution (handles "(git push)").
-  _seg_for_sub=$(printf '%s' "$_seg" | sed -E 's/^[({]+//')
+  # Strip leading group-openers AND trailing group-closers before subcommand
+  # resolution. Stripping both ends handles "(git push)": the leading ( is
+  # stripped by the first expression and the trailing ) (which would cause
+  # canon_git_subcommand to see "push)" and fail the shape gate) is stripped
+  # by the second. Surrounding whitespace is also stripped for robustness.
+  _seg_for_sub=$(printf '%s' "$_seg" | sed -E 's/^[({[:space:]]+//; s/[)}[:space:]]+$//')
   if [[ "$(canon_git_subcommand "$_seg_for_sub" || true)" == "push" ]]; then  # DOCUMENTED FAIL-OPEN -- non-push segment returns empty/non-push; loop continues
     _IS_PUSH=true
     break

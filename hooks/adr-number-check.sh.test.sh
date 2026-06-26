@@ -530,6 +530,59 @@ run_test_in_dir_with_output "compound push output names 0022" 2 \
   "0022" "$CASE16_REPO" '{"command":"git add -A && git commit -m \"x\" && git push origin feature"}'
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Case 17: Bare subshell (git push) with collision → exit 2 [fail-OPEN regression]
+# Before fix: "(git push)" strips leading ( to yield "git push)"; canon_git_subcommand
+# tokenizes "git push)" and finds "push)" which FAILS the shape gate
+# (^[A-Za-z][A-Za-z0-9_-]*$ rejects the trailing ')') → returns empty →
+# _IS_PUSH stays false → gate exits 0 while a colliding ADR is pushed (fail-OPEN).
+# After fix (strip both ends): "(git push)" → "git push" → detected → exit 2.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 17: bare subshell (git push) with collision → exit 2 [fail-OPEN regression] --"
+
+CASE17_REPO="$MASTER_TMP/case17"
+setup_repo_with_origin "$CASE17_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE17_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir "bare subshell (git push) with collision → exit 2" 2 \
+  "$CASE17_REPO" '{"command":"(git push)"}'
+
+run_test_in_dir_with_output "bare subshell (git push) collision output names 0022" 2 \
+  "0022" "$CASE17_REPO" '{"command":"(git push)"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 18: Brace-group { git push; } with collision → exit 2
+# The ';' segmenter splits "{ git push; }" into "{ git push" and " }". The first
+# segment strips its leading '{' via the leading-opener strip → "git push" →
+# detected. Verified to work both before and after the strip-both-ends fix.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 18: brace-group { git push; } with collision → exit 2 --"
+
+CASE18_REPO="$MASTER_TMP/case18"
+setup_repo_with_origin "$CASE18_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE18_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir "brace-group { git push; } with collision → exit 2" 2 \
+  "$CASE18_REPO" '{"command":"{ git push; }"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 19: Subshell with refspec (git push origin feature) with collision → exit 2
+# The trailing ')' is on the refspec token ("feature)"); the subcommand "push" is
+# found before reaching "feature)" so this form worked even before the fix.
+# Regression test to confirm strip-both-ends does not break this path.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 19: subshell (git push origin feature) with collision → exit 2 --"
+
+CASE19_REPO="$MASTER_TMP/case19"
+setup_repo_with_origin "$CASE19_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE19_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir "subshell (git push origin feature) with collision → exit 2" 2 \
+  "$CASE19_REPO" '{"command":"(git push origin feature)"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
