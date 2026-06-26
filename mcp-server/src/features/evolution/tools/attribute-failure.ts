@@ -15,11 +15,14 @@
  */
 
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
-import { collectFailureSources } from "../services/attribution-failure-sources.ts";
+import {
+  collectArchivedFailureSources,
+  collectFailureSources,
+} from "../services/attribution-failure-sources.ts";
 import { attributeFailures } from "../services/attribution-join.ts";
 import { readProvenance } from "../services/attribution-provenance-source.ts";
 import type { AttributeFailureResult } from "../services/attribution-types.ts";
@@ -90,17 +93,22 @@ export async function attributeFailure(
     : readProvenance({ archive_id: archive_id!, kind: "archived", project_dir });
 
   // 2. Collect failure sources (fail-open per source)
-  // For archived builds, we read violations from the archived workspace if we can,
-  // but for now we fall back to an empty source since we only have the archive_id.
-  // Live workspace: collect from the workspace directory.
+  // Live workspace: collect from workspace reviews/ + drift.db cliff events.
+  // Archived build: read review_results from archived run-summary.json and
+  //   cliff events from drift.db using the archive's run_metadata.slug.
   const { violations, cliffEvents } = workspace
     ? collectFailureSources(workspace, project_dir)
-    : { cliffEvents: [], violations: [] };
+    : collectArchivedFailureSources(archive_id!, project_dir);
 
   // 3. readCurrentBody seam — reads artifact from project_dir, fail-open
+  // Honor absolute paths: when provenance records an absolute path (e.g. from
+  // resolve_agent_skills using pluginDir), use it directly. Relative paths are
+  // joined with project_dir. join(project_dir, absolutePath) would yield an
+  // incorrect nested path (e.g. /tmp/proj//absolute/path).
   const readCurrentBody = (artifactPath: string): string | null => {
     try {
-      return readFileSync(join(project_dir, artifactPath), "utf-8");
+      const resolved = isAbsolute(artifactPath) ? artifactPath : join(project_dir, artifactPath);
+      return readFileSync(resolved, "utf-8");
     } catch {
       return null;
     }

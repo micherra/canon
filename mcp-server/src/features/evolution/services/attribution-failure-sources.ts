@@ -20,7 +20,7 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { ReviewViolation } from "@platform/storage/archive/archive-types.ts";
+import type { ReviewResult, ReviewViolation } from "@platform/storage/archive/archive-types.ts";
 import { parseReviewFile } from "@platform/storage/archive/run-summary-extractors.ts";
 import type { CliffEventRow } from "@platform/storage/drift/cliff-events-dao.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
@@ -43,6 +43,27 @@ type FailureSources = {
 export function collectFailureSources(workspace: string, projectDir: string): FailureSources {
   const violations = collectReviewViolations(workspace);
   const cliffEvents = collectCliffEvents(workspace, projectDir);
+  return { cliffEvents, violations };
+}
+
+/**
+ * Collect failure sources for an archived build.
+ *
+ * Reads review_results from the archived run-summary.json (located at
+ * archive_path/run-summary.json as registered in the drift.db archive manifest).
+ * Cliff events are fetched from drift.db using the run_metadata.slug.
+ *
+ * Fail-open per source: any error returns [] for that source.
+ *
+ * @param archiveId  Archive ID registered in drift.db.
+ * @param projectDir Absolute path to the project root (contains .canon/drift.db).
+ */
+export function collectArchivedFailureSources(
+  archiveId: string,
+  projectDir: string,
+): FailureSources {
+  const violations = collectArchivedViolations(archiveId, projectDir);
+  const cliffEvents = collectArchivedCliffEvents(archiveId, projectDir);
   return { cliffEvents, violations };
 }
 
@@ -101,6 +122,69 @@ function collectCliffEvents(workspace: string, projectDir: string): CliffEventRo
   } catch (err: unknown) {
     console.warn(
       `[attribution] collectCliffEvents: failed to read cliff events for workspace=${basename(workspace)} project_dir=${projectDir}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Archived failure source helpers
+// ---------------------------------------------------------------------------
+
+/** Parse run-summary.json from an archive path and return review violations. */
+function collectArchivedViolations(archiveId: string, projectDir: string): ReviewViolation[] {
+  try {
+    const db = getDriftDb(projectDir);
+    const archive = db.getArchiveById(archiveId);
+    if (archive === null) return [];
+
+    const summaryPath = join(archive.archive_path, "run-summary.json");
+    const raw = readFileSync(summaryPath, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+
+    if (typeof parsed !== "object" || parsed === null || !("review_results" in parsed)) {
+      return [];
+    }
+
+    const rr = (parsed as { review_results?: unknown }).review_results;
+    if (!Array.isArray(rr)) return [];
+
+    return (rr as ReviewResult[]).flatMap((r) => r.violations ?? []);
+  } catch (err: unknown) {
+    console.warn(
+      `[attribution] collectArchivedViolations: failed for archive_id=${archiveId}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
+}
+
+/** Fetch cliff events for an archived build using run_metadata.slug from run-summary.json. */
+function collectArchivedCliffEvents(archiveId: string, projectDir: string): CliffEventRow[] {
+  try {
+    const db = getDriftDb(projectDir);
+    const archive = db.getArchiveById(archiveId);
+    if (archive === null) return [];
+
+    const summaryPath = join(archive.archive_path, "run-summary.json");
+    const raw = readFileSync(summaryPath, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+
+    if (typeof parsed !== "object" || parsed === null || !("run_metadata" in parsed)) {
+      return [];
+    }
+
+    const meta = (parsed as { run_metadata?: unknown }).run_metadata;
+    if (typeof meta !== "object" || meta === null || !("slug" in meta)) return [];
+
+    const slug = (meta as { slug: unknown }).slug;
+    if (typeof slug !== "string" || slug.length === 0) return [];
+
+    return db.getCliffEvents().getByWorkspace(slug);
+  } catch (err: unknown) {
+    console.warn(
+      `[attribution] collectArchivedCliffEvents: failed for archive_id=${archiveId}:`,
       err instanceof Error ? err.message : err,
     );
     return [];

@@ -12,6 +12,10 @@
  * 2. Fail-open default: absent provenance → empty result, no error
  * 3. INVALID_INPUT when neither workspace nor archive_id given
  * 4. INVALID_INPUT when both workspace and archive_id given
+ * 5. Transcript seam pin — getTranscriptExcerpt not wired in v1
+ * 6. INVALID_INPUT error paths
+ * 7. P1: absolute artifact paths in recorded provenance are resolved correctly
+ * 8. P2: archive_id mode reads review_results from archived run-summary.json
  *
  * Canon principles:
  *   - errors-are-values: handler returns ToolResult, never throws
@@ -30,6 +34,10 @@ import {
   clearStoreCache,
   getExecutionStore,
 } from "../../../domains/workspaces/execution-store-cache.ts";
+import {
+  evictDriftDbForScope,
+  getDriftDb,
+} from "../../../platform/storage/drift/drift-db-cache.ts";
 import { attributeFailure } from "../tools/attribute-failure.ts";
 
 // ---------------------------------------------------------------------------
@@ -47,6 +55,7 @@ beforeEach(() => {
 
 afterEach(() => {
   clearStoreCache();
+  evictDriftDbForScope(tmpProjectDir);
   try {
     rmSync(tmpWorkspace, { recursive: true, force: true });
   } catch {
@@ -280,6 +289,174 @@ describe("transcript seam unwired (v1 pin)", () => {
     if (!result.ok) throw new Error("expected ok");
     // No crash, transcript still empty
     expect(result.attributions[0].transcript_evidence).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. P1: absolute artifact paths in recorded provenance resolve correctly
+// ---------------------------------------------------------------------------
+
+describe("P1: absolute artifact path handling in readCurrentBody", () => {
+  it("hash_verified:true when provenance records an absolute artifact path", async () => {
+    // Seed provenance with an ABSOLUTE artifact path (as happens when resolve_agent_skills
+    // uses pluginDir which is an absolute path). The readCurrentBody fix must NOT do
+    // join(project_dir, absolutePath), which would yield an incorrect nested path.
+    const absoluteRulePath = join(tmpProjectDir, RULE_PATH);
+    mkdirSync(join(tmpProjectDir, "rules"), { recursive: true });
+    writeFileSync(absoluteRulePath, RULE_BODY, "utf-8");
+
+    const store = getExecutionStore(tmpWorkspace);
+    const record = buildContextProvenanceRecord({
+      workspace: tmpWorkspace,
+      stepId: "implement",
+      agentName: "canon:engineer",
+      spawnedAt: new Date().toISOString(),
+      finalPreloadPrompt: `### Rule: ${RULE_ID}\n\n${RULE_BODY}`,
+      skills: [
+        {
+          kind: "rule",
+          id: RULE_ID,
+          path: absoluteRulePath, // <-- ABSOLUTE path (the P1 case)
+          originalContent: RULE_BODY,
+          inContextText: `### Rule: ${RULE_ID}\n\n${RULE_BODY.trim()}`,
+          blanked: false,
+        },
+      ],
+    });
+
+    store.appendEvent("context_provenance", {
+      step_id: record.step_id,
+      agent_id: null,
+      agent_name: record.agent_name,
+      spawned_at: record.spawned_at,
+      assembled_artifacts: record.assembled_artifacts,
+      preload_prompt_hash: record.preload_prompt_hash,
+      workspace: record.workspace,
+    });
+
+    seedReviewMd(tmpWorkspace);
+
+    const result = await attributeFailure({
+      workspace: tmpWorkspace,
+      project_dir: tmpProjectDir,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+
+    // The artifact at the absolute path has the same content_hash as recorded,
+    // so hash_verified must be true (not artifact_missing / flagged).
+    expect(result.attributions).toHaveLength(1);
+    expect(result.attributions[0].target_artifact.hash_verified).toBe(true);
+    // Nothing should be in flagged (which captures artifact_missing / hash_mismatch)
+    expect(result.flagged).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. P2: archive_id mode reads review_results from archived run-summary.json
+// ---------------------------------------------------------------------------
+
+describe("P2: archive_id mode populates failure sources from run-summary.json", () => {
+  it("violations_seen > 0 and attribution produced for archive with review_results", async () => {
+    const archiveId = "test-archive-p2-001";
+    const archivePath = join(tmpProjectDir, ".canon", "history", "test-slug");
+    mkdirSync(archivePath, { recursive: true });
+
+    // Seed the archive manifest in drift.db
+    const db = getDriftDb(tmpProjectDir);
+    db.appendArchiveManifest({
+      archive_id: archiveId,
+      archive_path: archivePath,
+      archived_at: new Date().toISOString(),
+      artifact_types: ["reviews"],
+      branch: "main",
+      flow: "test-flow",
+      has_run_summary: true,
+      sanitized_branch: "main",
+      slug: "test-slug",
+      source_run_id: null,
+      task: "",
+      tier: "supervised",
+    });
+
+    // Build a context_provenance record with the RULE_ID artifact
+    const provenanceRecord: unknown = {
+      step_id: "implement",
+      agent_id: "agent-001",
+      agent_name: "canon:engineer",
+      spawned_at: new Date().toISOString(),
+      artifact_count: 1,
+      artifacts: [
+        {
+          id: RULE_ID,
+          kind: "rule",
+          path: RULE_PATH,
+          content_hash: RULE_HASH,
+          inContextText: `### Rule: ${RULE_ID}\n\n${RULE_BODY.trim()}`,
+          blanked: false,
+        },
+      ],
+    };
+
+    // Write run-summary.json with review_results + context_provenance
+    const runSummary = {
+      version: 1,
+      archive_id: archiveId,
+      run_metadata: {
+        branch: "main",
+        slug: "test-slug",
+        flow: "test-flow",
+        tier: "supervised",
+        task: "",
+        started_at: null,
+        completed_at: null,
+        archived_at: new Date().toISOString(),
+        total_duration_ms: null,
+      },
+      planner_context: null,
+      step_outcomes: [],
+      review_results: [
+        {
+          verdict: "BLOCKING",
+          files_reviewed: 1,
+          principles_checked: 1,
+          violations: [
+            {
+              principle_id: RULE_ID,
+              severity: "BLOCKING",
+              file_path: "src/foo.ts",
+              message: "Tests not written first.",
+            },
+          ],
+          honored: [],
+        },
+      ],
+      decision_summaries: [],
+      artifact_inventory: { artifacts: [] },
+      context_provenance: [provenanceRecord],
+    };
+
+    writeFileSync(join(archivePath, "run-summary.json"), JSON.stringify(runSummary), "utf-8");
+
+    // Also write the current rule file so hash_verified can be true
+    mkdirSync(join(tmpProjectDir, "rules"), { recursive: true });
+    writeFileSync(join(tmpProjectDir, RULE_PATH), RULE_BODY, "utf-8");
+
+    const result = await attributeFailure({
+      archive_id: archiveId,
+      project_dir: tmpProjectDir,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+
+    // archive_id mode must read review_results → violations_seen > 0
+    expect(result.meta.violations_seen).toBeGreaterThan(0);
+    // At least one attribution or unattributed (the violation was read)
+    const totalViolations =
+      result.attributions.length + result.unattributed.length + result.flagged.length;
+    expect(totalViolations).toBeGreaterThan(0);
   });
 });
 
