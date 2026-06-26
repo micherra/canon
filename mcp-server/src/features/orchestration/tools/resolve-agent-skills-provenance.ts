@@ -10,6 +10,7 @@
  */
 
 import {
+  type ArtifactTrustTier,
   buildContextProvenanceRecord,
   type ContextProvenanceRecord,
   type ProvenanceArtifactKind,
@@ -44,6 +45,9 @@ function buildSkillInputs(
       kind: preSk.kind as ProvenanceArtifactKind,
       originalContent,
       path: preSk.path,
+      // Plugin/frontmatter skills are always trusted — explicit tier for audit clarity.
+      // Untrusted-overlay entries use a separate code path with trust_tier: "untrusted-project-local".
+      trust_tier: "trusted" as ArtifactTrustTier,
     };
   });
 }

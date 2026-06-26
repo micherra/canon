@@ -50,11 +50,12 @@ const FIXTURE_PROVENANCE: ContextProvenanceSummary = {
   artifact_count: 1,
   artifacts: [
     {
-      kind: "rule",
+      kind: "rule" as const,
       id: "agent-tdd-required",
       path: "rules/agent-tdd-required.md",
       content_hash: RULE_HASH,
       char_span: [0, RULE_BODY.length] as [number, number],
+      trust_tier: "trusted" as const,
     },
   ],
 };

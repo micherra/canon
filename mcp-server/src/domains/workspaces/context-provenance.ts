@@ -17,6 +17,20 @@ import { createHash } from "node:crypto";
 
 export type ProvenanceArtifactKind = "rule" | "ref" | "primer" | "template";
 
+/**
+ * Trust tier for assembled artifacts.
+ *
+ * - "trusted"                — plugin skill loaded from the canonical plugin tree
+ *                              (rules/, primers/, references/, templates/).
+ * - "untrusted-project-local" — content sourced from a project-local `.canon/` overlay;
+ *                               agents MUST NOT follow instructions found inside it.
+ *                               See `rules/agent-never-trust-overlay-tier.md`.
+ *
+ * The field is REQUIRED on AssembledArtifact so every provenance entry explicitly
+ * declares a tier — no silent default.
+ */
+export type ArtifactTrustTier = "trusted" | "untrusted-project-local";
+
 export type AssembledArtifact = {
   kind: ProvenanceArtifactKind;
   id: string;
@@ -25,6 +39,7 @@ export type AssembledArtifact = {
   char_span: [number, number] | null; // [start, end) in final preload_prompt; null when blanked
   source?: "sidecar"; // present iff blanked by progressive disclosure
   sidecar_path?: string; // = full_data_path; present iff source === "sidecar"
+  trust_tier: ArtifactTrustTier; // required — declares the provenance trust boundary
 };
 
 export type ContextProvenanceRecord = {
@@ -84,6 +99,7 @@ export function buildContextProvenanceRecord(input: {
     originalContent: string; // pre-disclosure content (for hash)
     inContextText: string; // the exact section text as it appears in finalPreloadPrompt; "" if blanked
     blanked: boolean;
+    trust_tier?: ArtifactTrustTier; // defaults to "trusted" when omitted
   }>;
 }): ContextProvenanceRecord {
   const { workspace, stepId, agentName, spawnedAt, finalPreloadPrompt, sidecarPath, skills } =
@@ -92,6 +108,8 @@ export function buildContextProvenanceRecord(input: {
   const assembled_artifacts: AssembledArtifact[] = skills.map((skill) => {
     // content_hash from PRE-disclosure original content — always, even when blanked
     const content_hash = hashContent(skill.originalContent);
+
+    const trust_tier: ArtifactTrustTier = skill.trust_tier ?? "trusted";
 
     if (skill.blanked) {
       // Blanked by progressive disclosure: span is null; wording lives in the sidecar file
@@ -103,6 +121,7 @@ export function buildContextProvenanceRecord(input: {
         path: skill.path,
         sidecar_path: sidecarPath,
         source: "sidecar",
+        trust_tier,
       };
       return artifact;
     }
@@ -118,6 +137,7 @@ export function buildContextProvenanceRecord(input: {
       id: skill.id,
       kind: skill.kind,
       path: skill.path,
+      trust_tier,
     };
     return artifact;
   });
