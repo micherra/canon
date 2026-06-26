@@ -16,7 +16,7 @@
  * no-dead-abstractions: we do NOT re-implement sha256.
  *
  * Note: To regenerate `context-manifest.json` after updating corpus files, run
- * `tsx generate-manifest.mts` from the repo root. A future routine will automate this.
+ * `cd mcp-server && npm run regen:context-manifest` from the repo root.
  *
  * Canon principles:
  * - errors-are-values: all error conditions surface as result union; no throws
@@ -164,7 +164,6 @@ async function hashFile(fullPath: string): Promise<string | null> {
  * @param rootDir — absolute path to the repo root (or any dir that contains
  *   the 6 corpus directories + .claude-plugin/plugin.json).
  */
-// canon:allow-unwired: manifest generator invoked manually / by a future regen routine — see context-manifest.ts docstring
 export async function buildContextManifest(rootDir: string): Promise<ContextManifest> {
   const version = await readPluginVersion(rootDir);
 

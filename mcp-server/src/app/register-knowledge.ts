@@ -53,6 +53,22 @@ export const WIKI_LINT_CHECK_NAMES = [
 
 export type WikiLintCheckName = (typeof WIKI_LINT_CHECK_NAMES)[number];
 
+/**
+ * Canonical list of all valid sync_indexes artifact classes.
+ * Exported so tests can validate the zod schema's enum membership against the
+ * ArtifactClass union in index-inventory.ts — the two must stay in sync.
+ */
+export const SYNC_INDEXES_ARTIFACT_CLASSES = [
+  "rules",
+  "principles",
+  "agents",
+  "templates",
+  "references",
+  "primers",
+] as const;
+
+export type SyncIndexesArtifactClass = (typeof SYNC_INDEXES_ARTIFACT_CLASSES)[number];
+
 function registerCompositeContextTool(server: McpServer): void {
   server.registerTool(
     "get_context",
@@ -203,13 +219,13 @@ function registerSyncIndexesTool(server: McpServer): void {
     "sync_indexes",
     {
       description:
-        "Regenerate the sentinel-delimited inventory block of one or all sibling artifact-class indexes (rules, principles, agents, templates, references), preserving prose outside the markers.",
+        "Regenerate the sentinel-delimited inventory block of one or all sibling artifact-class indexes (rules, principles, agents, templates, references, primers), preserving prose outside the markers.",
       inputSchema: {
         class: z
-          .enum(["rules", "principles", "agents", "templates", "references"])
+          .enum(SYNC_INDEXES_ARTIFACT_CLASSES)
           .optional()
           .describe(
-            "Artifact class to sync (default: all 5). Options: rules, principles, agents, templates, references",
+            "Artifact class to sync (default: all 6). Options: rules, principles, agents, templates, references, primers",
           ),
       },
     },

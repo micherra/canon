@@ -170,9 +170,9 @@ describe("syncIndexes", () => {
     }
   });
 
-  it("no class specified → processes all 5 classes", async () => {
-    // Set up minimal structure for all 5 classes, all without markers
-    for (const cls of ["rules", "agents", "templates", "references"] as const) {
+  it("no class specified → processes all 6 classes", async () => {
+    // Set up minimal structure for all 6 classes, all without markers
+    for (const cls of ["rules", "agents", "templates", "references", "primers"] as const) {
       setupClass(
         projectDir,
         cls,
@@ -205,13 +205,14 @@ describe("syncIndexes", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      // All 5 should appear in either synced or skipped
+      // All 6 should appear in either synced or skipped
       const all = [...result.synced, ...result.skipped.map((s) => s.class)];
       expect(all).toContain("rules");
       expect(all).toContain("agents");
       expect(all).toContain("templates");
       expect(all).toContain("references");
       expect(all).toContain("principles");
+      expect(all).toContain("primers");
     }
   });
 

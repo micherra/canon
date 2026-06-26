@@ -188,7 +188,7 @@ Render one row per finding:
 **OK** if `clean: true`: "Context artifacts match manifest. No drift detected."
 **WARN** for drifted or extra paths: "Context artifact `{path}` has drifted from the committed manifest."
 **ERROR** for missing paths: "Context artifact `{path}` is listed in the manifest but absent from the installed tree."
-**ERROR** if `check_context_staleness` returns `MANIFEST_NOT_FOUND`: "context-manifest.json not found at `${CLAUDE_PLUGIN_ROOT}/context-manifest.json`. Run the `update-context-manifest` routine or rebuild from source."
+**ERROR** if `check_context_staleness` returns `MANIFEST_NOT_FOUND`: "context-manifest.json not found at `${CLAUDE_PLUGIN_ROOT}/context-manifest.json`. Run `cd mcp-server && npm run regen:context-manifest` from the repo root to regenerate it."
 
 ### Step 3: Present results
 
