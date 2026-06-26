@@ -6,8 +6,15 @@
 #
 # Push detection: per-segment canon_git_subcommand (replaces the coarse
 #   grep -qE '\bgit\b.*\bpush\b' that over-matched e.g. git commit -m "push fix").
+#   Leading group-openers ( and { are stripped per segment before subcommand
+#   resolution so that "(git push)" is correctly detected as a push.
 # cwd-scoping: git queries are scoped to the repo being pushed via
 #   canon_git_dir_directive_raw + the GDA array (fixes the cwd fail-OPEN).
+#   git -C takes final precedence over shell cd (git's actual algorithm).
+# unmodeled-redirect gate: pushd, subshell (, multi-cd, GIT_DIR= env prefix,
+#   and command substitution in dir position are detected via
+#   canon_has_unmodeled_cwd_redirect; any such construct in a push command
+#   triggers fail-closed (exit 2) before the directive is resolved.
 #
 # Input:  JSON on stdin with the tool call details
 # Output: CANON BLOCK message on stdout (if collision or unresolvable origin/main)
@@ -15,16 +22,19 @@
 # Exit 2: block (collision detected, or origin/main unresolvable when ADRs added)
 #
 # Failure-mode table:
-#   Non-push command gate:              exit 0 (silent)
-#   Command extraction (parse fail):    exit 0 (DOCUMENTED FAIL-OPEN — not analyzable;
-#                                         gate authority is the diff, not the parse)
-#   No newly-added ADRs:                exit 0 (early-out before fail-closed scope)
-#   Local origin/main NNNN collision:   exit 2 on collision (FAIL-CLOSED)
-#   origin/main unresolvable + ADRs:    exit 2 (FAIL-CLOSED — missed collision is unsafe)
-#   origin/main unresolvable + no ADRs: exit 0 (early-out; fail-closed scoped to ADR adds)
-#   cd/-C directive unresolvable+push:  exit 2 (FAIL-CLOSED — cannot scope collision check;
-#                                         decision adr-cwd-01)
-#   Open-PR check (DEFERRED):           FAIL-OPEN-WITH-WARNING when implemented
+#   Non-push command gate:                exit 0 (silent)
+#   Command extraction (parse fail):      exit 0 (DOCUMENTED FAIL-OPEN — not analyzable;
+#                                           gate authority is the diff, not the parse)
+#   Unmodeled cwd-redirect + push:        exit 2 (FAIL-CLOSED — pushd/subshell/multi-cd/
+#                                           GIT_DIR= means resolver cannot scope check;
+#                                           decision adr-cwd-01)
+#   cd/-C directive unresolvable + push:  exit 2 (FAIL-CLOSED — cannot scope collision
+#                                           check; decision adr-cwd-01)
+#   No newly-added ADRs:                  exit 0 (early-out before fail-closed scope)
+#   Local origin/main NNNN collision:     exit 2 on collision (FAIL-CLOSED)
+#   origin/main unresolvable + ADRs:      exit 2 (FAIL-CLOSED — missed collision is unsafe)
+#   origin/main unresolvable + no ADRs:   exit 0 (early-out; fail-closed scoped to ADR adds)
+#   Open-PR check (DEFERRED):             FAIL-OPEN-WITH-WARNING when implemented
 #
 # Parser-fail-open justification (security-hook-parser-allowlist-posture):
 # The non-push gate and the parse-fail path (lines 37–43) are denylist-shaped:
@@ -71,12 +81,17 @@ fi
 # Per-segment detection is required because canon_git_subcommand resolves only the FIRST
 # git token in a compound command — a compound "... && git push" would be missed by a
 # single whole-command call (Probe D / DESIGN.md).
+# Leading group-openers ( and { are stripped per segment so that "(git push)" is
+# correctly detected; the trailing ) in " git push)" after && splitting is not a
+# problem because canon_git_subcommand resolves the subcommand before trailing tokens.
 COMMAND=$(printf '%s' "$COMMAND" | canon_strip_comments)
 _IS_PUSH=false
 while IFS= read -r _seg; do
   _seg=$(printf '%s' "$_seg" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
   [[ -z "$_seg" ]] && continue
-  if [[ "$(canon_git_subcommand "$_seg" || true)" == "push" ]]; then  # DOCUMENTED FAIL-OPEN -- non-push segment returns empty/non-push; loop continues
+  # Strip leading group-openers before subcommand resolution (handles "(git push)").
+  _seg_for_sub=$(printf '%s' "$_seg" | sed -E 's/^[({]+//')
+  if [[ "$(canon_git_subcommand "$_seg_for_sub" || true)" == "push" ]]; then  # DOCUMENTED FAIL-OPEN -- non-push segment returns empty/non-push; loop continues
     _IS_PUSH=true
     break
   fi
@@ -88,12 +103,40 @@ fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Resolve the git repo being pushed and build the GDA (-C <dir>) scoping array.
-# Existence-agnostic directive detection distinguishes "no directive" (use hook
-# cwd — the pushed repo) from "directive present but unresolvable" (fail-closed —
-# cannot scope the collision check, so a missed collision is unsafe).
-# This closes the cwd fail-OPEN flagged by Codex P2 #3 (decision adr-cwd-01).
+#
+# Step A: Fail-closed on unmodeled cwd-redirecting constructs.
+#   pushd, subshell (, multi-cd, GIT_DIR=/GIT_WORK_TREE= env prefix, and
+#   command substitution in a dir position are NOT modeled by the resolver.
+#   Any such construct means we cannot determine which repo git will push —
+#   silently using hook cwd would be a fail-OPEN. (decision adr-cwd-01)
+#
+# Step B: Resolve directive with -C-wins precedence (git's actual algorithm).
+#   git -C <dir> takes final precedence over a shell cd-prefix.
+#   Existence-agnostic: distinguishes "no directive" (use hook cwd — trusted
+#   here because Step A confirmed no unmodeled redirect) from "directive present
+#   but unresolvable" (fail-closed: cannot scope the check to the target repo).
 # ─────────────────────────────────────────────────────────────────────────────
-_GIT_DIR_RAW=$(canon_git_dir_directive_raw "$COMMAND" || true) # DOCUMENTED FAIL-OPEN -- empty = no cd/-C directive → run all git queries in hook cwd (the pushed repo)
+
+# Step A: Unmodeled-redirect gate.
+# If the command contains any cwd-redirect that the resolver cannot fully model,
+# we cannot determine the pushed repo → fail-closed before any directive resolution.
+if canon_has_unmodeled_cwd_redirect "$COMMAND"; then
+  cat <<EOF
+CANON BLOCK: [adr-number-check] unmodeled cwd-redirect detected in push command.
+  The command contains a cwd-redirecting construct (pushd, subshell, multiple cd,
+  or GIT_DIR/GIT_WORK_TREE env prefix) that the ADR-number resolver does not fully
+  model. The collision check cannot be reliably scoped to the pushed repo.
+  Use 'git -C <path> push' or 'cd <path> && git push' to specify the target repo
+  explicitly with a form the resolver can verify.
+  (fail-closed: a missed collision is unsafe)
+EOF
+  exit 2
+fi
+
+# Step B: Directive resolution (only modeled forms reach here).
+# canon_git_dir_directive_raw applies -C-wins precedence (git's actual algorithm).
+# empty result = no cd/-C directive → use hook cwd (safe: Step A cleared unmodeled redirects)
+_GIT_DIR_RAW=$(canon_git_dir_directive_raw "$COMMAND" || true)  # DOCUMENTED FAIL-OPEN -- empty = no modeled directive; hook cwd is the pushed repo (Step A guarantees no unmodeled redirect)
 declare -a GDA=()
 if [[ -n "$_GIT_DIR_RAW" ]]; then
   if [[ -d "$_GIT_DIR_RAW" ]]; then
@@ -112,6 +155,7 @@ EOF
     exit 2
   fi
 fi
+# GDA is empty → all git queries run in hook cwd (the pushed repo, confirmed by Step A)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 1: Determine newly-added ADR files (branch diff vs origin/main)

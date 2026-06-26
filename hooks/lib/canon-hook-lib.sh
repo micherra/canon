@@ -1080,43 +1080,54 @@ canon_git_dir_path() {
 # ---------------------------------------------------------------------------
 # canon_git_dir_directive_raw <command>
 # ---------------------------------------------------------------------------
-# Prints the RAW directory target (EXISTENCE-AGNOSTIC) for a leading
-# "cd <dir> &&" prefix OR a "git -C <dir>" inline form. Prints nothing ONLY
-# when no directive is present at all.
+# Prints the RAW effective-push-cwd target (EXISTENCE-AGNOSTIC) that models
+# git's ACTUAL cwd-resolution precedence:
 #
-# Unlike canon_git_dir_path (which applies [[ -d ]] and therefore returns
-# empty for BOTH "no directive" and "directive present but non-existent"),
-# this helper lets callers distinguish those two cases:
-#   empty result   → no cd/-C directive in the command → use hook cwd
-#   non-empty + [[ ! -d "$result" ]] → directive present but unresolvable
+#   git -C <dir> wins over any shell cwd redirect (cd-prefix).
+#   "cd <dir> &&" is the fallback used only when no -C flag is present.
 #
-# This distinction is required for the fail-closed cwd-scoping guard in
-# adr-number-check.sh (decision adr-cwd-01): when a cd/-C directive is
-# present but the directory is unresolvable AND the command is a push, the
-# gate cannot scope its collision check to the target repo → exit 2 fail-closed.
+# This corrects the original cd-first ordering, which diverged from git for
+# commands like "cd CLEAN && git -C COLL push" (git operates on COLL, not CLEAN).
 #
-# Precedence mirrors canon_git_dir_path: cd-prefix first, then git -C.
-# Composes existing primitives (the lib's own cd grep+sed+quote-strip, and
-# canon_git_C_path for the -C form) without new command-form regex.
+# Callers MUST also call canon_has_unmodeled_cwd_redirect BEFORE calling this
+# function to detect redirects (pushd, subshell, multi-cd, GIT_DIR= env, command
+# substitution) that this function does NOT model. When an unmodeled redirect is
+# present, callers must fail closed without invoking this function.
+#
+# Returns:
+#   non-empty → effective push cwd (may not exist on disk)
+#   empty     → no modeled cwd directive found; use hook cwd (trusted ONLY
+#               when canon_has_unmodeled_cwd_redirect returned false/1)
 #
 # Handles:
-#   "cd /some/path && git push"         → "/some/path"   (exists or not)
-#   "cd \"$VAR\" && git push"           → "$VAR"         (unresolved var)
-#   "git -C /some/path push"            → "/some/path"   (exists or not)
-#   "git -C /no/such/dir push"          → "/no/such/dir" (non-existent)
-#   "git push origin feature"           → ""             (no directive)
+#   "cd /some/path && git push"             → "/some/path"   (cd only; exists or not)
+#   "cd \"$VAR\" && git push"               → "$VAR"         (unresolved var)
+#   "git -C /some/path push"                → "/some/path"   (-C only; exists or not)
+#   "git -C /no/such/dir push"              → "/no/such/dir" (non-existent)
+#   "cd CLEAN && git -C COLL push"          → "COLL"         (-C wins; returns COLL)
+#   "git push origin feature"               → ""             (no directive)
 canon_git_dir_directive_raw() {
   local command="$1"
-  local cd_target
 
-  # Extract the leading cd target (existence-agnostic: no [[ -d ]] gate).
+  # git -C takes FINAL precedence (git's actual cwd-resolution algorithm):
+  # "git -C <dir>" always overrides the shell's working directory.
+  # Check -C FIRST — if present, it wins over any shell cd-prefix.
+  local c_path
+  c_path=$(canon_git_C_path "$command" || true)  # DOCUMENTED FAIL-OPEN -- absent -C returns empty; fall through to cd-check
+  if [[ -n "$c_path" ]]; then
+    printf '%s' "$c_path"
+    return
+  fi
+
+  # No -C directive — fall back to the leading cd-prefix (existence-agnostic).
   # Mirrors the grep+sed extraction in canon_git_dir_path, but stops BEFORE
   # the [[ -d ]] guard so that unresolvable targets are still returned.
+  local cd_target
   cd_target=$(printf '%s' "$command" \
     | grep -oE '^[[:space:]]*cd[[:space:]]+[^;&|]+' \
     | sed 's/^[[:space:]]*cd[[:space:]]*//' \
     | sed 's/[[:space:]]*$//' \
-    || true) # DOCUMENTED FAIL-OPEN -- no cd prefix in command is the normal case
+    || true)  # DOCUMENTED FAIL-OPEN -- no cd prefix in command is the normal case
 
   # Strip one matched pair of surrounding quotes (same logic as canon_git_dir_path).
   case $cd_target in
@@ -1126,11 +1137,67 @@ canon_git_dir_directive_raw() {
 
   if [[ -n "$cd_target" ]]; then
     printf '%s' "$cd_target"
-    return
+  fi
+  # Returns nothing when no -C and no cd-prefix → caller uses hook cwd
+}
+
+# ---------------------------------------------------------------------------
+# canon_has_unmodeled_cwd_redirect <command>
+# ---------------------------------------------------------------------------
+# Returns 0 (true) if the command contains any cwd-redirecting construct that
+# canon_git_dir_directive_raw does NOT fully model. Returns 1 (false) if only
+# modeled forms are present (single leading cd-prefix and/or git -C) or none.
+#
+# Modeled forms (resolver handles correctly):
+#   "cd <dir> &&"           — single leading cd-prefix before &&
+#   "git -C <dir>"          — git's explicit cwd flag (-C wins over cd)
+#
+# Unmodeled forms (returns 0 → caller must fail closed):
+#   pushd <dir>             — directory-stack redirect; resolver does not track
+#   ( ... )                 — subshell; runs with its own cwd context
+#   Multiple cd occurrences — resolver handles only the leading one
+#   GIT_DIR= / GIT_WORK_TREE= — env overrides bypass cwd-based repo discovery
+#   $(...) or ` ` after cd/C — dynamic directory; cannot be resolved statically
+#
+# Vocabulary-free posture (security-hook-parser-allowlist-posture): detects
+# known-unmodeled forms and returns 0 so callers fail closed — NOT an allowlist
+# of known-safe forms. Each unmodeled form listed closes that vector without
+# opening an adjacent unlisted one; the caller's fail-closed branch handles
+# anything not covered here.
+canon_has_unmodeled_cwd_redirect() {
+  local command="$1"
+
+  # pushd as a command word (directory-stack redirect; not modeled)
+  if printf '%s' "$command" | grep -qE '(^|&&|\|\||;)[[:space:]]*pushd[[:space:]]'; then
+    return 0
   fi
 
-  # No cd-prefix — fall back to canon_git_C_path (already existence-agnostic).
-  canon_git_C_path "$command" || true # DOCUMENTED FAIL-OPEN -- absent -C is the normal case
+  # Subshell group: ( at command position (start of command or after connector)
+  if printf '%s' "$command" | grep -qE '(^[[:space:]]*\(|[&|;][[:space:]]*\()'; then
+    return 0
+  fi
+
+  # Multiple cd occurrences — resolver only handles the leading one correctly
+  local _cd_count
+  _cd_count=$(printf '%s' "$command" | grep -oE '\bcd\b' | wc -l | tr -d ' ')
+  if [[ "$_cd_count" -gt 1 ]]; then
+    return 0
+  fi
+
+  # GIT_DIR or GIT_WORK_TREE env-var prefix bypasses cwd-based repo discovery
+  if printf '%s' "$command" | grep -qE '\bGIT_(DIR|WORK_TREE)='; then
+    return 0
+  fi
+
+  # Command substitution ($(...) or backtick) in a cd/C argument position
+  if printf '%s' "$command" | grep -qE '(cd|git[[:space:]]+-C)[[:space:]]+[^&;|]*\$\('; then
+    return 0
+  fi
+  if printf '%s' "$command" | grep -qE '(cd|git[[:space:]]+-C)[[:space:]]+[^&;|]*`'; then
+    return 0
+  fi
+
+  return 1
 }
 
 # ---------------------------------------------------------------------------

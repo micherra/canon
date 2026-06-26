@@ -609,6 +609,110 @@ run_test_in_dir "plain git push, unique ADR, no directive → exit 0" 0 \
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Case 20: -C takes precedence over shell cd (fail-OPEN fix for cd+git-C combo)
+# "cd CLEAN && git -C COLL push" → hook must check COLL (where git actually pushes),
+# not CLEAN (which is only the shell cwd). COLL has a 0022 collision; CLEAN does not.
+# Without fix: cd-first resolver returns CLEAN → no collision → exit 0 (FAIL-OPEN).
+# With fix: -C wins → returns COLL → collision detected → exit 2.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 20: cd CLEAN && git -C COLL push → hook scopes to COLL (-C wins), exit 2 --"
+
+CASE20_COLL="$MASTER_TMP/case20_coll"
+CASE20_CLEAN="$MASTER_TMP/case20_clean"
+
+# COLL: origin has 0022-existing; branch adds colliding 0022-other → real collision
+setup_repo_with_origin "$CASE20_COLL" "docs/adr/0022-existing.md"
+add_adr "$CASE20_COLL" "docs/adr/0022-collision.md"
+
+# CLEAN: no collision (unique ADRs only)
+setup_repo_with_origin "$CASE20_CLEAN" "docs/adr/0023-other.md"
+add_adr "$CASE20_CLEAN" "docs/adr/0024-new.md"
+
+# Run hook from CLEAN cwd; command targets COLL via -C → hook must check COLL
+run_test_in_dir_with_output \
+  "cd CLEAN && git -C COLL push: hook scopes to COLL (-C wins), detects 0022 collision → exit 2" \
+  2 "0022" "$CASE20_CLEAN" \
+  "{\"command\":\"cd ${CASE20_CLEAN} && git -C ${CASE20_COLL} push origin feature\"}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 21: multiple cd (cd a; cd b) → unmodeled redirect → fail-closed
+# "cd REPO_A; cd REPO_B && git push" — git ends up in REPO_B (last cd wins), but the
+# resolver only sees the first cd (REPO_A). The hook cannot correctly scope the check.
+# With fix: multi-cd detected → unmodeled redirect → exit 2 fail-closed.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 21: cd a; cd b && git push (multi-cd, unmodeled) → exit 2 fail-closed --"
+
+CASE21_REPO_A="$MASTER_TMP/case21_a"
+CASE21_REPO_B="$MASTER_TMP/case21_b"
+
+# REPO_A: no collision (clean)
+setup_repo_with_origin "$CASE21_REPO_A" "docs/adr/0023-other.md"
+add_adr "$CASE21_REPO_A" "docs/adr/0024-new.md"
+
+# REPO_B: real 0022 collision
+setup_repo_with_origin "$CASE21_REPO_B" "docs/adr/0022-existing.md"
+add_adr "$CASE21_REPO_B" "docs/adr/0022-collision.md"
+
+# Hook runs from REPO_A; multi-cd means git actually pushes from REPO_B
+run_test_in_dir_with_output \
+  "cd a; cd b && git push (multi-cd, unmodeled) → exit 2 fail-closed" \
+  2 "unmodeled cwd-redirect" "$CASE21_REPO_A" \
+  "{\"command\":\"cd ${CASE21_REPO_A}; cd ${CASE21_REPO_B} && git push origin feature\"}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 22: pushd (unmodeled redirect) → fail-closed
+# "pushd COLL && git push" — pushd is not modeled by the resolver. The hook cannot
+# determine which repo git actually pushes. Fail closed when push detected.
+# Without fix: no directive → uses hook cwd (SAFE, no collision) → exit 0 (FAIL-OPEN).
+# With fix: pushd detected → unmodeled redirect → exit 2 fail-closed.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 22: pushd COLL && git push (unmodeled redirect) → exit 2 fail-closed --"
+
+CASE22_COLL="$MASTER_TMP/case22_coll"
+CASE22_SAFE="$MASTER_TMP/case22_safe"
+
+# COLL: real 0022 collision
+setup_repo_with_origin "$CASE22_COLL" "docs/adr/0022-existing.md"
+add_adr "$CASE22_COLL" "docs/adr/0022-collision.md"
+
+# SAFE: no collision (clean); hook runs from here
+setup_repo_with_origin "$CASE22_SAFE" "docs/adr/0023-other.md"
+add_adr "$CASE22_SAFE" "docs/adr/0024-new.md"
+
+run_test_in_dir_with_output \
+  "pushd COLL && git push (unmodeled) → exit 2 fail-closed" \
+  2 "unmodeled cwd-redirect" "$CASE22_SAFE" \
+  "{\"command\":\"pushd ${CASE22_COLL} && git push origin feature\"}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 23: subshell (cd COLL && git push) → unmodeled redirect → fail-closed
+# A subshell runs with its own cwd context; the resolver cannot model it.
+# Without fix: push not detected at all ((git becomes (git token) → exit 0 (FAIL-OPEN).
+# With fix: leading ( stripped for push detection; subshell detected → exit 2 fail-closed.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 23: (cd COLL && git push) subshell (unmodeled) → exit 2 fail-closed --"
+
+CASE23_COLL="$MASTER_TMP/case23_coll"
+CASE23_SAFE="$MASTER_TMP/case23_safe"
+
+# COLL: real 0022 collision
+setup_repo_with_origin "$CASE23_COLL" "docs/adr/0022-existing.md"
+add_adr "$CASE23_COLL" "docs/adr/0022-collision.md"
+
+# SAFE: no collision (clean); hook runs from here
+setup_repo_with_origin "$CASE23_SAFE" "docs/adr/0023-other.md"
+add_adr "$CASE23_SAFE" "docs/adr/0024-new.md"
+
+run_test_in_dir_with_output \
+  "(cd COLL && git push) subshell (unmodeled) → exit 2 fail-closed" \
+  2 "unmodeled cwd-redirect" "$CASE23_SAFE" \
+  "{\"command\":\"(cd ${CASE23_COLL} && git push origin feature)\"}"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
