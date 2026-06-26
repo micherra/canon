@@ -147,15 +147,6 @@ export function overlayGrammarPath(projectDir: string, grammarFile: string): str
 }
 
 /**
- * Maximum serialized size for a single overlay config file.
- *
- * KG language overlay configs are structured JSON with a small set of
- * fields. Any file exceeding this limit is almost certainly not a valid
- * overlay config and is rejected fail-closed.
- */
-const MAX_OVERLAY_CONFIG_BYTES = 32_768; // 32 KiB
-
-/**
  * Attempt to load and validate one overlay JSON file.
  * Returns a LanguageConfig on success, or null if the entry must be skipped.
  * Never throws.
@@ -165,26 +156,9 @@ function processOverlayFile(
   projectDir: string,
   builtinIds: ReadonlySet<string>,
 ): LanguageConfig | null {
-  let content: string;
-  try {
-    content = readFileSync(filePath, "utf-8");
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.warn(`kg-language-overlay: failed to read '${filePath}': ${message} — skipping`);
-    return null;
-  }
-
-  // Structural size guard: reject over-sized configs fail-closed.
-  if (Buffer.byteLength(content, "utf-8") > MAX_OVERLAY_CONFIG_BYTES) {
-    console.warn(
-      `kg-language-overlay: '${filePath}' exceeds max overlay config size (${MAX_OVERLAY_CONFIG_BYTES} bytes) — skipping`,
-    );
-    return null;
-  }
-
   let raw: unknown;
   try {
-    raw = JSON.parse(content);
+    raw = JSON.parse(readFileSync(filePath, "utf-8"));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`kg-language-overlay: failed to parse '${filePath}': ${message} — skipping`);

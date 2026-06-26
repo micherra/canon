@@ -1,7 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CANON_DIR } from "@shared/constants.ts";
-import { scanOverlayContent } from "@shared/lib/overlay-scanner.ts";
 
 /** Shape of a correction record written by correction-capture.sh */
 export type CorrectionRecord = {
@@ -72,16 +71,6 @@ function parseCorrectionFile(
   const record = parsed;
 
   if (!record.file_path || !record.timestamp) return null;
-
-  // Scan the fields rendered into agent prompts (project-local overlay boundary).
-  // Join with newlines so that line-start injection patterns (role reassignment)
-  // are detected even when the injected field value begins with the pattern.
-  const scanText = [record.correction_command, record.commit_subject, record.file_path].join("\n");
-  const scanResult = scanOverlayContent(scanText);
-  if (!scanResult.ok) {
-    console.warn("[overlay-scan] dropped correction:", scanResult.reason);
-    return null;
-  }
 
   const age = now - new Date(record.timestamp).getTime();
   // Guard against non-empty but invalid date strings producing NaN — which
