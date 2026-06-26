@@ -6,7 +6,7 @@
 Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint, agent metrics, signal compilation, and summary storage. All tools surface quality signals; none mutate workflow state.
 
 ## Architecture
-<!-- last-updated: 2026-06-24 -->
+<!-- last-updated: 2026-06-25 -->
 
 **`tools/`** — MCP tool handlers (thin wrappers calling services).
 
@@ -16,7 +16,8 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `get-drift-report.ts` | `get_drift_report` | Full drift report — compliance rates, hotspots, trend, doc freshness |
 | `record-agent-metrics.ts` | `record_agent_metrics` | Agent-callable metrics recorder |
 | `store-summaries.ts` | `store_summaries` | DB-only summary persistence |
-| `sync-indexes.ts` | `sync_indexes` | Regenerates sentinel-delimited `## Artifact Inventory` blocks in the 5 sibling artifact-class indexes; returns `{ synced[], skipped[] }` |
+| `sync-indexes.ts` | `sync_indexes` | Regenerates sentinel-delimited `## Artifact Inventory` blocks in the 6 sibling artifact-class indexes (adds `primers/`); returns `{ synced[], skipped[] }` |
+| `check-context-staleness.ts` | `check_context_staleness` | Reads committed `context-manifest.json`, re-scans installed corpus, returns `StalenessReport`; `MANIFEST_NOT_FOUND` when manifest unreadable |
 
 **`services/`** — Pure functions; all accept pre-loaded data (no I/O except `scanDirectories`).
 
@@ -27,7 +28,8 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `wiki-lint-principle-tier.ts` | `checkMisroutedPrinciples(principles)`, `checkDuplicateTitles(principles)`, `normalizeTitle(title)` — principle-tier checks; `CANON_INTERNAL_PREFIXES` constant; split per `line-limit-split-into-siblings`; pure, no I/O |
 | `frontmatter-schema.ts` | `runFrontmatterSchemaCheck(files, projectDir)` — per-class Zod schema registry for principles, agents, templates, docs/adr, loops, routines; `classifyFmClass(filePath)` pure classifier (skips dot-dirs, empty-fm prose, index docs); `toFrontmatterSchemaInput` helper; emits `SCHEMA_ERROR` / `PARSE_ERROR` findings; pure I/O split via injected `existsOnDisk`; whole-corpus zero-false-positive coverage (ADR-0021; added 2026-06-24) |
 | `link-graph.ts` | `buildCorpusLinkGraph(files, projectDir)` — mdast text-node visitor extracts `[[wiki-links]]` (with line numbers), relative markdown links, and `ADR-NNNN` refs; fenced/inline-code `[[...]]` excluded by construction; `referencedPrincipleIds` set = ids targeted by at least one `[[id]]` link (inbound-link source of truth for `orphan_principles`); single shared graph consumed by both `link_integrity` and `orphan_principles` checks; `docs/explore/` excluded as link source; helpers: `collectWikiFindingsForFile`, `collectMdFindingsForFile`, `collectAdrFindingsForFile`; pure (ADR-0019; added 2026-06-24) |
-| `index-inventory.ts` | `toDescriptors`, `renderInventoryBlock`, `rewriteManagedBlock`, `extractManagedBlock`, `diffIndex` (pure); `checkIndexDrift` (I/O boundary); sentinel constants `INVENTORY_START`/`INVENTORY_END`; types `ArtifactClass`, `ArtifactDescriptor`, `IndexDriftFinding`, `CLASS_DIRS` |
+| `index-inventory.ts` | `toDescriptors`, `renderInventoryBlock`, `rewriteManagedBlock`, `extractManagedBlock`, `diffIndex` (pure); `checkIndexDrift` (I/O boundary); sentinel constants `INVENTORY_START`/`INVENTORY_END`; types `ArtifactClass` (6 values: `rules`, `principles`, `agents`, `templates`, `references`, `primers`), `ArtifactDescriptor`, `IndexDriftFinding`, `CLASS_DIRS` |
+| `context-manifest.ts` | `buildContextManifest(pluginDir)` — pure async; hashes each `.md` file in corpus dirs via `hashContent` (sha256 reused from `context-provenance.ts`); returns sorted `ContextManifest`; `checkContextStaleness(projectDir, manifest)` — compares live corpus against manifest, returns `StalenessReport` with `drifted[]`, `missing[]`, `extra[]`; unreadable file → missing (not drifted) |
 | `doc-gap-detect.ts` | `detectDocGaps(entries)`, `scanDirectories(rootDir, excludeDirs?)` |
 | `signal-compiler.ts` | `compileSignals(filePaths, driftDbSignals)` — read-only; scores by priority within per-file token budget |
 | `doc-freshness.ts` | `computeDocFreshness` — enumerates `docs/*.md` (excludes `docs/reference/`); ENOENT → `[]` |
@@ -35,11 +37,15 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `craft-audit-service.ts` | Pure audit area selector + profile persistence; see Contracts below |
 
 ## Contracts
-<!-- last-updated: 2026-06-24 -->
+<!-- last-updated: 2026-06-25 -->
 
 **Craft audit service** (`services/craft-audit-service.ts`) — `selectAuditAreas(files, options?)` pure selector; bounded by `limit` default 5; `persistAuditProfile(areas, ratings, dao)` writes `source:"audit"` rows via injected `CraftProfileDao`; reuses `CraftProfileSchema` + `deriveSubsystemKey`. Added 2026-06-03.
 
 **`wiki_lint` tool** — `wikiLint(input, projectDir)` runs any combination of 12 non-`index_drift` checks (13 total with `index_drift`); returns `WikiLintOutput` with per-check arrays + `total_findings`. `WIKI_LINT_CHECK_NAMES` exported from `register-knowledge.ts` — derive-from-const parity with `CheckName` union (schema-parity test enforces this).
+
+**`check_context_staleness` tool** (`tools/check-context-staleness.ts`) — reads `context-manifest.json`, calls `checkContextStaleness(project_dir, manifest)` from service; returns `toolOk(StalenessReport)` or `toolError("INVALID_INPUT", "MANIFEST_NOT_FOUND: ...")` when manifest unreadable. Added 2026-06-25.
+
+**Index inventory** (`services/index-inventory.ts`) — `ArtifactClass` union has 6 members: `rules`, `principles`, `agents`, `templates`, `references`, `primers` (added 2026-06-25). `CLASS_DIRS.primers = ["primers"]`. `sync_indexes` operates on all 6 classes; `index_drift` wiki_lint check covers all 6.
 
 `CheckName` union (all valid values for the optional `checks` input array):
 
@@ -66,8 +72,8 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 **`assembleWikiLintOutput(input: AssembleWikiLintInput)`** — `total_findings` includes all check counts including `scopeLayers`, `scopeTags`, `indexDrift`, `glossaryConsistency`, `misroutedPrinciples`, and `duplicateTitles`. `filesScanned` counts CLAUDE.md files + agent files + DDD doc files.
 
 ## Invariants
-<!-- last-updated: 2026-06-24 -->
-- All service functions are pure: no I/O except `scanDirectories` and `doc-freshness.ts` (git + fs reads)
+<!-- last-updated: 2026-06-25 -->
+- All service functions are pure: no I/O except `scanDirectories`, `doc-freshness.ts` (git + fs reads), and `context-manifest.ts` (fs reads via `buildContextManifest`/`checkContextStaleness`)
 - `tools/wiki-lint.ts` is the only file that calls `existsSync` for `checkCitedPaths`; service layer receives an injected `existsOnDisk` predicate (pure-IO split)
 - `checkCitedPaths` scans `references/**/*.md` and DDD doc set; `collectDddDocPaths` performs a live filesystem scan (never depends on KG graph store)
 - `dddDocFiles` is only loaded when `stale_refs` or `cited_paths` is enabled — no unnecessary filesystem scans for unrelated check subsets
