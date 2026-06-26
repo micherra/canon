@@ -1,30 +1,39 @@
 # features/evolution/ — Trace-Driven Evolution Bounded Context
 
+<!-- last-updated: 2026-06-25 -->
+
 ## Purpose
 
-The `evolution/` feature module is the seed of Canon's trace-driven evolution
-pipeline (Phase 1). It provides the `evaluate_candidate` MCP tool: given a
-candidate artifact (text) and a target path, it injects the candidate into an
-isolated temp-dir copy of the eval surface, runs the Canon eval harness
-(run-evals.sh) per split, and applies the §7 strict-holdout improvement gate.
+The `evolution/` feature module implements Canon's trace-driven evolution
+pipeline (Phase 1). It provides two MCP tools:
+- `evaluate_candidate` — offline fitness gate (§7 strict-holdout, ADR-0022)
+- `attribute_failure` — attribution consumer: joins recorded `context_provenance` with review violations + cliff events to localize each failure to the in-context artifact (ADR-0024)
 
-This is a **write-side / offline gate** — it blocks the build hot path.
-It is invoked manually or by the evolution loop, never on every request.
+Both tools are **offline** — never called on the build hot path.
 
 ## Architecture
 
 ```
 features/evolution/
 ├── tools/
-│   └── evaluate-candidate.ts   # MCP tool handler (thin wrapper over services)
+│   ├── evaluate-candidate.ts   # MCP tool handler (thin wrapper over services)
+│   └── attribute-failure.ts    # MCP tool handler (thin wrapper over attribution services)
 ├── services/
 │   ├── eval-runner.ts          # parseSummary, decideGate, runSplit (pure + one I/O fn)
-│   └── candidate-injection.ts  # withInjectedCandidate (ADR-0022 temp-dir injection)
+│   ├── candidate-injection.ts  # withInjectedCandidate (ADR-0022 temp-dir injection)
+│   ├── attribution-types.ts    # Mutator-facing output types: FailureKind, AttributedArtifact, FailureAttribution, AttributeFailureResult
+│   ├── attribution-join.ts     # attributeFailures() — pure join of provenance + failure sources
+│   ├── attribution-provenance-source.ts  # readProvenance() — reads live workspace or archived RunSummary
+│   └── attribution-failure-sources.ts   # collectFailureSources() — reads review violations + cliff events
 └── __tests__/
-    ├── decide-gate.test.ts      # §7 invariant tests (pure, no I/O)
-    ├── parse-summary.test.ts    # parseSummary tests (pure, no I/O)
-    ├── evaluate-candidate.test.ts  # handler tests (mocks runShell seam)
-    └── candidate-injection.test.ts # injection tests (real fs, hash guard)
+    ├── decide-gate.test.ts
+    ├── parse-summary.test.ts
+    ├── evaluate-candidate.test.ts
+    ├── candidate-injection.test.ts
+    ├── attribution-join.test.ts           # 17 pure unit tests (happy path, byte-identity, cliff join, lossy paths)
+    ├── attribute-failure.test.ts          # 6 integration tests (real SQLite + REVIEW.md)
+    ├── attribution-provenance-source.test.ts
+    └── attribution-failure-sources.test.ts
 ```
 
 Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
@@ -93,8 +102,36 @@ return empty output.
 - 512KB stdout maxBuffer is sufficient for the summary text; `parseSummary` scans from
   the end to tolerate truncation.
 
+## Tool: `attribute_failure`
+
+**Input** (`AttributeFailureInputSchema`):
+- `workspace` (string, optional) — absolute path to a live Canon workspace; exactly one of `workspace` or `archive_id` must be provided.
+- `archive_id` (string, optional) — archive ID of a completed build (from `get_build_history`).
+- `project_dir` (string, required) — absolute path to the project root; needed for artifact body reads, drift.db cliff events, and archive lookups.
+
+**Output (`AttributeFailureResult`):**
+- `attributions[]` — `FailureAttribution` objects: each links one failure to one `AttributedArtifact` with `failure_kind`, `confidence`, `hash_verified`, `join_basis`, `hypothesis`, `transcript_evidence`.
+- `unattributed[]` — violations with no matching provenance entry (typed bucket, not dropped).
+- `flagged[]` — attributions where `content_hash` mismatched or the artifact file is missing (degraded, not error).
+- `ambiguous[]` — violations that matched multiple provenance steps (surfaced, not silently resolved).
+
+**Fail behavior**: fail-open — absent provenance, reviews, or cliff events yield empty sub-arrays, not errors. `INVALID_INPUT` when both or neither of `workspace`/`archive_id` are given.
+
+## Attribution Join Contract (ADR-0024)
+
+- **`review_violation`** — joined on `violation.principle_id == assembled_artifacts[].id`; the only edge the recorded data supports; lossy cases become `unattributed[]` or `ambiguous[]`.
+- **`cliff_event`** — joined on `cliff.step_id == provenance.step_id`; exact, high-confidence.
+- **`test_failure`** — DEFERRED; no durable joinable key in current trace schema. Re-add per ADR-0024 Revisit-If once a `step_id`-keyed test_failure event type is available.
+- **content_hash** — re-hashed from the raw (untrimmed) pre-disclosure artifact body via `hashContent`; mismatch → `flagged[]` with `hash_verified: false`; exact match → `hash_verified: true`. Fail-closed: only exact SHA256 match counts.
+- **Hypothesis vocabulary** — all `hypothesis` strings use presence/context vocabulary; "caused"/"causes" are prohibited (verified by grep on every build).
+
+## Known Constraints
+
+- `runShell` is `spawnSync` (synchronous) — relevant to `evaluate_candidate` only; `attribute_failure` has no subprocess calls.
+- `getTranscriptExcerpt` seam in `attribute_failure` is wired but returns `[]` in v1 (transcript evidence not yet populated).
+- `attribute_failure` reads from two Canon stores: execution-store `orchestration.db` (for `context_provenance` events via `getEventsByType`) and drift.db (for cliff events via `CliffEventsDao`). It does NOT write to any Canon storage.
+
 ## Future Phases
 
 - Phase 2: candidate generation (propose mutations, rank by expected holdout improvement).
 - Phase 3: evolve loop (generation → evaluation → selection → commit cycle).
-- Phase 4: attribution integration (trace which prior builds informed which candidates).

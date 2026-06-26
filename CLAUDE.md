@@ -659,7 +659,7 @@ canon/
 │       │   ├── file-context/    # get_file_context
 │       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase D current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes
-│       │   ├── evolution/       # evaluate_candidate fitness gate — §7 strict-holdout, temp-dir injection (ADR-0022)
+│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Canon MCP server is organized into ten bounded contexts. The **Flows Context** owns all flow/state/fragment schema types and status vocabulary. The **Orchestration Context** owns execution lifecycle, board state, session management, DAG-based parallel dispatch, and spawn/HITL mechanics. The **Knowledge Graph Context** owns the file entity graph, import/export edge relationships, and semantic search. The **Drift/Review Context** owns review persistence, violation tracking, and compliance analytics. The **Messages Context** owns unified inter-agent messaging, event payloads, and event validation. The **File Context** owns file-level structural analysis, entity queries, and blast radius reporting. The **Diagnostics/Analytics Context** owns flow run analytics, agent metrics recording, and convergence checking. The **Loop Registry Context** owns loop-as-artifact schema, registry loading, and dispatch tools. The **Evolution Context** owns the trace-driven evolution fitness gate (`evaluate_candidate`), candidate injection, and the §7 holdout decision. The **Shared Kernel** is a foundation layer providing cross-cutting types and constants that ≥3 contexts depend on. A thin **Platform/Infrastructure layer** (`src/platform/`, `src/app/`) wires contexts together at startup and provides storage adapters — it is not a bounded context.
+The Canon MCP server is organized into ten bounded contexts. The **Flows Context** owns all flow/state/fragment schema types and status vocabulary. The **Orchestration Context** owns execution lifecycle, board state, session management, DAG-based parallel dispatch, and spawn/HITL mechanics. The **Knowledge Graph Context** owns the file entity graph, import/export edge relationships, and semantic search. The **Drift/Review Context** owns review persistence, violation tracking, and compliance analytics. The **Messages Context** owns unified inter-agent messaging, event payloads, and event validation. The **File Context** owns file-level structural analysis, entity queries, and blast radius reporting. The **Diagnostics/Analytics Context** owns flow run analytics, agent metrics recording, and convergence checking. The **Loop Registry Context** owns loop-as-artifact schema, registry loading, and dispatch tools. The **Evolution Context** owns the trace-driven evolution pipeline: the `evaluate_candidate` fitness gate (§7 holdout, candidate injection) and the `attribute_failure` attribution consumer (provenance⋈failure join, content_hash byte-identity verification, ADR-0024). The **Shared Kernel** is a foundation layer providing cross-cutting types and constants that ≥3 contexts depend on. A thin **Platform/Infrastructure layer** (`src/platform/`, `src/app/`) wires contexts together at startup and provides storage adapters — it is not a bounded context.
 
 ---
 
@@ -92,12 +92,14 @@ Phase A shipped the schema, loader, and both MCP tools. Phase B added `loops/shi
 
 ### 9. Evolution Context
 
-- **Directory**: `mcp-server/src/features/evolution/`
-- **Responsibility**: Trace-driven evolution fitness gate — candidate injection into an isolated temp-dir copy of the eval surface, per-split harness execution, §7 strict-holdout improvement gate, `evaluate_candidate` MCP tool
-- **Key types**: `EvaluateCandidateResult` (`baseline_score`, `candidate_score`, `per_split`, `accepted`, `regressed`, `size_delta`, `judge_votes_holdout`); `withInjectedCandidate` (ADR-0022 temp-dir contract)
-- **Depends on**: Platform adapters (`process-adapter.ts` via `runShell`) for subprocess isolation (ADR-002); Shared Kernel (`ToolResult<T>`, `CanonErrorCode`) only for error types
+<!-- last-updated: 2026-06-25 -->
 
-This context is a write-side / offline gate — it is never called on the build hot path. It does not read from or write to any Canon storage (no KG, no drift.db, no execution store). The real `skills/canon/evals/` directory is NEVER mutated; the injection contract (ADR-0022) enforces isolation via `mkdtemp` + `fs.cp` + `fs.rm` in `finally`.
+- **Directory**: `mcp-server/src/features/evolution/`
+- **Responsibility**: Trace-driven evolution pipeline — `evaluate_candidate` fitness gate (§7 strict-holdout, ADR-0022) + `attribute_failure` attribution consumer: joins recorded `context_provenance` events with review violations + cliff events to localize each failure to the in-context artifact (ADR-0024)
+- **Key types**: `EvaluateCandidateResult` (`baseline_score`, `candidate_score`, `per_split`, `accepted`, `regressed`, `size_delta`, `judge_votes_holdout`); `withInjectedCandidate` (ADR-0022 temp-dir contract); `FailureKind = "review_violation" | "cliff_event"`; `AttributedArtifact` (`id`, `path`, `kind`, `content_hash`, `char_span`, `hash_verified`); `FailureAttribution`; `AttributeFailureResult` (`attributions[]`, `unattributed[]`, `flagged[]`, `ambiguous[]`)
+- **Depends on**: Platform adapters (`process-adapter.ts` via `runShell`) for `evaluate_candidate` subprocess; Workspaces domain (`execution-store.ts` via `getEventsByType`) + Platform drift.db (`CliffEventsDao`) for `attribute_failure` reads; Shared Kernel (`ToolResult<T>`, `CanonErrorCode`) for error types
+
+Both tools are offline — never called on the build hot path. `evaluate_candidate` does not read from or write to any Canon storage (no KG, no drift.db, no execution store); the real `skills/canon/evals/` directory is NEVER mutated (ADR-0022). `attribute_failure` reads from execution-store (`context_provenance` events) and drift.db (cliff events) but does not write to any Canon storage.
 
 ### 10. Shared Kernel
 
