@@ -44,18 +44,13 @@ function getToolNames(server: McpServer): Set<string> {
 
 // ── Characterization: tool count pinned pre-refactor ─────────────────────────
 //
-// TOOL COUNT BASELINE (updated 2026-06-09: routines tools added):
-//   Tools reachable from the 6 top-level register groups:
-//   - registerOrchestrationTools: 19 tools
-//   - registerKnowledgeTools:     12 tools
-//   - registerArtifactTools:       4 tools
-//   - registerPrincipleTools:      8 tools
-//   - registerLoopTools:           2 tools (list_loops, get_loop_definition)
-//   - registerRoutineTools:        3 tools (list_routines, get_routine, sync_routines)
-//   Total: 48 tools
+// TOOL COUNT BASELINE (updated 2026-06-25):
+//   Previous baseline: 54 tools (as of 2026-06-09 routines tools added).
+//   +1 check_context_staleness (this build, registerKnowledgeTools)
+//   +1 attribute_failure         (main PR #418, registerEvolutionTools)
+//   New total: 55 tools
 //
-// Note: register-evaluate-step.ts defines evaluate_step but it is not imported
-// from any of the 6 top-level groups, so it is NOT registered at runtime.
+// To recount: run this test — the received value in the failure message is authoritative.
 //
 // This test must be GREEN before the refactor starts (pin existing behavior)
 // and GREEN after (prove no silent regression).
@@ -75,9 +70,9 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
     resetForTesting();
   });
 
-  it("factory produces a server with exactly 54 registered tools", () => {
+  it("factory produces a server with exactly 55 registered tools", () => {
     const server = createCanonServer();
-    expect(getToolCount(server)).toBe(54);
+    expect(getToolCount(server)).toBe(55);
   });
 
   it("tool names include a stable known subset", () => {
@@ -171,8 +166,8 @@ describe("createCanonServer(): factory independence", () => {
   it("each instance has the full tool count independently", () => {
     const s1 = createCanonServer();
     const s2 = createCanonServer();
-    expect(getToolCount(s1)).toBe(54);
-    expect(getToolCount(s2)).toBe(54);
+    expect(getToolCount(s1)).toBe(55);
+    expect(getToolCount(s2)).toBe(55);
   });
 });
 

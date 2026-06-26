@@ -13,6 +13,7 @@
     "lint:deps": "depcruise --validate .dependency-cruiser.cjs src/",
     "lint:fix": "cd .. && biome check --write mcp-server/src/",
     "lint:types": "tsc -p tsconfig.lint.json",
+    "regen:context-manifest": "tsx scripts/regen-context-manifest.ts",
     "start": "tsx src/app/index.ts",
     "test": "vitest run"
   },
