@@ -658,7 +658,7 @@ add_adr "$CASE21_REPO_B" "docs/adr/0022-collision.md"
 # Hook runs from REPO_A; multi-cd means git actually pushes from REPO_B
 run_test_in_dir_with_output \
   "cd a; cd b && git push (multi-cd, unmodeled) → exit 2 fail-closed" \
-  2 "unmodeled cwd-redirect" "$CASE21_REPO_A" \
+  2 "unrecognized cwd-redirect" "$CASE21_REPO_A" \
   "{\"command\":\"cd ${CASE21_REPO_A}; cd ${CASE21_REPO_B} && git push origin feature\"}"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -683,8 +683,8 @@ setup_repo_with_origin "$CASE22_SAFE" "docs/adr/0023-other.md"
 add_adr "$CASE22_SAFE" "docs/adr/0024-new.md"
 
 run_test_in_dir_with_output \
-  "pushd COLL && git push (unmodeled) → exit 2 fail-closed" \
-  2 "unmodeled cwd-redirect" "$CASE22_SAFE" \
+  "pushd COLL && git push (allowlist reject) → exit 2 fail-closed" \
+  2 "unrecognized cwd-redirect" "$CASE22_SAFE" \
   "{\"command\":\"pushd ${CASE22_COLL} && git push origin feature\"}"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -708,9 +708,77 @@ setup_repo_with_origin "$CASE23_SAFE" "docs/adr/0023-other.md"
 add_adr "$CASE23_SAFE" "docs/adr/0024-new.md"
 
 run_test_in_dir_with_output \
-  "(cd COLL && git push) subshell (unmodeled) → exit 2 fail-closed" \
-  2 "unmodeled cwd-redirect" "$CASE23_SAFE" \
+  "(cd COLL && git push) subshell (allowlist reject) → exit 2 fail-closed" \
+  2 "unrecognized cwd-redirect" "$CASE23_SAFE" \
   "{\"command\":\"(cd ${CASE23_COLL} && git push origin feature)\"}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 24: --git-dir flag (allowlist rejects repo-redirecting flag) → exit 2
+# The --git-dir/--work-tree flag form redirects git's target repo identically
+# to the GIT_DIR= env form (probe confirmed), but the old denylist only caught
+# the env form. Allowlist posture rejects any command containing --git-dir or
+# --work-tree regardless of whether a collision exists.
+# Test design: COLL has a UNIQUE new ADR (no collision with origin/main) so the
+# old collision check would exit 0 — proving this exit 2 comes from the allowlist,
+# not the collision path.
+# RED test: denylist exits 0 (--git-dir undetected, unique ADR passes), expected 2.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 24: --git-dir flag (allowlist reject) → exit 2 [RED until allowlist fix] --"
+
+CASE24_COLL="$MASTER_TMP/case24_coll"
+setup_repo_with_origin "$CASE24_COLL" "docs/adr/0022-existing.md"
+add_adr "$CASE24_COLL" "docs/adr/0024-new-unique.md"   # unique number — old code exits 0
+
+# Run from COLL's cwd so hook sees ADRs being added (can't early-out).
+# The --git-dir flag must be rejected by the allowlist.
+run_test_in_dir \
+  "--git-dir flag with ADRs: denylist passes (unique ADR), allowlist rejects → exit 2" \
+  2 "$CASE24_COLL" \
+  "{\"command\":\"git --git-dir=${CASE24_COLL}/.git --work-tree=${CASE24_COLL} push origin feature\"}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 25: --namespace flag (allowlist rejects unmodeled repo-affecting flag) → exit 2
+# --namespace changes git's ref namespace and is not modeled by the resolver.
+# RED test: denylist exits 0 (--namespace undetected, unique ADR), expected 2.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 25: --namespace flag (allowlist reject) → exit 2 [RED until allowlist fix] --"
+
+CASE25_REPO="$MASTER_TMP/case25"
+setup_repo_with_origin "$CASE25_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE25_REPO" "docs/adr/0024-new-unique.md"   # unique number
+
+run_test_in_dir \
+  "--namespace flag with ADRs: denylist passes (unique ADR), allowlist rejects → exit 2" \
+  2 "$CASE25_REPO" \
+  '{"command":"git --namespace=foo push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 26: WARNING regression — pushd/subshell with NO ADRs added → exit 0
+# Before this fix, the unmodeled-redirect gate fired at Step A BEFORE the no-ADR
+# early-out. A contributor using `pushd dir && git push` for a non-ADR commit
+# got a confusing CANON BLOCK message even though no collision check was needed.
+# Fix: move the allowlist gate to AFTER the no-ADR early-out so it only fires
+# when the push actually adds ADRs.
+# RED test: current Step A fires before ADR check → exit 2 (over-block), expected 0.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 26: pushd with zero ADR changes → exit 0 (no over-block) [RED until gate reorder] --"
+
+CASE26_REPO="$MASTER_TMP/case26"
+CASE26_OTHER="$MASTER_TMP/case26_other"
+setup_repo_with_origin "$CASE26_REPO" "docs/adr/0022-existing.md"
+add_non_adr "$CASE26_REPO" "src/foo.ts"   # no ADR changes; only source file
+mkdir -p "$CASE26_OTHER"
+
+# pushd to another dir && git push from CASE26_REPO (no new ADRs in diff).
+# After fix: diff sees no ADRs → early-out exit 0 before allowlist check.
+# Currently: pushd detected at Step A → exit 2 (over-block).
+run_test_in_dir \
+  "pushd dir && git push, zero ADR changes → exit 0 (gate reorder prevents over-block)" \
+  0 "$CASE26_REPO" \
+  "{\"command\":\"pushd ${CASE26_OTHER} && git push origin feature\"}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summary

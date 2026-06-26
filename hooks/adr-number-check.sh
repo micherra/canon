@@ -11,10 +11,12 @@
 # cwd-scoping: git queries are scoped to the repo being pushed via
 #   canon_git_dir_directive_raw + the GDA array (fixes the cwd fail-OPEN).
 #   git -C takes final precedence over shell cd (git's actual algorithm).
-# unmodeled-redirect gate: pushd, subshell (, multi-cd, GIT_DIR= env prefix,
-#   and command substitution in dir position are detected via
-#   canon_has_unmodeled_cwd_redirect; any such construct in a push command
-#   triggers fail-closed (exit 2) before the directive is resolved.
+# unmodeled-redirect gate (allowlist posture, adr-cwd-02): only provably-safe,
+#   fully-modeled forms are allowed (optional literal cd-prefix + git -C literal).
+#   --git-dir/--work-tree/--namespace flags, GIT_*= env prefixes, pushd, subshell,
+#   multi-cd, command substitution, and eval trigger fail-closed (exit 2) via
+#   canon_cwd_redirect_is_modeled. Gate fires AFTER the no-ADR early-out so that
+#   a non-ADR push with an exotic redirect is not over-blocked.
 #
 # Input:  JSON on stdin with the tool call details
 # Output: CANON BLOCK message on stdout (if collision or unresolvable origin/main)
@@ -25,12 +27,16 @@
 #   Non-push command gate:                exit 0 (silent)
 #   Command extraction (parse fail):      exit 0 (DOCUMENTED FAIL-OPEN — not analyzable;
 #                                           gate authority is the diff, not the parse)
-#   Unmodeled cwd-redirect + push:        exit 2 (FAIL-CLOSED — pushd/subshell/multi-cd/
-#                                           GIT_DIR= means resolver cannot scope check;
-#                                           decision adr-cwd-01)
-#   cd/-C directive unresolvable + push:  exit 2 (FAIL-CLOSED — cannot scope collision
-#                                           check; decision adr-cwd-01)
 #   No newly-added ADRs:                  exit 0 (early-out before fail-closed scope)
+#   Unmodeled cwd-redirect + ADRs:        exit 2 (FAIL-CLOSED — allowlist rejects
+#                                           --git-dir/--work-tree/--namespace flags,
+#                                           GIT_*= env prefixes, pushd, subshell,
+#                                           multi-cd, command substitution, eval;
+#                                           gate fires AFTER the no-ADR early-out
+#                                           so non-ADR pushes are not over-blocked;
+#                                           decisions adr-cwd-01, adr-cwd-02)
+#   cd/-C directive unresolvable + ADRs:  exit 2 (FAIL-CLOSED — cannot scope collision
+#                                           check; decision adr-cwd-01)
 #   Local origin/main NNNN collision:     exit 2 on collision (FAIL-CLOSED)
 #   origin/main unresolvable + ADRs:      exit 2 (FAIL-CLOSED — missed collision is unsafe)
 #   origin/main unresolvable + no ADRs:   exit 0 (early-out; fail-closed scoped to ADR adds)
@@ -104,39 +110,26 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # Resolve the git repo being pushed and build the GDA (-C <dir>) scoping array.
 #
-# Step A: Fail-closed on unmodeled cwd-redirecting constructs.
-#   pushd, subshell (, multi-cd, GIT_DIR=/GIT_WORK_TREE= env prefix, and
-#   command substitution in a dir position are NOT modeled by the resolver.
-#   Any such construct means we cannot determine which repo git will push —
-#   silently using hook cwd would be a fail-OPEN. (decision adr-cwd-01)
-#
 # Step B: Resolve directive with -C-wins precedence (git's actual algorithm).
 #   git -C <dir> takes final precedence over a shell cd-prefix.
-#   Existence-agnostic: distinguishes "no directive" (use hook cwd — trusted
-#   here because Step A confirmed no unmodeled redirect) from "directive present
-#   but unresolvable" (fail-closed: cannot scope the check to the target repo).
+#   Existence-agnostic: distinguishes "no directive" (use hook cwd) from
+#   "directive present but unresolvable" (fail-closed: cannot scope the check).
+#
+# Step 1: Determine newly-added ADR files (branch diff vs origin/main).
+#   Early-out if no ADRs → exit 0. Fail-closed is scoped to ADR-adding pushes.
+#
+# Step A: Allowlist gate (fires AFTER no-ADR early-out).
+#   Only fires when the push actually adds ADRs, so non-ADR pushes with exotic
+#   redirects are not over-blocked. Allowlist posture: only provably-safe,
+#   fully-modeled forms are allowed (optional literal cd + git -C literal).
+#   --git-dir/--work-tree/--namespace flags, GIT_*= env prefixes, pushd, subshell,
+#   multi-cd, command substitution, and eval all trigger exit 2. (adr-cwd-01/02)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Step A: Unmodeled-redirect gate.
-# If the command contains any cwd-redirect that the resolver cannot fully model,
-# we cannot determine the pushed repo → fail-closed before any directive resolution.
-if canon_has_unmodeled_cwd_redirect "$COMMAND"; then
-  cat <<EOF
-CANON BLOCK: [adr-number-check] unmodeled cwd-redirect detected in push command.
-  The command contains a cwd-redirecting construct (pushd, subshell, multiple cd,
-  or GIT_DIR/GIT_WORK_TREE env prefix) that the ADR-number resolver does not fully
-  model. The collision check cannot be reliably scoped to the pushed repo.
-  Use 'git -C <path> push' or 'cd <path> && git push' to specify the target repo
-  explicitly with a form the resolver can verify.
-  (fail-closed: a missed collision is unsafe)
-EOF
-  exit 2
-fi
-
-# Step B: Directive resolution (only modeled forms reach here).
+# Step B: Directive resolution.
 # canon_git_dir_directive_raw applies -C-wins precedence (git's actual algorithm).
-# empty result = no cd/-C directive → use hook cwd (safe: Step A cleared unmodeled redirects)
-_GIT_DIR_RAW=$(canon_git_dir_directive_raw "$COMMAND" || true)  # DOCUMENTED FAIL-OPEN -- empty = no modeled directive; hook cwd is the pushed repo (Step A guarantees no unmodeled redirect)
+# empty result = no cd/-C directive → use hook cwd
+_GIT_DIR_RAW=$(canon_git_dir_directive_raw "$COMMAND" || true)  # DOCUMENTED FAIL-OPEN -- empty = no modeled directive; hook cwd is used; Step A (below) validates the form when ADRs are present
 declare -a GDA=()
 if [[ -n "$_GIT_DIR_RAW" ]]; then
   if [[ -d "$_GIT_DIR_RAW" ]]; then
@@ -155,7 +148,6 @@ EOF
     exit 2
   fi
 fi
-# GDA is empty → all git queries run in hook cwd (the pushed repo, confirmed by Step A)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 1: Determine newly-added ADR files (branch diff vs origin/main)
@@ -190,10 +182,29 @@ if [[ "$_DIFF_EXIT" -ne 0 ]]; then
   NEW_ADRS="$_BRANCH_ADRS"
 fi
 
-# Early-out: no newly-added ADRs → pass before any origin/main resolution.
-# Fail-closed is scoped to pushes that actually add ADR files.
+# Early-out: no newly-added ADRs → exit 0 before the allowlist gate and origin/main check.
+# Fail-closed is scoped to pushes that actually add ADR files (adr-cwd-01).
 if [[ -z "$NEW_ADRS" ]]; then
   exit 0
+fi
+
+# Step A: Allowlist gate — only reached when ADRs are being added.
+# Allowlist posture (security-hook-parser-allowlist-posture): the command must
+# consist ONLY of provably-safe, fully-modeled forms. Anything else fails closed.
+# Firing after the no-ADR early-out means non-ADR pushes with exotic redirects
+# (pushd, subshell, etc.) are not over-blocked. (adr-cwd-02)
+if ! canon_cwd_redirect_is_modeled "$COMMAND"; then
+  cat <<EOF
+CANON BLOCK: [adr-number-check] unrecognized cwd-redirect in push command (allowlist).
+  The command contains a cwd-redirecting construct (--git-dir/--work-tree/--namespace
+  flag, GIT_* env prefix, pushd, subshell, multiple cd, command substitution, or eval)
+  that the ADR-number resolver does not fully model. The collision check cannot be
+  reliably scoped to the pushed repo.
+  Use 'git -C <path> push' or 'cd <path> && git push' to specify the target repo
+  explicitly with a form the resolver can verify.
+  (fail-closed: only provably-safe modeled forms are allowed when ADRs are being added)
+EOF
+  exit 2
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

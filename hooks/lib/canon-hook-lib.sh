@@ -1142,62 +1142,87 @@ canon_git_dir_directive_raw() {
 }
 
 # ---------------------------------------------------------------------------
-# canon_has_unmodeled_cwd_redirect <command>
+# canon_cwd_redirect_is_modeled <command>
 # ---------------------------------------------------------------------------
-# Returns 0 (true) if the command contains any cwd-redirecting construct that
-# canon_git_dir_directive_raw does NOT fully model. Returns 1 (false) if only
-# modeled forms are present (single leading cd-prefix and/or git -C) or none.
+# Allowlist posture (security-hook-parser-allowlist-posture / watch_HHHHHHHHHHHHH1):
+# Returns 0 (true/success) ONLY when the command consists of provably-safe,
+# fully-modeled forms that canon_git_dir_directive_raw handles correctly.
+# Returns 1 (false/fail-closed) for ANY construct not explicitly verified as
+# safe — including forms not yet imagined. The default for an unrecognized form
+# is FAIL-CLOSED, not proceed.
 #
-# Modeled forms (resolver handles correctly):
-#   "cd <dir> &&"           — single leading cd-prefix before &&
-#   "git -C <dir>"          — git's explicit cwd flag (-C wins over cd)
+# Modeled (safe) forms — returns 0:
+#   Optional single "cd <literal_path> &&"  — single leading cd-prefix (no $, no
+#     backtick, no command substitution in the path; resolver handles this form)
+#   "git [-C <literal_path>]* push ..."     — zero or more -C <literal> pairs
+#     as the only repo-affecting git global options
 #
-# Unmodeled forms (returns 0 → caller must fail closed):
-#   pushd <dir>             — directory-stack redirect; resolver does not track
-#   ( ... )                 — subshell; runs with its own cwd context
+# Returns 1 (fail-closed) for all of the following and for any other form:
+#   --git-dir / --work-tree / --namespace flags — redirect git's target repo;
+#     probe confirmed that git --git-dir=X/.git --work-tree=X operates on X
+#     regardless of shell cwd, identical to GIT_DIR= env form (adr-cwd-02)
+#   GIT_DIR= / GIT_WORK_TREE= / any GIT_*= env-var prefix — bypass cwd-based
+#     repo discovery
+#   pushd / popd     — directory-stack redirect; resolver does not track
+#   ( ... ) subshell — runs with its own cwd context
+#   $(...) / backtick — command substitution; cannot be resolved statically
+#   eval             — dynamic execution; cannot be statically analyzed
 #   Multiple cd occurrences — resolver handles only the leading one
-#   GIT_DIR= / GIT_WORK_TREE= — env overrides bypass cwd-based repo discovery
-#   $(...) or ` ` after cd/C — dynamic directory; cannot be resolved statically
+#   Dynamic dir in cd or -C: cd $VAR, cd $(...)
 #
-# Vocabulary-free posture (security-hook-parser-allowlist-posture): detects
-# known-unmodeled forms and returns 0 so callers fail closed — NOT an allowlist
-# of known-safe forms. Each unmodeled form listed closes that vector without
-# opening an adjacent unlisted one; the caller's fail-closed branch handles
-# anything not covered here.
-canon_has_unmodeled_cwd_redirect() {
+# Replaces canon_has_unmodeled_cwd_redirect (denylist, watch_UUUUUUUU2 Nth-patch
+# trap). Inverted return-value semantics: caller uses `if ! canon_cwd_redirect_is_modeled`.
+canon_cwd_redirect_is_modeled() {
   local command="$1"
 
-  # pushd as a command word (directory-stack redirect; not modeled)
+  # Reject: repo-redirecting git global flags (--git-dir, --work-tree, --namespace).
+  # Probe confirmed: git --git-dir=X/.git --work-tree=X operates on X regardless of
+  # shell cwd — identical fail-open surface to GIT_DIR= env form. (adr-cwd-02)
+  if printf '%s' "$command" | grep -qE '\--(git-dir|work-tree|namespace)'; then
+    return 1
+  fi
+
+  # Reject: any GIT_* env-var prefix (bypasses cwd-based repo discovery)
+  if printf '%s' "$command" | grep -qE '\bGIT_[A-Z_]+='; then
+    return 1
+  fi
+
+  # Reject: pushd as a command word (directory-stack redirect; not modeled)
   if printf '%s' "$command" | grep -qE '(^|&&|\|\||;)[[:space:]]*pushd[[:space:]]'; then
-    return 0
+    return 1
   fi
 
-  # Subshell group: ( at command position (start of command or after connector)
+  # Reject: subshell group at command position (start of command or after connector)
   if printf '%s' "$command" | grep -qE '(^[[:space:]]*\(|[&|;][[:space:]]*\()'; then
-    return 0
+    return 1
   fi
 
-  # Multiple cd occurrences — resolver only handles the leading one correctly
-  local _cd_count
-  _cd_count=$(printf '%s' "$command" | grep -oE '\bcd\b' | wc -l | tr -d ' ')
-  if [[ "$_cd_count" -gt 1 ]]; then
-    return 0
+  # Reject: command substitution ($(...) or backtick) anywhere in the command
+  if printf '%s' "$command" | grep -qE '\$\(|`'; then
+    return 1
   fi
 
-  # GIT_DIR or GIT_WORK_TREE env-var prefix bypasses cwd-based repo discovery
-  if printf '%s' "$command" | grep -qE '\bGIT_(DIR|WORK_TREE)='; then
-    return 0
+  # Reject: eval as a command word (dynamic execution; cannot be statically analyzed)
+  if printf '%s' "$command" | grep -qE '(^|&&|\|\||;)[[:space:]]*eval[[:space:]]'; then
+    return 1
   fi
 
-  # Command substitution ($(...) or backtick) in a cd/C argument position
-  if printf '%s' "$command" | grep -qE '(cd|git[[:space:]]+-C)[[:space:]]+[^&;|]*\$\('; then
-    return 0
-  fi
-  if printf '%s' "$command" | grep -qE '(cd|git[[:space:]]+-C)[[:space:]]+[^&;|]*`'; then
-    return 0
+  # Reject: multiple cd occurrences — resolver handles only the leading one correctly
+  local _cwd_cd_count
+  _cwd_cd_count=$(printf '%s' "$command" | grep -oE '\bcd\b' | wc -l | tr -d ' ')
+  if [[ "$_cwd_cd_count" -gt 1 ]]; then
+    return 1
   fi
 
-  return 1
+  # Reject: dynamic directory in cd or -C argument (variable expansion without $()
+  # was already caught above; this catches bare $VAR forms)
+  if printf '%s' "$command" | grep -qE '(cd|git[[:space:]]+-C)[[:space:]]+[^&;|]*\$'; then
+    return 1
+  fi
+
+  # All known-unsafe forms rejected. The command consists of only modeled
+  # constructs (optional single literal cd-prefix and/or git -C with literal paths).
+  return 0
 }
 
 # ---------------------------------------------------------------------------
