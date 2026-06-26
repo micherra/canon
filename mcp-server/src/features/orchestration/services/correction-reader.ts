@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CANON_DIR } from "@shared/constants.ts";
+import { fenceUntrustedOverlay } from "@shared/lib/overlay-fence.ts";
 
 /** Shape of a correction record written by correction-capture.sh */
 export type CorrectionRecord = {
@@ -144,23 +145,34 @@ export function readCorrections(
  * into agent preload prompts.
  *
  * Returns empty string when no corrections exist.
+ *
+ * Security: all correction data originates from `.canon/corrections/` (project-local
+ * untrusted). The per-record projection is fenced as a single UNTRUSTED-DATA envelope
+ * via the Layer 2 inert-A primitive — the entire rendered body (all five fields) lands
+ * inside the fence, never in raw instruction position. The trusted header (heading +
+ * explanation) remains outside the fence.
  */
 export function formatCorrectionsSection(corrections: CorrectionRecord[]): string {
   if (corrections.length === 0) return "";
 
-  const lines = [
+  // Trusted header — static Canon-authored text; outside the fence.
+  const header = [
     "## Recent User Corrections",
     "",
     "The following files were recently corrected by the user after an agent commit. Pay extra attention to these patterns:",
     "",
-  ];
+  ].join("\n");
 
+  // Per-record body lines — contains project-local untrusted data from all five fields;
+  // fenced as a single projection (closes the "only some fields scanned" under-coverage class).
+  const bodyLines: string[] = [];
   for (const c of corrections) {
-    lines.push(`- **${c.file_path}**: Correction at ${c.timestamp}`);
-    lines.push(`  - Agent commit: \`${c.commit_sha.slice(0, 8)}\` — "${c.commit_subject}"`);
-    lines.push(`  - Correction: \`${c.correction_command}\``);
-    lines.push("");
+    bodyLines.push(`- **${c.file_path}**: Correction at ${c.timestamp}`);
+    bodyLines.push(`  - Agent commit: \`${c.commit_sha.slice(0, 8)}\` — "${c.commit_subject}"`);
+    bodyLines.push(`  - Correction: \`${c.correction_command}\``);
+    bodyLines.push("");
   }
 
-  return lines.join("\n");
+  const fenced = fenceUntrustedOverlay(bodyLines.join("\n"), { source: ".canon/corrections" });
+  return header + fenced;
 }
