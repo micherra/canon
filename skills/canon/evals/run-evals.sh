@@ -33,6 +33,17 @@ STRUCTURED_JUDGE=false
 JUDGE_VOTES=1
 EMIT_BASELINE=""
 
+# Guardrail injection mode (ADR-0025): when EVAL_PLUGIN_DIR is set (by eval-runner.ts),
+# pass --plugin-dir <dir> --setting-sources project to activating claude -p runs so they
+# load the rewritten guardrail artifact from the sandbox instead of the marketplace plugin.
+# Default unset = current eval-surface behavior (ADR-0022) — no plugin flags added.
+EVAL_PLUGIN_DIR="${EVAL_PLUGIN_DIR:-}"
+if [[ -n "$EVAL_PLUGIN_DIR" ]]; then
+  PLUGIN_FLAGS=(--plugin-dir "$EVAL_PLUGIN_DIR" --setting-sources project)
+else
+  PLUGIN_FLAGS=()
+fi
+
 while [[ $# -gt 0 ]]; do
   case $1 in
     --filter) FILTER="$2"; shift 2 ;;
@@ -162,6 +173,7 @@ $file_content
         --allowedTools "Read Grep Glob" \
         --max-turns "$max_turns" \
         --max-budget-usd "$eval_budget" \
+        "${PLUGIN_FLAGS[@]+"${PLUGIN_FLAGS[@]}"}" \
         2>&1) || exit_code=$?
     fi
   else
@@ -172,6 +184,7 @@ $file_content
       --allowedTools "Read Grep Glob" \
       --max-turns "$max_turns" \
       --max-budget-usd "$eval_budget" \
+      "${PLUGIN_FLAGS[@]+"${PLUGIN_FLAGS[@]}"}" \
       2>&1) || exit_code=$?
   fi
 
