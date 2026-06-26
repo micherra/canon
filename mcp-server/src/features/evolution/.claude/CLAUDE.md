@@ -1,26 +1,31 @@
 # features/evolution/ — Trace-Driven Evolution Bounded Context
 
-<!-- last-updated: 2026-06-25 -->
+<!-- last-updated: 2026-06-26 -->
 
 ## Purpose
 
 The `evolution/` feature module implements Canon's trace-driven evolution
-pipeline (Phase 1). It provides two MCP tools:
-- `evaluate_candidate` — offline fitness gate (§7 strict-holdout, ADR-0022)
+pipeline (Phase 1). It provides three MCP tools:
+- `evaluate_candidate` — offline fitness gate (§7 strict-holdout, ADR-0022/ADR-0025 dual injection)
 - `attribute_failure` — attribution consumer: joins recorded `context_provenance` with review violations + cliff events to localize each failure to the in-context artifact (ADR-0024)
+- `select_mutation_targets` — deterministic (no model calls) selection layer: composes `attribute_failure`, applies policy + budget, returns construction-ready `MutationTarget[]` for the learner
 
-Both tools are **offline** — never called on the build hot path.
+All tools are **offline** — never called on the build hot path.
 
 ## Architecture
 
 ```
 features/evolution/
 ├── tools/
-│   ├── evaluate-candidate.ts   # MCP tool handler (thin wrapper over services)
-│   └── attribute-failure.ts    # MCP tool handler (thin wrapper over attribution services)
+│   ├── evaluate-candidate.ts       # MCP tool handler — dual-mode dispatch via isGuardrailTarget()
+│   ├── attribute-failure.ts        # MCP tool handler (thin wrapper over attribution services)
+│   └── select-mutation-targets.ts  # MCP tool handler — composes attribution pipeline + selectMutationTargets()
 ├── services/
 │   ├── eval-runner.ts          # parseSummary, decideGate, runSplit (pure + one I/O fn)
-│   ├── candidate-injection.ts  # withInjectedCandidate (ADR-0022 temp-dir injection)
+│   ├── candidate-injection.ts  # withInjectedCandidate (ADR-0022) + withInjectedGuardrailCandidate (ADR-0025) + isGuardrailTarget()
+│   ├── mutation-types.ts       # Pure types: MutationTarget, GateIneligibleTarget, SkippedAttribution, SelectMutationTargetsResult, MutationProposal, ArtifactClass; budget constants DEFAULT_MAX_TARGETS_PER_PASS, CANDIDATES_PER_TARGET
+│   ├── mutation-selection.ts   # selectMutationTargets() — pure join+rank+filter; PLUGIN_ARTIFACT_ROOTS eligibility check
+│   ├── mutation-proposal.ts    # shapeMutationProposal() — shapes accepted eval result into MutationProposal
 │   ├── attribution-types.ts    # Mutator-facing output types: FailureKind, AttributedArtifact, FailureAttribution, AttributeFailureResult
 │   ├── attribution-join.ts     # attributeFailures() — pure join of provenance + failure sources
 │   ├── attribution-provenance-source.ts  # readProvenance() — reads live workspace or archived RunSummary
@@ -30,6 +35,12 @@ features/evolution/
     ├── parse-summary.test.ts
     ├── evaluate-candidate.test.ts
     ├── candidate-injection.test.ts
+    ├── guardrail-injection-integration.test.ts  # Integration: guardrail sandbox build + isGuardrailTarget predicate
+    ├── mutation-proposal.test.ts
+    ├── mutation-selection.test.ts
+    ├── mutator-gate-integration.test.ts
+    ├── proposal-shape-parity.test.ts    # Proposal frontmatter matches canonical template in SKILL.md
+    ├── select-mutation-targets.test.ts
     ├── attribution-join.test.ts           # 17 pure unit tests (happy path, byte-identity, cliff join, lossy paths)
     ├── attribute-failure.test.ts          # 6 integration tests (real SQLite + REVIEW.md)
     ├── attribution-provenance-source.test.ts
@@ -55,7 +66,34 @@ Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
 - `size_delta` — Candidate length minus baseline file length (chars). Signal only, not a gate.
 - `judge_votes_holdout` — Always `3` (documents AC#7, evaluate-candidate-04).
 
-## Injection Contract (ADR-0022)
+## Tool: `select_mutation_targets`
+
+**Input (`SelectMutationTargetsInputSchema`):**
+- `workspace` (string, optional) — absolute path to a live Canon workspace; exactly one of `workspace` or `archive_id` must be provided.
+- `archive_id` (string, optional) — archive ID of a completed build (from `get_build_history`).
+- `project_dir` (string, required) — absolute path to the project root.
+- `max_targets_per_pass` (number, optional) — override budget cap; default `DEFAULT_MAX_TARGETS_PER_PASS` (3).
+
+**Output (`SelectMutationTargetsResult`):**
+- `targets[]` — `MutationTarget[]`: each has `target_path`, `artifact_class`, `baseline_body`, `char_span`, `gate_eligible: true`, `confidence`, `failure_kind`, `principle_id`, `attribution`.
+- `gate_ineligible[]` — `GateIneligibleTarget[]`: paths rejected as not gate-eligible (typed bucket, not dropped); `reason` values: `tool_description_not_loadable`, `file_missing`, `path_traversal`, `harness_entrypoint`.
+- `skipped[]` — `SkippedAttribution[]`: attributions not promoted before eligibility check; `reason` values: `hash_unverified`, `confidence_below_high`, `budget_exhausted`.
+- `meta` — `{ attributions_seen, selected, budget }` for observability.
+
+**Selection policy (deterministic, in order):**
+1. Filter: `hash_verified === true` AND `confidence === "high"`.
+2. Gate-eligibility: `target_path` under a `PLUGIN_ARTIFACT_ROOTS` dir and NOT the eval surface or a harness entrypoint; `tool_description_not_loadable` for TypeScript paths.
+3. Rank: by `attributed_violation_count` descending, then `weighted_count` (optional secondary), then deterministic tie-break.
+4. Budget: take up to `maxTargetsPerPass`; overflow → `skipped[reason="budget_exhausted"]`.
+5. Read `baseline_body` from disk (fail-open: empty string on ENOENT).
+
+**No model calls**: verified by `grep -rniE 'anthropic|claude -p|messages.create|model:' select-mutation-targets.ts` — must return empty.
+
+## Injection Contract (ADR-0022 + ADR-0025)
+
+Two injection modes, auto-dispatched from `target_path` via `isGuardrailTarget()`:
+
+**Eval-surface mode (`withInjectedCandidate`) — ADR-0022 (unchanged):**
 
 `withInjectedCandidate(projectDir, candidateText, targetPath, fn)`:
 
@@ -66,8 +104,25 @@ Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
 5. Calls `fn(tmpDir)` — caller runs the eval harness.
 6. `fs.rm(recursive, force)` in `finally` — always cleans up, even on error.
 
-**Invariant**: the real `skills/canon/evals/` directory is NEVER mutated.
-The candidate-injection test snapshots the directory hash before/after and asserts equality.
+**Guardrail mode (`withInjectedGuardrailCandidate`) — ADR-0025 (new):**
+
+`withInjectedGuardrailCandidate(projectDir, candidateText, targetPath, fn)`:
+
+1. `fs.mkdtemp` — creates a fresh temp dir under `os.tmpdir()`.
+2. For each root in `PLUGIN_ARTIFACT_ROOTS` (`.claude-plugin`, `skills`, `agents`, `rules`, `principles`, `templates`, `references`, `primers`): `fs.cp(recursive)`, fail-open for missing roots.
+3. Path-traversal + harness-entrypoint guard — same as eval-surface mode.
+4. `mkdir(dirname(resolvedTarget), { recursive: true })` — creates parent dirs for new files.
+5. Writes `candidateText` at `resolvedTarget`.
+6. Calls `fn(tmpDir)` — caller in `eval-runner.ts` sets `EVAL_PLUGIN_DIR=tmpDir` so `run-evals.sh` passes `--plugin-dir <tmpDir> --setting-sources project` to the two activating `claude -p` runs.
+7. `fs.rm(recursive, force)` in `finally` — always cleans up.
+
+**Dispatch predicate (`isGuardrailTarget`):** returns `true` when `targetPath`'s first segment is in `PLUGIN_ARTIFACT_ROOTS` AND the path is NOT under `skills/canon/evals/`. Used by both `evaluate-candidate.ts` (dispatch) and `select-mutation-targets.ts` (gate-eligibility check).
+
+**`EVAL_PLUGIN_DIR` env variable:** optional, default unset = prior eval-surface behavior. Set only for the two activating `claude -p` runs within `run-evals.sh` when the variable is non-empty. Not set for baseline runs (no candidate injected).
+
+**Invariants**: the real project tree is NEVER mutated by either mode. The candidate-injection tests snapshot directory hashes before/after and assert equality.
+
+**Known gap — tool-descriptions remain gate-ineligible**: Tool descriptions live in `register-*.ts` (TypeScript source), not in plugin-loaded markdown files. They are NOT copied into the guardrail sandbox and therefore cannot be evaluated by the holdout gate. `GateIneligibleTarget.reason = "tool_description_not_loadable"` is the typed signal. This is a structural constraint of the current plugin-load surface; no workaround in Phase 1.
 
 ## §7 Gate: decideGate
 
@@ -101,6 +156,8 @@ return empty output.
 - Timeout is set to `EVAL_TIMEOUT_MS = 600_000` (10 minutes) to override the 30s default.
 - 512KB stdout maxBuffer is sufficient for the summary text; `parseSummary` scans from
   the end to tolerate truncation.
+- `select_mutation_targets` reads baseline bodies from disk synchronously (fail-open). The tool is offline; this is acceptable.
+- The candidate rewrite (Step 2 of the evolve-candidate skill) is **model-backed** and lives in the learner layer (the `canon:evolve-candidate` skill). It is never a tool or an MCP call. `select_mutation_targets` and `evaluate_candidate` are the tool-layer bookends; the model call between them is the learner's inline `sonnet` rewrite.
 
 ## Tool: `attribute_failure`
 
@@ -131,7 +188,19 @@ return empty output.
 - `getTranscriptExcerpt` seam in `attribute_failure` is wired but returns `[]` in v1 (transcript evidence not yet populated).
 - `attribute_failure` reads from two Canon stores: execution-store `orchestration.db` (for `context_provenance` events via `getEventsByType`) and drift.db (for cliff events via `CliffEventsDao`). It does NOT write to any Canon storage.
 
+## Mutator Pipeline (Phase 1 complete)
+
+The full mutator pipeline runs in the learner via the `canon:evolve-candidate` skill:
+
+1. `select_mutation_targets` (tool) — selects attribution-backed targets, returns `MutationTarget[]` with `baseline_body`.
+2. Inline Sonnet rewrite (learner, model-backed) — generates a full-file candidate text per target; NOT a tool.
+3. `evaluate_candidate` (tool) — runs holdout gate; caller passes `splits: ["holdout"]`.
+4. `shapeMutationProposal` (pure function in `mutation-proposal.ts`) — shapes accepted result into `MutationProposal`.
+5. Write proposal to `.canon/proposed-learnings/` (or workspace plans dir).
+
+Only `accepted === true` survivors are emitted. The learner NEVER applies proposals — it surfaces them for orchestrator routing.
+
 ## Future Phases
 
-- Phase 2: candidate generation (propose mutations, rank by expected holdout improvement).
-- Phase 3: evolve loop (generation → evaluation → selection → commit cycle).
+- Phase 2: evolve loop — orchestrator-level routing of accepted proposals (writer/engineer-build-flow channels).
+- Phase 3: multi-candidate generation, ranking by expected holdout improvement.
