@@ -40,6 +40,10 @@ const baseInput = {
   base_commit: "abc123",
   branch: "main",
   flow_name: "fast-path",
+  // A real single-session id: the same session creating then resuming its own
+  // workspace must re-acquire its own mutex (same-session re-entry). Omitted ids
+  // no longer satisfy the same-session predicate (workspace-lock P1 #2).
+  session_id: "session-fixture",
   task: "fix the bug",
   tier: "small" as const,
 };
@@ -64,12 +68,13 @@ describe("initWorkspaceFlow — SQLite creation", () => {
     expect(existsSync(boardPath)).toBe(false);
   });
 
-  it("does NOT create a .lock file", async () => {
+  it("creates a .lock file for the workspace mutex (S2 lock wiring)", async () => {
     const projectDir = makeTmpProjectDir();
     const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
 
+    // init_workspace now acquires the workspace mutex — .lock is expected
     const lockPath = join(result.workspace, ".lock");
-    expect(existsSync(lockPath)).toBe(false);
+    expect(existsSync(lockPath)).toBe(true);
   });
 
   it("progress entry exists in DB after init", async () => {

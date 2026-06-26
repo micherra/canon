@@ -22,7 +22,7 @@ src/
 │   └── workspaces/       # Workspace and execution store (SQLite persistence)
 ├── features/             # Tool implementations grouped by bounded context
 │   ├── diagnostics/      # Drift reports, agent metrics, summary storage, wiki lint
-│   ├── evolution/        # evaluate_candidate MCP tool — §7 strict-holdout fitness gate, temp-dir candidate injection (ADR-0022)
+│   ├── evolution/        # evaluate_candidate (§7 holdout, ADR-0022) + attribute_failure attribution consumer (provenance⋈failure join, ADR-0024)
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
@@ -47,7 +47,7 @@ src/
 - **Archive storage** (`platform/storage/archive/`) — build-archive persistence (ADR-0006 relocation from `features/history/services/`): `archiveWorkspace`, `buildRunSummary`, pure extractors, shared archive types. See `src/platform/storage/archive/.claude/CLAUDE.md`.
 - **Orchestration tools** (`features/orchestration/`) — workspace lifecycle, artifact writing, agent skill resolution. See `src/features/orchestration/.claude/CLAUDE.md`.
 - **Diagnostics tools** (`features/diagnostics/`) — drift reports, wiki lint, signal compiler, area memory, doc freshness. See `src/features/diagnostics/.claude/CLAUDE.md`.
-- **Evolution tools** (`features/evolution/`) — `evaluate_candidate` fitness gate; temp-dir candidate injection, `run-evals.sh` per split, §7 holdout gate. See `src/features/evolution/.claude/CLAUDE.md`.
+- **Evolution tools** (`features/evolution/`) — `evaluate_candidate` fitness gate (§7 holdout, ADR-0022) + `attribute_failure` attribution consumer (provenance⋈failure join, content_hash byte-identity, ADR-0024). See `src/features/evolution/.claude/CLAUDE.md`.
 - **History tools + RecurringViolation types** → `src/features/history/.claude/CLAUDE.md`.
 - **History services** (`features/history/services/`) — cross-run analysis, craft drift, judge-weight, consolidate-policy. See `src/features/history/services/.claude/CLAUDE.md`.
 - **Loop tools** (`features/loops/`) — loop-definition schema, registry loader, list_loops/get_loop_definition. See `src/features/loops/.claude/CLAUDE.md`.
@@ -135,9 +135,9 @@ src/
 | Tool | Purpose |
 |------|---------|
 | `open_artifact` | Open an HTML artifact from `${workspace}/artifacts/` in browser; reads file, registers with HTTP server, opens fire-and-forget; returns `{ url }`; path traversal blocked; `UNEXPECTED` when HTTP server not running. Added 2026-05-25. |
-| `init_workspace` | Create or resume a workspace; seeds `progress.md`; creates build worktree at `{workspace}/worktree` on `canon/{slug}` branch (returned as `worktree_path`/`worktree_branch`); `preflight: true` checks git status, stale sessions, file claims (non-blocking); when preflight issues found, returns `workspace: ""` + `candidate_workspace` + `preflight_issues` — callers must check `preflight_issues`; resume checks `{workspace}/worktree` first, then legacy `.canon/worktrees/{slug}`; `expectedTask` mismatch blocks resume (slug-collision guard) |
+| `init_workspace` | Create or resume a workspace; seeds `progress.md`; creates build worktree at `{workspace}/worktree` on `canon/{slug}` branch (returned as `worktree_path`/`worktree_branch`); `preflight: true` checks git status, stale sessions, file claims (non-blocking); when preflight issues found, returns `workspace: ""` + `candidate_workspace` + `preflight_issues` — callers must check `preflight_issues`; resume checks `{workspace}/worktree` first, then legacy `.canon/worktrees/{slug}`; `expectedTask` mismatch blocks resume (slug-collision guard); OPTIONAL `session_id` (value of `CLAUDE_CODE_SESSION_ID`) + `job_id` (first 8 chars of `basename($CLAUDE_JOB_DIR)`) — used to acquire the workspace mutex (`.lock`); when a live foreign lock is detected returns `lock_gated: true` + `lock_owner: LockRecord` — caller MUST NOT proceed, must HITL; when a stale lock is reclaimed returns `lock_reclaimed: "ttl" \| "pid_dead" \| "corrupt_and_stale"` — informational, proceed normally <!-- last-updated: 2026-06-24 --> |
 | `write_plan_index` | Write a structured `INDEX.md` for wave execution to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs (`/^[a-zA-Z0-9_-]+$/`), wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
-| `finalize_workspace` | Close the flow: verifies journal completeness, releases file claims for the workflow slug, aggregates gate/postcondition/violation/test metrics into `FlowRunEntry`; populates `diff_stat` + `total_files_changed` via `tryComputeDiffStats`; archives workspace (copy only) via `archiveWorkspaceOnly` — **no destructive teardown** (no `git worktree remove`, no `git branch -D`, no `rmSync`); returns `teardown_deferred: true` + `teardown_owner` (post-ship janitor path) when archive runs (ADR-0016) <!-- last-updated: 2026-06-14 --> |
+| `finalize_workspace` | Close the flow: verifies journal completeness, releases file claims for the workflow slug, releases the workspace mutex (`.lock`), aggregates gate/postcondition/violation/test metrics into `FlowRunEntry`; populates `diff_stat` + `total_files_changed` via `tryComputeDiffStats`; archives workspace (copy only) via `archiveWorkspaceOnly` — **no destructive teardown** (no `git worktree remove`, no `git branch -D`, no `rmSync`); returns `teardown_deferred: true` + `teardown_owner` (post-ship janitor path) when archive runs (ADR-0016); OPTIONAL `session_id` — used to release the workspace mutex; omitting releases unconditionally (single-session backward compat); `lock_released: boolean` in all responses <!-- last-updated: 2026-06-24 --> |
 | `log_step` | Record a single step execution (status, artifacts, agent ID) in `journal.json` |
 | `record_agent_metrics` | Record performance counters into execution state; `INVALID_INPUT` if no fields; `WORKSPACE_NOT_FOUND` if state absent — ADR-003a 2026-04-01 |
 | `post_event` | Structured activity logging via `appendEvent`; returns `{ ok: true }` or error codes — added 2026-04-07 |
@@ -190,11 +190,12 @@ src/
 | `get_routine` | Retrieve a single routine by name; returns frontmatter + body; `INVALID_INPUT` when not found |
 | `sync_routines` | Sync routine state to `.canon/routines/`; returns drift summary |
 
-**Evolution tools** (`src/features/evolution/`): <!-- last-updated: 2026-06-24 -->
+**Evolution tools** (`src/features/evolution/`): <!-- last-updated: 2026-06-25 -->
 
 | Tool | Purpose |
 |------|---------|
 | `evaluate_candidate` | Inject candidate text into a temp-dir copy of the eval surface, run `run-evals.sh` per split, apply §7 strict-holdout gate; returns `EvaluateCandidateResult` (`baseline_score`, `candidate_score`, `per_split`, `accepted`, `regressed`, `size_delta`, `judge_votes_holdout`); fail-closed on subprocess error or timeout; registered via `register-evolution.ts` |
+| `attribute_failure` | Join recorded `context_provenance` events with review violations + cliff events to localize each failure to the in-context artifact; accepts `workspace` OR `archive_id` + `project_dir`; returns `AttributeFailureResult` with `attributions[]`, `unattributed[]`, `flagged[]`, `ambiguous[]`; content_hash byte-identity re-check (fail-closed); fail-open on absent provenance/reviews → partial result; `FailureKind = "review_violation" \| "cliff_event"` (ADR-0024) |
 
 ## Dependencies
 <!-- last-updated: 2026-06-24 -->
@@ -244,6 +245,11 @@ src/
 <!-- last-updated: 2026-05-26 -->
 
 **Recursive filesystem scanners — root threading**: Scanners that exclude paths by relative prefix must thread the original scan root through all recursive calls. Never update the root to the current directory. Pattern: `scanFn(currentDir, rootDir)` where `rootDir` never changes. The bug class (root-drift) is silent — exclusion logic passes at depth 0 and silently fails at depth 1+. See `tools/wiki-lint.ts` (`FindFilesCtx.originalRoot`) and `services/doc-gap-detect.ts` as reference implementations.
+
+## Scripts
+<!-- last-updated: 2026-06-24 -->
+
+- `scripts/dead-wire-internal-use.mjs` — TS compiler-API same-file use resolver; invoked by `hooks/dead-wire-gate.sh` as `node dead-wire-internal-use.mjs <file> <symbol>`; returns integer code-ref count on stdout + exit 0 on success, non-zero on any error (fail-closed); counts an identifier as a use ONLY when `ts.TypeChecker.getSymbolAtLocation` resolves it to the top-level exported binding — member-property names, shadowing locals, declaration sites, strings, and comments are all correctly excluded by construction; bails fail-closed on non-empty `sourceFile.parseDiagnostics` (syntactic parse errors) before building the Program; no tsconfig dependency (`noResolve/noLib/types:[]` in-memory Program). <!-- last-updated: 2026-06-24 -->
 
 ## Development
 <!-- last-updated: 2026-06-09 -->

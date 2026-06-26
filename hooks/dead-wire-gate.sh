@@ -282,8 +282,49 @@ while IFS= read -r entry; do
   done <<< "$local_refs"
 
   if [[ -n "${local_wired_refs// /}" ]]; then
-    # Symbol is wired
+    # Symbol is wired via cross-file reference
     continue
+  fi
+
+  # No cross-file wiring found — check for same-file internal use via
+  # the parse-aware helper (hooks-fail-closed: any failure → DEAD).
+
+  # Resolve the helper path relative to this gate script so it works
+  # regardless of the working directory. The gate is always at hooks/dead-wire-gate.sh
+  # in the repo root, and the helper lives at mcp-server/scripts/dead-wire-internal-use.mjs.
+  # Allow DEAD_WIRE_HELPER_PATH override for testing (T13 stub / T14 grammar scenarios).
+  _gate_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  _helper_path="${DEAD_WIRE_HELPER_PATH:-${_gate_dir}/../mcp-server/scripts/dead-wire-internal-use.mjs}"
+
+  if ! command -v node >/dev/null 2>&1; then
+    echo "CANON WARNING: [dead-wire-gate] node unavailable — flagging ${local_symbol} DEAD (fail-closed)" >&2
+    # Fall through to DEAD path below
+  else
+    # Invoke the helper with a bounded timeout; capture exit status explicitly.
+    # The helper prints the integer code-ref count on stdout and exits 0 on
+    # success, non-zero on any error.  We must NOT rely on $() alone to detect
+    # failure — $() swallows the exit code; we use a temp variable instead.
+    _helper_exit=0
+    _code_refs=""
+    _code_refs=$(timeout 20 node "$_helper_path" "$local_file" "$local_symbol" \
+      2>/dev/null) || _helper_exit=$?
+
+    if [[ "$_helper_exit" -ne 0 ]]; then
+      # Helper failed (missing grammar, parse error, missing file, timeout, …)
+      echo "CANON WARNING: [dead-wire-gate] internal-use parse failed for ${local_symbol} in ${local_file} — flagging DEAD (fail-closed)" >&2
+      # Fall through to DEAD path below
+    elif [[ -z "$_code_refs" ]] || ! [[ "$_code_refs" =~ ^[0-9]+$ ]]; then
+      # Output not a non-negative integer — treat as detection failure
+      echo "CANON WARNING: [dead-wire-gate] internal-use helper returned non-integer output for ${local_symbol} — flagging DEAD (fail-closed)" >&2
+      # Fall through to DEAD path below
+    elif [[ "$_code_refs" -ge 1 ]]; then
+      # count ≥ 1: helper counts USE-POSITION refs only (declaration names excluded),
+      # so any count ≥ 1 means at least one genuine same-file code use → WIRED
+      echo "same-file-wired: ${local_symbol} has ${_code_refs} use-position code refs in ${local_file} (same-file internal use detected)"
+      continue
+    fi
+    # count = 0: no genuine uses found (declaration names excluded by helper)
+    # Fall through to DEAD path below
   fi
 
   # Symbol appears DEAD — check suppression before flagging

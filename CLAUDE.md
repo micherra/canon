@@ -12,7 +12,7 @@
 
 - Call Canon MCP tools (`init_workspace`, `categorize_failures`, `log_step`, `batch_log_steps`, `finalize_workspace`)
 - Spawn specialist agents via the `Agent` tool
-- Read/write orchestration files: `board.json`, `progress.md`, `.lock`, `sharpened-request.md`
+- Read/write orchestration files: `board.json`, `progress.md`, `sharpened-request.md`; observe (never write) `{workspace}/.lock` — the workspace mutex managed by `init_workspace`/`finalize_workspace`
 - Use `Bash` for orchestration git operations: `git status`, `git worktree`, `git merge`
 - Respond to bare greetings ("hi", "bye") with zero project content
 - Ask clarifying questions about scope and requirements
@@ -425,6 +425,46 @@ The PostCommit hook validates `Canon-Workflow` trailer presence.
 
 See Agent Spawn Error Handling below. For transient errors (429, auth, TTL), retry up to 3 times with exponential backoff (4s, 8s, 16s). For agent failures and stuck conditions, use the Auto-Escalation Protocol instead of immediate HITL.
 
+### Multi-Session Concurrency <!-- last-updated: 2026-06-24 -->
+
+Canon runs as a shared HTTP daemon. Multiple Claude sessions may run concurrently against the same project — each session is a separate orchestrator instance sharing one server process. The protocols below prevent workspace corruption and stale-read hazards.
+
+#### Workspace mutex (`.lock`)
+
+`init_workspace` acquires an exclusive file mutex at `{workspace}/.lock` using POSIX-atomic exclusive-create (`O_EXCL`). The lock is released by `finalize_workspace`. Pass `session_id` and `job_id` to both tools so the shared daemon can identify which session holds the lock.
+
+**Session-unique identity**: The orchestrator MUST pass its own `session_id` (the value of `CLAUDE_CODE_SESSION_ID` in its environment) and `job_id` (first 8 chars of `basename($CLAUDE_JOB_DIR)`) to every `init_workspace` and `finalize_workspace` call. The shared daemon cannot read these values from `process.env` — they must be passed explicitly.
+
+**Foreign-lock HITL pattern**: When `init_workspace` returns `lock_gated: true`, the workspace is held by another session. Do NOT proceed. Surface to the user:
+
+```
+WORKSPACE LOCKED
+Workspace: {workspace}
+Owner session: {lock_owner.session_id}
+Owner job:     {lock_owner.job_id}
+Locked since:  {lock_owner.started_at}
+
+Options:
+  1. Wait for the other session to finalize and retry.
+  2. If the owner session is dead, retry — the TTL reclaim (2h) will fire automatically.
+  3. If you are certain the session is abandoned, contact the owner or wait for TTL.
+Do NOT manually delete .lock — race-free reclaim is automatic via TTL.
+```
+
+Locks are reclaimed automatically after a 2-hour TTL or when the owner process is confirmed dead (PID liveness check). Never manually delete `.lock` — the exclusive-create reclaim protocol is the only race-safe path.
+
+#### Pre-Mutate Re-Read Gate <!-- S7 -->
+
+Before any agent mutates a shared workspace artifact (journal, board, checkpoint), it must re-read the artifact immediately before the write — not rely on a stale in-context copy from an earlier read earlier in its turn. This prevents the "read-then-long-compute-then-stale-write" hazard where another session advanced the artifact while the agent was computing.
+
+**Protocol:**
+1. Before each `log_step` / `batch_log_steps` / `write_orchestrator_checkpoint` call, read the current `journal.json` state if needed for merge decisions.
+2. Use `write_orchestrator_checkpoint` immediately (not deferred) — a stale checkpoint blocks correct resume.
+3. When a `BOARD_LOCKED` error (version conflict) is returned by an MCP tool, treat it as a retryable conflict: re-read the current board state and re-apply your update against the new version.
+4. Never cache journal or board snapshots across multiple tool calls — each MCP call sees the current on-disk state.
+
+**Shell helper**: The `hooks/pre-mutate-reread.sh` script (S8) validates that an in-context snapshot age does not exceed a freshness threshold. Agents may invoke it before multi-step journal writes to detect stale-read hazards at the hook layer.
+
 ## Specialist Agents
 
 | Agent | subagent_type | When |
@@ -441,7 +481,7 @@ See Agent Spawn Error Handling below. For transient errors (429, auth, TTL), ret
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
 
-**Spawn pattern**: Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`.
+**Spawn pattern**: Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`. Agent `name` MUST be session-unique: use `{agent-type}-{step_id}-{job_suffix}` where `job_suffix` is the first 8 chars of `basename($CLAUDE_JOB_DIR)` (read from the orchestrator's env) — e.g. `reviewer-review-72f2b372` not `reviewer-1`. `SendMessage` routes by bare agent name, so two concurrent sessions both spawning `reviewer-1` cross each other's mailboxes (D5 / watch_OOOOOOOOOO2).
 
 **Exceptions (no worktree needed):**
 - Agents writing exclusively to `.canon/` (gitignored). Currently: learner.
@@ -619,7 +659,7 @@ canon/
 │       │   ├── file-context/    # get_file_context
 │       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase D current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes
-│       │   ├── evolution/       # evaluate_candidate fitness gate — §7 strict-holdout, temp-dir injection (ADR-0022)
+│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs

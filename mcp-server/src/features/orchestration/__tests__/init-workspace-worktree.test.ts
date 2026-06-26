@@ -66,6 +66,9 @@ const baseInput = {
   base_commit: "abc123",
   branch: "main",
   flow_name: "fast-path",
+  // Real single-session id so create-then-resume re-acquires its own mutex
+  // (same-session re-entry); omitted ids no longer match (workspace-lock P1 #2).
+  session_id: "session-fixture",
   task: "fix the bug",
   tier: "small" as const,
 };

@@ -32,18 +32,11 @@ import { isAbsolute, join } from "node:path";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { scanArtifactList, scanArtifacts } from "../services/artifact-matching.ts";
-import { tryWriteBuildTrendSummary } from "../services/build-trend-summary-writer.ts";
 import { backfillContextProvenanceAgentId } from "../services/context-provenance-backfill.ts";
-import { tryWriteBuildDigest } from "../services/digest-writer.ts";
 import { computeFlowOutcome, getStepsMissingSkipReason } from "../services/finalize-helpers.ts";
 import { tryTranscriptCapture } from "../services/transcript-capture-hook.ts";
-import {
-  archiveWorkspaceOnly,
-  tryAppendAnalytics,
-  tryReleaseClaims,
-  tryRemoveCliffLedger,
-  tryRunJanitor,
-} from "../services/workspace-cleanup.ts";
+import { archiveWorkspaceOnly, runCompletionSideEffects } from "../services/workspace-cleanup.ts";
+import { releaseLock } from "../services/workspace-lock.ts";
 
 export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
 
@@ -108,6 +101,13 @@ export type FinalizeWorkspaceInput = {
   workspace: string;
   /** Project directory — threaded from resolveScope(extra) in register-journal.ts. */
   projectDir: string;
+  /**
+   * Calling session's identity — used to release the workspace mutex.
+   * Pass the same value given to init_workspace. Omitting means the lock
+   * is released unconditionally (single-session flows) to preserve backward
+   * compatibility.
+   */
+  session_id?: string;
 };
 
 export type FinalizeWorkspaceResult = {
@@ -199,6 +199,13 @@ export type FinalizeWorkspaceResult = {
   digest_written?: boolean;
   /** Present only when complete is true. True when build trend summary was written to workspace. */
   trend_summary_written?: boolean;
+  /**
+   * True when the workspace mutex (`.lock` file) was released by this finalize call.
+   * False when the lock was already gone, absent, or owned by a different session.
+   * Present in all finalize responses (not just complete ones) — release is
+   * attempted regardless of whether the flow completed cleanly.
+   */
+  lock_released?: boolean;
 };
 
 function journalPath(workspace: string): string {
@@ -541,25 +548,41 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
 }
 
 // Best-effort side effects on workspace completion: digest, analytics, trend summary, claims.
-// digest MUST run before archiveWorkspaceOnly — it reads workspace files that archive copies.
-async function runCompletionSideEffects(
-  workspace: string,
-  steps: JournalStep[],
-  projectDir: string,
-) {
-  const digest_written = await tryWriteBuildDigest(workspace, projectDir);
-  const analytics_recorded = await tryAppendAnalytics(workspace, steps, projectDir);
-  const trend_summary_written = await tryWriteBuildTrendSummary(workspace, projectDir);
-  const claims_released = await tryReleaseClaims(workspace, projectDir);
-  await tryRemoveCliffLedger(workspace); // best-effort cleanup (loops-phase-c-03)
-  await tryRunJanitor(projectDir);
-  return { analytics_recorded, claims_released, digest_written, trend_summary_written };
+async function analyzeJournalSteps(workspace: string, steps: JournalStep[], projectDir: string) {
+  const completed = steps.filter((s) => s.status === "completed");
+  const skipped = steps.filter((s) => s.status === "skipped");
+  const stepsMissing = steps
+    .filter((s) => s.status === "planned" || s.status === "started")
+    .map((s) => ({ status: s.status, step_id: s.step_id }));
+  const stepsSkipped = skipped.map((s) => s.step_id);
+  const stepsMissingSkipReason = getStepsMissingSkipReason(skipped);
+  const stepsGhost = steps.filter((s) => s.status === "planned").map((s) => s.step_id);
+  const artifacts = scanArtifacts(workspace, completed);
+  const complete =
+    stepsMissing.length === 0 &&
+    stepsMissingSkipReason.length === 0 &&
+    artifacts.missing.length === 0;
+  const sideEffects = complete
+    ? await runCompletionSideEffects(workspace, steps, projectDir)
+    : undefined;
+  const cleanup = complete ? await archiveWorkspaceOnly(workspace, projectDir) : undefined;
+  return {
+    artifacts,
+    cleanup,
+    complete,
+    completed,
+    sideEffects,
+    stepsGhost,
+    stepsMissing,
+    stepsMissingSkipReason,
+    stepsSkipped,
+  };
 }
 
 export async function finalizeWorkspace(
   input: FinalizeWorkspaceInput,
 ): Promise<ToolResult<FinalizeWorkspaceResult>> {
-  const { workspace, projectDir } = input;
+  const { workspace, projectDir, session_id } = input;
 
   if (!workspace) {
     return toolError("INVALID_INPUT", "workspace must be a non-empty string", false);
@@ -575,26 +598,23 @@ export async function finalizeWorkspace(
   }
 
   const { steps } = await readJournal(workspace);
+  const {
+    artifacts,
+    cleanup,
+    complete,
+    completed,
+    sideEffects,
+    stepsGhost,
+    stepsMissing,
+    stepsMissingSkipReason,
+    stepsSkipped,
+  } = await analyzeJournalSteps(workspace, steps, projectDir);
 
-  const completed = steps.filter((s) => s.status === "completed");
-  const stepsMissing = steps
-    .filter((s) => s.status === "planned" || s.status === "started")
-    .map((s) => ({ status: s.status, step_id: s.step_id }));
-  const skipped = steps.filter((s) => s.status === "skipped");
-  const stepsSkipped = skipped.map((s) => s.step_id);
-  const stepsMissingSkipReason = getStepsMissingSkipReason(skipped);
-  const stepsGhost = steps.filter((s) => s.status === "planned").map((s) => s.step_id);
-
-  const artifacts = scanArtifacts(workspace, completed);
-  const complete =
-    stepsMissing.length === 0 &&
-    stepsMissingSkipReason.length === 0 &&
-    artifacts.missing.length === 0;
-
-  const sideEffects = complete
-    ? await runCompletionSideEffects(workspace, steps, projectDir)
-    : undefined;
-  const cleanup = complete ? await archiveWorkspaceOnly(workspace, projectDir) : undefined;
+  // Release the workspace mutex. Run regardless of `complete` so an incomplete
+  // finalize (e.g. a cancelled build) still unlocks the workspace.
+  // Best-effort: releaseLock never throws for expected conditions (ENOENT, owner
+  // mismatch). Pass session_id so we don't delete a peer session's lock.
+  const { released: lock_released } = releaseLock(workspace, { session_id });
 
   return toolOk({
     artifacts_expected: artifacts.expected,
@@ -602,6 +622,7 @@ export async function finalizeWorkspace(
     artifacts_skipped_unresolved: artifacts.skipped_unresolved,
     complete,
     flow_outcome: computeFlowOutcome(steps),
+    lock_released,
     steps_completed: completed.length,
     steps_ghost: stepsGhost,
     steps_logged: steps.length,
