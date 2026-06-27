@@ -388,7 +388,7 @@ Read `references/multi-session-concurrency.md` BEFORE handling a lock-gated init
 | TTL ordering ("cache_control.ttl", "must not come after") | Long conversation + MCP cache ordering bug |
 | Stream idle timeout (agent stalls mid-run: no streaming output, tool-use history present) | Long composition or reading phase without output — **resume-first; backoff does not apply** |
 
-Retry up to 3 times with exponential backoff (4s, 8s, 16s). If all retries fail, pause and inform the user.
+Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only failed ones. If all retries fail, pause and inform the user.
 
 **Stream-idle timeout recovery (watch_NNNNN2)**: A stream-idle stall is a mid-run failure, NOT a spawn failure — resume-first (SendMessage); fall back to escalation-protocol only if no response within ~30s. See `references/escalation-protocol.md` for recovery detail.
 
