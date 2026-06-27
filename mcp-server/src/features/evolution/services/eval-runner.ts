@@ -46,6 +46,14 @@ type RunSplitOpts = {
   filter?: string;
   /** Whether to pass --structured-judge. Default true for gate runs. */
   structuredJudge?: boolean;
+  /**
+   * Optional plugin sandbox directory (guardrail injection mode, ADR-0025).
+   * When set, prefixes `EVAL_PLUGIN_DIR=<dir>` to the shell command so
+   * run-evals.sh can pass `--plugin-dir <dir> --setting-sources project` to
+   * the activating claude -p invocations, overriding the installed plugin.
+   * Not set for eval-surface injection (ADR-0022) — only guardrail mode uses this.
+   */
+  pluginDir?: string;
 };
 
 /**
@@ -113,7 +121,7 @@ export function runSplit(
   split: "train" | "val" | "holdout" | "all",
   opts: RunSplitOpts = {},
 ): ProcessResult {
-  const { dryRun = false, filter, judgeVotes = 1, structuredJudge = true } = opts;
+  const { dryRun = false, filter, judgeVotes = 1, pluginDir, structuredJudge = true } = opts;
 
   const scriptPath = join(tmpDir, "skills", "canon", "evals", "run-evals.sh");
 
@@ -139,7 +147,14 @@ export function runSplit(
     parts.push("--dry-run");
   }
 
-  const command = parts.join(" ");
+  const baseCommand = parts.join(" ");
+
+  // Guardrail injection mode (ADR-0025): prefix EVAL_PLUGIN_DIR env var so
+  // run-evals.sh passes --plugin-dir <tmpDir> to the activating claude -p runs.
+  // runShell uses shell: true, so env-var prefix in the command string is safe.
+  const command = pluginDir
+    ? `EVAL_PLUGIN_DIR=${JSON.stringify(pluginDir)} ${baseCommand}`
+    : baseCommand;
 
   return runShell(command, tmpDir, EVAL_TIMEOUT_MS);
 }
