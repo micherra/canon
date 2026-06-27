@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.14.0](https://github.com/micherra/canon/compare/v2.13.0...v2.14.0) (2026-06-27)
+
+
+### Features
+
+* **conventions:** promote safety-classifier posture + ADR sequential-ID gate (watch_ZZZZZZZ1 + convention_UUUUUUUU1) ([#419](https://github.com/micherra/canon/issues/419)) ([e0152c9](https://github.com/micherra/canon/commit/e0152c91e2f5f9eac0ed422e1d634f8c85e010ef))
+* **dead-wire:** compiler-API binding resolver replaces regex+allowlist ([#415](https://github.com/micherra/canon/issues/415)) ([644bf69](https://github.com/micherra/canon/commit/644bf69a21362df001c615df386bc500f85a14ed))
+* **evolution:** attribute_failure — trace-driven-evolution Phase 1 ATTRIBUTE consumer ([#418](https://github.com/micherra/canon/issues/418)) ([ab0815b](https://github.com/micherra/canon/commit/ab0815b49acc4c6929e46dd612bdf39088963337))
+* **evolution:** evolve loop host — trace-driven-evolution Phase 1 deliverable 4 ([#423](https://github.com/micherra/canon/issues/423)) ([e4eb933](https://github.com/micherra/canon/commit/e4eb933e835b829388aa8e98bd9cdb58664317ce))
+* **evolution:** the Mutator + guardrail injection upgrade — trace-driven-evolution Phase 1 deliverable 5 ([#421](https://github.com/micherra/canon/issues/421)) ([346be3a](https://github.com/micherra/canon/commit/346be3a45a69da22a9ad33b6fba1c2785bdeb2a7))
+* **evolution:** trace-driven-evolution Phase-1 fitness gate — evaluate_candidate ([#414](https://github.com/micherra/canon/issues/414)) ([ae656ae](https://github.com/micherra/canon/commit/ae656ae50cfd68e8721cb9cdb4d835227b1e6e91))
+* **loops:** harness-watch loop — self-paced learner nudge (G2 Increment 1) ([#408](https://github.com/micherra/canon/issues/408)) ([3da25f6](https://github.com/micherra/canon/commit/3da25f617667a7393d4a4908d127cad0141cda71))
+* **orchestration:** concurrency-safety hardening for multi-session Canon orchestration ([#416](https://github.com/micherra/canon/issues/416)) ([056d898](https://github.com/micherra/canon/commit/056d8981ca58d5774685a7847ed3f7efdc24e798))
+* **phase0:** context staleness detection + primers sync_indexes class ([#420](https://github.com/micherra/canon/issues/420)) ([1a857b1](https://github.com/micherra/canon/commit/1a857b14e0ed6bad5200753ee16c12d55f4de860))
+* **principles:** promote 4 concurrency-safety conventions (watch_OOOOOOOOOO1-4) ([#417](https://github.com/micherra/canon/issues/417)) ([d6f30fb](https://github.com/micherra/canon/commit/d6f30fb23498dc1a51e0399a5d1cd26b209a56e8))
+* **principles:** promote 5 batch learnings ([#395](https://github.com/micherra/canon/issues/395)/[#401](https://github.com/micherra/canon/issues/401)/[#402](https://github.com/micherra/canon/issues/402)/[#403](https://github.com/micherra/canon/issues/403)) — allowlist posture, dep-bump, ADR-collision + 2 protocol notes ([#406](https://github.com/micherra/canon/issues/406)) ([a457618](https://github.com/micherra/canon/commit/a457618efdac80742379b1291c14949c7292df92))
+* **provenance:** trace-driven-evolution Phase-1 step-0 — context provenance instrumentation ([#413](https://github.com/micherra/canon/issues/413)) ([4827eec](https://github.com/micherra/canon/commit/4827eec82e718b7016284aef97f50e485a2c62ca))
+* **wiki-lint:** markdown corpus integrity — frontmatter schema + link-graph + corpus cross-links (R0–R3) ([#412](https://github.com/micherra/canon/issues/412)) ([24c0cbe](https://github.com/micherra/canon/commit/24c0cbe4ecf4eb4c7878c8d232fe165dcdfaa4b8))
+
+
+### Bug Fixes
+
+* **push-guard:** stop treating shell redirect tokens as git push refspecs ([#409](https://github.com/micherra/canon/issues/409)) ([6503c47](https://github.com/micherra/canon/commit/6503c47eb47cc4338faab9f9f0b4a5e4ecfd224b))
+
 ## [2.13.0](https://github.com/micherra/canon/compare/v2.12.0...v2.13.0) (2026-06-22)
 
 
