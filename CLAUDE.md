@@ -479,7 +479,7 @@ Before any agent mutates a shared workspace artifact (journal, board, checkpoint
 | Writer | `canon:writer` | Principle authoring and artifact retirement (HITL-gated) |
 | Learner | `canon:learner` | Pattern analysis |
 | Evaluator | `canon:evaluator` | Lightweight quality gate — structural signal verdict (PASS/FAIL) on engineer diffs; runs on Haiku |
-| Janitor | `canon:janitor` | Background housekeeping — prunes stale worktrees and orphaned workspaces; spawned when `invoke_janitor` returns `needs_prune: true` |
+| Janitor | `canon:janitor` | Background housekeeping — dispatched when `invoke_janitor` returns `needs_prune: true`, a post-run outcome signal that routine pruning already ran (not a trigger to prune) |
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
 
