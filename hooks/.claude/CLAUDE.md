@@ -20,7 +20,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `pre-commit-check.sh` | PreToolUse (Bash) | Detect secrets, validate principle compliance |
 | `dead-wire-gate.sh` | verify contract (CLI arg, not hooks.json) | Standing dead-wire reachability gate — fails closed on unwired new exports/tools; reachability grep scans `mcp-server/src` AND `mcp-server/scripts` (so script-only callers count as wired); same-file internal-use detection is parse/binding-aware via `mcp-server/scripts/dead-wire-internal-use.mjs` (TS compiler-API binding resolver, not regex comment-stripping); any helper error or node-absent → DEAD (fail-closed) |
 | `summary-diff-check.sh` | post-engineer (CLI arg, not hooks.json) | Deterministic phantom-claim checker — compares SUMMARY `### Files` + `### What Changed` symbols against `git diff --name-only`; PHANTOM claims exit 2 (block), unreported changes advisory (exit 0) |
-| `scribe-scope-guard.sh` | post-scribe (CLI arg, not hooks.json) | CLAUDE.md over-trim guard — counts deletion lines across all `CLAUDE.md` files in the diff; exceeds threshold (default 5) → exit 2 (surface to user) |
+| `scribe-scope-guard.sh` | post-scribe (CLI arg, not hooks.json) | CLAUDE.md over-trim guard — counts deletion lines from the scribe's own commit(s) (`Canon-Agent: scribe` trailer) in base..HEAD; exceeds threshold (default 5) → exit 2 (surface to user); fails closed (exit 2) when no scribe-trailer commit is found |
 | `destructive-guard.sh` | PreToolUse (Bash) | Prevent force push, hard reset, and other dangerous git ops |
 | `workspace-lock-guard.sh` | PreToolUse (Bash) | Prevent concurrent builds on same branch |
 | `pre-push-review.sh` | PreToolUse (Bash) | Require review before pushing |
