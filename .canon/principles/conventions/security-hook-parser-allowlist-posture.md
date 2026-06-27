@@ -175,6 +175,7 @@ Any of these is the denylist posture this convention forbids.
 - [[hooks-observable-failures]] — sibling convention: when a hook swallows a failure silently, the failure must be made observable or justified.
 - [[scanner-avoids-its-own-pattern]] — sibling convention: a scanner must not contain the literal pattern it detects (same `hooks/**` and `scripts/**` scope).
 - [[probe-before-build-invoke-not-infer]] — when an authority exists (compiler, type-checker), invoke it rather than inferring from environment inspection; this is the design-phase analogue of the delegation principle above.
+- [[delegate-to-authoritative-primitive]] — generalizes this parser-design posture to question-design: when even allowlist enumeration cannot close the space, delegate to or relocate to the authoritative primitive rather than extending the enumeration.
 
 ## Verification
 
