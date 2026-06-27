@@ -522,6 +522,8 @@ When an agent failure or stuck condition is detected (`isStuck` returns true, ag
 
 **Timeout**: The tool enforces a 2-minute cumulative timeout. If the cascade has been running for 2+ minutes, it returns "hitl" regardless of remaining strategies. The orchestrator does not need to track time separately.
 
+**Adversarial-surface iteration signal**: When a fix loop runs 3+ rounds AND every reviewer finding in those rounds is a confirmed true positive on a NEW, distinct bypass or failure class (not a regression introduced by a prior fix, not noise, not churn), surface the following signal to the user BEFORE spawning another patch engineer: "Fix loop at N rounds: all findings are true positives on new bypass classes. This surface likely needs a vocabulary-free / authoritative-primitive design change rather than another patch iteration. Consider delegating to the authoritative platform primitive or relocating the gate — see `[[delegate-to-authoritative-primitive]]`." The discriminator: true positives on new classes (different shapes each round) → rethink signal; same shape re-introduced or churn → normal HITL escalation.
+
 ## Re-spawn Enrichment Protocol
 
 Re-spawned agents MUST receive prior progress context. **Include in every re-spawn prompt:**
