@@ -69,28 +69,38 @@ if [[ "${#SCRIBE_COMMITS[@]}" -eq 0 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Sum CLAUDE.md deletion lines across all scribe commits (per-commit diffs)
+# Sum CLAUDE.md deletion lines across all scribe commits via git --numstat
 # ---------------------------------------------------------------------------
+# --numstat outputs exact "<added>\t<deleted>\t<path>" counts per file.  This
+# avoids the grep-'^---' content/header ambiguity: deleted lines whose content
+# is "---" (YAML frontmatter delimiters, markdown HRs) appear as "----" in the
+# unified diff, match '^---', and were undercounted by the old text-parse
+# approach.  Numstat is immune to content; it counts exact git deletion counts.
 DELETION_COUNT=0
 
 for c in "${SCRIBE_COMMITS[@]}"; do
-  DIFF_OUTPUT=""
-  # --format='' prints only the patch (no commit header/body), so prose '-' bullets
-  # in the commit message body cannot be miscounted as deletion lines.
-  if ! DIFF_OUTPUT=$(git show --format='' --no-color "${c}" -- CLAUDE.md ':(glob)**/CLAUDE.md' 2>&1); then
-    echo "CANON: scribe-scope-guard failed-closed — git show failed for commit ${c}: $DIFF_OUTPUT" >&2
+  NUMSTAT_OUTPUT=""
+  # --format='' suppresses the commit header/body; only numstat lines remain.
+  if ! NUMSTAT_OUTPUT=$(git show --numstat --format='' --no-color "${c}" -- CLAUDE.md ':(glob)**/CLAUDE.md' 2>&1); then
+    echo "CANON: scribe-scope-guard failed-closed — git show failed for commit ${c}: $NUMSTAT_OUTPUT" >&2
     exit 2
   fi
 
-  # Count lines starting with '-' (deletions), excluding '---' diff headers.
-  # grep exits 1 when no matches; use || true to avoid pipefail abort on empty diff.
-  DELETION_LINES=$(echo "$DIFF_OUTPUT" | grep '^-' || true) # DOCUMENTED FAIL-OPEN -- no-match on empty diff; no deletions for this commit; count accumulates 0
-  DELETION_LINES=$(echo "$DELETION_LINES" | grep -v '^---' || true) # DOCUMENTED FAIL-OPEN -- no-match when only headers remain; net deletions are 0
-  if [[ -n "$DELETION_LINES" ]]; then
-    COMMIT_DEL=$(echo "$DELETION_LINES" | grep -c '^.')
-    COMMIT_DEL="${COMMIT_DEL// /}"
-    DELETION_COUNT=$((DELETION_COUNT + COMMIT_DEL))
-  fi
+  # Sum the deleted column (field 2) across all matching files.
+  # Binary files show "-\t-\t<path>"; a non-numeric deleted field is treated as
+  # a fail-closed error — CLAUDE.md is always text, but be defensive.
+  # An empty NUMSTAT_OUTPUT (scribe did not touch CLAUDE.md) contributes 0.
+  COMMIT_DEL=0
+  while IFS=$'\t' read -r _added deleted _path; do
+    [[ -z "$deleted" ]] && continue # DOCUMENTED FAIL-OPEN -- empty line from trailing newline; no deletions for this row
+    if ! echo "$deleted" | grep -qE '^[0-9]+$'; then
+      echo "CANON: scribe-scope-guard failed-closed — non-numeric deleted field '${deleted}' in git show --numstat for commit ${c}" >&2
+      exit 2
+    fi
+    COMMIT_DEL=$((COMMIT_DEL + deleted))
+  done <<< "$NUMSTAT_OUTPUT"
+
+  DELETION_COUNT=$((DELETION_COUNT + COMMIT_DEL))
 done
 
 # ---------------------------------------------------------------------------

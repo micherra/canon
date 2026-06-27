@@ -287,6 +287,57 @@ commit_scribe "$CASE5B_REPO"
 run_guard "multi-commit-union: 3+3=6 del, threshold 5 → exit 2" 2 "$CASE5B_REPO" "$CASE5B_BASE" "5"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Case 6: triple-dash-undercount FAIL
+# scribe commit deletes 6 lines whose content is exactly "---"
+# (YAML frontmatter delimiters / markdown horizontal rules)
+#
+# Bug: the old grep-based guard counts deletion diff lines matching '^-' and
+# then excludes lines matching '^---' to strip the "--- a/path" file-header.
+# A deleted "---" line appears as "----" in the diff (one '-' deletion marker
+# + three '-' content) — "----" starts with "---", so grep -v '^---' also
+# strips the real deletion lines.  Six deletions → counted as 0 → wrong exit 0.
+#
+# TDD: this case is RED against the current grep-based guard (exits 0, should
+# exit 2).  After the numstat fix it becomes GREEN (exits 2 = over threshold 5).
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 6: triple-dash-undercount FAIL --"
+
+CASE6_REPO="$MASTER_TMP/case6"
+init_repo "$CASE6_REPO"
+
+# Write CLAUDE.md with 6 "---" lines interleaved with normal content
+{
+  printf '# Header\n'
+  printf -- '---\n'
+  printf 'Some content\n'
+  printf -- '---\n'
+  printf 'More content\n'
+  printf -- '---\n'
+  printf 'Even more\n'
+  printf -- '---\n'
+  printf 'Last section\n'
+  printf -- '---\n'
+  printf 'Final\n'
+  printf -- '---\n'
+} > "$CASE6_REPO/CLAUDE.md"
+commit_engineer "$CASE6_REPO" "docs: initial CLAUDE.md with --- lines"
+CASE6_BASE=$(git -C "$CASE6_REPO" rev-parse HEAD)
+
+# Scribe commit: remove all 6 "---" lines; 6 deleted lines, threshold 5 → exit 2
+{
+  printf '# Header\n'
+  printf 'Some content\n'
+  printf 'More content\n'
+  printf 'Even more\n'
+  printf 'Last section\n'
+  printf 'Final\n'
+} > "$CASE6_REPO/CLAUDE.md"
+commit_scribe "$CASE6_REPO"
+
+run_guard "triple-dash-undercount: scribe deletes 6 '---' lines, threshold 5 → exit 2" 2 "$CASE6_REPO" "$CASE6_BASE" "5"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
