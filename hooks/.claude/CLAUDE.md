@@ -7,7 +7,7 @@
 Pre/post tool-use interceptors that enforce policy and prevent mistakes without requiring agent compliance. Hooks run automatically on matched tool invocations.
 
 ## Architecture
-<!-- last-updated: 2026-06-24 -->
+<!-- last-updated: 2026-06-25 -->
 
 `hooks.json` is the single registry defining when each hook script runs. Hooks are shell scripts triggered by `PreToolUse` (before Bash/Write/Edit/EnterPlanMode/Agent), `PostToolUse` (after Bash), `SessionStart`, `SubagentStop`, or `PostCompact`. The separate `canon-agent-teams/hooks.json` was merged into this file (2026-04-26); `canon-agent-teams/hooks.json` no longer exists.
 
@@ -18,7 +18,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | Script | Trigger | Purpose |
 |--------|---------|---------|
 | `pre-commit-check.sh` | PreToolUse (Bash) | Detect secrets, validate principle compliance |
-| `dead-wire-gate.sh` | verify contract (CLI arg, not hooks.json) | Standing dead-wire reachability gate — fails closed on unwired new exports/tools; same-file internal-use detection is parse/binding-aware via `mcp-server/scripts/dead-wire-internal-use.mjs` (TS compiler-API binding resolver, not regex comment-stripping); any helper error or node-absent → DEAD (fail-closed) |
+| `dead-wire-gate.sh` | verify contract (CLI arg, not hooks.json) | Standing dead-wire reachability gate — fails closed on unwired new exports/tools; reachability grep scans `mcp-server/src` AND `mcp-server/scripts` (so script-only callers count as wired); same-file internal-use detection is parse/binding-aware via `mcp-server/scripts/dead-wire-internal-use.mjs` (TS compiler-API binding resolver, not regex comment-stripping); any helper error or node-absent → DEAD (fail-closed) |
 | `summary-diff-check.sh` | post-engineer (CLI arg, not hooks.json) | Deterministic phantom-claim checker — compares SUMMARY `### Files` + `### What Changed` symbols against `git diff --name-only`; PHANTOM claims exit 2 (block), unreported changes advisory (exit 0) |
 | `scribe-scope-guard.sh` | post-scribe (CLI arg, not hooks.json) | CLAUDE.md over-trim guard — counts deletion lines across all `CLAUDE.md` files in the diff; exceeds threshold (default 5) → exit 2 (surface to user) |
 | `destructive-guard.sh` | PreToolUse (Bash) | Prevent force push, hard reset, and other dangerous git ops |

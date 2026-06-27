@@ -261,7 +261,7 @@ while IFS= read -r entry; do
   # ≥1 remaining reference ⇒ WIRED, zero ⇒ DEAD
 
   local_refs=""
-  if ! local_refs=$(grep -rln "\b${local_symbol}\b" mcp-server/src --include='*.ts' 2>/dev/null || true); then
+  if ! local_refs=$(grep -rln "\b${local_symbol}\b" mcp-server/src mcp-server/scripts --include='*.ts' 2>/dev/null || true); then
     echo "CANON: dead-wire-gate failed-closed — grep failed for symbol: $local_symbol" >&2
     exit 1
   fi

@@ -1,12 +1,14 @@
 /**
- * Zod schema parity tests for wiki_lint.
+ * Zod schema parity tests for wiki_lint and sync_indexes.
  *
- * Verifies that the WIKI_LINT_CHECK_NAMES exported from register-knowledge.ts
- * (which drives the zod enum in the MCP registration) is in sync with the
- * CheckName union in wiki-lint.ts.
+ * Verifies that the WIKI_LINT_CHECK_NAMES and SYNC_INDEXES_ARTIFACT_CLASSES
+ * exported from register-knowledge.ts (which drives the zod enums in the MCP
+ * registration) are in sync with the CheckName union in wiki-lint.ts and the
+ * ArtifactClass union in index-inventory.ts respectively.
  *
- * The existing tier tests bypass zod by calling wikiLint() directly; these
- * tests close that gap by exercising the registration-level schema.
+ * The existing tier tests bypass zod by calling wikiLint() / syncIndexes()
+ * directly; these tests close that gap by exercising the registration-level
+ * schema.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -118,5 +120,47 @@ A portable principle for zod-path verification.
     // misrouted_principles ran and found no issues (the principle is correctly portable: true)
     expect(Array.isArray(result.misrouted_principles)).toBe(true);
     expect(result.misrouted_principles).toHaveLength(0);
+  });
+});
+
+// ---- Zod schema parity: sync_indexes ALL_CLASSES vs ArtifactClass union ----
+//
+// These tests verify that the zod enum in the sync_indexes MCP tool registration
+// includes all ArtifactClass values from index-inventory.ts, including "primers"
+// which was added as the 6th class. A missing value is silently rejected at the
+// MCP schema boundary, making the class unreachable via the tool interface.
+//
+// The Zod enum is built directly from ALL_CLASSES (the same array syncIndexes()
+// iterates over), so parity is structural — not a separate const that can drift.
+
+describe("sync_indexes zod schema: ALL_CLASSES parity", () => {
+  it("primers is present in ALL_CLASSES (accepted by zod schema)", async () => {
+    // If "primers" is absent here, MCP schema validation rejects
+    // sync_indexes({ class: "primers" }) before it reaches syncIndexes().
+    const { ALL_CLASSES } = await import("../../../features/diagnostics/tools/sync-indexes.ts");
+
+    expect(ALL_CLASSES).toContain("primers");
+  });
+
+  it("ALL_CLASSES includes all 6 ArtifactClass values with no extras", async () => {
+    const { ALL_CLASSES } = await import("../../../features/diagnostics/tools/sync-indexes.ts");
+
+    // Authoritative set derived from index-inventory.ts ArtifactClass union
+    const expectedClasses = new Set([
+      "rules",
+      "principles",
+      "agents",
+      "templates",
+      "references",
+      "primers",
+    ]);
+
+    expect(ALL_CLASSES).toHaveLength(expectedClasses.size);
+    for (const cls of ALL_CLASSES) {
+      expect(expectedClasses.has(cls)).toBe(true);
+    }
+    for (const cls of expectedClasses) {
+      expect(ALL_CLASSES).toContain(cls);
+    }
   });
 });

@@ -637,11 +637,12 @@ to `.canon/`. dc-06 holds: the `harness-watch` loop only surfaces the signal via
 `ORCHESTRATOR_ACTION: run-learner field=learner_due loop=harness-watch`; the orchestrator
 spawns the learner.
 
-## Project Structure <!-- last-updated: 2026-06-24 -->
+## Project Structure <!-- last-updated: 2026-06-25 -->
 
 ```
 canon/
 ├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (25 terms)
+├── context-manifest.json # Content-hash manifest of the installed context-artifact corpus; regenerated via `npm run regen:context-manifest`
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── docs/
 │   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
@@ -658,8 +659,8 @@ canon/
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
 │       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase D current)
-│       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes
-│       │   ├── evolution/       # evaluate_candidate fitness gate — §7 strict-holdout, temp-dir injection (ADR-0022)
+│       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes, check_context_staleness
+│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
@@ -671,7 +672,7 @@ canon/
 │   ├── strong-opinions/
 │   └── conventions/
 ├── rules/                # Agent-behavior rules loaded per agent at runtime
-├── primers/              # Domain primers — domain reasoning context loaded by agents
+├── primers/              # Domain primers — domain reasoning context loaded by agents; generated index at primers/.claude/CLAUDE.md (6th sync_indexes class)
 ├── references/           # Orchestrator + agent protocol fragments (canon-orchestrator.md, etc.)
 ├── scripts/              # Standalone re-runnable bash tools (mine-codex-comments.sh mines Codex bot PR history → docs/reference/codex-defect-classes.md)
 ├── skills/canon/         # Claude Code skill definition — entry point for Canon activation

@@ -28,7 +28,13 @@ export const INVENTORY_END = "<!-- canon:inventory:end -->";
 
 // ---- Types ----
 
-export type ArtifactClass = "rules" | "principles" | "agents" | "templates" | "references";
+export type ArtifactClass =
+  | "rules"
+  | "principles"
+  | "agents"
+  | "templates"
+  | "references"
+  | "primers";
 
 export type ArtifactDescriptor = { name: string; summary: string };
 
@@ -42,6 +48,7 @@ export type IndexDriftFinding = {
 
 export const CLASS_DIRS: Record<ArtifactClass, string[]> = {
   agents: ["agents"],
+  primers: ["primers"],
   principles: ["principles/rules", "principles/strong-opinions", "principles/conventions"],
   references: ["references"],
   rules: ["rules"],
@@ -336,7 +343,14 @@ function indexFilePath(cls: ArtifactClass): string {
  * All pure computation is delegated to toDescriptors, renderInventoryBlock, diffIndex.
  */
 export async function checkIndexDrift(projectDir: string): Promise<IndexDriftFinding[]> {
-  const classes: ArtifactClass[] = ["rules", "principles", "agents", "templates", "references"];
+  const classes: ArtifactClass[] = [
+    "rules",
+    "principles",
+    "agents",
+    "templates",
+    "references",
+    "primers",
+  ];
   const allFindings: IndexDriftFinding[] = [];
 
   await Promise.all(
