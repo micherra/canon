@@ -53,6 +53,17 @@ export function parseRoutine(raw: string, filePath: string, source: "project" | 
     const { data: fm, body } = splitFrontmatter(raw);
     const name = (fm.name as string) || "";
     if (!name) return makeEmptyRoutine(filePath, source);
+    // Charset constraint — name is a closed identifier domain (mirrors kg-language-overlay id
+    // validation). Allows only lowercase alphanumeric, hyphen, and underscore to prevent
+    // label-injection via specially-crafted name strings. Non-matching entries are skipped
+    // fail-closed (same posture as an empty name).
+    const NAME_CHARSET = /^[a-z0-9_-]+$/;
+    if (!NAME_CHARSET.test(name)) {
+      console.warn(
+        `[canon] routine: name '${name}' does not match ^[a-z0-9_-]+$ — skipping (${filePath})`,
+      );
+      return makeEmptyRoutine(filePath, source);
+    }
     return buildRoutine(fm, body.trim(), filePath, source);
   } catch {
     return makeEmptyRoutine(filePath, source);
