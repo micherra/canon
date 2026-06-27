@@ -1575,9 +1575,11 @@ _CANON_INVOKES_MAX_DEPTH=3
 #
 # Evaluates a single (already-segmented) raw command segment to determine
 # whether it invokes "git <subcommand>".  This is the SINGLE SHARED DETECTION
-# PIPELINE used by every Canon hook — it is byte-equivalent to the detection
-# logic in push-to-main-guard.sh's process_segment, which is now refactored to
-# call these same shared functions from canon-hook-lib.sh.
+# PIPELINE used by every Canon hook — it uses the same shared leaf detection
+# functions as push-to-main-guard.sh's process_segment (behaviorally equivalent
+# for push detection; verified by the push-guard suite + cross-hook parity).
+# The drivers differ: this function returns 0/1/2 + subcommand-match, while
+# process_segment applies exit 2 + refspec policy directly.
 #
 # Handles:
 #   - Direct git invocations: "git push", "sudo git push", "(git push)"

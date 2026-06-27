@@ -5,8 +5,9 @@
 # already exists on origin/main under a different filename (network-free local check).
 #
 # Push detection: delegates to canon_command_invokes_subcommand (lib/canon-hook-lib.sh)
-#   which is the SINGLE SHARED DETECTION PIPELINE — byte-equivalent to push-to-main-
-#   guard.sh's process_segment.  Handles: plain "git push", compound commands
+#   which is the SINGLE SHARED DETECTION PIPELINE — shares the same leaf detection
+#   functions as push-to-main-guard.sh's process_segment (behaviorally equivalent for
+#   push detection; drivers differ: returns 0/1/2 vs. exit 2 + refspec policy).  Handles: plain "git push", compound commands
 #   (&&/||/;/|), grouping forms ((git push), { git push; }), string-executing wrappers
 #   (bash -c / eval / sh -c) via canon_unwrap_string_exec_arg recursion with a depth cap,
 #   ambiguous git-prefixed tokens (git$IFS, git${X}) via canon_has_ambiguous_git_token,
