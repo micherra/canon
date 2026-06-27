@@ -7,16 +7,18 @@
 Agent definitions for Canon's multi-agent build pipeline. Each markdown file defines a specialized Claude agent with its role, tools, permissions, and behavioral rules.
 
 ## Architecture
-<!-- last-updated: 2026-05-26 -->
+<!-- last-updated: 2026-06-26 -->
 
 Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, `maxTurns`, `permissionMode`, `memory`, `skills`, `tools`) followed by markdown instructions. Agents are spawned by the orchestrator during flow execution.
 
-**Agent roster (9):**
+**Agent roster (11):**
 
 | Agent | Role | Model |
 |-------|------|-------|
 | `architect` | Technical planning for non-trivial builds: researches codebase, designs solutions, produces runbooks and task plans | opus |
 | `engineer` | Executes code-writing work in implementation mode (per a plan) or fix mode (targeted bug or violation fixes) | sonnet |
+| `evaluator` | Lightweight quality gate — interprets structural signals against acceptance criteria; returns PASS/FAIL verdict | haiku |
+| `janitor` | Background housekeeping — prunes stale worktrees and orphaned workspaces; spawned when `invoke_janitor` returns `needs_prune: true` | sonnet |
 | `learner` | Analyzes patterns; suggests principle improvements | sonnet |
 | `reviewer` | Reviews code for principle compliance | opus |
 | `scribe` | Updates CLAUDE.md, context.md, CONVENTIONS.md post-implementation; checks touched directories for missing CLAUDE.md (Step 2b, doc-gap detection) and reports gaps informational-only in CONTEXT-SYNC.md | sonnet |
