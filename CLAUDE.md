@@ -677,13 +677,13 @@ canon/
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
-│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase D current)
+│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase E current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes, check_context_staleness
 │       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase D: _probe + ship-watch + session-watch + harness-watch)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + ship-watch + session-watch + harness-watch + evolve)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
 ├── principles/           # Built-in principles (64 total: 6 rules, 36 strong-opinions, 22 conventions); 26 Canon-internal principles in .canon/principles/ (portable: false)
