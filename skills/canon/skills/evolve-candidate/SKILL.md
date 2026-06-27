@@ -131,8 +131,10 @@ proposal = {
 }
 ```
 
-2. Write the proposal to `${WORKSPACE}/plans/${SLUG}/evolve/${pad2(index)}-evolve-${slug(target_path)}.md`
-   (or `.canon/proposed-evolution/${filename}` when no workspace is available).
+2. Write the proposal to `.canon/proposed-learnings/${timestamp}/${pad2(index)}-${slug(target_path)}.md`
+   where `timestamp` is a UTC compact string (e.g. `20260626T120000Z`) generated once at the
+   start of this pass and reused for all proposals written in the same run. Create the directory
+   if it does not exist. This path is used in ALL cases — whether or not a workspace is available.
 
 3. The proposal file format — canonical template (machine-parseable; tested by `proposal-shape-parity.test.ts`):
 

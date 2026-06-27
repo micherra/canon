@@ -429,3 +429,55 @@ describe("selectMutationTargets — MutationTarget shape", () => {
     expect(result.meta.budget).toBe(3); // DEFAULT_MAX_TARGETS_PER_PASS
   });
 });
+
+// ---------------------------------------------------------------------------
+// 8. Coalesce by path — aggregate same-path attributions before ranking
+// ---------------------------------------------------------------------------
+
+describe("selectMutationTargets — coalesce by path", () => {
+  it("coalesces duplicate-path attributions: aggregate count, distinct budget, correct ranking", () => {
+    // 4 raw attributions: 2 share rules/a.md (violationCounts 2+1=3 aggregate),
+    // plus rules/b.md and rules/c.md each with violationCount 1.
+    // Without coalescing: budget=3 takes 3 of the 4 raw attributions — one slot
+    // can be consumed by the second rules/a.md entry, starving rules/c.md.
+    // With coalescing: 3 distinct paths, aggregate count for a.md=3, all fit in budget.
+    const attr1 = makeAttribution("rules/a.md", { violationCount: 2, principle_id: "rule-a" });
+    const attr2 = makeAttribution("rules/a.md", { violationCount: 1, principle_id: "rule-a" });
+    const attr3 = makeAttribution("rules/b.md", { violationCount: 1, principle_id: "rule-b" });
+    const attr4 = makeAttribution("rules/c.md", { violationCount: 1, principle_id: "rule-c" });
+
+    const bodies = {
+      "rules/a.md": "a body",
+      "rules/b.md": "b body",
+      "rules/c.md": "c body",
+    };
+    const existing = {
+      "rules/a.md": true,
+      "rules/b.md": true,
+      "rules/c.md": true,
+    };
+
+    const result = selectMutationTargets([attr1, attr2, attr3, attr4], bodies, existing);
+
+    // 3 distinct target paths (not 4 raw attributions)
+    expect(result.targets).toHaveLength(3);
+    const paths = result.targets.map((t) => t.target_path);
+    expect(paths).toContain("rules/a.md");
+    expect(paths).toContain("rules/b.md");
+    expect(paths).toContain("rules/c.md");
+
+    // The coalesced path carries the aggregate violation count (2+1=3)
+    const aTarget = result.targets.find((t) => t.target_path === "rules/a.md");
+    expect(aTarget?.attributed_violation_count).toBe(3);
+
+    // rules/a.md ranks first (highest aggregate count = 3 > 1)
+    expect(result.targets[0].target_path).toBe("rules/a.md");
+
+    // Budget: all 3 distinct paths fit; no budget_exhausted entries
+    expect(result.skipped.filter((s) => s.reason === "budget_exhausted")).toHaveLength(0);
+
+    // meta.attributions_seen counts raw input, not coalesced
+    expect(result.meta.attributions_seen).toBe(4);
+    expect(result.meta.selected).toBe(3);
+  });
+});

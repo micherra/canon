@@ -243,6 +243,43 @@ function filterAndPartition(
 }
 
 /**
+ * coalesceByPath — merge same-path attributions before ranking.
+ *
+ * attributeFailures emits one FailureAttribution per violation (attributed_violations
+ * is always a single-element array). Multiple attributions may share the same
+ * target_artifact.path, each carrying one violation. Without coalescing, the same
+ * path can consume multiple budget slots and its ranking uses 1 instead of the
+ * aggregate count.
+ *
+ * This function groups eligible attributions by path and merges each group into a
+ * single representative attribution whose attributed_violations is the union of all
+ * violations across duplicates. The first attribution in each group supplies the
+ * representative metadata (confidence, failure_kind, target_artifact, etc.).
+ *
+ * Post-condition: returned array has exactly one entry per distinct target_artifact.path.
+ */
+function coalesceByPath(eligible: FailureAttribution[]): FailureAttribution[] {
+  const byPath = new Map<string, FailureAttribution[]>();
+  for (const attr of eligible) {
+    const path = attr.target_artifact.path;
+    const bucket = byPath.get(path);
+    if (bucket === undefined) {
+      byPath.set(path, [attr]);
+    } else {
+      bucket.push(attr);
+    }
+  }
+
+  return [...byPath.values()].map((group) => {
+    if (group.length === 1) return group[0];
+    // Merge: first attribution is the representative; union the violations.
+    const representative = group[0];
+    const allViolations = group.flatMap((a) => a.attributed_violations);
+    return { ...representative, attributed_violations: allViolations };
+  });
+}
+
+/**
  * rankAndCap — steps (c) and (d): rank eligible attributions then apply budget.
  *
  * Returns selected (within budget) and overflow (budget_exhausted).
@@ -295,7 +332,8 @@ export function selectMutationTargets(
   const budget = maxTargetsPerPass;
 
   const { eligible, gateIneligible, skipped } = filterAndPartition(attributions, existing);
-  const { overflow, selected } = rankAndCap(eligible, budget, weightedCounts);
+  const coalescedEligible = coalesceByPath(eligible);
+  const { overflow, selected } = rankAndCap(coalescedEligible, budget, weightedCounts);
 
   const overflowSkipped: SkippedAttribution[] = overflow.map((attr) => ({
     reason: "budget_exhausted",
