@@ -576,6 +576,7 @@ a plugin cannot do this.
 demo; no production loop ran. Phase B ships `loops/ship-watch.md` — the first real loop,
 dispatched via the post-ship tap. Phase C ships session-watch + self-paced mode.
 Phase D ships harness-watch — the accumulated-build-signal observer, fired post-ship, surfaces `run-learner`.
+Phase E ships evolve — the session-start attribution-signal observer, surfaces `run-evolve`.
 Discovery: `list_loops`.
 
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
@@ -598,6 +599,8 @@ Discovery: `list_loops`.
 - `firing_posture[tier] === "disabled"` → skip silently.
 
 `session-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in).
+`evolve` is also a session-start loop (autonomous/light-touch → auto, supervised → opt-in); it observes
+accumulated attribution signal and surfaces `run-evolve` when gate-eligible targets exist.
 
 **Non-declarative invariant (dc-06):** Only the orchestrator initiates `CronCreate` or
 `ScheduleWakeup`. Authoring `loops/session-watch.md` only registers the definition — it does
@@ -636,6 +639,20 @@ automatically. The learner pass NEVER mutates the build — it only analyzes pat
 to `.canon/`. dc-06 holds: the `harness-watch` loop only surfaces the signal via
 `ORCHESTRATOR_ACTION: run-learner field=learner_due loop=harness-watch`; the orchestrator
 spawns the learner.
+
+**`run-evolve`** (fires on the `evolve` loop's `evolve_due` false→true transition): The
+orchestrator spawns the learner's `canon:evolve-candidate` pass (`select_mutation_targets →
+inline Sonnet rewrite → evaluate_candidate holdout → shape → write accepted proposals to
+`.canon/proposed-learnings/`). Under the `supervised` tier, ASK the user first before
+spawning; under `autonomous` and `light-touch`, auto-spawn but fire a `PushNotification`
+first (the pass is multi-minute and runs many `claude -p` eval calls — cost visibility is
+mandatory before an automatic long-running dispatch). Proposals are HITL-gated regardless of
+tier. The spawned pass emits ONLY `accepted===true` candidates (evolution-hard-gate preserved);
+candidate generation stays in the learner skill (model-step-in-agent-layer — the loop, the
+runner, and the dispatch never invoke a model). dc-06 holds: the `evolve` loop only surfaces
+`ORCHESTRATOR_ACTION: run-evolve field=evolve_due loop=evolve`; the orchestrator spawns the
+learner. NO contract change to `select_mutation_targets`, `evaluate_candidate`,
+`attribute_failure`, or `context_provenance` — consumed as-is.
 
 ## Project Structure <!-- last-updated: 2026-06-25 -->
 

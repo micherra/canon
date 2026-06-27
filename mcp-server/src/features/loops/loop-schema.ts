@@ -45,6 +45,7 @@ export const ORCHESTRATOR_ACTIONS = [
   "auto-triage-fix",
   "auto-plugin-update",
   "run-learner",
+  "run-evolve",
 ] as const;
 export type OrchestratorAction = (typeof ORCHESTRATOR_ACTIONS)[number];
 
