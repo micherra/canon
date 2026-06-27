@@ -5,11 +5,14 @@
 # already exists on origin/main under a different filename (network-free local check).
 #
 # Push detection: delegates to canon_command_invokes_subcommand (lib/canon-hook-lib.sh)
-#   which handles plain "git push", compound commands (&&/||/;/|), grouping forms
-#   ((git push), { git push; }), AND string-executing wrappers (bash -c "git push",
-#   eval "git push", sh -c "git push") via canon_unwrap_string_exec_arg recursion with
-#   a depth cap.  Replaces the former per-segment strip-both-ends detector that missed
-#   the wrapper class (REVIEW-6 BLOCKING finding).
+#   which is the SINGLE SHARED DETECTION PIPELINE — byte-equivalent to push-to-main-
+#   guard.sh's process_segment.  Handles: plain "git push", compound commands
+#   (&&/||/;/|), grouping forms ((git push), { git push; }), string-executing wrappers
+#   (bash -c / eval / sh -c) via canon_unwrap_string_exec_arg recursion with a depth cap,
+#   ambiguous git-prefixed tokens (git$IFS, git${X}) via canon_has_ambiguous_git_token,
+#   non-final command substitutions ($(echo git) push) via canon_cmdsub_not_final, AND
+#   backslash-escaped git command words (\git push) via canon_backslash_git_command_word.
+#   Closes REVIEW-7 BLOCKING finding (hooks-fail-closed divergence on 5 bypass forms).
 #
 # Input:  JSON on stdin with the tool call details
 # Output: CANON BLOCK message on stdout (if collision or unresolvable origin/main)

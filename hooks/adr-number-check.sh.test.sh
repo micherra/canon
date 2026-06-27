@@ -645,6 +645,87 @@ run_test_in_dir 'bash -c "bash -c '"'"'git push'"'"'" nested → exit 2' 2 \
   "$CASE23_REPO" '{"command":"bash -c \"bash -c '"'"'git push'"'"'\""}'
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Case 24: \git push with collision → exit 2 [backslash-escaped git detection]
+# Divergence form DEC-p2m-bypass-02: `\git push` resolves to real git at
+# runtime (backslash only suppresses alias lookup). The shared detector must
+# apply canon_backslash_git_command_word parity — previously
+# _canon_seg_invokes_subcmd missed it, returning exit 0 (false-negative).
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 24: \\git push with collision → exit 2 [backslash-escaped git] --"
+
+CASE24_REPO="$MASTER_TMP/case24"
+setup_repo_with_origin "$CASE24_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE24_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir '\git push with collision → exit 2' 2 \
+  "$CASE24_REPO" '{"command":"\\git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 25: FOO=1 \git push with collision → exit 2 [env-prefix + backslash-git]
+# Divergence form: NAME=VALUE assignment prefix before \git push; the command-
+# word walker must skip the prefix and detect the escaped git at its resolved
+# command-word slot.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 25: FOO=1 \\git push with collision → exit 2 [env-prefix + backslash-git] --"
+
+CASE25_REPO="$MASTER_TMP/case25"
+setup_repo_with_origin "$CASE25_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE25_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir 'FOO=1 \git push with collision → exit 2' 2 \
+  "$CASE25_REPO" '{"command":"FOO=1 \\git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 26: $(echo git) push with collision → exit 2 [cmdsub as command word]
+# Divergence form DEC-p2m-bypass-01 R1: a command substitution occupying the
+# command-word slot followed by further tokens — canon_cmdsub_not_final must
+# detect the non-final substitution and fail-closed.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 26: \$(echo git) push with collision → exit 2 [cmdsub command word] --"
+
+CASE26_REPO="$MASTER_TMP/case26"
+setup_repo_with_origin "$CASE26_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE26_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir '$(echo git) push with collision → exit 2' 2 \
+  "$CASE26_REPO" '{"command":"$(echo git) push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 27: g$(echo i)t push with collision → exit 2 [cmdsub glued into git word]
+# Divergence form DEC-p2m-bypass-01 R1 contains-test: a command substitution
+# glued into the middle of the git command word — the contains-test in
+# canon_cmdsub_not_final catches it even when `$(` is not at the token start.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 27: g\$(echo i)t push with collision → exit 2 [glued cmdsub] --"
+
+CASE27_REPO="$MASTER_TMP/case27"
+setup_repo_with_origin "$CASE27_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE27_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir 'g$(echo i)t push with collision → exit 2' 2 \
+  "$CASE27_REPO" '{"command":"g$(echo i)t push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 28: git$IFS push with collision → exit 2 [ambiguous-glued token]
+# Divergence form: a git-prefixed token followed by a shell metacharacter ($)
+# creates an ambiguous token that could word-split to `git push` at runtime.
+# canon_has_ambiguous_git_token must be checked.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 28: git\$IFS push with collision → exit 2 [ambiguous-glued token] --"
+
+CASE28_REPO="$MASTER_TMP/case28"
+setup_repo_with_origin "$CASE28_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE28_REPO" "docs/adr/0022-other.md"
+
+run_test_in_dir 'git$IFS push with collision → exit 2' 2 \
+  "$CASE28_REPO" '{"command":"git$IFS push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""

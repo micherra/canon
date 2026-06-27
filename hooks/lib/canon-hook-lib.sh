@@ -1326,6 +1326,241 @@ canon_git_subcommand() {
 }
 
 # ---------------------------------------------------------------------------
+# canon_deescape_basename <token>
+# ---------------------------------------------------------------------------
+# Simulate bash's PAIRWISE `\X`→`X` collapse over a token's basename, then
+# lowercase it. Returns the de-escaped command name the shell would actually
+# invoke at runtime.
+#
+# Pairwise collapse — NOT "remove all backslashes" — keeps `\\git`→`\git`
+# (a literal command name that is NOT git). `\git`→`git` IS matched.
+# Handles path-qualified forms: `/path/\git` → basename `\git` → `git`.
+#
+# Shared by canon_deescaped_git (compare to "git") and
+# canon_backslash_git_command_word (compare to the known-safe terminal set).
+# Previously lived inline as _p2m_deescape_basename inside process_segment
+# in push-to-main-guard.sh; extracted here as the single shared authority.
+canon_deescape_basename() {
+  local _tok="$1"
+  local _base="${_tok##*/}"                   # basename (handles /path/\git etc.)
+  local _out="" _i2=0 _ch
+  local _len=${#_base}
+  while (( _i2 < _len )); do
+    _ch="${_base:_i2:1}"
+    if [[ "$_ch" == "\\" ]]; then
+      _i2=$(( _i2 + 1 ))                        # consume the backslash
+      (( _i2 < _len )) && { _out="$_out${_base:_i2:1}"; _i2=$(( _i2 + 1 )); }
+    else
+      _out="$_out$_ch"; _i2=$(( _i2 + 1 ))
+    fi
+  done
+  printf '%s' "$_out" | tr '[:upper:]' '[:lower:]'
+}
+
+# ---------------------------------------------------------------------------
+# canon_deescaped_git <token>
+# ---------------------------------------------------------------------------
+# Returns 0 iff the token (a) contains a backslash AND (b) its pairwise
+# de-escaped, lowercased basename equals exactly "git".
+# Closes the `\git`, `\GIT`, `g\it`, `gi\t` bypass class (DEC-p2m-bypass-02).
+# Pairwise collapse keeps `\\git`→`\git` (literal, not real git) as a
+# non-match — only actual single-backslash escape forms that resolve to git
+# at runtime are matched.
+#
+# Previously lived inline as _p2m_deescaped_git inside process_segment in
+# push-to-main-guard.sh; extracted here as the single shared authority.
+canon_deescaped_git() {
+  local _tok="$1"
+  [[ "$_tok" == *"\\"* ]] || return 1         # must carry a backslash escape
+  local _lc
+  _lc=$(canon_deescape_basename "$_tok")
+  [[ "$_lc" == "git" ]] && return 0
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# canon_cmdsub_not_final <clause>
+# ---------------------------------------------------------------------------
+# DURABLE PREDICATE (PR #386 V2, ADR-0012): returns 0 (BLOCK) when the clause
+# contains a command substitution ($(...) or backtick) that is NOT the final
+# non-punctuation token — meaning the substitution can occupy or forward to
+# a command-name slot at runtime and the clause cannot be proven safe.
+#
+# A substitution that IS the final element of its clause is inert (argument
+# data) and returns 1 (ALLOW), preserving false-positive wins for forms like
+# `ls $(pwd)` and `echo $(date)`.
+#
+# FP1 fix: leading NAME=VALUE assignment prefixes and transparent-exec prefix
+# words (env/command/exec/nohup/nice/timeout/stdbuf) are skipped before
+# seeding a span start, so `a=$(echo git) push` is ALLOWED (the substitution
+# is in the assignment value; the command word is the bare `push`).
+#
+# R1 (DEC-p2m-bypass-01): span-START detection is a CONTAINS test — a
+# substitution glued to a literal prefix (`gi$(echo t)`, `g$(echo i)t`) is
+# detected even when `$(` is not at the start of the token.
+#
+# Previously lived inline as _p2m_cmdsub_not_final inside process_segment in
+# push-to-main-guard.sh; extracted here as the single shared authority.
+canon_cmdsub_not_final() {
+  local _clause="$1"
+  local -a _toks=()
+  local _t _tok_str
+  _tok_str=$(canon_tokenize "$_clause") || true
+  while IFS= read -r _t; do
+    [[ -n "$_t" ]] && _toks+=("$_t")
+  done <<< "$_tok_str"
+  local _n=${#_toks[@]}
+  local _i=0
+  local _seen_cmd_word=false
+  while (( _i < _n )); do
+    local _tok="${_toks[_i]}"
+    if [[ "$_seen_cmd_word" == false ]]; then
+      local _peek="$_tok"
+      while [[ "$_peek" == '('* || "$_peek" == '{'* ]]; do _peek="${_peek:1}"; done
+      if [[ -z "$_peek" ]]; then _i=$(( _i + 1 )); continue; fi
+      if [[ "$_peek" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then _i=$(( _i + 1 )); continue; fi
+      local _peekbase="${_peek##*/}"
+      case "$_peekbase" in
+        env|command|exec|nohup|nice|timeout|stdbuf) _i=$(( _i + 1 )); continue ;;
+      esac
+      _seen_cmd_word=true
+    fi
+    if [[ "$_tok" == *'$('* || "$_tok" == *'`'* ]]; then
+      local _end=$_i
+      if [[ "$_tok" == *'$('* ]]; then
+        local _depth=0 _j=$_i
+        while (( _j < _n )); do
+          local _s="${_toks[_j]}"
+          local _opens="${_s//[!(]/}"; local _closes="${_s//[!)]/}"
+          _depth=$(( _depth + ${#_opens} - ${#_closes} ))
+          if (( _depth <= 0 )); then _end=$_j; break; fi
+          _end=$_j; _j=$(( _j + 1 ))
+        done
+      else
+        local _cnt=0 _j=$_i
+        while (( _j < _n )); do
+          local _s="${_toks[_j]}"; local _bt="${_s//[!\`]/}"
+          _cnt=$(( _cnt + ${#_bt} ))
+          if (( _cnt >= 2 && _cnt % 2 == 0 )); then _end=$_j; break; fi
+          _end=$_j; _j=$(( _j + 1 ))
+        done
+      fi
+      local _k=$(( _end + 1 ))
+      while (( _k < _n )); do
+        local _rest="${_toks[_k]//[(){};]/}"
+        if [[ -n "$_rest" ]]; then return 0; fi   # substitution NOT final → BLOCK
+        _k=$(( _k + 1 ))
+      done
+      _i=$(( _end + 1 )); continue
+    fi
+    _i=$(( _i + 1 ))
+  done
+  return 1   # no non-final substitution → ALLOW
+}
+
+# ---------------------------------------------------------------------------
+# canon_backslash_git_command_word <raw_segment>
+# ---------------------------------------------------------------------------
+# Walk tokens to RESOLVE the COMMAND-WORD position and decide whether a
+# backslash-escaped git (`\git`, `\GIT`, `g\it`, `gi\t`) occupies it —
+# directly, behind RECOGNIZED command-executing wrappers + their options, or
+# behind an UNRECOGNIZED wrapper that cannot be proven safe. Prints the
+# matched escaped token on stdout and returns 0 on match; returns 1 with no
+# output on no-match.
+#
+# FAIL-CLOSED PRINCIPLE (security posture, DEC-p2m-bypass-02):
+#   - RECOGNIZED wrappers (env/command/exec/nohup/nice/timeout/stdbuf/sudo/
+#     doas/time) consume their own options, then resolution continues.
+#   - The de-escaped-git basename at any resolved command-word slot → MATCH.
+#   - A KNOWN-SAFE terminal command word (echo/printf/cat/:/true/false/
+#     systemctl/ls/test) → trailing tokens are ARGUMENTS → ALLOW.
+#   - ANY OTHER (UNKNOWN) command word is an ambiguous passthrough-wrapper
+#     candidate → FAIL CLOSED: scan remaining tokens; if any de-escapes to
+#     git, print that token (MATCH). Over-blocking `unknownwrapper \git push`
+#     is an accepted fail-closed false positive per the threat model.
+#
+# Option consumption per RECOGNIZED wrapper mirrors push-to-main-guard.sh:
+#   - `--` end-of-options → next token is the command word.
+#   - dash-option → skip; consume next token when value-bearing:
+#       nice -n; sudo -u/-g/-U/-C/-p/-h/-r/-T (clustered last-char parity);
+#       doas -u/-C/-a; env -u/-S; timeout -s/-k.
+#   - timeout: consumes ONE DURATION-SHAPED bare positional
+#     (^[0-9]+(\.[0-9]+)?[smhd]?$) before its command.
+#
+# Previously lived inline as _p2m_backslash_git_command_word inside
+# process_segment in push-to-main-guard.sh; extracted here as the single
+# shared authority.
+canon_backslash_git_command_word() {
+  local _raw="$1"
+  local -a _bt=()
+  local _b _bt_str
+  _bt_str=$(canon_tokenize "$_raw") || true
+  while IFS= read -r _b; do
+    [[ -n "$_b" ]] && _bt+=("$_b")
+  done <<< "$_bt_str"
+  local _bn=${#_bt[@]}
+  local _bi=0
+  local _cur_wrapper=""      # basename of the wrapper whose options we are consuming ("" = none yet)
+  local _pending_duration=0  # 1 while timeout still expects its DURATION-shaped positional
+  local _end_of_opts=false   # set once `--` is seen for the current wrapper
+  while (( _bi < _bn )); do
+    local _ctok="${_bt[_bi]}"
+    while [[ "$_ctok" == '('* || "$_ctok" == '{'* ]]; do _ctok="${_ctok:1}"; done
+    if [[ -z "$_ctok" ]]; then _bi=$(( _bi + 1 )); continue; fi
+    if [[ "$_end_of_opts" == false ]]; then
+      if [[ -n "$_cur_wrapper" && "$_ctok" == "--" ]]; then
+        _end_of_opts=true; _bi=$(( _bi + 1 )); continue
+      fi
+      if [[ "$_ctok" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then _bi=$(( _bi + 1 )); continue; fi
+      if [[ -n "$_cur_wrapper" && "$_ctok" == -* ]]; then
+        if [[ "$_ctok" != *=* ]]; then
+          local _vc=false
+          local _last="${_ctok: -1}"
+          case "$_cur_wrapper" in
+            nice)    [[ "$_ctok" == "-n" ]] && _vc=true ;;
+            sudo)    case "$_last" in u|g|U|C|p|h|r|T) _vc=true ;; esac ;;
+            doas)    case "$_last" in u|C|a) _vc=true ;; esac ;;
+            env)     case "$_ctok" in -u|-S) _vc=true ;; esac ;;
+            timeout) case "$_ctok" in -s|-k) _vc=true ;; esac ;;
+          esac
+          [[ "$_vc" == true ]] && _bi=$(( _bi + 2 )) && continue
+        fi
+        _bi=$(( _bi + 1 )); continue
+      fi
+      if (( _pending_duration > 0 )) && [[ "$_ctok" =~ ^[0-9]+(\.[0-9]+)?[smhd]?$ ]]; then
+        _pending_duration=0; _bi=$(( _bi + 1 )); continue
+      fi
+    fi
+    # ---- this token is the RESOLVED command word ----
+    if canon_deescaped_git "$_ctok"; then printf '%s' "$_ctok"; return 0; fi
+    local _cbase="${_ctok##*/}"
+    case "$_cbase" in
+      env|command|exec|nohup|nice|timeout|stdbuf|sudo|doas|time)
+        _cur_wrapper="$_cbase"
+        _end_of_opts=false
+        [[ "$_cbase" == "timeout" ]] && _pending_duration=1
+        _bi=$(( _bi + 1 )); continue ;;
+    esac
+    local _safe_base
+    _safe_base=$(canon_deescape_basename "$_ctok")
+    case "$_safe_base" in
+      echo|printf|cat|true|false|:|systemctl|ls|test) return 1 ;;
+    esac
+    # UNKNOWN command word → ambiguous passthrough-wrapper candidate. FAIL
+    # CLOSED: if any remaining token de-escapes to git, MATCH on it.
+    local _ui=$(( _bi + 1 ))
+    while (( _ui < _bn )); do
+      local _utok="${_bt[_ui]}"
+      while [[ "$_utok" == '('* || "$_utok" == '{'* ]]; do _utok="${_utok:1}"; done
+      if [[ -n "$_utok" ]] && canon_deescaped_git "$_utok"; then printf '%s' "$_utok"; return 0; fi
+      _ui=$(( _ui + 1 ))
+    done
+    return 1
+  done
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # _CANON_INVOKES_MAX_DEPTH
 # ---------------------------------------------------------------------------
 # Recursion cap for _canon_seg_invokes_subcmd / canon_command_invokes_subcommand.
@@ -1339,21 +1574,24 @@ _CANON_INVOKES_MAX_DEPTH=3
 # canon_command_invokes_subcommand.
 #
 # Evaluates a single (already-segmented) raw command segment to determine
-# whether it invokes "git <subcommand>". Handles:
+# whether it invokes "git <subcommand>".  This is the SINGLE SHARED DETECTION
+# PIPELINE used by every Canon hook — it is byte-equivalent to the detection
+# logic in push-to-main-guard.sh's process_segment, which is now refactored to
+# call these same shared functions from canon-hook-lib.sh.
+#
+# Handles:
 #   - Direct git invocations: "git push", "sudo git push", "(git push)"
 #   - String-executing wrappers: "bash -c \"git push\"", "eval \"git push\""
 #   - Depth-capped recursion into the inner command of wrapper forms
+#   - Ambiguous git-prefixed tokens: "git$IFS push" (canon_has_ambiguous_git_token)
+#   - Non-final command substitutions: "$(echo git) push" (canon_cmdsub_not_final)
+#   - Backslash-escaped git command words: "\git push" (canon_backslash_git_command_word)
 #
 # Return codes:
 #   0  — this segment invokes git <subcommand>
 #   1  — this segment does NOT invoke git <subcommand>
-#   2  — fail-closed: recognised wrapper with unparseable/empty/expansion inner
-#         command, or depth cap exceeded; caller must treat this as BLOCKED
-#
-# Implementation notes:
-# The segment-strip → canon_has_git_token → canon_git_subcommand path handles
-# plain and grouped forms; the canon_unwrap_string_exec_arg path handles string-
-# executing wrappers.  Both reuse shared lib primitives — no ad-hoc char-strip.
+#   2  — fail-closed: ambiguous/unparseable form that cannot be statically proven
+#         to NOT invoke git <subcommand>; caller must treat this as BLOCKED
 _canon_seg_invokes_subcmd() {
   local seg="$1"
   local subcmd="$2"
@@ -1364,19 +1602,17 @@ _canon_seg_invokes_subcmd() {
   [[ -z "$seg" ]] && return 1
 
   # Strip leading group-openers ( { and trailing group-closers ) } plus surrounding
-  # whitespace.  This is required so that "(git push)" is correctly identified as a
-  # push — without stripping, the first token would be "(git" which does not pass
-  # the exact-match check in canon_has_git_token.  Stripping BOTH ends (not just
-  # leading) prevents "push)" from reaching canon_git_subcommand's shape gate
-  # (^[A-Za-z][A-Za-z0-9_-]*$ would reject the trailing ')' → returns empty →
-  # push missed).
+  # whitespace so that "(git push)" is correctly identified as a push.
   local seg_stripped
   seg_stripped=$(printf '%s' "$seg" | sed -E 's/^[({[:space:]]+//; s/[)}[:space:]]+$//')
 
   # Check for a direct standalone "git" token (quote-aware via canon_has_git_token).
   if canon_has_git_token "$seg_stripped"; then
     local sub
-    sub=$(canon_git_subcommand "$seg_stripped" || true) # DOCUMENTED FAIL-OPEN -- empty sub: subcommand unresolvable (e.g. git $VAR); treat as non-match (shape validation already fired inside canon_git_subcommand)
+    sub=$(canon_git_subcommand "$seg_stripped" || true) # DOCUMENTED FAIL-OPEN -- empty sub: subcommand unresolvable; fail-closed below
+    if [[ -z "$sub" ]]; then
+      return 2  # git token present but subcommand unresolvable → fail-closed
+    fi
     if [[ "$sub" == "$subcmd" ]]; then
       return 0
     fi
@@ -1385,9 +1621,7 @@ _canon_seg_invokes_subcmd() {
 
   # No direct git token in this segment.  Check whether it is a string-executing
   # wrapper (bash -c / sh -c / eval / zsh -c / ksh -c) whose quoted inner string
-  # may contain a git command.  canon_unwrap_string_exec_arg uses the same shared
-  # primitives (canon_tokenize, basename resolution, scan-forward) as push-to-
-  # main-guard.sh — this is the single authoritative detector.
+  # may contain a git command.
   local inner_cmd
   local _unwrap_rc=0
   inner_cmd=$(canon_unwrap_string_exec_arg "$seg_stripped") || _unwrap_rc=$?
@@ -1401,7 +1635,7 @@ _canon_seg_invokes_subcmd() {
     # Recognised wrapper; inner command cleanly extracted.
 
     # F1: inner command that starts with $( or ` is a command substitution —
-    # cannot evaluate statically → fail-closed (mirrors push-to-main-guard F1).
+    # cannot evaluate statically → fail-closed.
     if [[ "$inner_cmd" == '$('* || "$inner_cmd" == '`'* ]]; then
       return 2
     fi
@@ -1430,7 +1664,48 @@ _canon_seg_invokes_subcmd() {
     return "$_inner_found"
   fi
 
-  # Not a string-executing wrapper, no direct git token → not a match.
+  # Not a string-executing wrapper, no direct git token.  Apply the fail-closed
+  # checks for disguised-git forms — mirrors push-to-main-guard.sh process_segment
+  # and uses the SAME shared functions extracted to this lib (single authority).
+
+  # Fail-closed: ambiguous git-prefixed token (git$IFS, git${X}, git$(cmd) etc.).
+  if canon_has_ambiguous_git_token "$seg_stripped"; then
+    return 2
+  fi
+
+  # Fail-closed: a command substitution that is NOT the final token in the clause
+  # can occupy the command-name slot at runtime — cannot be proven safe.
+  if canon_cmdsub_not_final "$seg_stripped"; then
+    return 2
+  fi
+
+  # Backslash-escaped git command word (\git, \GIT, g\it, gi\t, …).
+  local _bse_cw
+  _bse_cw=$(canon_backslash_git_command_word "$seg_stripped") || true # DOCUMENTED FAIL-OPEN -- empty means no escaped-git command word; skip this branch
+  if [[ -n "$_bse_cw" ]]; then
+    # De-escape: substitute the matched escaped token with "git" in the segment,
+    # then resolve the subcommand from the de-escaped form.
+    # ${var/pat/rep} treats pat as a glob where `\` escapes the next char —
+    # backslashes in the matched token must be doubled to form a literal-matching
+    # pattern (otherwise `\git` glob-pattern would match the bare `git` substring).
+    local _bse_pat="${_bse_cw//\\/\\\\}"
+    local _deesc_seg="${seg_stripped/$_bse_pat/git}"
+    if [[ "$_deesc_seg" == "$seg_stripped" ]]; then
+      # Substitution did not change the segment → fail-closed.
+      return 2
+    fi
+    local _deesc_sub
+    _deesc_sub=$(canon_git_subcommand "$_deesc_seg" || true) # DOCUMENTED FAIL-OPEN -- empty sub on de-escaped command triggers fail-closed below
+    if [[ -z "$_deesc_sub" ]]; then
+      return 2  # fail-closed: de-escaped command has unresolvable subcommand
+    fi
+    if [[ "$_deesc_sub" == "$subcmd" ]]; then
+      return 0  # backslash-escaped git <subcmd> detected
+    fi
+    return 1  # backslash-escaped git with a different subcommand → not a match
+  fi
+
+  # No disguised git command detected in this segment.
   return 1
 }
 
@@ -1447,14 +1722,20 @@ _canon_seg_invokes_subcmd() {
 #
 # Returns 1 if no such invocation is found (non-match — the normal case).
 # Returns 2 if a recognised wrapper's inner command is unparseable, a shell
-# expansion ($(...)/backtick), or the depth cap is exceeded (fail-closed;
-# callers should treat the command as a BLOCKED push).
+# expansion ($(...)/backtick), an ambiguous git-prefixed token, a non-final
+# command substitution, or the depth cap is exceeded (fail-closed; callers
+# should treat the command as a BLOCKED push).
 #
-# Reuses canon_strip_comments, canon_has_git_token, canon_unwrap_string_exec_arg,
-# and canon_git_subcommand — the single shared source of truth for string-exec
-# wrapper detection.  Replaces ad-hoc per-segment strip-only detectors in hook
-# scripts and eliminates the divergence that allowed bash -c / eval wrappers to
-# bypass per-hook push-detection (security-hook-parser-allowlist-posture).
+# Reuses the FULL shared detection pipeline: canon_strip_comments,
+# canon_has_git_token, canon_git_subcommand, canon_unwrap_string_exec_arg,
+# canon_has_ambiguous_git_token, canon_cmdsub_not_final, and
+# canon_backslash_git_command_word (plus canon_deescape_basename /
+# canon_deescaped_git as sub-helpers).  This is the single authority for all
+# hook-level push detection — push-to-main-guard.sh's process_segment is
+# refactored to call these same shared functions.  Closes divergence that
+# allowed git$IFS / $(echo git) / \git bypass forms to slip past hooks that
+# use canon_command_invokes_subcommand (security-hook-parser-allowlist-posture,
+# hooks-fail-closed).
 #
 # Usage:
 #   canon_command_invokes_subcommand "$COMMAND" "push"
