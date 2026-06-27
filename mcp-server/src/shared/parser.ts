@@ -131,9 +131,51 @@ function parsePortable(value: unknown): boolean | undefined {
   return undefined;
 }
 
+// Charset for principle id — closed identifier domain; non-matching ids produce the empty-id
+// sentinel which matcher.ts:161 filters out (same posture as the routine name gate).
+const PRINCIPLE_ID_CHARSET = /^[a-z0-9_-]+$/;
+// Valid severity enum values; anything else defaults to "convention" (safe default).
+const VALID_SEVERITIES = new Set(["rule", "strong-opinion", "convention"]);
+
+/**
+ * Fail-closed id charset guard. Returns `true` when the id is acceptable (empty ids
+ * are allowed — matcher.ts:161 filters them downstream). Emits a warn and returns
+ * `false` for non-empty ids that contain characters outside [a-z0-9_-].
+ */
+function isValidPrincipleId(rawId: string, filePath: string): boolean {
+  if (!rawId) return true;
+  if (PRINCIPLE_ID_CHARSET.test(rawId)) return true;
+  console.warn(
+    `[canon] parsePrinciple: id '${rawId}' does not match ^[a-z0-9_-]+$ — skipping (${filePath})`,
+  );
+  return false;
+}
+
+/** Empty-id sentinel returned for principles with invalid ids. Filtered by matcher.ts. */
+function emptyPrincipleSentinel(filePath: string): Principle {
+  return {
+    archived: false,
+    body: "",
+    filePath,
+    id: "",
+    scope: { file_patterns: [], layers: [] },
+    severity: "convention",
+    tags: [],
+    title: "",
+  };
+}
+
+/** Severity enum guard — injection strings default to the safe "convention" value. */
+function parseSeverity(raw: string | undefined): Principle["severity"] {
+  return (VALID_SEVERITIES.has(raw ?? "") ? raw : "convention") as Principle["severity"];
+}
+
 export function parsePrinciple(content: string, filePath: string): Principle {
   const { frontmatter, body: rawBody } = parseFrontmatter(content);
   const { sections, remainder } = extractSections(rawBody);
+
+  const rawId = (frontmatter.id as string) || "";
+  if (!isValidPrincipleId(rawId, filePath)) return emptyPrincipleSentinel(filePath);
 
   const scope = (frontmatter.scope as Record<string, unknown>) || {};
 
@@ -141,14 +183,14 @@ export function parsePrinciple(content: string, filePath: string): Principle {
     archived: frontmatter.archived === "true" || frontmatter.archived === true,
     body: remainder,
     filePath,
-    id: (frontmatter.id as string) || "",
+    id: rawId,
     portable: parsePortable(frontmatter.portable),
     scope: {
       file_patterns: (scope.file_patterns as string[]) || [],
       layers: (scope.layers as string[]) || [],
       tags: (scope.tags as string[]) || undefined,
     },
-    severity: (frontmatter.severity as Principle["severity"]) || "convention",
+    severity: parseSeverity(frontmatter.severity as string | undefined),
     tags: (frontmatter.tags as string[]) || [],
     title: (frontmatter.title as string) || "",
   };

@@ -84,7 +84,7 @@ function buildRoutine(
     needs: parseNeeds((fm.needs as Record<string, unknown>) ?? {}),
     recurrence: fm.recurrence === "one-shot" ? "one-shot" : "standing",
     repos: Array.isArray(fm.repos)
-      ? (fm.repos as string[]).filter((r) => typeof r === "string")
+      ? (fm.repos as string[]).filter((r) => typeof r === "string" && REPO_CHARSET.test(r))
       : [],
     scope: fm.scope === "account" ? "account" : "repo",
     source,
@@ -97,10 +97,32 @@ function buildRoutine(
   return routine;
 }
 
+// Charset guards for trigger fields — closed identifier/grammar domains.
+// Non-matching values are dropped (undefined) rather than passed through unfenced.
+const CRON_CHARSET = /^[\d\s*/,?LWC#-]+$/;
+// Event names allow pipe to support GitHub multi-event filters (e.g. "push|pull_request").
+const EVENT_CHARSET = /^[A-Za-z0-9._:|-]+$/;
+// Repo entries: owner/name style identifiers only.
+const REPO_CHARSET = /^[A-Za-z0-9._/-]+$/;
+
 function parseTrigger(raw: Record<string, unknown>): Routine["trigger"] {
   const trigger: Routine["trigger"] = { kind: validTriggerKind(raw.kind) ?? "schedule" };
-  if (raw.cron != null) trigger.cron = String(raw.cron);
-  if (raw.event != null) trigger.event = String(raw.event);
+  if (raw.cron != null) {
+    const cron = String(raw.cron);
+    if (CRON_CHARSET.test(cron)) {
+      trigger.cron = cron;
+    } else {
+      console.warn(`[canon] parseTrigger: cron '${cron}' failed charset — skipping`);
+    }
+  }
+  if (raw.event != null) {
+    const event = String(raw.event);
+    if (EVENT_CHARSET.test(event)) {
+      trigger.event = event;
+    } else {
+      console.warn(`[canon] parseTrigger: event '${event}' failed charset — skipping`);
+    }
+  }
   return trigger;
 }
 

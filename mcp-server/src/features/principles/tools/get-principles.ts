@@ -104,6 +104,7 @@ function formatPrincipleBody(
     verification?: string;
     source?: "project" | "plugin";
     id: string;
+    title: string;
   },
   summaryOnly: boolean | undefined,
   sections: string[],
@@ -112,10 +113,13 @@ function formatPrincipleBody(
     ? extractSummary(p.body)
     : filterBodyBySections(p.body, p.anti_rationalization, p.verification, sections);
 
-  // Fence untrusted project-local content. Plugin (trusted) and origin-unknown
-  // (treated as trusted per errors-are-values safe-default) content is returned as-is.
+  // Fence untrusted project-local content as a WHOLE-PROJECTION envelope.
+  // Title is included inside the fence so no free-text field appears in unfenced
+  // instruction position. Plugin (trusted) and origin-unknown content is returned as-is.
   if (p.source === "project") {
-    return fenceUntrustedOverlay(formatted, { source: `.canon/principles/${p.id}` });
+    return fenceUntrustedOverlay(`# ${p.title}\n\n${formatted}`, {
+      source: `.canon/principles/${p.id}`,
+    });
   }
   return formatted;
 }
@@ -156,7 +160,9 @@ export async function getPrinciples(
       body: formatPrincipleBody(p, input.summary_only, sections),
       id: p.id,
       severity: p.severity,
-      title: p.title,
+      // Expose safe id as the title field for project-local principles — the display
+      // title (free-text, untrusted) is inside the whole-projection fence in `body`.
+      title: p.source === "project" ? p.id : p.title,
     })),
     total_in_canon: allPrinciples.length,
     total_matched: matched.length,
@@ -234,7 +240,8 @@ export async function getPrinciplesBatch(
       body: formatPrincipleBody(p, input.summary_only, sections),
       id: p.id,
       severity: p.severity,
-      title: p.title,
+      // Same whole-projection treatment as the single-path: safe id as title field.
+      title: p.source === "project" ? p.id : p.title,
     }));
 
   let graph_context_by_file: Record<string, PrinciplesGraphContext | undefined> = {};

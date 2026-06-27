@@ -1,3 +1,4 @@
+import { fenceUntrustedOverlay } from "@shared/lib/overlay-fence.ts";
 import { loadAllPrinciples, matchPrinciples } from "@shared/matcher.ts";
 
 export type ListPrinciplesInput = {
@@ -46,7 +47,12 @@ export async function listPrinciples(
       },
       severity: p.severity,
       tags: p.tags,
-      title: p.title,
+      // Fence project-local title — list_principles has no body field, so the title
+      // is the only free-text channel; fencing here closes the same sink as get_principles.
+      title:
+        p.source === "project"
+          ? fenceUntrustedOverlay(p.title, { source: `.canon/principles/${p.id}` })
+          : p.title,
     })),
     total: matched.length,
   };
