@@ -6,7 +6,11 @@ import { initDatabase } from "@graph/kg-schema.ts";
 import type { FileMetrics } from "@graph/kg-types.ts";
 import { CANON_DIR, CANON_FILES, extractSummary } from "@shared/constants.ts";
 import { loadConfigNumber } from "@shared/lib/config.ts";
-import { fenceUntrustedOverlay } from "@shared/lib/overlay-fence.ts";
+import {
+  mapUntrusted,
+  renderUntrusted,
+  renderUntrustedProjection,
+} from "@shared/lib/overlay-untrusted-text.ts";
 import { loadAllPrinciples, matchPrinciples } from "@shared/matcher.ts";
 import { filterBodyBySections } from "@shared/parser.ts";
 
@@ -99,29 +103,32 @@ function metricsToContext(metrics: FileMetrics): PrinciplesGraphContext {
 
 function formatPrincipleBody(
   p: {
-    body: string;
-    anti_rationalization?: string;
-    verification?: string;
+    body: import("@shared/lib/overlay-untrusted-text.ts").UntrustedText;
+    anti_rationalization?: import("@shared/lib/overlay-untrusted-text.ts").UntrustedText;
+    verification?: import("@shared/lib/overlay-untrusted-text.ts").UntrustedText;
     source?: "project" | "plugin";
     id: string;
-    title: string;
+    title: import("@shared/lib/overlay-untrusted-text.ts").UntrustedText;
   },
   summaryOnly: boolean | undefined,
   sections: string[],
 ): string {
-  const formatted = summaryOnly
-    ? extractSummary(p.body)
+  const filteredBody = summaryOnly
+    ? mapUntrusted(p.body, extractSummary)
     : filterBodyBySections(p.body, p.anti_rationalization, p.verification, sections);
 
-  // Fence untrusted project-local content as a WHOLE-PROJECTION envelope.
-  // Title is included inside the fence so no free-text field appears in unfenced
-  // instruction position. Plugin (trusted) and origin-unknown content is returned as-is.
+  const ref = `.canon/principles/${p.id}`;
   if (p.source === "project") {
-    return fenceUntrustedOverlay(`# ${p.title}\n\n${formatted}`, {
-      source: `.canon/principles/${p.id}`,
-    });
+    // Fence untrusted project-local content as a WHOLE-PROJECTION envelope.
+    // Title is included inside the fence so no free-text field appears in unfenced
+    // instruction position.
+    return renderUntrustedProjection(
+      { body: filteredBody, heading: p.title },
+      { ref, source: "project" },
+    );
   }
-  return formatted;
+  // Plugin (trusted) and origin-unknown content is returned as-is (no fence).
+  return renderUntrusted(filteredBody, { ref, source: p.source });
 }
 
 export async function getPrinciples(
@@ -162,7 +169,11 @@ export async function getPrinciples(
       severity: p.severity,
       // Expose safe id as the title field for project-local principles — the display
       // title (free-text, untrusted) is inside the whole-projection fence in `body`.
-      title: p.source === "project" ? p.id : p.title,
+      // For plugin/unknown sources, render the branded title as a plain string.
+      title:
+        p.source === "project"
+          ? p.id
+          : renderUntrusted(p.title, { ref: `.canon/principles/${p.id}`, source: p.source }),
     })),
     total_in_canon: allPrinciples.length,
     total_matched: matched.length,
@@ -241,7 +252,10 @@ export async function getPrinciplesBatch(
       id: p.id,
       severity: p.severity,
       // Same whole-projection treatment as the single-path: safe id as title field.
-      title: p.source === "project" ? p.id : p.title,
+      title:
+        p.source === "project"
+          ? p.id
+          : renderUntrusted(p.title, { ref: `.canon/principles/${p.id}`, source: p.source }),
     }));
 
   let graph_context_by_file: Record<string, PrinciplesGraphContext | undefined> = {};

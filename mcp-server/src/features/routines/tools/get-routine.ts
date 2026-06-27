@@ -1,7 +1,14 @@
-import { fenceUntrustedOverlay } from "@shared/lib/overlay-fence.ts";
+import {
+  brandUntrusted,
+  rawUntrustedForStructuralUse,
+  renderUntrusted,
+  renderUntrustedProjection,
+} from "@shared/lib/overlay-untrusted-text.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import type { Routine } from "@shared/routine.ts";
 import { loadAllRoutines } from "@shared/routine.ts";
+
 import { resolveRoutineBinding } from "../services/resolve-binding.ts";
 import type { BindingDrift, RoutineEnv } from "../services/routine-drift.ts";
 import { computeBindingDrift } from "../services/routine-drift.ts";
@@ -23,7 +30,9 @@ export type GetRoutineOutput = {
   body: string;
   trigger: {
     kind: "schedule" | "github-event" | "api";
+    /** Absent for project-local routines — the charset-valid value is inside the fenced body. */
     cron?: string;
+    /** Absent for project-local routines — inside the fenced body. */
     event?: string;
   };
   needs: {
@@ -35,7 +44,8 @@ export type GetRoutineOutput = {
     repo_writes: "notify-only" | "draft-pr" | "none";
     consent: "opt-in" | "tier-gated";
   };
-  repos: string[];
+  /** Absent for project-local routines — inside the fenced body. */
+  repos?: string[];
   scope: "repo" | "account";
   recurrence: "standing" | "one-shot";
   source: "project" | "plugin";
@@ -48,6 +58,65 @@ export type GetRoutineOutput = {
 };
 
 // ---------------------------------------------------------------------------
+// Project-local helper — fences all project-authored content
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the model-facing output for project-local routines.
+ *
+ * USER ADDENDUM: the full projection (title + body + trigger.cron/event + repos)
+ * is fenced inside a CANON_UNTRUSTED_OVERLAY envelope. Top-level `trigger.cron`,
+ * `trigger.event`, and `repos` are ABSENT — they appear only inside the fence.
+ */
+function buildProjectOutput(
+  routine: Routine,
+  resolved_binding: GetRoutineOutput["resolved_binding"],
+  drift: BindingDrift,
+  state: RoutineState | null,
+): ToolResult<GetRoutineOutput> {
+  const ref = `.canon/routines/${routine.name}`;
+  const rawTitle = rawUntrustedForStructuralUse(routine.title);
+  const rawBody = rawUntrustedForStructuralUse(routine.body);
+
+  const metaParts: string[] = [];
+  if (routine.trigger.cron !== undefined) {
+    metaParts.push(`trigger.cron: ${routine.trigger.cron}`);
+  }
+  if (routine.trigger.event !== undefined) {
+    metaParts.push(`trigger.event: ${routine.trigger.event}`);
+  }
+  if (routine.repos.length > 0) {
+    metaParts.push(`repos: ${routine.repos.join(", ")}`);
+  }
+  const metaBlock = metaParts.length > 0 ? `\n\n---\n${metaParts.join("\n")}` : "";
+  const fullProjection = `# ${rawTitle}\n\n${rawBody}${metaBlock}`;
+
+  const fencedBody = renderUntrustedProjection(
+    { body: brandUntrusted(fullProjection) },
+    { ref, source: "project" },
+  );
+
+  return toolOk({
+    body: fencedBody,
+    drift,
+    guardrails: routine.guardrails,
+    name: routine.name,
+    needs: routine.needs,
+    recurrence: routine.recurrence,
+    // cron, event, repos are ABSENT from top-level; they appear only inside the fence.
+    repos: undefined,
+    resolved_binding,
+    scope: routine.scope,
+    source: routine.source,
+    state,
+    status: routine.status,
+    // Safe name identifier in title field; untrusted title is inside the fenced body.
+    title: routine.name,
+    trigger: { kind: routine.trigger.kind },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -56,6 +125,9 @@ export type GetRoutineOutput = {
  *
  * Thin handler — delegates to services. Returns ToolResult<GetRoutineOutput>.
  * Returns INVALID_INPUT when name is empty or routine not found.
+ *
+ * Plugin routines are trusted (dc-05): rendered unfenced, all fields included.
+ * Project-local routines: all project-authored content fenced (see buildProjectOutput).
  */
 export async function getRoutine(
   input: GetRoutineInput,
@@ -79,22 +151,15 @@ export async function getRoutine(
   const resolved_binding = resolveRoutineBinding(routine);
   const drift = computeBindingDrift(routine, env);
   const state = await readRoutineState(projectDir, routine.name);
+  const ref = `.canon/routines/${routine.name}`;
 
-  // For project-local routines: fence the full projection (title + body together) so that
-  // untrusted content — including the title (old F4 under-scan) — never reaches instruction
-  // position. Plugin routines are trusted; they render unfenced.
-  const isProject = routine.source === "project";
-  const fencedBody = isProject
-    ? fenceUntrustedOverlay(`# ${routine.title}\n\n${routine.body}`, {
-        source: `.canon/routines/${routine.name}`,
-      })
-    : routine.body;
-  // For project-local routines, expose only the safe name identifier in the title field;
-  // the full untrusted title is inside the fenced body projection.
-  const safeTitle = isProject ? routine.name : routine.title;
+  if (routine.source === "project") {
+    return buildProjectOutput(routine, resolved_binding, drift, state);
+  }
 
+  // Plugin routines are trusted (dc-05): render unfenced, include all fields.
   return toolOk({
-    body: fencedBody,
+    body: renderUntrusted(routine.body, { ref, source: "plugin" }),
     drift,
     guardrails: routine.guardrails,
     name: routine.name,
@@ -106,7 +171,7 @@ export async function getRoutine(
     source: routine.source,
     state,
     status: routine.status,
-    title: safeTitle,
+    title: renderUntrusted(routine.title, { ref, source: "plugin" }),
     trigger: routine.trigger,
   });
 }

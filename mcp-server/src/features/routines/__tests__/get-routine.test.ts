@@ -1,3 +1,4 @@
+import { brandUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import type { Routine } from "@shared/routine.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getRoutine } from "../tools/get-routine.ts";
@@ -7,9 +8,15 @@ import { listRoutines } from "../tools/list-routines.ts";
 // Fixtures
 // ---------------------------------------------------------------------------
 
-function makeRoutine(overrides: Partial<Routine> = {}): Routine {
+function makeRoutine(
+  overrides: Omit<Partial<Routine>, "title" | "body"> & { title?: string; body?: string } = {},
+): Routine {
+  const {
+    title = "Test Routine",
+    body = "Routine body text describing what it does.",
+    ...rest
+  } = overrides;
   return {
-    body: "Routine body text describing what it does.",
     filePath: "/plugin/routines/test-routine.md",
     guardrails: { consent: "opt-in", mutates_running_build: false, repo_writes: "none" },
     name: "test-routine",
@@ -19,9 +26,10 @@ function makeRoutine(overrides: Partial<Routine> = {}): Routine {
     scope: "repo",
     source: "plugin",
     status: "enabled",
-    title: "Test Routine",
     trigger: { kind: "schedule", cron: "0 9 * * 1" },
-    ...overrides,
+    ...rest,
+    title: brandUntrusted(title),
+    body: brandUntrusted(body),
   };
 }
 

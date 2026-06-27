@@ -1,5 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { rawUntrustedForStructuralUse } from "@shared/lib/overlay-untrusted-text.ts";
 import {
   loadAllRoutines,
   loadRoutineFile,
@@ -92,7 +93,7 @@ describe("parseRoutine", () => {
     const routine = parseRoutine(VALID_ROUTINE_CONTENT, "/routines/release-ahead.md", "plugin");
 
     expect(routine.name).toBe("release-ahead");
-    expect(routine.title).toBe("Release-ahead check");
+    expect(rawUntrustedForStructuralUse(routine.title)).toBe("Release-ahead check");
     expect(routine.status).toBe("enabled");
     expect(routine.trigger.kind).toBe("schedule");
     expect(routine.trigger.cron).toBe("0 9 * * *");
@@ -106,7 +107,7 @@ describe("parseRoutine", () => {
     expect(routine.recurrence).toBe("standing");
     expect(routine.source).toBe("plugin");
     expect(routine.filePath).toBe("/routines/release-ahead.md");
-    expect(routine.body).toContain("Release-ahead check");
+    expect(rawUntrustedForStructuralUse(routine.body)).toContain("Release-ahead check");
   });
 
   it("returns name='' for malformed frontmatter (no YAML delimiters)", () => {

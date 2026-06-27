@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
+import { rawUntrustedForStructuralUse } from "@shared/lib/overlay-untrusted-text.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import type { Routine } from "@shared/routine.ts";
@@ -33,9 +34,14 @@ export function emitCloudRecipe(routine: Routine): string {
         ? `trigger: github-event (${routine.trigger.event})`
         : `trigger: ${routine.trigger.kind}`;
 
+  // rawUntrustedForStructuralUse: emitCloudRecipe writes a disk artifact (non-model-facing).
+  // The recipe is a user-paste document, not a tool output consumed by the model.
+  const rawTitle = rawUntrustedForStructuralUse(routine.title);
+  const rawBody = rawUntrustedForStructuralUse(routine.body);
+
   const lines = [
     `# Canon routine: ${routine.name}`,
-    `# ${routine.title}`,
+    `# ${rawTitle}`,
     `#`,
     `# To register this routine in Claude.ai / Claude Scheduled Tasks,`,
     `# copy this recipe and follow the platform's /schedule setup steps.`,
@@ -47,7 +53,7 @@ export function emitCloudRecipe(routine: Routine): string {
     ``,
     `## Task body`,
     ``,
-    routine.body,
+    rawBody,
   ];
 
   return lines.join("\n");
@@ -85,14 +91,15 @@ export async function writeDesktopSkill(
 }
 
 function buildSkillContent(routine: Routine): string {
+  // rawUntrustedForStructuralUse: SKILL.md is a disk artifact (non-model-facing).
   return [
     `---`,
     `name: ${routine.name}`,
-    `title: ${routine.title}`,
+    `title: ${rawUntrustedForStructuralUse(routine.title)}`,
     `status: ${routine.status}`,
     `---`,
     ``,
-    routine.body,
+    rawUntrustedForStructuralUse(routine.body),
     ``,
   ].join("\n");
 }

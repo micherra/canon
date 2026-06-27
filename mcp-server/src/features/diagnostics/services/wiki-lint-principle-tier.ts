@@ -10,6 +10,7 @@
  * - line-limit-split-into-siblings: new checks go here, never appended to wiki-lint.ts
  */
 
+import { rawUntrustedForStructuralUse } from "@shared/lib/overlay-untrusted-text.ts";
 import type { Principle } from "@shared/parser.ts";
 
 // ---- Types ----
@@ -169,10 +170,11 @@ export function normalizeTitle(title: string): string {
  * Pure: no I/O. Receives pre-loaded principles array (both tiers merged).
  */
 export function checkDuplicateTitles(principles: Principle[]): DuplicateTitleFinding[] {
-  // Group by normalized title
+  // Group by normalized title — title is UntrustedText; use rawUntrustedForStructuralUse
+  // to extract the raw string for lint key computation (non-model-facing structural use).
   const byTitle = new Map<string, Principle[]>();
   for (const p of principles) {
-    const key = normalizeTitle(p.title);
+    const key = normalizeTitle(rawUntrustedForStructuralUse(p.title));
     if (!key) continue; // skip principles with empty titles
     const group = byTitle.get(key) ?? [];
     group.push(p);

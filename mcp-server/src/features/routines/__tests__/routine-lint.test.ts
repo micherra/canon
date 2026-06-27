@@ -1,3 +1,4 @@
+import { brandUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import type { Routine } from "@shared/routine.ts";
 import { describe, expect, it } from "vitest";
 import { lintRoutines } from "../services/routine-lint.ts";
@@ -6,10 +7,16 @@ import { lintRoutines } from "../services/routine-lint.ts";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeRoutine(overrides: Partial<Routine> = {}): Routine {
-  const base: Routine = {
+function makeRoutine(
+  overrides: Omit<Partial<Routine>, "title" | "body"> & { title?: string; body?: string } = {},
+): Routine {
+  const {
+    title = "Release Ahead Check",
+    body = "Check release status ahead of main.",
+    ...rest
+  } = overrides;
+  return {
     name: "release-ahead",
-    title: "Release Ahead Check",
     status: "enabled",
     trigger: { kind: "schedule", cron: "0 9 * * 1" },
     needs: { state: "git-native", daemon: false },
@@ -21,11 +28,12 @@ function makeRoutine(overrides: Partial<Routine> = {}): Routine {
       consent: "opt-in",
     },
     recurrence: "standing",
-    body: "Check release status ahead of main.",
     source: "plugin",
     filePath: "/fake/release-ahead.md",
+    ...rest,
+    title: brandUntrusted(title),
+    body: brandUntrusted(body),
   };
-  return { ...base, ...overrides };
 }
 
 // ---------------------------------------------------------------------------

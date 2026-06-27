@@ -1,4 +1,4 @@
-import { fenceUntrustedOverlay } from "@shared/lib/overlay-fence.ts";
+import { renderUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import { loadAllPrinciples, matchPrinciples } from "@shared/matcher.ts";
 
 export type ListPrinciplesInput = {
@@ -42,17 +42,16 @@ export async function listPrinciples(
       archived: p.archived,
       id: p.id,
       scope: {
+        // Closed-domain array fields — charset-validated at load (B-layer); emit directly.
         file_patterns: p.scope.file_patterns,
         layers: p.scope.layers,
       },
       severity: p.severity,
+      // Closed-domain array — charset-validated at load (B-layer); emit directly.
       tags: p.tags,
-      // Fence project-local title — list_principles has no body field, so the title
-      // is the only free-text channel; fencing here closes the same sink as get_principles.
-      title:
-        p.source === "project"
-          ? fenceUntrustedOverlay(p.title, { source: `.canon/principles/${p.id}` })
-          : p.title,
+      // Fence project-local title via renderUntrusted — list_principles has no body field,
+      // so the title is the only free-text channel. Plugin titles are trusted (passthrough).
+      title: renderUntrusted(p.title, { ref: `.canon/principles/${p.id}`, source: p.source }),
     })),
     total: matched.length,
   };

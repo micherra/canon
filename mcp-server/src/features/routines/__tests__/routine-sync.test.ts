@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { brandUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import type { Routine } from "@shared/routine.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -15,9 +16,15 @@ import {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-function makeRoutine(overrides: Partial<Routine> = {}): Routine {
+function makeRoutine(
+  overrides: Omit<Partial<Routine>, "title" | "body"> & { title?: string; body?: string } = {},
+): Routine {
+  const {
+    title = "Test Routine",
+    body = "Analyze recent commits and surface risky changes.",
+    ...rest
+  } = overrides;
   return {
-    body: "Analyze recent commits and surface risky changes.",
     filePath: "/plugin/routines/test.md",
     guardrails: { consent: "opt-in", mutates_running_build: false, repo_writes: "none" },
     name: "test-routine",
@@ -27,13 +34,16 @@ function makeRoutine(overrides: Partial<Routine> = {}): Routine {
     scope: "repo",
     source: "plugin",
     status: "enabled",
-    title: "Test Routine",
     trigger: { kind: "schedule", cron: "0 * * * *" },
-    ...overrides,
+    ...rest,
+    title: brandUntrusted(title),
+    body: brandUntrusted(body),
   };
 }
 
-function makeCloudRoutine(overrides: Partial<Routine> = {}): Routine {
+type RoutineInput = Omit<Partial<Routine>, "title" | "body"> & { title?: string; body?: string };
+
+function makeCloudRoutine(overrides: RoutineInput = {}): Routine {
   return makeRoutine({
     name: "cloud-routine",
     needs: { daemon: false, state: "git-native" },
@@ -41,7 +51,7 @@ function makeCloudRoutine(overrides: Partial<Routine> = {}): Routine {
   });
 }
 
-function makeDesktopRoutine(overrides: Partial<Routine> = {}): Routine {
+function makeDesktopRoutine(overrides: RoutineInput = {}): Routine {
   return makeRoutine({
     name: "desktop-routine",
     needs: { daemon: true, state: "local-canon" },
@@ -203,7 +213,7 @@ describe("writeDesktopSkill", () => {
   it("overwrites an existing SKILL.md (refresh)", async () => {
     const routine = makeDesktopRoutine({ name: "refresh-routine", body: "old body" });
     await writeDesktopSkill(routine, tmpDir);
-    const updatedRoutine = { ...routine, body: "new body" };
+    const updatedRoutine = { ...routine, body: brandUntrusted("new body") };
     const result = await writeDesktopSkill(updatedRoutine, tmpDir);
     expect(result.ok).toBe(true);
     if (!result.ok) return;

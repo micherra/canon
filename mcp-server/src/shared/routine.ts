@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CANON_DIR } from "./constants.ts";
 import { splitFrontmatter } from "./lib/frontmatter.ts";
+import { brandUntrusted, type UntrustedText } from "./lib/overlay-untrusted-text.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -10,7 +11,8 @@ import { splitFrontmatter } from "./lib/frontmatter.ts";
 export type Routine = {
   /** Unique kebab-case identifier (peer of a principle id). */
   name: string;
-  title: string;
+  /** Free-text title — opaque box; must render via renderUntrusted* for model output. */
+  title: UntrustedText;
   status: "enabled" | "disabled" | "draft";
   trigger: {
     kind: "schedule" | "github-event" | "api";
@@ -32,7 +34,8 @@ export type Routine = {
     consent: "opt-in" | "tier-gated";
   };
   recurrence: "standing" | "one-shot";
-  body: string;
+  /** Free-text body — opaque box; must render via renderUntrusted* for model output. */
+  body: UntrustedText;
   source: "project" | "plugin";
   filePath: string;
 };
@@ -77,7 +80,8 @@ function buildRoutine(
   source: "project" | "plugin",
 ): Routine {
   const routine: Routine = {
-    body,
+    // Brand the free-text body at the load boundary.
+    body: brandUntrusted(body),
     filePath,
     guardrails: parseGuardrails((fm.guardrails as Record<string, unknown>) ?? {}),
     name: fm.name as string,
@@ -89,7 +93,8 @@ function buildRoutine(
     scope: fm.scope === "account" ? "account" : "repo",
     source,
     status: validStatus(fm.status) ?? "draft",
-    title: (fm.title as string) || "",
+    // Brand the free-text title at the load boundary.
+    title: brandUntrusted((fm.title as string) || ""),
     trigger: parseTrigger((fm.trigger as Record<string, unknown>) ?? {}),
   };
   const bt = fm.binding_target as string | undefined;
@@ -224,7 +229,7 @@ export async function loadAllRoutines(projectDir: string, pluginDir: string): Pr
 
 function makeEmptyRoutine(filePath: string, source: "project" | "plugin"): Routine {
   return {
-    body: "",
+    body: brandUntrusted(""),
     filePath,
     guardrails: {
       consent: "opt-in",
@@ -238,7 +243,7 @@ function makeEmptyRoutine(filePath: string, source: "project" | "plugin"): Routi
     scope: "repo",
     source,
     status: "draft",
-    title: "",
+    title: brandUntrusted(""),
     trigger: { kind: "schedule" },
   };
 }

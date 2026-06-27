@@ -2,22 +2,26 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { brandUntrusted, rawUntrustedForStructuralUse } from "../lib/overlay-untrusted-text.ts";
 import { inferLayer, loadAllPrinciples, matchPrinciples } from "../matcher.ts";
 import type { Principle } from "../parser.ts";
 
 // Principle overrides and parsePrinciple scope.tags tests are in matcher-overrides.test.ts
 
-function makePrinciple(overrides: Partial<Principle> = {}): Principle {
+function makePrinciple(
+  overrides: Omit<Partial<Principle>, "title" | "body"> & { title?: string; body?: string } = {},
+): Principle {
+  const { title = "Test", body = "Body", ...rest } = overrides;
   return {
     archived: false,
-    body: "Body",
     filePath: "test.md",
     id: "test",
     scope: { file_patterns: [], layers: [] },
     severity: "convention",
     tags: [],
-    title: "Test",
-    ...overrides,
+    ...rest,
+    title: brandUntrusted(title),
+    body: brandUntrusted(body),
   };
 }
 
@@ -409,6 +413,6 @@ describe("loadAllPrinciples — origin tagging", () => {
     const conflicts = principles.filter((x) => x.id === "conflict-id");
     expect(conflicts).toHaveLength(1);
     expect(conflicts[0].source).toBe("project");
-    expect(conflicts[0].title).toBe("Project Version");
+    expect(rawUntrustedForStructuralUse(conflicts[0].title)).toBe("Project Version");
   });
 });
