@@ -51,11 +51,8 @@ stale plugin installs. `/canon:loop-tick <id>` is the registered-install conveni
 
 | Mode | Phase | Scheduler | Description |
 |------|-------|-----------|-------------|
-| `interval` | A/B (current) | `CronCreate` | Fixed-cadence ticks; `schedule.interval` + `schedule.max_ticks` |
-| `self-paced` | C (planned) | `ScheduleWakeup` | Variable cadence; `schedule.cadence_hint.active` + `.idle` |
-
-Phase C is not yet implemented. Self-paced definitions are accepted by the schema but
-rejected by the runner with a clear "deferred to Phase C" message.
+| `interval` | A/B | `CronCreate` | Fixed-cadence ticks; `schedule.interval` + `schedule.max_ticks` |
+| `self-paced` | C+ (current) | `ScheduleWakeup` | Variable cadence; `schedule.cadence_hint.active` + `.idle` |
 
 ## Determinism guardrail
 
@@ -83,3 +80,4 @@ they are surfaced with their filename and error message, never silently dropped.
 | `ship-watch` | interval | post-ship | active | Watches PR status after ship — CI results, external review comments, release tags. Surfaces `auto-triage-fix` and `auto-plugin-update` actions. |
 | `session-watch` | self-paced | session-start | active | Cliff + staleness observer — detects backgrounded steps that may have died and surfaces KG/drift staleness. |
 | `harness-watch` | self-paced | post-ship | active | Accumulated-build-signal observer — counts builds since last learner pass and watches for rising recurring violations. Surfaces `run-learner` action when threshold crosses. |
+| `evolve` | self-paced | session-start | active | Attribution-signal observer — tracks accumulated attribution signal and surfaces `run-evolve` when gate-eligible mutation targets exist. |
