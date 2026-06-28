@@ -132,3 +132,30 @@ assigning to `scope`; non-matching entries are dropped with `console.warn` (fail
 posture as parser). `overlay-sink-coverage.test.ts` covers both bypass vectors with regression
 tests (injection-in-layers, injection-in-file_patterns, invalid-glob-no-throw,
 legitimate-values-survive).
+
+## Amendment — Glob-DoS Still Open After Second-Writer Fix (2026-06-28)
+
+**Finding (security re-review pass 4):** The second-writer fix falsely claimed the shared charset
+also closes the glob-DoS. `FILE_PATTERN_CHARSET` intentionally admits `( ) { } , !` to support
+legitimate glob syntax, but `globToRegex` (shared/matcher.ts) passed them unescaped to
+`new RegExp`, giving them live regex meaning. Two exploits (both reachable via parser.ts and
+matcher.ts writers):
+- **Throw-DoS:** `file_patterns: ["("]` → `globToRegex("(")` → `new RegExp("(^|/)($")` →
+  uncaught `SyntaxError` propagated out of `loadAllPrinciples`, denying the entire principle
+  subsystem.
+- **ReDoS:** `file_patterns: ["(*){2,}"]` → `globToRegex` → `([^/]*){2,}` (nested unbounded
+  quantifier) → catastrophic backtracking at match time; measured 13 s at n=28, ×4 per +2 chars.
+
+**Fix (vocabulary-free, per watch_UUUUUUUU2):** `globToRegex` now escapes ALL regex
+metacharacters first (`pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")`), then selectively
+restores only the glob wildcards Canon supports (`\*\*` → `.*`, `\*` → `[^/]*`). This closes
+both throw-DoS and ReDoS in one move, independent of which characters the charset admits.
+A belt-and-suspenders try/catch in `loadAllPrinciples`'s eager pre-compile loop ensures a future
+metacharacter slip cannot deny the subsystem even if `globToRegex` produces a bad pattern.
+
+**DoS guarantee ownership:** The DoS invariant now lives in `globToRegex`, not `FILE_PATTERN_CHARSET`.
+The charset guards against injection strings and unknown glob syntax; the DoS guarantee is the
+escape-all posture in `globToRegex`. Tests in `overlay-sink-coverage.test.ts` cover all four
+metacharacter fixtures (`(`, `)`, `{`, `(*){2,}`) via BOTH the frontmatter parser writer AND the
+narrow-scope override writer, asserting no throw AND match-time < 50 ms against a 40-char
+adversarial path.

@@ -26,9 +26,18 @@ export const TAG_CHARSET = /^[a-z0-9_-]+$/;
 
 /**
  * scope.file_patterns: glob characters allowed in addition to alphanumerics.
- * This charset also acts as a DoS guard — patterns outside it are dropped
- * before `globToRegex` / `new RegExp()` sees them, preventing `SyntaxError`
- * propagation from malformed character classes (e.g. unclosed `[`).
+ *
+ * NOTE: This charset intentionally admits regex metacharacters `( ) { } , !`
+ * to support legitimate glob syntax (brace-expansion, extglob).  The DoS
+ * guarantee (SyntaxError throw-DoS + ReDoS) does NOT live here — it lives in
+ * `globToRegex` (shared/matcher.ts), which escapes all regex metacharacters
+ * before constructing `new RegExp`, then selectively restores only the glob
+ * wildcards Canon supports (* and **).  A charset-tweak approach (dropping
+ * individual metacharacters) is the fragile enumeration posture; the primary
+ * defence is the vocabulary-free escape in globToRegex (watch_UUUUUUUU2).
+ *
+ * The charset still guards against injection strings (spaces, colons, etc.)
+ * and unclosed bracket `[` — but the DoS invariant is owned by globToRegex.
  */
 export const FILE_PATTERN_CHARSET = /^[A-Za-z0-9._*/{}!,()-]+$/;
 
@@ -50,9 +59,11 @@ export function filterLayers(raw: string[], source: string): string[] {
 
 /**
  * Charset-filter `scope.file_patterns`. Drops non-matching entries fail-closed with a warn.
- * Dropping invalid patterns here also prevents the invalid-glob DoS — patterns with
- * characters outside the charset (e.g. unclosed `[`) are removed before `globToRegex`
- * / `new RegExp()` can throw a `SyntaxError`.
+ *
+ * This guards against injection strings (spaces, colons, shell metacharacters, and
+ * unclosed `[` which is not in the charset). It does NOT by itself prevent DoS from
+ * regex metacharacters `( ) { } , !` that the charset admits — the DoS guarantee
+ * lives in `globToRegex`, which escapes all regex metacharacters before compiling.
  *
  * @param raw - Raw string array from the principle source (frontmatter or override).
  * @param source - Identifier for log messages.

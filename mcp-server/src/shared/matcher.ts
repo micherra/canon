@@ -39,11 +39,20 @@ function globToRegex(pattern: string): RegExp {
   const cached = globRegexCache.get(pattern);
   if (cached) return cached;
 
+  // Vocabulary-free DoS hardening (security-hook-parser-allowlist-posture /
+  // watch_UUUUUUUU2): escape ALL regex metacharacters first, then selectively
+  // restore only the two glob wildcards Canon actually supports (* and **).
+  // This ensures no caller-supplied quantifier nesting, unbalanced groups, or
+  // alternation reaches new RegExp — closing both the SyntaxError throw-DoS and
+  // the catastrophic-backtracking ReDoS independently of which characters
+  // FILE_PATTERN_CHARSET admits (e.g. ( ) { } , !).
+  //
+  // Transform order matters: \*\* must be restored before \* so the single-star
+  // pass does not consume half of a double-star.
   const regex = pattern
-    .replace(/\./g, "\\.")
-    .replace(/\*\*/g, "{{DOUBLESTAR}}")
-    .replace(/\*/g, "[^/]*")
-    .replace(/\{\{DOUBLESTAR\}\}/g, ".*");
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&") // escape all metacharacters
+    .replace(/\\\*\\\*/g, ".*") // \*\* → .* (any path segment, incl. /)
+    .replace(/\\\*/g, "[^/]*"); // \* → [^/]* (one path segment, no /)
   const compiled = new RegExp(`(^|/)${regex}$`);
   globRegexCache.set(pattern, compiled);
   return compiled;
@@ -393,10 +402,27 @@ export async function loadAllPrinciples(
   const overrides = await loadOverrides(projectDir);
   const effective = applyOverrides(merged, overrides);
 
-  // Pre-compile all glob regexes while we're loading
+  // Pre-compile all glob regexes while we're loading.
+  // Defense-in-depth: wrap each compilation in try/catch so a future
+  // metacharacter that slips through the charset can never throw out of
+  // loadAllPrinciples and deny the entire principle subsystem.  The primary
+  // DoS guarantee lives in globToRegex's escape-all posture above; this is
+  // a belt-and-suspenders backstop (errors-are-values, fail-closed on bad
+  // pattern = skip that pattern's pre-warm, not crash the loader).
   for (const p of effective) {
     for (const pattern of p.scope.file_patterns) {
-      globToRegex(pattern);
+      try {
+        globToRegex(pattern);
+      } catch (err) {
+        console.warn(
+          "[canon] matcher: pre-compile failed for file_pattern",
+          JSON.stringify(pattern),
+          "on principle",
+          p.id,
+          "— pattern will not match any file:",
+          err instanceof Error ? err.message : err,
+        );
+      }
     }
   }
 
