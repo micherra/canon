@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { CANON_DIR, CANON_FILES } from "./constants.ts";
 import { buildLayerInferrer, DEFAULT_LAYER_MAPPINGS } from "./lib/config.ts";
+import { filterFilePatterns, filterLayers } from "./lib/overlay-closed-domain.ts";
 import { loadPrincipleFile, type Principle } from "./parser.ts";
 
 const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
@@ -268,14 +269,16 @@ function applySingleOverride(principle: Principle, override: PrincipleOverride):
   switch (override.action) {
     case "override-severity":
       return { ...principle, severity: override.severity };
-    case "narrow-scope":
+    case "narrow-scope": {
+      const source = `principle-overrides.yaml (id: ${override.principle_id})`;
       return {
         ...principle,
         scope: {
-          file_patterns: override.applies_to.file_patterns,
-          layers: override.applies_to.layers,
+          file_patterns: filterFilePatterns(override.applies_to.file_patterns, source),
+          layers: filterLayers(override.applies_to.layers, source),
         },
       };
+    }
     default:
       // Unknown action — silently skip override, keep principle unchanged
       return principle;

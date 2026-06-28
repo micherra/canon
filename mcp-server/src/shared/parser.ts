@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { PRINCIPLE_SECTIONS } from "./constants.ts";
 import { splitFrontmatter } from "./lib/frontmatter.ts";
+import { filterFilePatterns, filterLayers, filterTagArray } from "./lib/overlay-closed-domain.ts";
 import {
   brandUntrusted,
   rawUntrustedForStructuralUse,
@@ -161,14 +162,6 @@ const PRINCIPLE_ID_CHARSET = /^[a-z0-9_-]+$/;
 // Valid severity enum values; anything else defaults to "convention" (safe default).
 const VALID_SEVERITIES = new Set(["rule", "strong-opinion", "convention"]);
 
-// Charset regexes for closed-domain array fields (B-layer: validate at load boundary).
-/** Tags and scope.tags: lowercase alphanumeric, hyphen, underscore. */
-const TAG_CHARSET = /^[a-z0-9_-]+$/;
-/** scope.layers: same closed identifier domain as tags. */
-const LAYER_CHARSET = /^[a-z0-9_-]+$/;
-/** scope.file_patterns: glob characters allowed in addition to alphanumerics. */
-const FILE_PATTERN_CHARSET = /^[A-Za-z0-9._*/{}!,()-]+$/;
-
 /**
  * Fail-closed id charset guard. Returns `true` when the id is acceptable (empty ids
  * are allowed — matcher.ts:161 filters them downstream). Emits a warn and returns
@@ -200,46 +193,6 @@ function emptyPrincipleSentinel(filePath: string): Principle {
 /** Severity enum guard — injection strings default to the safe "convention" value. */
 function parseSeverity(raw: string | undefined): Principle["severity"] {
   return (VALID_SEVERITIES.has(raw ?? "") ? raw : "convention") as Principle["severity"];
-}
-
-/**
- * Charset-filter an array of tag strings. Non-matching entries are dropped
- * (warn-and-drop posture — injection strings are silently excluded, not passed through).
- */
-function filterTagArray(raw: string[], label: string, filePath: string): string[] {
-  return raw.filter((t) => {
-    if (TAG_CHARSET.test(t)) return true;
-    console.warn(
-      `[canon] parsePrinciple: ${label} '${t}' failed charset ^[a-z0-9_-]+$ — dropping (${filePath})`,
-    );
-    return false;
-  });
-}
-
-/**
- * Charset-filter scope.layers. Drops non-matching entries with a warn.
- */
-function filterLayers(raw: string[], filePath: string): string[] {
-  return raw.filter((l) => {
-    if (LAYER_CHARSET.test(l)) return true;
-    console.warn(
-      `[canon] parsePrinciple: scope.layers '${l}' failed charset ^[a-z0-9_-]+$ — dropping (${filePath})`,
-    );
-    return false;
-  });
-}
-
-/**
- * Charset-filter scope.file_patterns. Drops non-matching entries with a warn.
- */
-function filterFilePatterns(raw: string[], filePath: string): string[] {
-  return raw.filter((p) => {
-    if (FILE_PATTERN_CHARSET.test(p)) return true;
-    console.warn(
-      `[canon] parsePrinciple: scope.file_patterns '${p}' failed charset — dropping (${filePath})`,
-    );
-    return false;
-  });
 }
 
 export function parsePrinciple(content: string, filePath: string): Principle {

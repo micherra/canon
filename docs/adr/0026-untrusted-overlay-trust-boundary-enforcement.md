@@ -114,3 +114,21 @@ The intersection-brand equivalent produces NO error — which is exactly why it 
   to the sink-coverage test; closed-domain fields get a load-boundary charset.
 - The model is shown to act on fenced data despite ADR-0025's policy → strengthen framing per
   ADR-0025 Revisit-If; not this ADR's concern.
+
+## Amendment — Override Second-Writer Bypass (2026-06-28)
+
+**Finding (security re-review):** ADR-0026 claimed "charset/enum-validated at the single load
+boundary (`parser.ts`)" but `matcher.ts:applySingleOverride` is a second writer: it assigns
+`override.applies_to.layers` and `override.applies_to.file_patterns` directly to
+`principle.scope` with no charset filter. An attacker controlling `.canon/principle-overrides.yaml`
+could inject arbitrary strings into `scope.layers`/`scope.file_patterns` (injection) or an
+unclosed glob bracket like `"foo [UNCLOSED"` (invalid-regex DoS crashing `loadAllPrinciples`).
+
+**Fix:** Shared validator module `shared/lib/overlay-closed-domain.ts` exports the charset
+constants and `filterLayers`/`filterFilePatterns`/`filterTagArray` functions. Both writers
+(`parser.ts` and `matcher.ts`) now import from this module — a single definition, no future
+divergence. The narrow-scope override case applies `filterLayers`/`filterFilePatterns` before
+assigning to `scope`; non-matching entries are dropped with `console.warn` (fail-closed, same
+posture as parser). `overlay-sink-coverage.test.ts` covers both bypass vectors with regression
+tests (injection-in-layers, injection-in-file_patterns, invalid-glob-no-throw,
+legitimate-values-survive).

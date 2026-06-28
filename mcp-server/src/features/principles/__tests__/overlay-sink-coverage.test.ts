@@ -503,3 +503,104 @@ describe("emitCloudRecipe — structural non-model-facing sink", () => {
     expect(recipe).toContain("evil-routine");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Narrow-scope OVERRIDE: second-writer bypass fix (B-layer, override path)
+//
+// These tests verify that the narrow-scope override path in matcher.ts applies
+// the SAME closed-domain charset filters as parser.ts (the first writer).
+// Before the fix, injection strings in applies_to.layers / applies_to.file_patterns
+// bypassed the load-boundary charset and reached list_principles unfenced.
+// After the fix, they are dropped fail-closed, mirroring the parser posture.
+//
+// The DoS test verifies that an invalid-glob pattern in an override
+// (e.g. unclosed bracket → SyntaxError in new RegExp()) no longer propagates
+// out of loadAllPrinciples now that the charset filter drops it first.
+// ---------------------------------------------------------------------------
+
+describe("narrow-scope override: second-writer bypass (B-layer, override path)", () => {
+  // Use INJECTION_TOKEN directly — it contains spaces + colon that fail both
+  // LAYER_CHARSET (^[a-z0-9_-]+$) and FILE_PATTERN_CHARSET.
+  // assertCharsetSafe(values) fires when any value contains INJECTION_TOKEN.
+  const OVERRIDE_LAYER_INJECTION = `${INJECTION_TOKEN} [OVERRIDE_LAYER]`;
+  const OVERRIDE_PATTERN_INJECTION = `${INJECTION_TOKEN} [OVERRIDE_PATTERN]`;
+  // Invalid glob that creates a malformed RegExp character class when not charset-filtered.
+  const INVALID_GLOB_PATTERN = "foo [UNCLOSED";
+
+  // Write override YAML targeting the evil-principle (already created by outer beforeEach).
+  beforeEach(async () => {
+    const overridesContent = [
+      "overrides:",
+      "  - principle_id: evil-principle",
+      "    action: narrow-scope",
+      "    reason: attacker override",
+      "    applies_to:",
+      `      layers:`,
+      `        - "${OVERRIDE_LAYER_INJECTION}"`,
+      `      file_patterns:`,
+      `        - "${OVERRIDE_PATTERN_INJECTION}"`,
+    ].join("\n");
+    await writeFile(join(tmpDir, ".canon", "principle-overrides.yaml"), overridesContent);
+  });
+
+  it("narrow-scope override: injection in applies_to.layers is dropped — does not reach scope.layers output", async () => {
+    const result = await listPrinciples({}, projectDir, pluginDir);
+    const p = result.principles.find((x) => x.id === "evil-principle");
+    expect(p).toBeDefined();
+    assertCharsetSafe(p!.scope.layers, "narrow-scope override: scope.layers");
+  });
+
+  it("narrow-scope override: injection in applies_to.file_patterns is dropped — does not reach scope.file_patterns output", async () => {
+    const result = await listPrinciples({}, projectDir, pluginDir);
+    const p = result.principles.find((x) => x.id === "evil-principle");
+    expect(p).toBeDefined();
+    assertCharsetSafe(p!.scope.file_patterns, "narrow-scope override: scope.file_patterns");
+  });
+
+  it("narrow-scope override: invalid-glob file_patterns does not throw — principle subsystem remains available (DoS regression)", async () => {
+    // Overwrite the override file with an invalid glob that would produce a
+    // SyntaxError in new RegExp() when not charset-filtered first.
+    const dosContent = [
+      "overrides:",
+      "  - principle_id: evil-principle",
+      "    action: narrow-scope",
+      "    reason: dos attempt",
+      "    applies_to:",
+      "      layers: []",
+      `      file_patterns:`,
+      `        - "${INVALID_GLOB_PATTERN}"`,
+    ].join("\n");
+    await writeFile(join(tmpDir, ".canon", "principle-overrides.yaml"), dosContent);
+
+    // Must resolve — the subsystem must not crash
+    await expect(listPrinciples({}, projectDir, pluginDir)).resolves.toBeDefined();
+
+    // Plugin principle still reachable — subsystem is intact
+    const result = await listPrinciples({}, projectDir, pluginDir);
+    expect(result.principles.find((x) => x.id === "trusted-principle")).toBeDefined();
+  });
+
+  it("narrow-scope override: legitimate charset-valid layers and file_patterns survive", async () => {
+    // Confirm that a well-formed override with valid values is still applied correctly.
+    const legitimateContent = [
+      "overrides:",
+      "  - principle_id: evil-principle",
+      "    action: narrow-scope",
+      "    reason: legitimate narrowing",
+      "    applies_to:",
+      "      layers:",
+      "        - shared",
+      "        - app",
+      "      file_patterns:",
+      "        - src/**/*.ts",
+    ].join("\n");
+    await writeFile(join(tmpDir, ".canon", "principle-overrides.yaml"), legitimateContent);
+
+    const result = await listPrinciples({}, projectDir, pluginDir);
+    const p = result.principles.find((x) => x.id === "evil-principle");
+    expect(p).toBeDefined();
+    expect(p!.scope.layers).toContain("shared");
+    expect(p!.scope.layers).toContain("app");
+    expect(p!.scope.file_patterns).toContain("src/**/*.ts");
+  });
+});
