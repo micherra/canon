@@ -153,9 +153,40 @@ both throw-DoS and ReDoS in one move, independent of which characters the charse
 A belt-and-suspenders try/catch in `loadAllPrinciples`'s eager pre-compile loop ensures a future
 metacharacter slip cannot deny the subsystem even if `globToRegex` produces a bad pattern.
 
-**DoS guarantee ownership:** The DoS invariant now lives in `globToRegex`, not `FILE_PATTERN_CHARSET`.
-The charset guards against injection strings and unknown glob syntax; the DoS guarantee is the
-escape-all posture in `globToRegex`. Tests in `overlay-sink-coverage.test.ts` cover all four
-metacharacter fixtures (`(`, `)`, `{`, `(*){2,}`) via BOTH the frontmatter parser writer AND the
-narrow-scope override writer, asserting no throw AND match-time < 50 ms against a 40-char
-adversarial path.
+**DoS guarantee ownership (superseded by §Amendment-3):** The DoS invariant was said to live in
+`globToRegex`. The escape-all posture closed throw-DoS and nested-quantifier ReDoS, but the
+restored `*` wildcard remained an unbounded quantifier in V8's backtracking engine — the
+sequential-wildcard class was still open (see §Amendment-3 below).
+
+## Amendment-3 — Sequential-Wildcard ReDoS (2026-06-29)
+
+**Finding (security re-review pass 4, follow-up):** The escape-all-then-restore posture in
+`globToRegex` closed the throw-DoS and nested-quantifier ReDoS (`(*){2,}` → `([^/]*){2,}`), but
+NOT the sequential-wildcard class. The restored single-star `*` → `[^/]*` is itself an unbounded
+quantifier. A pattern such as `a*a*a*a*a*a*a*a*b` (all chars admitted by `FILE_PATTERN_CHARSET`)
+compiles to `(^|/)a[^/]*a[^/]*a[^/]*a[^/]*a[^/]*a[^/]*a[^/]*a[^/]*b$`. V8's NFA backtracking
+engine reaches O(n^k) on this — measured at 7.4 s for n=50 chars, k=8 stars; >120 s for k=12.
+This DoS is reachable via BOTH the frontmatter parser writer AND the narrow-scope override writer,
+both of which call `matchPrinciples` → `matchesFilePattern` → `globToRegex(...).test(path)`.
+
+**Root cause:** The bug was not in the escape-all logic (that part works) — it was in using a
+backtracking RegExp engine at all. `globToRegex` → `new RegExp` → `regex.test(path)` inherits
+V8's O(n^k) sequential-wildcard behaviour regardless of how the pattern was constructed.
+
+**Fix (structural engine replacement, per watch_UUUUUUUU2):** Replace `globToRegex` + `new RegExp`
+entirely with `matchGlob` in `shared/lib/glob-matcher.ts` — an O(m·n) DP wildcard matcher that
+removes the backtracking engine from the match path. `matchGlob` is pure, never calls `new RegExp`,
+and returns a boolean. The DoS guarantee now lives in the structural property that no unbounded
+backtracking is possible, not in any enumeration of pattern forms. The `globToRegex` function and
+`globRegexCache` are removed; the pre-warm loop in `loadAllPrinciples` is removed (matchGlob has
+no compilation phase).
+
+**Parity:** `matchGlob(pattern, path)` returns the identical boolean as `globToRegex(pattern).test(path)`
+for every pattern in Canon's shipped principle corpus and a representative path matrix (3157 pairs,
+zero mismatches — verified by differential parity test in `shared/lib/__tests__/glob-matcher.test.ts`).
+The one pre-existing non-match (`src/**/*.ts` ↛ `src/a.ts`) is preserved.
+
+**Tests:** `overlay-sink-coverage-dos.test.ts` now covers all six DoS patterns (four original +
+`"a*".repeat(8)+"b"` + `"**a".repeat(6)+"b"`) via both writers, asserting no throw AND
+match-time < 50 ms against a 40-char adversarial path. The new patterns fail on the old code (>362 ms)
+and pass on the fixed code (<1 ms).

@@ -2,12 +2,18 @@
  * Glob-DoS / availability-coverage test — compiler-and-test-enforced trust boundary (C layer).
  *
  * Covers the DoS hardening for regex metacharacters in file_patterns
- * (B-layer + globToRegex).
+ * (B-layer + matchGlob linear matcher).
  *
  * FILE_PATTERN_CHARSET admits ( ) { } , ! to support legitimate glob syntax.
- * The DoS guarantee must live in globToRegex (escape-all-metacharacters-then-
- * restore-globs), not the charset alone — a charset tweak is the fragile
- * enumeration posture (watch_CCCCCCCCCCCC1 / watch_UUUUUUUU2).
+ * The DoS guarantee must NOT live in the charset alone — a charset tweak is the
+ * fragile enumeration posture (watch_CCCCCCCCCCCC1 / watch_UUUUUUUU2).
+ * The structural guarantee is the linear-time glob matcher (matchGlob) which
+ * replaces the RegExp-based globToRegex:
+ *   - Throw-DoS (unbalanced groups, unknown quantifier operands): closed by
+ *     escape-all metacharacters in globToRegex / the charset gate before that.
+ *   - Nested-quantifier ReDoS (e.g. (*){2,}): closed by escape-all in globToRegex.
+ *   - Sequential-wildcard ReDoS (e.g. a*a*a*a*a*b): closed by linear matchGlob
+ *     (ADR-0026 §Amendment-3) — this was NOT closed by escape-all alone.
  *
  * These tests cover BOTH the frontmatter parser writer (parser.ts:216) AND
  * the narrow-scope override writer (matcher.ts:277). They verify:
@@ -26,11 +32,20 @@ import { PLUGIN_PRINCIPLE_CONTENT } from "./overlay-sink-coverage.fixtures.ts";
 // Glob-DoS hardening: regex metacharacter fixtures (B-layer + globToRegex)
 // ---------------------------------------------------------------------------
 
-describe("glob-DoS hardening: regex metacharacter fixtures (B-layer, globToRegex)", () => {
+describe("glob-DoS hardening: regex metacharacter fixtures (B-layer, matchGlob linear matcher)", () => {
   // Patterns that pass FILE_PATTERN_CHARSET but previously caused DoS.
   // Throw-DoS patterns: unbalanced group or unknown quantifier operand.
-  // ReDoS pattern: nested unbounded quantifier ((*){2,} → ([^/]*){2,} in old code).
-  const DOS_PATTERNS = ["(", ")", "{", "(*){2,}"] as const;
+  // Nested-quantifier ReDoS: (*){2,} → ([^/]*){2,} in old globToRegex.
+  // Sequential-wildcard ReDoS: a*a*a*…b takes 7.4s at n=40 via old RegExp engine;
+  // closed by the linear matchGlob (ADR-0026 §Amendment-3).
+  const DOS_PATTERNS = [
+    "(",
+    ")",
+    "{",
+    "(*){2,}",
+    `${"a*".repeat(8)}b`,
+    `${"**a".repeat(6)}b`,
+  ] as const;
   // 40-char slash-free adversarial segment: triggers catastrophic backtracking
   // at match time when globToRegex produces nested quantifiers.
   const ADVERSARIAL_PATH = `${"a".repeat(40)}/b.ts`;

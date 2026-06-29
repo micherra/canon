@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { CANON_DIR, CANON_FILES } from "./constants.ts";
 import { buildLayerInferrer, DEFAULT_LAYER_MAPPINGS } from "./lib/config.ts";
+import { matchGlob } from "./lib/glob-matcher.ts";
 import { filterFilePatterns, filterLayers } from "./lib/overlay-closed-domain.ts";
 import { loadPrincipleFile, type Principle } from "./parser.ts";
 
@@ -32,31 +33,12 @@ export function inferLayer(filePath: string): string | undefined {
   return layer === "unknown" ? undefined : layer;
 }
 
-// Cache compiled glob regexes to avoid recompilation on every match
-const globRegexCache = new Map<string, RegExp>();
-
-function globToRegex(pattern: string): RegExp {
-  const cached = globRegexCache.get(pattern);
-  if (cached) return cached;
-
-  // Vocabulary-free DoS hardening (security-hook-parser-allowlist-posture /
-  // watch_UUUUUUUU2): escape ALL regex metacharacters first, then selectively
-  // restore only the two glob wildcards Canon actually supports (* and **).
-  // This ensures no caller-supplied quantifier nesting, unbalanced groups, or
-  // alternation reaches new RegExp — closing both the SyntaxError throw-DoS and
-  // the catastrophic-backtracking ReDoS independently of which characters
-  // FILE_PATTERN_CHARSET admits (e.g. ( ) { } , !).
-  //
-  // Transform order matters: \*\* must be restored before \* so the single-star
-  // pass does not consume half of a double-star.
-  const regex = pattern
-    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&") // escape all metacharacters
-    .replace(/\\\*\\\*/g, ".*") // \*\* → .* (any path segment, incl. /)
-    .replace(/\\\*/g, "[^/]*"); // \* → [^/]* (one path segment, no /)
-  const compiled = new RegExp(`(^|/)${regex}$`);
-  globRegexCache.set(pattern, compiled);
-  return compiled;
-}
+// File-pattern matching uses matchGlob from lib/glob-matcher.ts — a pure
+// O(m·n) DP wildcard matcher that admits no backtracking engine (see
+// ADR-0026 §Amendment-3).  The previous globToRegex + RegExp approach
+// closed the SyntaxError throw-DoS and nested-quantifier ReDoS but left the
+// sequential-wildcard class open (a*a*…a*b → 7.4 s at n=50 in V8).  The
+// linear matcher removes new RegExp from the match path entirely.
 
 function severityPassesFilter(severity: string, filter?: string): boolean {
   if (!filter) return true;
@@ -72,7 +54,7 @@ function matchesLayers(p: Principle, layers: string[]): boolean {
 /** Check if a principle matches the file pattern filter. */
 function matchesFilePattern(p: Principle, filePath: string | undefined): boolean {
   if (!filePath || p.scope.file_patterns.length === 0) return true;
-  return p.scope.file_patterns.some((pattern) => globToRegex(pattern).test(filePath));
+  return p.scope.file_patterns.some((pattern) => matchGlob(pattern, filePath));
 }
 
 /** Check if a principle matches the tag filter. */
@@ -402,29 +384,7 @@ export async function loadAllPrinciples(
   const overrides = await loadOverrides(projectDir);
   const effective = applyOverrides(merged, overrides);
 
-  // Pre-compile all glob regexes while we're loading.
-  // Defense-in-depth: wrap each compilation in try/catch so a future
-  // metacharacter that slips through the charset can never throw out of
-  // loadAllPrinciples and deny the entire principle subsystem.  The primary
-  // DoS guarantee lives in globToRegex's escape-all posture above; this is
-  // a belt-and-suspenders backstop (errors-are-values, fail-closed on bad
-  // pattern = skip that pattern's pre-warm, not crash the loader).
-  for (const p of effective) {
-    for (const pattern of p.scope.file_patterns) {
-      try {
-        globToRegex(pattern);
-      } catch (err) {
-        console.warn(
-          "[canon] matcher: pre-compile failed for file_pattern",
-          JSON.stringify(pattern),
-          "on principle",
-          p.id,
-          "— pattern will not match any file:",
-          err instanceof Error ? err.message : err,
-        );
-      }
-    }
-  }
+  // matchGlob is a pure DP function — no compilation phase, no pre-warm needed.
 
   principleCache = { mtimeKey, principles: effective };
   return effective;

@@ -29,15 +29,20 @@ export const TAG_CHARSET = /^[a-z0-9_-]+$/;
  *
  * NOTE: This charset intentionally admits regex metacharacters `( ) { } , !`
  * to support legitimate glob syntax (brace-expansion, extglob).  The DoS
- * guarantee (SyntaxError throw-DoS + ReDoS) does NOT live here — it lives in
- * `globToRegex` (shared/matcher.ts), which escapes all regex metacharacters
- * before constructing `new RegExp`, then selectively restores only the glob
- * wildcards Canon supports (* and **).  A charset-tweak approach (dropping
- * individual metacharacters) is the fragile enumeration posture; the primary
- * defence is the vocabulary-free escape in globToRegex (watch_UUUUUUUU2).
+ * guarantee has two layers:
  *
- * The charset still guards against injection strings (spaces, colons, etc.)
- * and unclosed bracket `[` — but the DoS invariant is owned by globToRegex.
+ *   1. Throw-DoS (SyntaxError from unbalanced groups, unknown quantifiers):
+ *      closed by the old globToRegex escape-all posture — no longer relevant
+ *      since matchGlob (lib/glob-matcher.ts) does not call new RegExp at all.
+ *
+ *   2. Sequential-wildcard ReDoS (a*a*…a*b — O(n^k) in V8's backtracking
+ *      engine): closed by the O(m·n) DP matcher in lib/glob-matcher.ts
+ *      (ADR-0026 §Amendment-3), which removes new RegExp from the match path.
+ *
+ * A charset-tweak approach (dropping individual metacharacters) is the fragile
+ * enumeration posture (watch_UUUUUUUU2).  The primary structural defence is
+ * the vocabulary-free linear matcher; this charset guards only against
+ * injection strings (spaces, colons, etc.) and unclosed bracket `[`.
  */
 export const FILE_PATTERN_CHARSET = /^[A-Za-z0-9._*/{}!,()-]+$/;
 
