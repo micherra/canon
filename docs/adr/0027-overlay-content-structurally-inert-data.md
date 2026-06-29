@@ -1,12 +1,12 @@
 ---
-adr: "0025"
+adr: "0027"
 title: "Overlay content is structurally inert data, not scanned-then-trusted instructions"
 status: accepted
 date: "2026-06-25"
 build: "overlay-inert-data-hardening-4-redesign-replace-the-falsified-scanner"
 ---
 
-# ADR-0025: Overlay content is structurally inert data, not scanned-then-trusted instructions
+# ADR-0027: Overlay content is structurally inert data, not scanned-then-trusted instructions
 
 ## Context
 

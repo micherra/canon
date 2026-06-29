@@ -5,14 +5,14 @@ status: accepted
 date: "2026-06-27"
 build: "overlay-inert-data-hardening-4-redesign-replace-the-falsified-scanner"
 supersedes: ~
-extends: "0025"
+extends: "0027"
 ---
 
 # ADR-0026: Untrusted overlay trust boundary is compiler-and-test enforced, not per-sink fenced
 
 ## Context
 
-ADR-0025 made overlay content structurally inert (neutralize + fence + tier) and is sound. But the
+ADR-0027 made overlay content structurally inert (neutralize + fence + tier) and is sound. But the
 *application* of the fence was per-sink: each MCP tool that serves a project-local principle/routine
 field to the model had to remember to call `fenceUntrustedOverlay`. Three consecutive adversarial
 passes each re-found the SAME class at a DIFFERENT sink:
@@ -112,8 +112,8 @@ The intersection-brand equivalent produces NO error — which is exactly why it 
   simplicity" → reject; re-read the probe (the brand enforces nothing).
 - A new untrusted overlay record type is added → give its free-text fields `UntrustedText` and add it
   to the sink-coverage test; closed-domain fields get a load-boundary charset.
-- The model is shown to act on fenced data despite ADR-0025's policy → strengthen framing per
-  ADR-0025 Revisit-If; not this ADR's concern.
+- The model is shown to act on fenced data despite ADR-0027's policy → strengthen framing per
+  ADR-0027 Revisit-If; not this ADR's concern.
 
 ## Amendment — Override Second-Writer Bypass (2026-06-28)
 

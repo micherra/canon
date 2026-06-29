@@ -97,6 +97,60 @@ Added 2026-05-29.
 
 ---
 
+---
+
+### `overlay-untrusted-text.ts` — Opaque-Box UntrustedText Type (ADR-0026)
+
+Implements the boundary type that makes raw-emission of overlay free-text a `tsc` TS2322 error.
+
+**Exports:**
+- `UntrustedText` — opaque object type (`{ readonly [tag]: "UntrustedText"; readonly _v: string }`), NOT a `string` subtype. Assigning to a `string` field produces TS2322 at compile time.
+- `brandUntrusted(v: string): UntrustedText` — stamps at load boundary; call in `parser.ts` / `routine.ts` only
+- `renderUntrusted(v: UntrustedText, opts: { source: string }): string` — model-facing unwrap: fences for `source==="project"`, passes through for `plugin`/`undefined`
+- `renderUntrustedProjection(v: UntrustedText, opts): string` — projection variant (same fence behavior)
+- `rawUntrustedForStructuralUse(v: UntrustedText): string` — audited escape hatch for non-model-facing use (grep-trackable, CI-tested invariant that callers are structural-only)
+- `mapUntrusted(v: UntrustedText, fn: (s: string) => string): UntrustedText` — brand-preserving transform; use for structural operations that must not lose the brand
+
+**Key constraint:** `_v` never escapes this module directly. All external callers go through the four named entry points above.
+
+Added 2026-06-27.
+
+---
+
+### `overlay-closed-domain.ts` — Shared Closed-Domain Validators (ADR-0026 §Amendment-2)
+
+Shared charset constants and filter functions for Principle/Routine closed-domain fields. Both writers (`parser.ts` and `matcher.ts`) import from here — prevents second-writer bypass.
+
+**Exports:**
+- `LAYER_CHARSET` — regexp for valid layer name characters
+- `FILE_PATTERN_CHARSET` — regexp for valid file-pattern characters (admits glob syntax chars `(){}!,`)
+- `TAG_CHARSET` — regexp for valid tag characters
+- `FILE_PATTERN_MAX_LEN: number` — max allowed length for a single `file_patterns` entry (bounds DP table in `matchGlob`)
+- `filterLayers(arr: string[]): string[]` — drop entries not matching `LAYER_CHARSET` (fail-closed, with `console.warn`)
+- `filterFilePatterns(arr: string[]): string[]` — drop entries not matching `FILE_PATTERN_CHARSET` OR exceeding `FILE_PATTERN_MAX_LEN`
+- `filterTagArray(arr: string[]): string[]` — drop entries not matching `TAG_CHARSET`
+
+Added 2026-06-27.
+
+---
+
+### `glob-matcher.ts` — Linear-Time Glob Matcher (ADR-0026 §Amendment-3)
+
+Replaces `globToRegex`+`new RegExp` in `matcher.ts` with a pure DP function that has no `new RegExp` on the pattern at match time.
+
+**Exports:**
+- `matchGlob(pattern: string, path: string): boolean` — O(m·n) wildcard DP match; supports `*` (non-slash wildcard) and `**` (full wildcard); segment-boundary anchor (`^` or `/`) matches Canon's `(^|/)` semantic
+
+**Why this module exists:** `globToRegex` + `new RegExp` admitted two exploit classes via the `FILE_PATTERN_CHARSET`-legal chars `({` etc.:
+1. **Throw-DoS**: patterns like `"("` → `new RegExp("(^|/)($")` → uncaught `SyntaxError` that propagated out of `loadAllPrinciples`
+2. **ReDoS**: patterns like `"(*){2,}"` → `([^/]*){2,}` (nested unbounded quantifier) → catastrophic backtracking (measured 13s at n=28)
+
+The DP approach removes the regex engine from the match path entirely.
+
+Added 2026-06-27.
+
+---
+
 ## When to Extract to shared/lib/
 
 A pure function belongs in `shared/lib/` when:
