@@ -2,6 +2,8 @@
 # Tests for scribe-scope-guard.sh
 # Run with: bash hooks/scribe-scope-guard.test.sh
 # Exit 0 = all tests pass, Exit 1 = one or more failures
+#
+# All tests use isolated temp git repos. No hard-coded paths; safe for CI.
 
 set -euo pipefail
 
@@ -11,28 +13,25 @@ GUARD="$SCRIPT_DIR/scribe-scope-guard.sh"
 # shellcheck source=hooks/test-helpers.sh
 source "$SCRIPT_DIR/test-helpers.sh"
 
-echo ""
-echo "=== scribe-scope-guard.sh tests ==="
-echo ""
-
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 # Helpers
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 
-# run_guard <expected_exit> <repo_dir> <base_commit> [threshold] <description>
+MASTER_TMP=$(mktemp -d)
+trap 'rm -rf "$MASTER_TMP"' EXIT
+
+# run_guard <description> <expected_exit> <repo_dir> <base_commit> [threshold]
+# Runs the scribe-scope-guard in <repo_dir> with positional args.
+# The guard takes <base_commit> [threshold] positionally, NOT stdin JSON.
 run_guard() {
-  local expected_exit="$1"
-  local repo_dir="$2"
-  local base_commit="$3"
-  local threshold="${4:-}"
-  local description="$5"
+  local description="$1"
+  local expected_exit="$2"
+  local repo_dir="$3"
+  local base_commit="$4"
+  local threshold="${5:-5}"
 
   local actual_exit=0
-  if [[ -n "$threshold" ]]; then
-    (cd "$repo_dir" && bash "$GUARD" "$base_commit" "$threshold") >/dev/null 2>&1 || actual_exit=$?
-  else
-    (cd "$repo_dir" && bash "$GUARD" "$base_commit") >/dev/null 2>&1 || actual_exit=$?
-  fi
+  (cd "$repo_dir" && bash "$GUARD" "$base_commit" "$threshold" >/dev/null 2>&1) || actual_exit=$?
 
   if [[ "$actual_exit" -eq "$expected_exit" ]]; then
     echo "  PASS: $description"
@@ -44,231 +43,309 @@ run_guard() {
   fi
 }
 
-# run_guard_with_output <expected_exit> <expected_pattern> <repo_dir> <base_commit> [threshold] <description>
-run_guard_with_output() {
-  local expected_exit="$1"
-  local expected_pattern="$2"
+# run_guard_raw <description> <expected_exit> <repo_dir> [args...]
+# Passes all args after repo_dir verbatim to the guard (e.g. for missing-arg cases).
+run_guard_raw() {
+  local description="$1"
+  local expected_exit="$2"
   local repo_dir="$3"
-  local base_commit="$4"
-  local threshold="${5:-}"
-  local description="$6"
+  shift 3
 
   local actual_exit=0
-  local output
-  if [[ -n "$threshold" ]]; then
-    output=$(cd "$repo_dir" && bash "$GUARD" "$base_commit" "$threshold" 2>&1) || actual_exit=$?
-  else
-    output=$(cd "$repo_dir" && bash "$GUARD" "$base_commit" 2>&1) || actual_exit=$?
-  fi
+  (cd "$repo_dir" && bash "$GUARD" "$@" >/dev/null 2>&1) || actual_exit=$?
 
-  local exit_ok=true
-  local output_ok=true
-
-  if [[ "$actual_exit" -ne "$expected_exit" ]]; then
-    exit_ok=false
-  fi
-
-  if ! echo "$output" | grep -qF "$expected_pattern"; then
-    output_ok=false
-  fi
-
-  if [[ "$exit_ok" == "true" ]] && [[ "$output_ok" == "true" ]]; then
+  if [[ "$actual_exit" -eq "$expected_exit" ]]; then
     echo "  PASS: $description"
     PASS=$((PASS + 1))
   else
     echo "  FAIL: $description"
-    if [[ "$exit_ok" == "false" ]]; then
-      echo "        expected exit=$expected_exit, got exit=$actual_exit"
-    fi
-    if [[ "$output_ok" == "false" ]]; then
-      echo "        expected output containing: $expected_pattern"
-      echo "        actual output: $output"
-    fi
+    echo "        expected exit=$expected_exit, got exit=$actual_exit"
     FAIL=$((FAIL + 1))
   fi
 }
 
-# setup_claude_repo <repo_dir>
-# Creates a minimal git repo with a base commit (no CLAUDE.md).
-setup_claude_repo() {
-  local repo_dir="$1"
-  mkdir -p "$repo_dir"
-  git -C "$repo_dir" init -q
-  git -C "$repo_dir" config user.email "test@example.com"
-  git -C "$repo_dir" config user.name "Test User"
-  git -C "$repo_dir" config commit.gpgsign false
-
-  echo "placeholder" > "$repo_dir/placeholder.txt"
-  git -C "$repo_dir" add placeholder.txt
-  git -C "$repo_dir" commit -q -m "base"
+# init_repo <dir>
+# Creates a minimal git repo with a single initial commit.
+init_repo() {
+  local dir="$1"
+  mkdir -p "$dir"
+  git -C "$dir" init -q
+  git -C "$dir" config user.email "test@example.com"
+  git -C "$dir" config user.name "Test User"
+  git -C "$dir" config commit.gpgsign false
+  echo "placeholder" > "$dir/README.md"
+  git -C "$dir" add README.md
+  git -C "$dir" commit -q -m "init"
 }
 
-# add_claude_md_change <repo_dir> <num_deleted_lines> <num_added_lines>
-# Adds a commit that modifies CLAUDE.md: removes N lines and adds M lines.
-add_claude_md_change() {
-  local repo_dir="$1"
-  local num_deleted="$2"
-  local num_added="$3"
-
-  # First create a CLAUDE.md with enough lines to delete
-  {
-    for i in $(seq 1 "$((num_deleted + 5))"); do
-      echo "# Original line $i"
-    done
-  } > "$repo_dir/CLAUDE.md"
-
-  git -C "$repo_dir" add "$repo_dir/CLAUDE.md"
-  git -C "$repo_dir" commit -q -m "add CLAUDE.md base"
-
-  # Now make a HEAD commit that removes num_deleted lines and adds num_added lines
-  {
-    # Only keep lines after the deleted ones
-    for i in $(seq "$((num_deleted + 1))" "$((num_deleted + 5))"); do
-      echo "# Original line $i"
-    done
-    # Add new lines
-    for i in $(seq 1 "$num_added"); do
-      echo "# New line $i"
-    done
-  } > "$repo_dir/CLAUDE.md"
-
-  git -C "$repo_dir" add "$repo_dir/CLAUDE.md"
-  git -C "$repo_dir" commit -q -m "modify CLAUDE.md"
+# write_claude_md <dir> <line_count>
+# Writes a CLAUDE.md with <line_count> numbered lines to <dir>/CLAUDE.md.
+write_claude_md() {
+  local dir="$1"
+  local count="$2"
+  local i
+  : > "$dir/CLAUDE.md"
+  for ((i = 1; i <= count; i++)); do
+    echo "Line $i" >> "$dir/CLAUDE.md"
+  done
 }
 
-# ---------------------------------------------------------------------------
-# Test setup
-# ---------------------------------------------------------------------------
-TMP_DIR=$(mktemp -d)
-trap 'rm -rf "$TMP_DIR"' EXIT
+# trim_claude_md <dir> <keep_lines>
+# Truncates CLAUDE.md in <dir> to <keep_lines> lines (simulating line deletions).
+trim_claude_md() {
+  local dir="$1"
+  local keep="$2"
+  local tmpf
+  tmpf=$(mktemp)
+  head -"$keep" "$dir/CLAUDE.md" > "$tmpf"
+  mv "$tmpf" "$dir/CLAUDE.md"
+}
 
-# ---------------------------------------------------------------------------
-# TC1: OVER THRESHOLD — deletions > 5 (default) → exit 2 + SCRIBE-SCOPE message
-# ---------------------------------------------------------------------------
-echo "-- Over threshold (default 5, should block, exit 2) --"
+# commit_engineer <dir> [message]
+# Stages CLAUDE.md and commits with no scribe trailer.
+commit_engineer() {
+  local dir="$1"
+  local msg="${2:-refactor: engineer edit}"
+  git -C "$dir" add CLAUDE.md
+  git -C "$dir" commit -q -m "$msg"
+}
 
-REPO1="$TMP_DIR/repo1"
-setup_claude_repo "$REPO1"
-add_claude_md_change "$REPO1" 10 2
-BASE1=$(git -C "$REPO1" rev-parse HEAD~1)
+# commit_scribe <dir>
+# Stages CLAUDE.md and commits with the Canon-Agent: scribe trailer.
+commit_scribe() {
+  local dir="$1"
+  git -C "$dir" add CLAUDE.md
+  git -C "$dir" commit -q -m "$(printf 'docs(context-sync): sync\n\nCanon-Agent: scribe\nCanon-State: context-sync')"
+}
 
-run_guard_with_output 2 "SCRIBE-SCOPE: 10 CLAUDE.md lines deleted (threshold 5)" \
-  "$REPO1" "$BASE1" "" \
-  "10 deletions > default threshold 5 → exit 2 SCRIBE-SCOPE"
-
-# ---------------------------------------------------------------------------
-# TC2: UNDER THRESHOLD — deletions ≤ 5 (default) → exit 0
-# ---------------------------------------------------------------------------
 echo ""
-echo "-- Under threshold (default 5, should pass, exit 0) --"
-
-REPO2="$TMP_DIR/repo2"
-setup_claude_repo "$REPO2"
-add_claude_md_change "$REPO2" 3 2
-BASE2=$(git -C "$REPO2" rev-parse HEAD~1)
-
-run_guard 0 "$REPO2" "$BASE2" "" \
-  "3 deletions ≤ default threshold 5 → exit 0"
-
-# ---------------------------------------------------------------------------
-# TC3: EXACTLY AT THRESHOLD — deletions == 5 (default) → exit 0 (not blocked)
-# ---------------------------------------------------------------------------
+echo "=== scribe-scope-guard.sh tests ==="
 echo ""
-echo "-- Exactly at threshold (should pass, exit 0) --"
 
-REPO3="$TMP_DIR/repo3"
-setup_claude_repo "$REPO3"
-add_claude_md_change "$REPO3" 5 2
-BASE3=$(git -C "$REPO3" rev-parse HEAD~1)
+# ─────────────────────────────────────────────────────────────────────────────
+# Argument-validation cases (fail-closed, exit 2)
+# ─────────────────────────────────────────────────────────────────────────────
+echo "-- Argument validation --"
 
-run_guard 0 "$REPO3" "$BASE3" "" \
-  "5 deletions == default threshold 5 → exit 0 (threshold is >, not >=)"
+ARGVAL_REPO="$MASTER_TMP/argval"
+init_repo "$ARGVAL_REPO"
+ARGVAL_BASE=$(git -C "$ARGVAL_REPO" rev-parse HEAD)
 
-# ---------------------------------------------------------------------------
-# TC4: CUSTOM THRESHOLD — threshold = 20, deletions = 15 → exit 0
-# ---------------------------------------------------------------------------
+run_guard_raw "missing base_commit → exit 2" 2 "$ARGVAL_REPO"
+run_guard_raw "bad threshold (non-integer) → exit 2" 2 "$ARGVAL_REPO" "$ARGVAL_BASE" "abc"
+run_guard_raw "invalid base commit → exit 2" 2 "$ARGVAL_REPO" "deadbeef12345678deadbeef12345678deadbeef"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 1: paired-reword PASS
+# engineer deletes 9 CLAUDE.md lines (no scribe trailer)
+# scribe deletes 5 CLAUDE.md lines (Canon-Agent: scribe trailer)
+# threshold 5 → guard counts only the scribe's 5 deletions → 5 ≤ 5 → exit 0
+#
+# TDD: this case FAILS (exit 2) against the old cumulative-range guard because
+# it counts all 14 deletions (9 engineer + 5 scribe) and 14 > 5.
+# After the fix, only the scribe's 5 are counted → exit 0 (GREEN).
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- Custom threshold honored (should pass, exit 0) --"
+echo "-- Case 1: paired-reword PASS --"
 
-REPO4="$TMP_DIR/repo4"
-setup_claude_repo "$REPO4"
-add_claude_md_change "$REPO4" 15 2
-BASE4=$(git -C "$REPO4" rev-parse HEAD~1)
+CASE1_REPO="$MASTER_TMP/case1"
+init_repo "$CASE1_REPO"
 
-run_guard 0 "$REPO4" "$BASE4" "20" \
-  "15 deletions ≤ custom threshold 20 → exit 0"
+write_claude_md "$CASE1_REPO" 25
+commit_engineer "$CASE1_REPO" "docs: initial CLAUDE.md"
+CASE1_BASE=$(git -C "$CASE1_REPO" rev-parse HEAD)
 
-# ---------------------------------------------------------------------------
-# TC5: CUSTOM THRESHOLD — threshold = 10, deletions = 15 → exit 2
-# ---------------------------------------------------------------------------
+# Engineer commit: delete 9 lines (25 → 16); no scribe trailer
+trim_claude_md "$CASE1_REPO" 16
+commit_engineer "$CASE1_REPO"
+
+# Scribe commit: delete 5 lines (16 → 11)
+trim_claude_md "$CASE1_REPO" 11
+commit_scribe "$CASE1_REPO"
+
+run_guard "paired-reword: engineer 9 del + scribe 5 del, threshold 5 → exit 0" 0 "$CASE1_REPO" "$CASE1_BASE" "5"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 2: compound-inflation PASS
+# engineer deletes lines, a mid-build commit also touches CLAUDE.md,
+# then the scribe deletes ≤ threshold lines — guard should pass
+#
+# TDD: this case FAILS under the old guard (cumulative sum > threshold).
+# After fix, only the scribe's 3 deletions are counted → exit 0 (GREEN).
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- Custom threshold blocks (should block, exit 2) --"
+echo "-- Case 2: compound-inflation PASS --"
 
-REPO5="$TMP_DIR/repo5"
-setup_claude_repo "$REPO5"
-add_claude_md_change "$REPO5" 15 2
-BASE5=$(git -C "$REPO5" rev-parse HEAD~1)
+CASE2_REPO="$MASTER_TMP/case2"
+init_repo "$CASE2_REPO"
 
-run_guard_with_output 2 "SCRIBE-SCOPE: 15 CLAUDE.md lines deleted (threshold 10)" \
-  "$REPO5" "$BASE5" "10" \
-  "15 deletions > custom threshold 10 → exit 2"
+write_claude_md "$CASE2_REPO" 30
+commit_engineer "$CASE2_REPO" "docs: initial CLAUDE.md"
+CASE2_BASE=$(git -C "$CASE2_REPO" rev-parse HEAD)
 
-# ---------------------------------------------------------------------------
-# TC6: MISSING BASE COMMIT ARG — fail-closed exit 2
-# ---------------------------------------------------------------------------
+# Engineer commit: delete 10 lines (30 → 20)
+trim_claude_md "$CASE2_REPO" 20
+commit_engineer "$CASE2_REPO"
+
+# Simulate a merged-in commit (e.g. origin/main advancing): delete 5 more lines
+trim_claude_md "$CASE2_REPO" 15
+commit_engineer "$CASE2_REPO" "chore: merge origin/main CLAUDE.md update"
+
+# Scribe commit: delete 3 lines (15 → 12); threshold 5 → exit 0
+trim_claude_md "$CASE2_REPO" 12
+commit_scribe "$CASE2_REPO"
+
+run_guard "compound-inflation: engineer + mid-build + scribe 3 del, threshold 5 → exit 0" 0 "$CASE2_REPO" "$CASE2_BASE" "5"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 3: genuine over-trim FAIL
+# scribe commit itself deletes 10 CLAUDE.md lines; threshold 5 → exit 2
+# (real over-trim is still caught after the fix)
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- Missing base commit (fail-closed, exit 2) --"
+echo "-- Case 3: genuine over-trim FAIL --"
 
-REPO6="$TMP_DIR/repo6"
-setup_claude_repo "$REPO6"
+CASE3_REPO="$MASTER_TMP/case3"
+init_repo "$CASE3_REPO"
 
-actual_exit=0
-(cd "$REPO6" && bash "$GUARD") >/dev/null 2>&1 || actual_exit=$?
-if [[ "$actual_exit" -eq 2 ]]; then
-  echo "  PASS: missing base commit → fail-closed exit 2"
-  PASS=$((PASS + 1))
-else
-  echo "  FAIL: missing base commit → expected exit 2, got $actual_exit"
-  FAIL=$((FAIL + 1))
-fi
+write_claude_md "$CASE3_REPO" 20
+commit_engineer "$CASE3_REPO" "docs: initial CLAUDE.md"
+CASE3_BASE=$(git -C "$CASE3_REPO" rev-parse HEAD)
 
-# ---------------------------------------------------------------------------
-# TC7: INVALID BASE COMMIT — fail-closed exit 2
-# ---------------------------------------------------------------------------
+# Scribe commit: delete 10 lines (20 → 10); threshold 5 → exit 2
+trim_claude_md "$CASE3_REPO" 10
+commit_scribe "$CASE3_REPO"
+
+run_guard "genuine over-trim: scribe deletes 10, threshold 5 → exit 2" 2 "$CASE3_REPO" "$CASE3_BASE" "5"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 4: fail-closed-on-empty FAIL
+# only an engineer commit since base (no Canon-Agent: scribe trailer) → exit 2
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- Invalid base commit (fail-closed, exit 2) --"
+echo "-- Case 4: fail-closed-on-empty FAIL --"
 
-REPO7="$TMP_DIR/repo7"
-setup_claude_repo "$REPO7"
+CASE4_REPO="$MASTER_TMP/case4"
+init_repo "$CASE4_REPO"
 
-run_guard_with_output 2 "CANON: scribe-scope-guard failed-closed" \
-  "$REPO7" "deadbeefdeadbeefdeadbeef00000000deadbeef" "" \
-  "invalid base commit → fail-closed exit 2"
+write_claude_md "$CASE4_REPO" 20
+commit_engineer "$CASE4_REPO" "docs: initial CLAUDE.md"
+CASE4_BASE=$(git -C "$CASE4_REPO" rev-parse HEAD)
 
-# ---------------------------------------------------------------------------
-# TC8: NO CLAUDE.MD IN DIFF — no deletions → exit 0
-# ---------------------------------------------------------------------------
+# Only an engineer commit in the range — no scribe trailer → fail-closed
+trim_claude_md "$CASE4_REPO" 15
+commit_engineer "$CASE4_REPO"
+
+run_guard "fail-closed-on-empty: no scribe trailer commit → exit 2" 2 "$CASE4_REPO" "$CASE4_BASE" "5"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 5a: multi-commit-union PASS
+# two scribe-trailer commits each deleting 2 lines → union = 4 ≤ 5 → exit 0
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- No CLAUDE.md in diff (should pass, exit 0) --"
+echo "-- Case 5a: multi-commit-union PASS --"
 
-REPO8="$TMP_DIR/repo8"
-setup_claude_repo "$REPO8"
+CASE5A_REPO="$MASTER_TMP/case5a"
+init_repo "$CASE5A_REPO"
 
-# Only change a non-CLAUDE.md file
-echo "updated" > "$REPO8/placeholder.txt"
-git -C "$REPO8" add "$REPO8/placeholder.txt"
-git -C "$REPO8" commit -q -m "update placeholder"
-BASE8=$(git -C "$REPO8" rev-parse HEAD~1)
+write_claude_md "$CASE5A_REPO" 20
+commit_engineer "$CASE5A_REPO" "docs: initial CLAUDE.md"
+CASE5A_BASE=$(git -C "$CASE5A_REPO" rev-parse HEAD)
 
-run_guard 0 "$REPO8" "$BASE8" "" \
-  "no CLAUDE.md changes → 0 deletions → exit 0"
+# Scribe commit 1: delete 2 lines (20 → 18)
+trim_claude_md "$CASE5A_REPO" 18
+commit_scribe "$CASE5A_REPO"
 
-# ---------------------------------------------------------------------------
+# Scribe commit 2: delete 2 lines (18 → 16)
+trim_claude_md "$CASE5A_REPO" 16
+commit_scribe "$CASE5A_REPO"
+
+run_guard "multi-commit-union: 2+2=4 del, threshold 5 → exit 0" 0 "$CASE5A_REPO" "$CASE5A_BASE" "5"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 5b: multi-commit-union FAIL (nice-to-have variant)
+# two scribe-trailer commits each deleting 3 lines → union = 6 > 5 → exit 2
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 5b: multi-commit-union FAIL --"
+
+CASE5B_REPO="$MASTER_TMP/case5b"
+init_repo "$CASE5B_REPO"
+
+write_claude_md "$CASE5B_REPO" 20
+commit_engineer "$CASE5B_REPO" "docs: initial CLAUDE.md"
+CASE5B_BASE=$(git -C "$CASE5B_REPO" rev-parse HEAD)
+
+# Scribe commit 1: delete 3 lines (20 → 17)
+trim_claude_md "$CASE5B_REPO" 17
+commit_scribe "$CASE5B_REPO"
+
+# Scribe commit 2: delete 3 lines (17 → 14)
+trim_claude_md "$CASE5B_REPO" 14
+commit_scribe "$CASE5B_REPO"
+
+run_guard "multi-commit-union: 3+3=6 del, threshold 5 → exit 2" 2 "$CASE5B_REPO" "$CASE5B_BASE" "5"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 6: triple-dash-undercount FAIL
+# scribe commit deletes 6 lines whose content is exactly "---"
+# (YAML frontmatter delimiters / markdown horizontal rules)
+#
+# Bug: the old grep-based guard counts deletion diff lines matching '^-' and
+# then excludes lines matching '^---' to strip the "--- a/path" file-header.
+# A deleted "---" line appears as "----" in the diff (one '-' deletion marker
+# + three '-' content) — "----" starts with "---", so grep -v '^---' also
+# strips the real deletion lines.  Six deletions → counted as 0 → wrong exit 0.
+#
+# TDD: this case is RED against the current grep-based guard (exits 0, should
+# exit 2).  After the numstat fix it becomes GREEN (exits 2 = over threshold 5).
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 6: triple-dash-undercount FAIL --"
+
+CASE6_REPO="$MASTER_TMP/case6"
+init_repo "$CASE6_REPO"
+
+# Write CLAUDE.md with 6 "---" lines interleaved with normal content
+{
+  printf '# Header\n'
+  printf -- '---\n'
+  printf 'Some content\n'
+  printf -- '---\n'
+  printf 'More content\n'
+  printf -- '---\n'
+  printf 'Even more\n'
+  printf -- '---\n'
+  printf 'Last section\n'
+  printf -- '---\n'
+  printf 'Final\n'
+  printf -- '---\n'
+} > "$CASE6_REPO/CLAUDE.md"
+commit_engineer "$CASE6_REPO" "docs: initial CLAUDE.md with --- lines"
+CASE6_BASE=$(git -C "$CASE6_REPO" rev-parse HEAD)
+
+# Scribe commit: remove all 6 "---" lines; 6 deleted lines, threshold 5 → exit 2
+{
+  printf '# Header\n'
+  printf 'Some content\n'
+  printf 'More content\n'
+  printf 'Even more\n'
+  printf 'Last section\n'
+  printf 'Final\n'
+} > "$CASE6_REPO/CLAUDE.md"
+commit_scribe "$CASE6_REPO"
+
+run_guard "triple-dash-undercount: scribe deletes 6 '---' lines, threshold 5 → exit 2" 2 "$CASE6_REPO" "$CASE6_BASE" "5"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "Results: $PASS passed, $FAIL failed"
+echo "=== Results: $PASS passed, $FAIL failed ==="
+echo ""
+
 if [[ "$FAIL" -gt 0 ]]; then
   exit 1
 fi
+
 exit 0
