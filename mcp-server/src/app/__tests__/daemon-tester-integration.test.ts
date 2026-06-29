@@ -105,6 +105,7 @@ async function pollUntil(
 ): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < deadlineMs) {
+    // biome-ignore lint/performance/noAwaitInLoops: sequential polling — each iteration must observe the prior await's result before the next probe
     if (await condition()) return;
     await new Promise<void>((r) => setTimeout(r, intervalMs));
   }
