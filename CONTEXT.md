@@ -4,6 +4,10 @@ This file defines Canon's ubiquitous language: what terms **mean** in this syste
 
 ---
 
+## ADR (Architecture Decision Record)
+
+A durable record of a consequential architecture decision that passes the 3-condition gate: (1) the decision is irreversible or hard to reverse, (2) it involves a significant design tradeoff, and (3) it is likely to be re-litigated without a written record. Written by the architect to `docs/adr/NNNN-slug.md` (sequential numeric ID enforced by the ADR sequential-ID gate). ADRs are committed to the build branch so they ship alongside the code they document. 28 ADRs tracked as of the 231-commit drift window.
+
 ## Blast Radius
 
 The transitive set of files affected by changing a given file, measured by the knowledge graph (`graph_query({ query_type: "blast_radius" })`). Used for risk assessment during review partitioning — files with a large blast radius warrant smaller reviewer groups and more careful analysis.
@@ -50,7 +54,7 @@ The file `journal.json` in the workspace root. An ordered log of step executions
 
 ## Loop
 
-A Canon-managed periodic-observation artifact authored as `loops/<id>.md` (YAML frontmatter + action-prompt body). The `loops/` directory at the repo root is the loop registry — no hardcoded catalog exists. Loops are discovered via `list_loops` and dispatched by the orchestrator via `CronCreate` at a named lifecycle moment (`post-ship`, `on-long-dispatch`, `session-start`). Nothing auto-starts; authoring a `loops/*.md` registers the definition but does not start the loop (dc-06 non-declarative constraint). Phase A ships the framework spine (schema, registry, MCP tools, `_probe` demo); Phase B adds ship-watch; Phase C adds self-paced mode + session-watch; Phase D adds harness-watch + `run-learner` action.
+A Canon-managed periodic-observation artifact authored as `loops/<id>.md` (YAML frontmatter + action-prompt body). The `loops/` directory at the repo root is the loop registry — no hardcoded catalog exists. Loops are discovered via `list_loops` and dispatched by the orchestrator via `CronCreate` at a named lifecycle moment (`post-ship`, `on-long-dispatch`, `session-start`). Nothing auto-starts; authoring a `loops/*.md` registers the definition but does not start the loop (dc-06 non-declarative constraint). Phase A ships the framework spine (schema, registry, MCP tools, `_probe` demo); Phase B adds ship-watch; Phase C adds self-paced mode + session-watch; Phase D adds harness-watch + `run-learner` action; Phase E adds evolve + `run-evolve` action.
 
 ## Orchestrator Checkpoint
 
@@ -67,6 +71,10 @@ A codified quality standard with severity (`rule` > `strong-opinion` > `conventi
 ## Rule (Agent-Behavior)
 
 An imperative behavioral constraint loaded into an agent's context at spawn time. Rules govern agent execution patterns (e.g., TDD required, structured triage, artifact-write-before-return). Stored in `rules/` and listed in agent frontmatter under the `rules:` key. Distinct from Canon principles, which govern code quality.
+
+## Routine
+
+A Canon-managed scheduled or automated task, stored as a structured markdown file with YAML frontmatter in `routines/<name>.md`. Routines are Canon's 5th managed artifact class (after principles, loops, workspaces, and worktrees). The `routines/` directory at the repo root is the canonical registry; project-local overrides live in `.canon/routines/`. Discovered via `list_routines`, retrieved via `get_routine`, and synchronized from remote schedules via `sync_routines`. A generated index lives at `routines/.claude/CLAUDE.md`. Routines differ from loops: loops are periodic-observation pipelines fired by the orchestrator at lifecycle moments; routines are standalone automated tasks managed with a full state and schedule layer.
 
 ## Runbook
 

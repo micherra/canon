@@ -22,7 +22,7 @@ src/
 │   └── workspaces/       # Workspace and execution store (SQLite persistence)
 ├── features/             # Tool implementations grouped by bounded context
 │   ├── diagnostics/      # Drift reports, agent metrics, summary storage, wiki lint
-│   ├── evolution/        # evaluate_candidate (§7 holdout, ADR-0022) + attribute_failure attribution consumer (provenance⋈failure join, ADR-0024)
+│   ├── evolution/        # evaluate_candidate (§7 holdout, dual injection ADR-0022/ADR-0025) + attribute_failure (provenance⋈failure join, ADR-0024) + select_mutation_targets (deterministic, no model calls)
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, codebase_graph, git-intel
@@ -47,7 +47,7 @@ src/
 - **Archive storage** (`platform/storage/archive/`) — build-archive persistence (ADR-0006 relocation from `features/history/services/`): `archiveWorkspace`, `buildRunSummary`, pure extractors, shared archive types. See `src/platform/storage/archive/.claude/CLAUDE.md`.
 - **Orchestration tools** (`features/orchestration/`) — workspace lifecycle, artifact writing, agent skill resolution. See `src/features/orchestration/.claude/CLAUDE.md`.
 - **Diagnostics tools** (`features/diagnostics/`) — drift reports, wiki lint, signal compiler, area memory, doc freshness. See `src/features/diagnostics/.claude/CLAUDE.md`.
-- **Evolution tools** (`features/evolution/`) — `evaluate_candidate` fitness gate (§7 holdout, ADR-0022) + `attribute_failure` attribution consumer (provenance⋈failure join, content_hash byte-identity, ADR-0024). See `src/features/evolution/.claude/CLAUDE.md`.
+- **Evolution tools** (`features/evolution/`) — `evaluate_candidate` fitness gate (§7 holdout, dual injection ADR-0022/ADR-0025) + `attribute_failure` attribution consumer (provenance⋈failure join, content_hash byte-identity, ADR-0024) + `select_mutation_targets` (deterministic selection, no model calls). See `src/features/evolution/.claude/CLAUDE.md`.
 - **History tools + RecurringViolation types** → `src/features/history/.claude/CLAUDE.md`.
 - **History services** (`features/history/services/`) — cross-run analysis, craft drift, judge-weight, consolidate-policy. See `src/features/history/services/.claude/CLAUDE.md`.
 - **Loop tools** (`features/loops/`) — loop-definition schema, registry loader, list_loops/get_loop_definition. See `src/features/loops/.claude/CLAUDE.md`.
@@ -193,12 +193,18 @@ src/
 | `get_routine` | Retrieve a single routine by name; returns frontmatter + body; `INVALID_INPUT` when not found |
 | `sync_routines` | Sync routine state to `.canon/routines/`; returns drift summary |
 
-**Evolution tools** (`src/features/evolution/`): <!-- last-updated: 2026-06-25 -->
+**Evolution tools** (`src/features/evolution/`): <!-- last-updated: 2026-06-26 -->
 
 | Tool | Purpose |
 |------|---------|
-| `evaluate_candidate` | Inject candidate text into a temp-dir copy of the eval surface, run `run-evals.sh` per split, apply §7 strict-holdout gate; returns `EvaluateCandidateResult` (`baseline_score`, `candidate_score`, `per_split`, `accepted`, `regressed`, `size_delta`, `judge_votes_holdout`); fail-closed on subprocess error or timeout; registered via `register-evolution.ts` |
+| `evaluate_candidate` | Inject candidate text into a temp-dir copy of the eval surface or a full-plugin sandbox (ADR-0025 dual injection mode; see below), run `run-evals.sh` per split, apply §7 strict-holdout gate; returns `EvaluateCandidateResult` (`baseline_score`, `candidate_score`, `per_split`, `accepted`, `regressed`, `size_delta`, `judge_votes_holdout`); fail-closed on subprocess error or timeout; public `EvaluateCandidateInputSchema`/`EvaluateCandidateResult` contract UNCHANGED; registered via `register-evolution.ts` |
 | `attribute_failure` | Join recorded `context_provenance` events with review violations + cliff events to localize each failure to the in-context artifact; accepts `workspace` OR `archive_id` + `project_dir`; returns `AttributeFailureResult` with `attributions[]`, `unattributed[]`, `flagged[]`, `ambiguous[]`; content_hash byte-identity re-check (fail-closed); fail-open on absent provenance/reviews → partial result; `FailureKind = "review_violation" \| "cliff_event"` (ADR-0024) |
+| `select_mutation_targets` | Deterministic (no model calls): composes `attribute_failure` pipeline, applies selection policy (`hash_verified` + `confidence:high` + `gate_eligible`) + budget (`max_targets_per_pass`, default 3), reads baseline bodies, returns bounded `MutationTarget[]` with `gate_eligible` + `baseline_body`; ineligible/skipped paths land in typed `gate_ineligible[]` / `skipped[]` buckets; accepts `workspace` OR `archive_id` + `project_dir`; registered via `register-evolution.ts` |
+
+**`evaluate_candidate` dual injection mode (ADR-0025):** mode auto-selected from `target_path` — no caller change needed.
+- **Eval-surface mode** (ADR-0022, unchanged): `target_path` under `skills/canon/evals/` → copies only `skills/canon/evals/` into a temp dir.
+- **Guardrail mode** (ADR-0025, new): `target_path` under any plugin artifact root (`rules/`, `primers/`, `agents/`, `templates/`, `principles/`, `skills/`, `references/`) but NOT under the eval surface → copies the full plugin markdown tree (`PLUGIN_ARTIFACT_ROOTS`) into a temp sandbox and passes `--plugin-dir <sandbox> --setting-sources project` to `claude -p` via the `EVAL_PLUGIN_DIR` env var in `run-evals.sh`. Tool-descriptions (TypeScript in `register-*.ts`) are NOT plugin-loaded → they remain gate-ineligible (`GateIneligibleTarget.reason = "tool_description_not_loadable"`).
+- **Public contract unchanged**: callers pass the same `{ candidate_text, target_path, project_dir, splits? }` — the handler dispatches internally via `isGuardrailTarget(targetPath)`.
 
 ## Dependencies
 <!-- last-updated: 2026-06-24 -->

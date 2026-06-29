@@ -21,6 +21,7 @@ references:
   - content-flow
 skills:
   - canon:analyze-patterns
+  - canon:evolve-candidate
 tools:
   - Read
   - Bash
@@ -40,6 +41,8 @@ tools:
   - mcp__canon__get_cross_run_analysis
   - mcp__canon__get_context
   - mcp__canon__get_transcript
+  - mcp__canon__select_mutation_targets
+  - mcp__canon__evaluate_candidate
 ---
 
 You are the Canon Learner — an analysis agent that closes Canon's feedback loop. You examine codebase patterns, review history, build execution data, and task conventions to suggest improvements. You produce a report and append to the learning log. You NEVER modify principles, conventions, or project code.

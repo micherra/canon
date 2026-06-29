@@ -478,6 +478,8 @@ Before any agent mutates a shared workspace artifact (journal, board, checkpoint
 | Shipper | `canon:shipper` | Ship states |
 | Writer | `canon:writer` | Principle authoring and artifact retirement (HITL-gated) |
 | Learner | `canon:learner` | Pattern analysis |
+| Evaluator | `canon:evaluator` | Lightweight quality gate — structural signal verdict (PASS/FAIL) on engineer diffs; runs on Haiku |
+| Janitor | `canon:janitor` | Background housekeeping — dispatched when `invoke_janitor` returns `needs_prune: true`, a post-run outcome signal that routine pruning already ran (not a trigger to prune) |
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
 
@@ -521,6 +523,8 @@ When an agent failure or stuck condition is detected (`isStuck` returns true, ag
 **Flow-specific config**: Pass `flow_config: { skip_strategies: ["narrow_scope"] }` for security flows. The escalation tool handles the skip internally.
 
 **Timeout**: The tool enforces a 2-minute cumulative timeout. If the cascade has been running for 2+ minutes, it returns "hitl" regardless of remaining strategies. The orchestrator does not need to track time separately.
+
+**Adversarial-surface iteration signal**: When a fix loop runs 3+ rounds AND every reviewer finding in those rounds is a confirmed true positive on a NEW, distinct bypass or failure class (not a regression introduced by a prior fix, not noise, not churn), surface the following signal to the user BEFORE spawning another patch engineer: "Fix loop at N rounds: all findings are true positives on new bypass classes. This surface likely needs a vocabulary-free / authoritative-primitive design change rather than another patch iteration. Consider delegating to the authoritative platform primitive or relocating the gate — see `[[delegate-to-authoritative-primitive]]`." The discriminator: true positives on new classes (different shapes each round) → rethink signal; same shape re-introduced or churn → normal HITL escalation.
 
 ## Re-spawn Enrichment Protocol
 
@@ -576,6 +580,7 @@ a plugin cannot do this.
 demo; no production loop ran. Phase B ships `loops/ship-watch.md` — the first real loop,
 dispatched via the post-ship tap. Phase C ships session-watch + self-paced mode.
 Phase D ships harness-watch — the accumulated-build-signal observer, fired post-ship, surfaces `run-learner`.
+Phase E ships evolve — the session-start attribution-signal observer, surfaces `run-evolve`.
 Discovery: `list_loops`.
 
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
@@ -598,6 +603,8 @@ Discovery: `list_loops`.
 - `firing_posture[tier] === "disabled"` → skip silently.
 
 `session-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in).
+`evolve` is also a session-start loop (autonomous/light-touch → auto, supervised → opt-in); it observes
+accumulated attribution signal and surfaces `run-evolve` when gate-eligible targets exist.
 
 **Non-declarative invariant (dc-06):** Only the orchestrator initiates `CronCreate` or
 `ScheduleWakeup`. Authoring `loops/session-watch.md` only registers the definition — it does
@@ -637,11 +644,25 @@ to `.canon/`. dc-06 holds: the `harness-watch` loop only surfaces the signal via
 `ORCHESTRATOR_ACTION: run-learner field=learner_due loop=harness-watch`; the orchestrator
 spawns the learner.
 
+**`run-evolve`** (fires on the `evolve` loop's `evolve_due` false→true transition): The
+orchestrator spawns the learner's `canon:evolve-candidate` pass (`select_mutation_targets →
+inline Sonnet rewrite → evaluate_candidate holdout → shape → write accepted proposals to
+`.canon/proposed-learnings/`). Under the `supervised` tier, ASK the user first before
+spawning; under `autonomous` and `light-touch`, auto-spawn but fire a `PushNotification`
+first (the pass is multi-minute and runs many `claude -p` eval calls — cost visibility is
+mandatory before an automatic long-running dispatch). Proposals are HITL-gated regardless of
+tier. The spawned pass emits ONLY `accepted===true` candidates (evolution-hard-gate preserved);
+candidate generation stays in the learner skill (model-step-in-agent-layer — the loop, the
+runner, and the dispatch never invoke a model). dc-06 holds: the `evolve` loop only surfaces
+`ORCHESTRATOR_ACTION: run-evolve field=evolve_due loop=evolve`; the orchestrator spawns the
+learner. NO contract change to `select_mutation_targets`, `evaluate_candidate`,
+`attribute_failure`, or `context_provenance` — consumed as-is.
+
 ## Project Structure <!-- last-updated: 2026-06-25 -->
 
 ```
 canon/
-├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (25 terms)
+├── CONTEXT.md            # Domain glossary — authoritative definitions for Canon ubiquitous language (27 terms)
 ├── context-manifest.json # Content-hash manifest of the installed context-artifact corpus; regenerated via `npm run regen:context-manifest`
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── docs/
@@ -658,16 +679,17 @@ canon/
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
-│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase D current)
+│       │   ├── history/         # get_build_history, get_historical_artifacts, get_cross_run_analysis — cross-run analysis for learner
+│       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase E current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes, check_context_staleness
 │       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase D: _probe + ship-watch + session-watch + harness-watch)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
-├── principles/           # Built-in principles (64 total: 6 rules, 36 strong-opinions, 22 conventions); 26 Canon-internal principles in .canon/principles/ (portable: false)
+├── principles/           # Built-in principles (64 total: 6 rules, 36 strong-opinions, 22 conventions); 35 Canon-internal principles in .canon/principles/ (portable: false)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/

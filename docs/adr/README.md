@@ -22,6 +22,8 @@ git fetch origin && git ls-tree origin/main docs/adr/ | grep -oE '[0-9]{4}' | so
 
 If the chosen number is now taken, renumber the ADR (file rename + heading + frontmatter + README index row + any in-tree cross-references) before pushing. Resolving collisions by keeping both rows in numeric order is the canonical resolution; the pre-push mergeability check is the reliable detection point when a re-verify is skipped.
 
+**Mechanical gate (automated backstop)**: `hooks/adr-number-check.sh` enforces the origin/main collision check automatically at push time — it blocks a `git push` that adds `docs/adr/NNNN-*.md` whose `NNNN` already exists on `origin/main` under a different slug (network-free, uses local `git ls-tree origin/main`). The manual re-verify above is still recommended pre-ship practice; the hook is a fail-closed backstop for missed or skipped re-verifies.
+
 ## The Conjunctive 3-Condition Gate
 
 An ADR is written **only when ALL THREE conditions hold**:

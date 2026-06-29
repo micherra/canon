@@ -15,7 +15,11 @@ import { join } from "node:path";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
-import { withInjectedCandidate } from "../services/candidate-injection.ts";
+import {
+  isGuardrailTarget,
+  withInjectedCandidate,
+  withInjectedGuardrailCandidate,
+} from "../services/candidate-injection.ts";
 import type { PerSplit } from "../services/eval-runner.ts";
 import { decideGate, parseSummary, runSplit } from "../services/eval-runner.ts";
 
@@ -80,9 +84,17 @@ async function runOneSplit(
 ): Promise<ToolResult<SummaryScore>> {
   const judgeVotes = split === "holdout" ? HOLDOUT_JUDGE_VOTES : 1;
 
-  const result = await withInjectedCandidate(projectDir, fileContent, targetPath, async (tmpDir) =>
-    runSplit(tmpDir, split, { judgeVotes, structuredJudge: true }),
-  );
+  // Auto-select injection mode based on target_path (ADR-0025):
+  // - Guardrail-corpus targets (rules/, agents/, primers/, etc.) → full plugin sandbox injection.
+  //   The sandbox is passed as pluginDir so run-evals.sh loads the rewritten guardrail artifact.
+  // - Eval-surface targets (skills/canon/evals/**) → eval-surface injection (ADR-0022, unchanged).
+  const result = isGuardrailTarget(targetPath)
+    ? await withInjectedGuardrailCandidate(projectDir, fileContent, targetPath, async (tmpDir) =>
+        runSplit(tmpDir, split, { judgeVotes, pluginDir: tmpDir, structuredJudge: true }),
+      )
+    : await withInjectedCandidate(projectDir, fileContent, targetPath, async (tmpDir) =>
+        runSplit(tmpDir, split, { judgeVotes, structuredJudge: true }),
+      );
 
   // Timeout is always fail-closed — even if stdout contains a summary line, we reject.
   if (result.timedOut) {
@@ -138,9 +150,19 @@ async function checkScriptReachable(
   candidateText: string,
   targetPath: string,
 ): Promise<ToolResult<{ ok: true }>> {
-  const check = await withInjectedCandidate(projectDir, candidateText, targetPath, async (tmpDir) =>
-    runSplit(tmpDir, "train", { dryRun: true, judgeVotes: 1, structuredJudge: false }),
-  );
+  // Same mode auto-selection as runOneSplit (ADR-0025).
+  const check = isGuardrailTarget(targetPath)
+    ? await withInjectedGuardrailCandidate(projectDir, candidateText, targetPath, async (tmpDir) =>
+        runSplit(tmpDir, "train", {
+          dryRun: true,
+          judgeVotes: 1,
+          pluginDir: tmpDir,
+          structuredJudge: false,
+        }),
+      )
+    : await withInjectedCandidate(projectDir, candidateText, targetPath, async (tmpDir) =>
+        runSplit(tmpDir, "train", { dryRun: true, judgeVotes: 1, structuredJudge: false }),
+      );
 
   if (check.timedOut) {
     return toolError(
