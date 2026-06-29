@@ -117,7 +117,7 @@ For each accepted proposal:
 **Arm M — primer / agent / template direct-write:**
 
 1. Resolve `target_path` from proposal frontmatter. If `target_path` is absent or the file does not exist on disk under the matching artifact directory (`primers/`, `agents/`, `templates/`), fall through to Arm F — do not create new files.
-2. Extract the candidate body from the `## Proposed Change` fenced code block in the proposal body.
+2. Extract the candidate body from the `## Proposed Change` section: the candidate body is everything between the opening fence (the line immediately after the `(full-file rewrite)` / `(span-guided …)` marker line) and the **final** closing fence of the `## Proposed Change` section. Nested ``` fences may appear inside the body — take the outermost span, do not stop at the first inner closing fence. If no `## Proposed Change` fenced block is found, or the extracted candidate body is empty or whitespace-only, fall through to Arm F (manual-apply required) — do NOT Write the target file.
 3. Read the CURRENT on-disk content of `target_path`. Render a diff (current vs candidate body) and present it to the reviewer before asking for confirmation:
 
    ```
@@ -128,7 +128,7 @@ For each accepted proposal:
 
 4. Ask: **"Accept / Reject / Skip this {artifact_class} change to {target_path}?"**
 
-   - **Accept**: Write the candidate body to `target_path` (full-file replace; if the proposal indicates a span-guided edit via `char_span`, splice the candidate into the indicated span instead). Then call the `sync_indexes` MCP tool to refresh the index inventory row for this artifact class. Advise: `"Change applied to {target_path}. Run /canon:check to verify."` Then move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl` with `artifact_class` and `apply_channel` included:
+   - **Accept**: Write the candidate body to `target_path` (full-file replace). Then call the `sync_indexes` MCP tool to refresh the index inventory row for this artifact class. Advise: `"Change applied to {target_path}. Run /canon:check to verify."` Then move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl` with `artifact_class` and `apply_channel` included:
      ```json
      {"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"...","artifact_class":"...","apply_channel":"engineer-build-flow"}
      ```
