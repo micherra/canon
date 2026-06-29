@@ -200,7 +200,7 @@ After emitting proposals, surface the routing intent to the orchestrator:
 | apply_channel | Next step |
 |---|---|
 | `writer` | Route to the `canon:writer` agent via `content-flow/learn-apply` for conflict detection, format validation, and the actual edit. |
-| `engineer-build-flow` | Route via a build flow under plan-approval HITL. (Non-principle enrichment for `/canon:review-learnings` is deferred — Q5 of Phase 1 design.) |
+| `engineer-build-flow` | Handled by `/canon:review-learnings`: primer/agent/template proposals → diff → Accept → direct-write + `sync_indexes`; tool-description proposals → surface-only (manual-apply instructions, no auto-write); unknown artifact class → fail-safe ("manual-apply required"). All arms require explicit reviewer confirmation before any write. |
 
 The learner NEVER applies proposals itself. Surface them and stop.
 
