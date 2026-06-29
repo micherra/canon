@@ -281,3 +281,30 @@ Minimize text output during the execution loop. Output is allowed only at:
 6. Error and preflight presentations
 
 Do not narrate individual tool calls. Do not expose Canon jargon.
+
+## Reconciliation-on-Resume
+
+**Reconciliation-on-resume (cliff detection → observe → surface).** Before
+continuing, call `reconcile_workspace({ workspace, emit_telemetry: true, source:
+"resume" })`. This both detects the cliff and (via `emit_telemetry: true`)
+records the `cliff_detected` telemetry automatically — mechanical enforcement, no
+separate logging instruction. Each entry in `incomplete_steps` is a
+`started`/`planned` step that either (a) has a declared artifact missing on disk
+(`missing_artifacts`), or (b) has an artifact present but still a `## Status:
+Partial` / `IN_PROGRESS` skeleton (`partial_artifacts`) — an agent that stopped
+before producing or finishing its artifact. For each entry:
+1. **Harvest** the dead agent's transcript (read-only, best-effort observation —
+   NOT recovery): call `capture_transcript({ workspace, step_id, agent_type,
+   agent_id?, source_path?, persist_path: true })`. Pass the `agent_id` from the
+   original Agent spawn result (or the journal) when available; if the agent died
+   before its completion was logged, pass `source_path` if known. If neither is
+   available, capture is a best-effort no-op (it returns a warning, never an
+   error) — proceed regardless. `persist_path: true` makes the recovered
+   transcript findable by `get_transcript` so the user can inspect it.
+2. If `needs_recovery: true`, **surface** the incomplete steps to the user via the
+   "Incomplete-step surfacing (cliff detected)" HITL pattern and STOP. **Do NOT
+   automatically re-spawn** — the user decides whether to manually re-run the
+   step, abandon it, or inspect the harvested transcript.
+
+Reconciliation runs against the BUILD journal. It is advisory and read-only — a
+`reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
