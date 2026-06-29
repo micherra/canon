@@ -150,6 +150,15 @@ check_mcp_json_payload_shellcheck() {
   return "$sc_ok"
 }
 
+# Check 4 — workflows/ CI lint
+# Runs the node-AST lint helper against workflows/*.js (via hooks/workflows-lint.sh).
+# The helper rejects Date.now(), Math.random(), argless new Date(), isolation properties,
+# TypeScript syntax, malformed JS, and non-literal meta exports. Fails closed when
+# node or the typescript dep is absent (hooks-fail-closed — see hooks/workflows-lint.sh).
+check_workflows_lint() {
+  bash "$SCRIPT_DIR/workflows-lint.sh"
+}
+
 if ! check_toolchain_pins; then
   FAILED=$(( FAILED + 1 ))
 fi
@@ -159,6 +168,10 @@ if ! check_mcp_json_args_token; then
 fi
 
 if ! check_mcp_json_payload_shellcheck; then
+  FAILED=$(( FAILED + 1 ))
+fi
+
+if ! check_workflows_lint; then
   FAILED=$(( FAILED + 1 ))
 fi
 
