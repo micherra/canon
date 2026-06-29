@@ -24,6 +24,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { filterFilePatterns, MAX_FILE_PATTERN_LENGTH } from "@shared/lib/overlay-closed-domain.ts";
 import { loadAllPrinciples, matchPrinciples } from "@shared/matcher.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PLUGIN_PRINCIPLE_CONTENT } from "./overlay-sink-coverage.fixtures.ts";
@@ -142,4 +143,38 @@ describe("glob-DoS hardening: regex metacharacter fixtures (B-layer, matchGlob l
       });
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// file_pattern length cap (MAX_FILE_PATTERN_LENGTH = 4096)
+// Defense-in-depth: bounds matchGlob m·n heap allocation for attacker-planted
+// multi-MB file_pattern entries (ADR-0026 §Amendment-4).
+// ---------------------------------------------------------------------------
+
+describe("file_pattern length cap (MAX_FILE_PATTERN_LENGTH)", () => {
+  it("exports MAX_FILE_PATTERN_LENGTH as 4096", () => {
+    expect(MAX_FILE_PATTERN_LENGTH).toBe(4096);
+  });
+
+  it("drops a file_pattern entry whose length exceeds 4096 characters", () => {
+    // Valid-charset pattern of length 4097 — must be dropped
+    const overlong = `${"a/".repeat(2048)}b`; // 2048*2 + 1 = 4097 chars
+    const result = filterFilePatterns([overlong], "test-source");
+    expect(result).toHaveLength(0);
+  });
+
+  it("keeps a file_pattern entry whose length equals exactly 4096 characters (boundary)", () => {
+    // Exactly 4096 chars of valid-charset content — must be kept
+    const boundary = "a".repeat(4096);
+    const result = filterFilePatterns([boundary], "test-source");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(boundary);
+  });
+
+  it("keeps a normal-length file_pattern entry unchanged", () => {
+    const normal = "src/**/*.ts";
+    const result = filterFilePatterns([normal], "test-source");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(normal);
+  });
 });
