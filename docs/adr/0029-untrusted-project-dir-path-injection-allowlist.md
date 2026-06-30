@@ -1,4 +1,4 @@
-# ADR-0028: Untrusted project-dir path-injection guard uses an allow-list, not containment
+# ADR-0029: Untrusted project-dir path-injection guard uses an allow-list, not containment
 
 - Status: accepted
 - Date: 2026-06-29

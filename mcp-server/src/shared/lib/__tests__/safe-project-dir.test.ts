@@ -4,7 +4,7 @@
  * Strategy: red-green TDD — this test file was written before the implementation.
  * Tests cover every CodeQL-relevant rejection class (empty, over-length, NUL,
  * control char, relative, traversal) and the accept case for a legitimate project dir.
- * See docs/adr/0028-untrusted-project-dir-path-injection-allowlist.md for the rationale.
+ * See docs/adr/0029-untrusted-project-dir-path-injection-allowlist.md for the rationale.
  */
 
 import { describe, expect, it } from "vitest";
