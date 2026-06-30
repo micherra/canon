@@ -280,6 +280,99 @@ git -C "$CASEH_REPO" commit -q -m "add qux.sh (in-scope change)"
 run_gate "suite exits 3 (non-zero) → exit 2 fail-closed" 2 "$CASEH_REPO" "$CASEH_BASE"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Case i: in-scope .mjs-only change → gate fires (AC#1,2)
+# Case c proves .sh triggers the gate; this case proves .mjs also triggers.
+# The scope filter is `^hooks/.*\.(sh|mjs)$` — both extensions must fire.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case i: in-scope .mjs-only change → gate fires (filter includes .mjs) --"
+
+CASEI_REPO="$MASTER_TMP/casei"
+init_fixture_repo "$CASEI_REPO"
+
+mkdir -p "$CASEI_REPO/hooks"
+printf '#!/bin/bash\nexit 0\n' > "$CASEI_REPO/hooks/stub-pass.test.sh"
+git -C "$CASEI_REPO" add hooks/stub-pass.test.sh
+git -C "$CASEI_REPO" commit -q -m "add passing stub suite"
+CASEI_BASE=$(git -C "$CASEI_REPO" rev-parse HEAD)
+
+# In-scope change: a hooks/*.mjs file only — no .sh change
+printf '// no-op\n' > "$CASEI_REPO/hooks/tool.mjs"
+git -C "$CASEI_REPO" add hooks/tool.mjs
+git -C "$CASEI_REPO" commit -q -m "add tool.mjs (in-scope .mjs-only change)"
+
+run_gate_with_output \
+  "in-scope .mjs-only change → gate fires, runs suite, exit 0 + === banner" \
+  "=== hooks/stub-pass.test.sh ===" \
+  "$CASEI_REPO" "$CASEI_BASE"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case j: stdin non-hang — suite doing `read x` completes via </dev/null
+# PROBE §3a showed a stdin-reading suite hangs the gate when stdin is a tty.
+# The gate passes </dev/null to every suite; confirm a read-stdin suite
+# completes immediately (read gets EOF → exits 1; || true makes suite exit 0).
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case j: stdin non-hang — read-stdin suite exits 0 via </dev/null --"
+
+CASEJ_REPO="$MASTER_TMP/casej"
+init_fixture_repo "$CASEJ_REPO"
+
+mkdir -p "$CASEJ_REPO/hooks"
+# `read x` returns 1 on EOF (stdin=/dev/null); || true makes suite exit 0
+printf '#!/bin/bash\nread x || true\nexit 0\n' > "$CASEJ_REPO/hooks/read-stdin.test.sh"
+git -C "$CASEJ_REPO" add hooks/read-stdin.test.sh
+git -C "$CASEJ_REPO" commit -q -m "add read-stdin suite"
+CASEJ_BASE=$(git -C "$CASEJ_REPO" rev-parse HEAD)
+
+printf '#!/bin/bash\n# trigger\n' > "$CASEJ_REPO/hooks/trigger.sh"
+git -C "$CASEJ_REPO" add hooks/trigger.sh
+git -C "$CASEJ_REPO" commit -q -m "add trigger.sh (in-scope change)"
+
+CASEJ_RC=0
+export GATE CASEJ_REPO CASEJ_BASE
+if command -v timeout >/dev/null 2>&1; then
+  timeout 10 bash -c '(cd "$CASEJ_REPO" && bash "$GATE" "$CASEJ_BASE" </dev/null >/dev/null 2>&1)' || CASEJ_RC=$?
+else
+  (cd "$CASEJ_REPO" && bash "$GATE" "$CASEJ_BASE" </dev/null >/dev/null 2>&1) || CASEJ_RC=$?
+fi
+
+if [[ "$CASEJ_RC" -eq 0 ]]; then
+  echo "  PASS: stdin non-hang — read-stdin suite completed without hanging (exit 0)"
+  PASS=$((PASS + 1))
+elif [[ "$CASEJ_RC" -eq 124 ]]; then
+  echo "  FAIL: stdin non-hang — gate timed out (</dev/null not passed to suite)"
+  FAIL=$((FAIL + 1))
+else
+  echo "  FAIL: stdin non-hang — unexpected exit $CASEJ_RC"
+  FAIL=$((FAIL + 1))
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case k: unrunnable suite (bash syntax error) → exit 2 fail-closed (AC#4d)
+# Confirms the gate does NOT silently skip a suite bash cannot parse.
+# bash "$t" on a syntax-error file exits non-zero → SUITE_RC captured → exit 2.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case k: unrunnable suite (bash syntax error) → exit 2 fail-closed (AC#4d) --"
+
+CASEK_REPO="$MASTER_TMP/casek"
+init_fixture_repo "$CASEK_REPO"
+
+mkdir -p "$CASEK_REPO/hooks"
+# Intentional bash syntax error: unmatched open paren; bash exits 2, not silently skipped
+printf '#!/bin/bash\n(\n' > "$CASEK_REPO/hooks/syntax-err.test.sh"
+git -C "$CASEK_REPO" add hooks/syntax-err.test.sh
+git -C "$CASEK_REPO" commit -q -m "add syntax-error stub suite"
+CASEK_BASE=$(git -C "$CASEK_REPO" rev-parse HEAD)
+
+printf '#!/bin/bash\n# trigger\n' > "$CASEK_REPO/hooks/foo.sh"
+git -C "$CASEK_REPO" add hooks/foo.sh
+git -C "$CASEK_REPO" commit -q -m "add foo.sh (in-scope change)"
+
+run_gate "unrunnable suite (bash syntax error) → exit 2 fail-closed" 2 "$CASEK_REPO" "$CASEK_BASE"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
