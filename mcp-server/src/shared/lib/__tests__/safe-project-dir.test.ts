@@ -50,6 +50,10 @@ describe("isSafeProjectDirInput", () => {
     expect(isSafeProjectDirInput("/../etc/passwd")).toBe(false);
   });
 
+  it("rejects an absolute path with a trailing .. segment (/a/b/..)", () => {
+    expect(isSafeProjectDirInput("/a/b/..")).toBe(false);
+  });
+
   // ── Accept cases ──────────────────────────────────────────────────────────
 
   it("accepts a clean absolute path (/Users/x/project)", () => {
