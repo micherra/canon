@@ -1,0 +1,139 @@
+#!/bin/bash
+# shell-test-gate.sh — Shell-CI parity gate.
+#
+# Invoked by the verify contract (not as a hooks.json PreToolUse hook).
+# Signature: bash hooks/shell-test-gate.sh <base_commit>
+# Run from the worktree root.
+#
+# When any hooks/**/*.sh or *.mjs file changed in base..HEAD, executes the
+# full hooks/**/*.test.sh suite set that CI's `shell` job runs, aggregating
+# failures without aborting mid-loop (mirrors CI behavior). Clean no-op
+# (exit 0) when no in-scope file changed.
+#
+# Exit semantics:
+#   Exit 0: all suites passed — or no in-scope hook script changed (no-op)
+#   Exit 2: one or more suites returned non-zero (fail-closed)
+#   Exit non-zero (other): internal error — fail-closed
+#
+# D1 GLOBSTAR-PARITY RATIONALE (see DESIGN Decision D1, PROBE-FINDINGS §2):
+# CI (ci.yml job `shell`, lines 26–38) uses:
+#   shopt -s globstar nullglob
+#   for t in hooks/**/*.test.sh; do bash "$t" || failed=1; done
+#
+# macOS / local bash 3.2.57 has NO globstar support:
+#   bash -c 'shopt -s globstar' → "bash: shopt: globstar: invalid shell option name"
+# Without globstar, hooks/**/*.test.sh silently degrades to one-level-deep only
+# (12 of 30 files), missing top-level hooks/*.test.sh and subdirectory suites.
+#
+# We mirror CI's file SET (all depths), not CI's glob syntax, via:
+#   find hooks -type f -name '*.test.sh' | sort
+# Probe-verified: `find` and globstar return the identical 30-file set at all
+# depths (PROBE-FINDINGS.md §2-3). `sort` ensures deterministic execution order.
+
+set -euo pipefail
+
+BASE_COMMIT="${1:-}"
+
+# ---------------------------------------------------------------------------
+# Argument validation (fail-closed)
+# ---------------------------------------------------------------------------
+if [[ -z "$BASE_COMMIT" ]]; then
+  echo "CANON: shell-test-gate failed-closed — usage: shell-test-gate.sh <base_commit>" >&2
+  exit 2
+fi
+
+if ! git rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
+  echo "CANON: shell-test-gate failed-closed — invalid base commit: $BASE_COMMIT" >&2
+  exit 2
+fi
+
+# ---------------------------------------------------------------------------
+# Scope detection: any hooks/**/*.sh or *.mjs changed in base..HEAD?
+# ---------------------------------------------------------------------------
+DIFF_OUTPUT=""
+if ! DIFF_OUTPUT=$(git diff --name-only "${BASE_COMMIT}..HEAD" 2>&1); then
+  echo "CANON: shell-test-gate failed-closed — git diff failed: $DIFF_OUTPUT" >&2
+  exit 2
+fi
+
+# Filter to in-scope paths: any file under hooks/ matching *.sh or *.mjs
+# grep rc1 (no match) means no in-scope change — treat as no-op, NOT an error.
+# DOCUMENTED FAIL-OPEN -- grep rc1 = no in-scope change; downstream: exit 0 no-op
+INSCOPE=""
+INSCOPE=$(echo "$DIFF_OUTPUT" | grep -E '^hooks/.*\.(sh|mjs)$' || true)
+
+if [[ -z "$INSCOPE" ]]; then
+  echo "shell-test-gate: no in-scope hook scripts changed in ${BASE_COMMIT}..HEAD — no-op."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Enumerate the full hooks/**/*.test.sh suite set (CI-parity via `find`)
+#
+# D1: `find hooks -type f -name '*.test.sh' | sort` mirrors CI's globstar set
+# at all depths (top-level, one-level, __tests__/) on bash 3.2 (no mapfile,
+# no shopt -s globstar). Fail-closed if find errors.
+# ---------------------------------------------------------------------------
+SUITE_LIST=""
+if ! SUITE_LIST=$(find hooks -type f -name '*.test.sh' | sort 2>&1); then
+  echo "CANON: shell-test-gate failed-closed — find failed: $SUITE_LIST" >&2
+  exit 2
+fi
+
+# Load into array using while-read (bash 3.2 compatible; mapfile requires bash 4)
+SUITES=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] && SUITES+=("$line")
+done <<< "$SUITE_LIST"
+
+SUITE_COUNT="${#SUITES[@]}"
+
+if [[ "$SUITE_COUNT" -eq 0 ]]; then
+  echo "shell-test-gate: no *.test.sh suites found under hooks/ — no-op."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Run all suites; aggregate exit codes (mirror CI's || failed=1, no abort)
+#
+# Each suite runs as `bash "$t" </dev/null` — the </dev/null is MANDATORY:
+# it matches CI's effective stdin (GitHub Actions sets stdin to /dev/null) and
+# prevents the loop-stdin hang where a suite reading stdin blocks on the pipe
+# (PROBE-FINDINGS.md §3a — hang disappears entirely with </dev/null).
+#
+# timeout (coreutils) is applied when available; not guaranteed on stock macOS.
+# CAP=180s is generous (slowest passing suite is ~31s; PROBE §3b); a timeout-
+# kill (rc 124/137) counts as a failure — fail-closed.
+# ---------------------------------------------------------------------------
+FAILED_SUITES=()
+
+for t in "${SUITES[@]}"; do
+  echo "=== $t ==="
+  SUITE_RC=0
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -k 5 180 bash "$t" </dev/null || SUITE_RC=$?
+  else
+    bash "$t" </dev/null || SUITE_RC=$?
+  fi
+
+  if [[ "$SUITE_RC" -ne 0 ]]; then
+    FAILED_SUITES+=("$t (rc=$SUITE_RC)")
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Verdict
+# ---------------------------------------------------------------------------
+FAILED_COUNT="${#FAILED_SUITES[@]}"
+
+if [[ "$FAILED_COUNT" -gt 0 ]]; then
+  echo "CANON: shell-test-gate — $FAILED_COUNT hook suite(s) failed:" >&2
+  for s in "${FAILED_SUITES[@]}"; do
+    echo "  $s" >&2
+  done
+  exit 2
+fi
+
+echo "shell-test-gate: $SUITE_COUNT hook test suite(s) passed."
+exit 0

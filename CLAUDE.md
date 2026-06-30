@@ -106,7 +106,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **Plan approval and initial review verdict are always mandatory regardless of tier — these are the highest-value checkpoints where wrong assumptions are caught.**
 
-**Deterministic-gate invariant**: deterministic code gates — the verify step (`npm run build`/`lint`/`test`/`bash hooks/lint.sh`), the dead-wire reachability gate (`hooks/dead-wire-gate.sh`), the summary-vs-diff phantom-claim check (`hooks/summary-diff-check.sh`), the post-scribe scope guard (`hooks/scribe-scope-guard.sh`), and contract-checker postconditions — run in **every** tier unconditionally. Only human/model (HITL) supervision may be traded away by higher tiers. No deterministic gate appears among the per-tier skippable items above.
+**Deterministic-gate invariant**: deterministic code gates — the verify step (`npm run build`/`lint`/`test`/`bash hooks/lint.sh`), the dead-wire reachability gate (`hooks/dead-wire-gate.sh`), the summary-vs-diff phantom-claim check (`hooks/summary-diff-check.sh`), the post-scribe scope guard (`hooks/scribe-scope-guard.sh`), the shell-CI-parity gate (`hooks/shell-test-gate.sh`), and contract-checker postconditions — run in **every** tier unconditionally. Only human/model (HITL) supervision may be traded away by higher tiers. No deterministic gate appears among the per-tier skippable items above.
 
 **Fail-safe**: If `compute_autonomy_tier` returns an error or the tool is unavailable, default to "supervised".
 
@@ -304,9 +304,11 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 
 ### Step Enforcement Contracts <!-- last-updated: 2026-06-12 -->
 
-**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh` → `bash hooks/dead-wire-gate.sh {base_commit}`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL. For builds with user-observable ACs, the verify step also drives the live app (background-launch + readiness-poll + curl/CLI-invocation, never `sleep N`), distinct from `npm test` — see `agents/tester.md` Live App Smoke.
+**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh` → `bash hooks/dead-wire-gate.sh {base_commit}` → `bash hooks/shell-test-gate.sh {base_commit}`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL. For builds with user-observable ACs, the verify step also drives the live app (background-launch + readiness-poll + curl/CLI-invocation, never `sleep N`), distinct from `npm test` — see `agents/tester.md` Live App Smoke.
 
 `→ bash hooks/dead-wire-gate.sh {base_commit}` — standing dead-wire reachability postcondition. Must exit 0. Fails closed on any newly-exported symbol/tool with zero real references (suppress legitimate not-yet-wired exports with an inline `// canon:allow-unwired: <reason>` marker; audit via `grep -rn 'canon:allow-unwired'`). The doc-only verify-skip (`.md`/`.txt` only diffs) also skips this gate.
+
+`→ bash hooks/shell-test-gate.sh {base_commit}` — shell-CI-parity gate. When any `hooks/**/*.sh` or `*.mjs` file changed in `base..HEAD`, executes the full `hooks/**/*.test.sh` suite set CI's `shell` job runs (enumerated portably via `find hooks -type f -name '*.test.sh'`, run with `</dev/null`); any suite non-zero → exit 2. Clean no-op (exit 0) when no in-scope hook script changed. The doc-only verify-skip also skips this gate.
 
 **Verify skip**: If `git diff {base_commit}..HEAD --name-only` contains only `.md`/`.txt` files, skip with `skip_reason: "documentation-only diff, verify produces zero signal"`.
 
