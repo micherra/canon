@@ -19,11 +19,15 @@
  *   - Date.now()          — breaks deterministic resume
  *   - Math.random()       — breaks deterministic resume
  *   - argless new Date()  — breaks deterministic resume (new Date(arg) is OK)
- *   - isolation property  — Canon prohibits isolation in workflow scripts
+ *   - isolation property  — Canon prohibits isolation as an agent-option key
+ *                           (agent-option PROPERTY KEY only; return-value
+ *                           or schema-definition uses are NOT banned)
  *   - TS syntax           — InterfaceDeclaration, TypeAliasDeclaration, or
  *                           Parameter/VariableDeclaration/PropertyDeclaration
  *                           carrying a type annotation
- *   - meta non-literal    — export const meta must be a pure object literal
+ *   - meta non-literal    — export const meta must be a pure object literal;
+ *                           MethodDeclaration/GetAccessor/SetAccessor members
+ *                           and non-PropertyAssignment members are also banned
  *   - parse error         — malformed JS rejected by the TypeScript parser
  *
  * FAIL-CLOSED GUARANTEE
@@ -164,6 +168,39 @@ function walkBans(sf) {
       ) {
         violations.push({ pos: node.getStart(sf), label: "Math.random()" });
       }
+
+      // ── isolation property in agent() calls only ──────────────────────────
+      // Bans the `isolation` key ONLY when it appears as a DIRECT property key
+      // of an object-literal argument to an `agent(...)` call:
+      //   agent(prompt, { isolation: 'worktree' })  ← banned
+      //   return { isolation: 'x' }                 ← NOT banned
+      //   { properties: { isolation: { type:'string' } } } ← NOT banned
+      //
+      // Scoped to direct properties of each agent() argument — nested objects
+      // inside agent args are not inspected (they are schema/data, not options).
+      if (ts.isIdentifier(expr) && expr.text === "agent") {
+        for (const arg of node.arguments) {
+          if (ts.isObjectLiteralExpression(arg)) {
+            for (const prop of arg.properties) {
+              if (
+                (ts.isPropertyAssignment(prop) || ts.isShorthandPropertyAssignment(prop)) &&
+                ts.isIdentifier(prop.name) &&
+                prop.name.text === "isolation"
+              ) {
+                violations.push({ pos: prop.getStart(sf), label: "isolation" });
+              }
+              // Also catch string-literal property key: agent(p, { "isolation": ... })
+              if (
+                ts.isPropertyAssignment(prop) &&
+                ts.isStringLiteral(prop.name) &&
+                prop.name.text === "isolation"
+              ) {
+                violations.push({ pos: prop.getStart(sf), label: "isolation" });
+              }
+            }
+          }
+        }
+      }
     }
 
     // ── argless new Date() ───────────────────────────────────────────────────
@@ -176,32 +213,6 @@ function walkBans(sf) {
       (!node.arguments || node.arguments.length === 0)
     ) {
       violations.push({ pos: node.getStart(sf), label: "argless new Date()" });
-    }
-
-    // ── isolation property ───────────────────────────────────────────────────
-    // Bans the `isolation` key when used as an agent-option PROPERTY KEY:
-    //   agent(..., { isolation: 'worktree' })   ← banned (PropertyAssignment, id key)
-    //   agent(..., { "isolation": 'worktree' }) ← banned (PropertyAssignment, string key)
-    //   { isolation }                            ← banned (ShorthandPropertyAssignment)
-    //
-    // The harness-forbidden construct is the option key that enables Canon's
-    // worktree lifecycle bypass, NOT any identifier named "isolation".  A bare
-    // variable (`const isolation = 'worktree'`) is intentionally out of scope —
-    // banning it would cause false positives on unrelated identifiers.
-    if (
-      (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === "isolation"
-    ) {
-      violations.push({ pos: node.getStart(sf), label: "isolation" });
-    }
-    // Also catch string-literal property key: { "isolation": ... }
-    if (
-      ts.isPropertyAssignment(node) &&
-      ts.isStringLiteral(node.name) &&
-      node.name.text === "isolation"
-    ) {
-      violations.push({ pos: node.getStart(sf), label: "isolation" });
     }
 
     // ── TypeScript syntax ────────────────────────────────────────────────────
@@ -309,7 +320,10 @@ function checkMetaLiteral(sf) {
         continue;
       }
 
-      // Walk the object literal checking each property value for purity
+      // Walk the object literal checking each property value for purity.
+      // Catch-all: any member that is not a plain PropertyAssignment
+      // (MethodDeclaration, GetAccessor, SetAccessor, etc.) is rejected
+      // because it embeds executable code in a supposedly pure-literal object.
       const obj = decl.initializer;
       for (const prop of obj.properties) {
         if (ts.isSpreadAssignment(prop)) {
@@ -326,6 +340,17 @@ function checkMetaLiteral(sf) {
           });
           continue;
         }
+        // MethodDeclaration, GetAccessor, SetAccessor, and any other
+        // non-PropertyAssignment member embed executable code — reject all.
+        if (!ts.isPropertyAssignment(prop)) {
+          const kindName = ts.SyntaxKind[prop.kind];
+          violations.push({
+            pos: prop.getStart(sf),
+            label: `meta: non-literal member (${kindName}) not allowed in meta literal`,
+          });
+          continue;
+        }
+        // prop is PropertyAssignment from here
         if (ts.isComputedPropertyName(prop.name)) {
           violations.push({
             pos: prop.name.getStart(sf),
@@ -333,14 +358,12 @@ function checkMetaLiteral(sf) {
           });
           continue;
         }
-        if (ts.isPropertyAssignment(prop)) {
-          if (!isLiteralValue(prop.initializer)) {
-            const kindName = ts.SyntaxKind[prop.initializer.kind];
-            violations.push({
-              pos: prop.initializer.getStart(sf),
-              label: `meta: non-literal value (${kindName}) in meta property '${ts.isIdentifier(prop.name) ? prop.name.text : "?"}'`,
-            });
-          }
+        if (!isLiteralValue(prop.initializer)) {
+          const kindName = ts.SyntaxKind[prop.initializer.kind];
+          violations.push({
+            pos: prop.initializer.getStart(sf),
+            label: `meta: non-literal value (${kindName}) in meta property '${ts.isIdentifier(prop.name) ? prop.name.text : "?"}'`,
+          });
         }
       }
     }

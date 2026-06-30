@@ -143,6 +143,11 @@ run_lint_with_construct \
   "meta" \
   "bad-nonliteral-meta.js: named 'meta'"
 
+run_lint_with_construct \
+  "$FIXTURES_DIR/bad-meta-method.js" \
+  "meta" \
+  "bad-meta-method.js (method in meta): named 'meta'"
+
 # ---------------------------------------------------------------------------
 # Advisory 1: TS-syntax detection robustness — diagnostic-path unit probe
 #
@@ -205,6 +210,37 @@ else
 fi
 
 rm -rf "$ISO_VAR_TMPDIR"
+trap - EXIT INT TERM
+
+# ---------------------------------------------------------------------------
+# Defect 2 positive fixture: isolation in return value / schema definition
+#
+# The `isolation` ban is scoped to the agent-option PROPERTY KEY only.
+# `return { isolation: 'x' }` and JSON-schema `{ properties: { isolation: {...} } }`
+# must NOT trigger the ban — they are not agent-option keys.
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- isolation agent-option scope: return-value and schema must PASS ---"
+
+ISO_RET_TMPDIR="$(mktemp -d)"
+# shellcheck disable=SC2064
+trap "rm -rf '$ISO_RET_TMPDIR'" EXIT INT TERM
+cp "$FIXTURES_DIR/ok-isolation-return.js" "$ISO_RET_TMPDIR/"
+
+ISO_RET_EXIT=0
+ISO_RET_OUTPUT=""
+ISO_RET_OUTPUT=$(node "$LINT_HELPER" "$ISO_RET_TMPDIR" 2>&1) || ISO_RET_EXIT=$?
+
+if [[ "$ISO_RET_EXIT" -eq 0 ]]; then
+  echo "  PASS: ok-isolation-return.js passes lint (isolation in return/schema not banned)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: ok-isolation-return.js should PASS lint (exit 0) but got exit=$ISO_RET_EXIT"
+  echo "        output: $ISO_RET_OUTPUT"
+  FAIL=$((FAIL + 1))
+fi
+
+rm -rf "$ISO_RET_TMPDIR"
 trap - EXIT INT TERM
 
 # ---------------------------------------------------------------------------
