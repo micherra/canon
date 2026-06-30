@@ -470,6 +470,7 @@ canon/
 │       └── shared/       # Constants, matcher, parser, schema, utility libs; overlay trust boundary (UntrustedText opaque box, closed-domain validators, linear-time glob matcher — ADR-0026/ADR-0027)
 ├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
+├── workflows/            # Managed workflow-script library — Canon's 6th managed-artifact class; plain-JS scripts invoked on-demand via Workflow `scriptPath`; lint enforced by `hooks/workflows-lint.sh`
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
 ├── principles/           # Built-in principles (64 total: 6 rules, 36 strong-opinions, 22 conventions); 36 Canon-internal principles in .canon/principles/ (portable: false)
 │   ├── rules/
