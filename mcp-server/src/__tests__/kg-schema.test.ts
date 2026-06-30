@@ -66,7 +66,7 @@ describe("migration v5 — community_id column and file_tags table", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("5");
+    expect(row.value).toBe("6");
     db.close();
   });
 
@@ -102,7 +102,7 @@ describe("migration v5 — community_id column and file_tags table", () => {
 
   test("migration v5 is idempotent — running runMigrations twice does not error", () => {
     const db = initDatabase(":memory:");
-    // Should be a no-op since version is already "5"
+    // Should be a no-op since version is already "6"
     expect(() => runMigrations(db)).not.toThrow();
     db.close();
   });
@@ -125,7 +125,7 @@ describe("migration v5 — community_id column and file_tags table", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("5");
+    expect(row.value).toBe("6");
     expect(tableExists(db, "file_tags")).toBe(true);
     db.close();
   });

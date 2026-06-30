@@ -18,6 +18,7 @@ import { codebaseGraphMaterialize } from "@features/knowledge-graph/tools/codeba
 import { codebaseGraphPoll } from "@features/knowledge-graph/tools/codebase-graph-poll.ts";
 import { codebaseGraphSubmit } from "@features/knowledge-graph/tools/codebase-graph-submit.ts";
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
+import { searchKnowledge } from "@features/knowledge-graph/tools/search-knowledge.ts";
 import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -338,6 +339,42 @@ function registerSemanticSearchTool(server: McpServer): void {
   );
 }
 
+function registerSearchKnowledgeTool(server: McpServer): void {
+  server.registerTool(
+    "search_knowledge",
+    {
+      description:
+        "Search the Canon knowledge corpus (principles, references, agents, primers, memory digest) with natural language. Returns verbatim chunk content and heading path. Requires the knowledge graph to be built first via codebase_graph.",
+      inputSchema: {
+        corpora: z
+          .array(z.string())
+          .optional()
+          .describe("Restrict search to specific corpus names (e.g., ['principles', 'agents'])"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe("Max results to return (default: 10)"),
+        query: z
+          .string()
+          .describe("Natural language search query (e.g., 'how should I handle errors')"),
+        trust: z
+          .enum(["internal", "any"])
+          .optional()
+          .describe(
+            "Trust-tier filter: 'internal' (default) excludes external-tier chunks; 'any' includes all",
+          ),
+      },
+    },
+    gatedWrapHandler(async (input, extra) => {
+      const dir = resolveScope(extra);
+      return searchKnowledge(input, dir);
+    }),
+  );
+}
+
 function registerGraphJobTools(server: McpServer): void {
   server.registerTool(
     "codebase_graph_submit",
@@ -399,6 +436,7 @@ export function registerKnowledgeTools(server: McpServer): void {
   registerContextStalenessTool(server);
   registerGraphQueryTool(server);
   registerSemanticSearchTool(server);
+  registerSearchKnowledgeTool(server);
   registerGraphJobTools(server);
   registerCompositeContextTool(server);
 }

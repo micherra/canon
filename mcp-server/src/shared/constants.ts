@@ -39,6 +39,40 @@ export const RESOLVE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"];
 /** Meta-table key for the commit SHA the knowledge graph was last built at. */
 export const GRAPH_HEAD_COMMIT_KEY = "graph_head_commit";
 
+/** Meta-table key for the content-hash of the doc corpus (not git HEAD). */
+export const DOC_CORPUS_HASH_KEY = "doc_corpus_hash";
+
+/** Maximum characters per doc chunk (heading-section chunker). */
+export const DOC_CORPUS_MAX_CHUNK_CHARS = 1200;
+
+/**
+ * Descriptor for one source corpus of markdown documents.
+ * `root` is an absolute path; relative roots must be resolved against projectDir
+ * before passing to ingestDocCorpus.
+ */
+export type DocCorpusSource = {
+  /** Logical name for the corpus (stored as `corpus` column in doc_chunks). */
+  corpus: string;
+  /** Absolute path to the root directory to scan for *.md files. */
+  root: string;
+  /** Trust tier applied to all chunks from this source. */
+  trust_tier: "internal" | "external";
+  /** When true, a missing root directory is silently skipped. */
+  optional: boolean;
+};
+
+/**
+ * Default doc corpus sources for a Canon project.
+ * Roots are relative to projectDir — callers must resolve them before use.
+ */
+export const DEFAULT_DOC_CORPUS_SOURCES: Omit<DocCorpusSource, "root">[] = [
+  { corpus: "principles", optional: false, trust_tier: "internal" },
+  { corpus: "references", optional: false, trust_tier: "internal" },
+  { corpus: "agents", optional: false, trust_tier: "internal" },
+  { corpus: "primers", optional: false, trust_tier: "internal" },
+  { corpus: "digest", optional: true, trust_tier: "internal" },
+] as const;
+
 /** Canon data directory and file names. */
 export const CANON_DIR = ".canon";
 export const CANON_FILES = {
