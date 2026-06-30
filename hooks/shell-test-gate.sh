@@ -73,9 +73,15 @@ fi
 # D1: `find hooks -type f -name '*.test.sh' | sort` mirrors CI's globstar set
 # at all depths (top-level, one-level, __tests__/) on bash 3.2 (no mapfile,
 # no shopt -s globstar). Fail-closed if find errors.
+#
+# Latent under-inclusion: `find -type f` skips hidden directories (e.g.
+# hooks/.claude/) and does NOT follow symlinks. There are zero such *.test.sh
+# files today; the over-inclusion direction is fail-closed-safe. If a
+# hidden-dir or symlinked hook test is ever added, revisit this enumeration
+# (add -L for symlinks or explicit hidden-dir paths as needed).
 # ---------------------------------------------------------------------------
 SUITE_LIST=""
-if ! SUITE_LIST=$(find hooks -type f -name '*.test.sh' | sort 2>&1); then
+if ! SUITE_LIST=$(find hooks -type f -name '*.test.sh' 2>&1 | sort); then
   echo "CANON: shell-test-gate failed-closed — find failed: $SUITE_LIST" >&2
   exit 2
 fi
