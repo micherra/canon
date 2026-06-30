@@ -38,8 +38,9 @@ function toEntry(
 ): SyncEntry {
   if (result.kind === "recipe") {
     // Fence the recipe in the model-facing response for project-local routines.
-    // emitCloudRecipe writes the raw (unfenced) disk artifact — correct for user-paste docs.
-    // The model-facing tool response must be fenced for project-local untrusted content.
+    // emitCloudRecipe is a pure function that returns the raw (unfenced) recipe string,
+    // intended as a user-paste /schedule artifact (no I/O). The model-facing tool response
+    // must fence project-local untrusted content at this boundary.
     // Plugin routines are trusted (dc-05): recipe passed through unfenced.
     const recipe =
       routine.source === "project"
