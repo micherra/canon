@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
+import { neutralizeOverlayText } from "@shared/lib/overlay-neutralize.ts";
 import { rawUntrustedForStructuralUse } from "@shared/lib/overlay-untrusted-text.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
@@ -34,10 +35,14 @@ export function emitCloudRecipe(routine: Routine): string {
         ? `trigger: github-event (${routine.trigger.event})`
         : `trigger: ${routine.trigger.kind}`;
 
-  // rawUntrustedForStructuralUse: emitCloudRecipe writes a disk artifact (non-model-facing).
-  // The recipe is a user-paste document, not a tool output consumed by the model.
-  const rawTitle = rawUntrustedForStructuralUse(routine.title);
-  const rawBody = rawUntrustedForStructuralUse(routine.body);
+  // The recipe IS returned in a tool result (syncRoutine → toolOk({ kind:"recipe", recipe }))
+  // and therefore reaches the model as a ToolResult. We neutralize (not fence) because the
+  // recipe must stay a clean, pasteable /schedule document: plain-ASCII prose after
+  // "## Task body" is document content, not an instruction channel. neutralizeOverlayText
+  // strips all \p{Cc}\p{Cf}\p{Cs}\p{Co} and Tag-block carriers (NFC-normalized) while
+  // leaving the human-readable text intact.
+  const rawTitle = neutralizeOverlayText(rawUntrustedForStructuralUse(routine.title));
+  const rawBody = neutralizeOverlayText(rawUntrustedForStructuralUse(routine.body));
 
   const lines = [
     `# Canon routine: ${routine.name}`,
@@ -91,15 +96,18 @@ export async function writeDesktopSkill(
 }
 
 function buildSkillContent(routine: Routine): string {
-  // rawUntrustedForStructuralUse: SKILL.md is a disk artifact (non-model-facing).
+  // SKILL.md is written to disk and loaded by the Claude Code scheduled-task harness,
+  // making the title and body model-facing at load time. We neutralize (not fence)
+  // so the file stays a clean, human-readable SKILL.md; neutralizeOverlayText strips
+  // all Unicode-smuggling carriers while preserving plain-ASCII document content.
   return [
     `---`,
     `name: ${routine.name}`,
-    `title: ${rawUntrustedForStructuralUse(routine.title)}`,
+    `title: ${neutralizeOverlayText(rawUntrustedForStructuralUse(routine.title))}`,
     `status: ${routine.status}`,
     `---`,
     ``,
-    rawUntrustedForStructuralUse(routine.body),
+    neutralizeOverlayText(rawUntrustedForStructuralUse(routine.body)),
     ``,
   ].join("\n");
 }
