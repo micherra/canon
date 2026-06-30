@@ -152,8 +152,8 @@ When you touch `src/routes/orders.ts`, Canon loads principles scoped to the `api
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, MCP server health |
 | `/canon:clean` | Clean up workspace artifacts; optionally archive to project history |
 | `/canon:diagnose` | Targeted diagnostics for build issues, agent failures, and Canon configuration |
-| `/canon:routine` | Run a named routine on demand (e.g. `canon-maintenance`, `pr-review`) |
-| `/canon:routines` | List all available routines and their last-run status |
+| `/canon:routine` | Author a new routine interactively (spawns the writer) |
+| `/canon:routines` | List and manage routines — enable, disable, delete, or sync |
 | `/canon:craft-audit` | Audit engineering craft quality against Canon's strong-opinions |
 
 ---
@@ -179,7 +179,7 @@ Canon keeps working after the PR is created.
 | `pr-review` | Scheduled PR review pass against open PRs |
 | `release-ahead` | Monitors for upstream Canon plugin updates |
 
-Run `/canon:routines` to see current status. Run `/canon:routine <name>` to trigger one immediately.
+Run `/canon:routines` to list and manage them (enable, disable, sync). Author a new routine with `/canon:routine`.
 
 ---
 
