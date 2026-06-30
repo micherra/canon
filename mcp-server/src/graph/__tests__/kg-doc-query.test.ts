@@ -14,6 +14,36 @@ import { initDatabase } from "@graph/kg-schema.ts";
 import { MockEmbeddingService, randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import { describe, expect, test } from "vitest";
 
+/** Seed a chunk directly with an explicit embedding and chunk_index (no random chunk_index). */
+function seedChunkDirect(
+  db: ReturnType<typeof initDatabase>,
+  opts: {
+    corpus: string;
+    doc_path: string;
+    content: string;
+    trust_tier?: "internal" | "external";
+    chunk_index: number;
+    embedding: Float32Array;
+  },
+): number {
+  const store = new DocVectorStore(db);
+  const hash = DocVectorStore.textHash(opts.content);
+  const chunkId = store.upsertDocChunk({
+    corpus: opts.corpus,
+    doc_path: opts.doc_path,
+    heading_path: null,
+    chunk_index: opts.chunk_index,
+    char_start: 0,
+    char_end: opts.content.length,
+    content: opts.content,
+    content_hash: hash,
+    trust_tier: opts.trust_tier ?? "internal",
+    updated_at: new Date().toISOString(),
+  });
+  store.upsertDocVector(chunkId, opts.embedding, hash);
+  return chunkId;
+}
+
 function makeDb() {
   return initDatabase(":memory:");
 }
@@ -239,6 +269,58 @@ describe("DocVectorQuery", () => {
     const results = await query.queryDocs("anything", { limit: 5 });
 
     expect(results).toEqual([]);
+    db.close();
+  });
+
+  test("overfetch-before-filter: corpus-filtered chunk ranked outside global top-limit IS returned", async () => {
+    // Setup: 5 noise chunks in "noise-corpus" with the SAME embedding as the query
+    // (distance = 0) so they always rank in the global top-5. 1 "target-corpus"
+    // chunk with a dissimilar embedding (ranked 6th globally).
+    //
+    // With limit=5 and no overfetch (bug): KNN returns top-5 (all noise), corpus
+    // filter drops them → 0 results even though a target-corpus chunk exists.
+    //
+    // With overfetch (OVERFETCH_FACTOR=8 → k=40): all 6 chunks sampled, corpus
+    // filter keeps the target → ≥1 result.
+    const db = makeDb();
+    const queryEmbedding = randomEmbedding(1001);
+    const noisyEmbedding = queryEmbedding; // distance = 0 from query → top-5
+
+    for (let i = 0; i < 5; i++) {
+      seedChunkDirect(db, {
+        corpus: "noise-corpus",
+        doc_path: `noise/n${i}.md`,
+        content: `Noise chunk ${i}`,
+        chunk_index: i,
+        embedding: noisyEmbedding,
+      });
+    }
+
+    // Target chunk with a dissimilar embedding → ranked outside global top-5
+    const targetEmbedding = randomEmbedding(7777);
+    seedChunkDirect(db, {
+      corpus: "target-corpus",
+      doc_path: "target/t.md",
+      content: "Target chunk in target corpus",
+      chunk_index: 0,
+      embedding: targetEmbedding,
+    });
+
+    const mockSvc = new MockEmbeddingService();
+    mockSvc.setNextEmbedding(queryEmbedding);
+
+    const query = new DocVectorQuery(db, mockSvc);
+    const results = await query.queryDocs("some query", {
+      limit: 5,
+      corpora: ["target-corpus"],
+      trust: "any",
+    });
+
+    // Must find the target chunk despite it being outside the global top-5
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].corpus).toBe("target-corpus");
+    expect(results.length).toBeLessThanOrEqual(5);
+
     db.close();
   });
 

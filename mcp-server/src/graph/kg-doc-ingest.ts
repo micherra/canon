@@ -138,17 +138,19 @@ function processOneSource(store: DocVectorStore, source: DocCorpusSource): void 
 
 /**
  * Batch-embed all stale doc chunks and write their vectors.
- * Fail-open: any error is caught and logged; never throws.
+ * Returns { embedFailed: true } when the embed phase throws (network/model error).
+ * Individual vector-write failures are logged but do NOT set embedFailed.
+ * Never throws — fail-open by design.
  */
 async function embedStaleChunks(
   store: DocVectorStore,
   embedSvc: EmbeddingServiceLike,
-): Promise<void> {
+): Promise<{ embedFailed: boolean }> {
   try {
     const stale = store.getStaleChunks();
     if (stale.length === 0) {
       store.cleanOrphanDocVectors();
-      return;
+      return { embedFailed: false };
     }
 
     const texts = stale.map((c) => c.content);
@@ -168,6 +170,13 @@ async function embedStaleChunks(
     }
   } catch (embedErr) {
     console.warn(`[kg-doc-ingest] embed phase failed: ${String(embedErr)}`);
+    // Always clean orphan doc_vectors even on embed failure
+    try {
+      store.cleanOrphanDocVectors();
+    } catch (cleanErr) {
+      console.warn(`[kg-doc-ingest] orphan cleanup failed: ${String(cleanErr)}`);
+    }
+    return { embedFailed: true };
   }
 
   // Always clean orphan doc_vectors at the end
@@ -176,6 +185,7 @@ async function embedStaleChunks(
   } catch (cleanErr) {
     console.warn(`[kg-doc-ingest] orphan cleanup failed: ${String(cleanErr)}`);
   }
+  return { embedFailed: false };
 }
 
 // Public entry point
@@ -194,12 +204,18 @@ async function embedStaleChunks(
  *
  * Errors from individual sources or individual files are caught and logged;
  * they never propagate — fail-open by design.
+ *
+ * Returns `{ ok: true }` when the full pipeline (scan → chunk → embed → write)
+ * completed without an embed-phase failure. Returns `{ ok: false, embedFailed: true }`
+ * when the embed phase threw (e.g. transient network/model error) — the scan and
+ * chunk phases still ran, but doc_vectors rows are missing. The caller should NOT
+ * stamp the freshness hash on embed failure so the next call retries.
  */
 export async function ingestDocCorpus(
   db: Database.Database,
   sources: DocCorpusSource[],
   embedSvc: EmbeddingServiceLike,
-): Promise<void> {
+): Promise<{ ok: boolean; embedFailed?: boolean }> {
   const store = new DocVectorStore(db);
 
   for (const source of sources) {
@@ -212,5 +228,9 @@ export async function ingestDocCorpus(
     }
   }
 
-  await embedStaleChunks(store, embedSvc);
+  const embedResult = await embedStaleChunks(store, embedSvc);
+  if (embedResult.embedFailed) {
+    return { embedFailed: true, ok: false };
+  }
+  return { ok: true };
 }

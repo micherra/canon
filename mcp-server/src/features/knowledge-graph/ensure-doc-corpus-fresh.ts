@@ -38,28 +38,36 @@ function safeStatSync(abs: string): Stats | null {
 
 /**
  * Walk a corpus directory tree, collecting (relPath, size, mtimeMs) entries for *.md files.
- * Uses an explicit `entries` parameter instead of a closure to keep complexity low.
+ *
+ * `dir` is the current directory being scanned (changes on each recursion).
+ * `originalRoot` is the corpus root — never changes — used for `relative()` so that
+ * nested files produce their full relative path (`a/foo.md`, `b/foo.md`) rather than
+ * a collapsed basename (`foo.md`). Violating this invariant silently breaks rename
+ * detection when two same-named files live in different subdirectories.
+ *
+ * See `mcp-server/.claude/CLAUDE.md` § "Recursive filesystem scanners — root threading".
  */
 function walkCorpusDir(
-  root: string,
+  dir: string,
+  originalRoot: string,
   corpusName: string,
   entries: Array<[string, number, number]>,
 ): void {
-  if (!existsSync(root)) return;
+  if (!existsSync(dir)) return;
   let dirEntries: string[];
   try {
-    dirEntries = readdirSync(root);
+    dirEntries = readdirSync(dir);
   } catch {
     return;
   }
   for (const entry of dirEntries) {
-    const abs = join(root, entry);
+    const abs = join(dir, entry);
     const stat = safeStatSync(abs);
     if (!stat) continue;
     if (stat.isDirectory()) {
-      walkCorpusDir(abs, corpusName, entries);
+      walkCorpusDir(abs, originalRoot, corpusName, entries); // originalRoot never changes
     } else if (entry.endsWith(".md")) {
-      const relPath = `${corpusName}/${relative(root, abs)}`;
+      const relPath = `${corpusName}/${relative(originalRoot, abs)}`; // full path from corpus root
       entries.push([relPath, stat.size, stat.mtimeMs]);
     }
   }
@@ -72,7 +80,7 @@ function walkCorpusDir(
 function computeCorpusHash(sources: DocCorpusSource[]): string {
   const entries: Array<[string, number, number]> = [];
   for (const source of sources) {
-    walkCorpusDir(source.root, source.corpus, entries);
+    walkCorpusDir(source.root, source.root, source.corpus, entries);
   }
 
   // Sort for determinism
@@ -120,12 +128,26 @@ async function refreshOnce(
   const p = (async () => {
     try {
       const db = initDatabase(dbPath);
+      // ingestOk defaults false: if ingestDocCorpus throws unexpectedly the hash
+      // is left un-stamped so the next caller retries (fail-closed on unexpected errors).
+      let ingestOk = false;
       try {
-        await ingestDocCorpus(db, sources, embedSvc);
+        const result = await ingestDocCorpus(db, sources, embedSvc);
+        ingestOk = result.ok;
       } finally {
         db.close();
       }
-      writeStoredHash(dbPath, newHash);
+      if (ingestOk) {
+        // Only stamp the freshness hash when the embed phase fully succeeded.
+        // On embed failure (doc_vectors missing), leave the hash un-stamped so
+        // the next ensureDocCorpusFresh call retries ingest. The last-good index
+        // is still served in the meantime (fail-open read path).
+        writeStoredHash(dbPath, newHash);
+      } else {
+        console.warn(
+          "[ensure-doc-corpus-fresh] embed phase failed — hash not stamped; next call will retry ingest",
+        );
+      }
     } catch (err) {
       console.warn(
         `[ensure-doc-corpus-fresh] refresh failed (serving last-good index): ${

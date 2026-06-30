@@ -9,7 +9,7 @@
  * dc-06: DOC_CORPUS_HASH_KEY marker stored in meta (not git HEAD)
  */
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDocCorpusFresh } from "@features/knowledge-graph/ensure-doc-corpus-fresh.ts";
@@ -19,9 +19,10 @@ import { DOC_CORPUS_HASH_KEY } from "@shared/constants.ts";
 import { MockEmbeddingService } from "@tests/helpers/embedding-test-helpers.ts";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-// Mock ingestDocCorpus so tests don't actually run the full ingest pipeline
+// Mock ingestDocCorpus so tests don't actually run the full ingest pipeline.
+// Default return is { ok: true } — matching the real function's success shape.
 vi.mock("@graph/kg-doc-ingest.ts", () => ({
-  ingestDocCorpus: vi.fn().mockResolvedValue(undefined),
+  ingestDocCorpus: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
 import { ingestDocCorpus } from "@graph/kg-doc-ingest.ts";
@@ -155,6 +156,80 @@ describe("ensureDocCorpusFresh", () => {
     await expect(
       ensureDocCorpusFresh(dbPath, sources, new MockEmbeddingService()),
     ).resolves.not.toThrow();
+  });
+
+  test("stamp-after-failed-embed: embed failure → hash NOT stamped → subsequent call retries ingest", async () => {
+    writeDoc("principles/p1.md");
+    const sources: DocCorpusSource[] = [makeSource("principles", join(tempDir, "principles"))];
+    const dbPath = makeDbPath();
+    const db = initDatabase(dbPath);
+    db.close();
+
+    // First call: ingest reports embed failure
+    (ingestDocCorpus as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      embedFailed: true,
+    });
+
+    await ensureDocCorpusFresh(dbPath, sources, new MockEmbeddingService());
+    expect(ingestDocCorpus).toHaveBeenCalledTimes(1);
+
+    // Hash must NOT have been stamped — embed phase failed
+    const db2 = initDatabase(dbPath);
+    const row = db2.prepare("SELECT value FROM meta WHERE key = ?").get(DOC_CORPUS_HASH_KEY) as
+      | { value: string }
+      | undefined;
+    db2.close();
+    expect(row).toBeUndefined();
+
+    // Second call: hash still absent → ingest retried
+    vi.clearAllMocks();
+    await ensureDocCorpusFresh(dbPath, sources, new MockEmbeddingService());
+    expect(ingestDocCorpus).toHaveBeenCalledTimes(1);
+  });
+
+  test("recursive-root-drift: file rename between nested subdirs (path-only change) triggers re-ingest", async () => {
+    // Use a fixed second-granularity mtime to eliminate sub-millisecond precision
+    // loss through utimesSync. This ensures the ONLY difference between state A and
+    // state B is the subdir in the path — not size or mtime.
+    const FIXED_MTIME = new Date(1704067200000); // 2024-01-01T00:00:00.000Z (exact second)
+
+    const aDir = join(tempDir, "principles", "sub-a");
+    const bDir = join(tempDir, "principles", "sub-b");
+    mkdirSync(aDir, { recursive: true });
+    mkdirSync(bDir, { recursive: true });
+
+    const content = "# Same content in both locations.\n";
+    const aFile = join(aDir, "guide.md");
+    const bFile = join(bDir, "guide.md");
+
+    writeFileSync(aFile, content);
+    utimesSync(aFile, FIXED_MTIME, FIXED_MTIME); // pin to exact second
+
+    const sources: DocCorpusSource[] = [makeSource("principles", join(tempDir, "principles"))];
+    const dbPath = makeDbPath();
+    const db = initDatabase(dbPath);
+    db.close();
+
+    // First run: sub-a/guide.md ingested, hash H_a stamped
+    await ensureDocCorpusFresh(dbPath, sources, new MockEmbeddingService());
+    expect(ingestDocCorpus).toHaveBeenCalledTimes(1);
+    vi.clearAllMocks();
+
+    // "Rename": write sub-b/guide.md with IDENTICAL content and IDENTICAL mtime,
+    // then delete sub-a/guide.md. The only change is the subdir component.
+    writeFileSync(bFile, content); // same size
+    utimesSync(bFile, FIXED_MTIME, FIXED_MTIME); // same exact mtime
+    unlinkSync(aFile);
+
+    // Second run:
+    //   Bug:  relative(subdir, abs) collapses both to "principles/guide.md":
+    //         H_b = sha256("principles/guide.md:size:mtime") = H_a → no re-ingest
+    //   Fix:  full relative path used:
+    //         H_a = sha256("principles/sub-a/guide.md:size:mtime") ≠
+    //         H_b = sha256("principles/sub-b/guide.md:size:mtime") → re-ingest fires
+    await ensureDocCorpusFresh(dbPath, sources, new MockEmbeddingService());
+    expect(ingestDocCorpus).toHaveBeenCalledTimes(1);
   });
 
   test("concurrent callers deduplicate — only one ingest runs per stale cycle", async () => {

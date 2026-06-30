@@ -16,6 +16,23 @@
 import type Database from "better-sqlite3";
 import type { EmbeddingServiceLike } from "./kg-embedding.ts";
 
+/**
+ * Over-fetch factor for KNN before corpus/trust filtering.
+ *
+ * The vec0 MATCH + `k = ?` idiom limits the initial KNN scan. When corpus or
+ * trust_tier filters are applied via the doc_chunks JOIN, SQLite discards
+ * non-matching rows AFTER the KNN — so a small k silently drops valid results
+ * that rank just outside the global top-k.
+ *
+ * Heuristic fix: request k = limit × OVERFETCH_FACTOR candidates, apply
+ * filters, then truncate to the caller's requested limit via LIMIT. An
+ * OVERFETCH_FACTOR of 8 means we tolerate up to 7 non-matching rows per
+ * matching row before recall degrades; the hard cap prevents runaway queries
+ * on large corpora.
+ */
+const OVERFETCH_FACTOR = 8;
+const OVERFETCH_CAP = 1000;
+
 export type DocSearchResult = {
   chunk_id: number;
   corpus: string;
@@ -62,6 +79,12 @@ export class DocVectorQuery {
     const queryBuf = Buffer.from(queryVec.buffer, queryVec.byteOffset, queryVec.byteLength);
 
     // 2. Build SQL — vec0 KNN via MATCH + k = ? (bound params work for queries, only writes bug out)
+    //
+    // Over-fetch: bind k to limit × OVERFETCH_FACTOR so corpus/trust filters applied
+    // by the doc_chunks JOIN do not silently drop valid results that rank just outside
+    // the global top-limit. LIMIT at the end truncates to the caller's requested limit.
+    const overfetchK = Math.min(limit * OVERFETCH_FACTOR, OVERFETCH_CAP);
+
     const trustClause = trust === "internal" ? "AND dc.trust_tier = 'internal'" : "";
 
     let corporaClause = "";
@@ -88,9 +111,10 @@ export class DocVectorQuery {
         ${trustClause}
         ${corporaClause}
       ORDER BY dv.distance
+      LIMIT ?
     `;
 
-    const rows = this.db.prepare(sql).all(queryBuf, limit, ...corporaParams) as Array<{
+    const rows = this.db.prepare(sql).all(queryBuf, overfetchK, ...corporaParams, limit) as Array<{
       chunk_id: number;
       distance: number;
       corpus: string;
