@@ -21,6 +21,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evictStoresForScope } from "@domains/workspaces/execution-store-cache.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -28,6 +29,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { RootsListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { evictJobManagerForScope } from "@platform/jobs/job-manager.ts";
 import { evictDriftDbForScope } from "@platform/storage/drift/drift-db-cache.ts";
+import { isSafeProjectDirInput } from "@shared/lib/safe-project-dir.ts";
 import { createCanonServer } from "../create-server.ts";
 import {
   clearConnectionScope,
@@ -227,14 +229,19 @@ export function _registerRootsChangedHandlerForTest(
  * Validate that dir is an existing directory, then realpath-normalize it.
  * Returns the normalized path or undefined if invalid.
  *
+ * Input is barrier-validated by isSafeProjectDirInput BEFORE any fs access
+ * (CodeQL js/path-injection allow-list strategy; see docs/adr/0028).
+ *
  * PROBE FINDING: must use fs.realpath, NOT path.resolve, to handle macOS symlinks
  * like /tmp → /private/tmp. Without realpath, two sessions with the same physical
  * directory can produce distinct scope keys, breaking refcounted eviction.
  */
 async function validateAndNormalizeDir(dir: string): Promise<string | undefined> {
   try {
-    if (!existsSync(dir) || !statSync(dir).isDirectory()) return undefined;
-    return await realpath(dir);
+    if (!isSafeProjectDirInput(dir)) return undefined; // barrier BEFORE fs access (ADR-0028)
+    const resolved = resolve(dir); // normalize (removes any residual .)
+    if (!existsSync(resolved) || !statSync(resolved).isDirectory()) return undefined;
+    return await realpath(resolved);
   } catch {
     return undefined;
   }

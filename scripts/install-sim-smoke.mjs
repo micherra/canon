@@ -392,8 +392,8 @@ async function runHttpSubTest({
 }) {
   const helperPath = resolveHeadersHelper(headersHelperRaw, installEnvForHelper, expandEnvToken);
   if (DEBUG) {
-    console.error(`[install-sim][${label}] headersHelper resolved: ${helperPath}`);
-    console.error(`[install-sim][${label}] url: ${expandedUrl}`);
+    console.error(`[install-sim][${label}] headersHelper resolved: <redacted>`);
+    console.error(`[install-sim][${label}] url: <redacted>`);
   }
 
   const headerResult = runHeadersHelper(
@@ -474,7 +474,7 @@ async function runNormalMode() {
           `CANON_DAEMON_PORT expansion may have failed.`,
       );
     }
-    console.log(`[install-sim] Expanded url: ${expandedUrl}`);
+    console.log("[install-sim] Expanded url: <redacted>");
 
     // Boot daemon on the ephemeral port.
     ({ proc } = await startTestDaemon({ archivePath, userProjectDir, port, tokenFile }));
@@ -694,8 +694,8 @@ async function main() {
     }
     process.exit(exitCode);
   } catch (err) {
-    console.error(`[install-sim] UNEXPECTED ERROR: ${err.message}`);
-    if (DEBUG) console.error(err.stack);
+    console.error(`[install-sim] UNEXPECTED ERROR: ${err?.name ?? "Error"}`);
+    if (DEBUG) console.error("[install-sim] Error name:", err?.name ?? "Error");
     process.exit(1);
   }
 }
