@@ -51,7 +51,12 @@ fi
 # Scope detection: any hooks/**/*.sh or *.mjs changed in base..HEAD?
 # ---------------------------------------------------------------------------
 DIFF_OUTPUT=""
-if ! DIFF_OUTPUT=$(git diff --name-only "${BASE_COMMIT}..HEAD" 2>&1); then
+# --no-renames: disable git's rename detection so a `git mv hooks/foo.sh
+# hooks/foo.txt` shows BOTH the deleted source path (hooks/foo.sh — which
+# matches the .sh filter and correctly fires the gate) AND the added
+# destination path.  With default rename detection ON, only the destination
+# path is reported, causing a false no-op when a hook .sh is moved/renamed.
+if ! DIFF_OUTPUT=$(git diff --name-only --no-renames "${BASE_COMMIT}..HEAD" 2>&1); then
   echo "CANON: shell-test-gate failed-closed — git diff failed: $DIFF_OUTPUT" >&2
   exit 2
 fi

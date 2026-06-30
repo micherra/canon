@@ -373,6 +373,41 @@ git -C "$CASEK_REPO" commit -q -m "add foo.sh (in-scope change)"
 run_gate "unrunnable suite (bash syntax error) → exit 2 fail-closed" 2 "$CASEK_REPO" "$CASEK_BASE"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Case l: rename — `git mv hooks/foo.sh hooks/foo.txt` → gate MUST fire
+#
+# Regression test for the --no-renames fix (Codex P2, PR #434).
+# With default rename detection ON, git diff --name-only reports only the
+# destination path (hooks/foo.txt), which does NOT match ^hooks/.*\.(sh|mjs)$,
+# causing a false no-op. --no-renames forces git to emit BOTH the deleted
+# source (hooks/foo.sh — in-scope) and the added destination (hooks/foo.txt —
+# out-of-scope), so the filter catches the .sh removal and fires the suite.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case l: git mv hooks/foo.sh hooks/foo.txt → gate fires (--no-renames fix) --"
+
+CASEL_REPO="$MASTER_TMP/casel"
+init_fixture_repo "$CASEL_REPO"
+
+mkdir -p "$CASEL_REPO/hooks"
+printf '#!/bin/bash\nexit 0\n' > "$CASEL_REPO/hooks/stub-pass.test.sh"
+printf '#!/bin/bash\n# original hook\n' > "$CASEL_REPO/hooks/foo.sh"
+git -C "$CASEL_REPO" add hooks/stub-pass.test.sh hooks/foo.sh
+git -C "$CASEL_REPO" commit -q -m "add foo.sh + stub suite"
+CASEL_BASE=$(git -C "$CASEL_REPO" rev-parse HEAD)
+
+# Rename hooks/foo.sh → hooks/foo.txt (git rename detection would hide the .sh)
+git -C "$CASEL_REPO" mv hooks/foo.sh hooks/foo.txt
+git -C "$CASEL_REPO" commit -q -m "rename hooks/foo.sh to hooks/foo.txt"
+
+# With --no-renames the gate sees the deleted hooks/foo.sh (in-scope) and
+# fires the suite (stub-pass exits 0 → overall exit 0, not a no-op exit 0).
+# We verify it actually ran by checking for the === banner in output.
+run_gate_with_output \
+  "rename hooks/foo.sh → hooks/foo.txt: gate fires (not a no-op)" \
+  "=== hooks/stub-pass.test.sh ===" \
+  "$CASEL_REPO" "$CASEL_BASE"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
