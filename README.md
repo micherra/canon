@@ -32,7 +32,7 @@ Claude classifies every message and picks the right approach automatically. No f
 
 ### Parallel execution via DAG
 
-For multi-task builds, the architect produces a `task-dag.yaml` that expresses ordering constraints. Claude spawns a team of engineer workers that claim tasks from the queue and execute them in parallel worktrees. Completed tasks are merged into the build branch in dependency order.
+For multi-task builds, the architect produces a `task-dag.yaml` that expresses ordering constraints. Claude spawns a team of engineer workers that claim tasks from the queue and execute them in isolated git worktrees — they cannot step on each other's changes. Completed tasks merge back into the build branch in dependency order.
 
 ### Codebase understanding
 
@@ -48,7 +48,7 @@ For open-ended questions, `semantic_search` lets you search the indexed codebase
 
 ### Principles with drift detection
 
-Canon ships with 64 built-in engineering principles across three severity tiers. Agents load the principles relevant to their task — matched by architectural layer and file path. Reviewers check compliance. Drift reports show which principles the codebase is drifting from, with trend data and hotspot directories.
+Canon ships with 64 built-in engineering principles across three severity tiers. Agents load the principles relevant to their task — matched by architectural layer and file path. Reviewers check compliance. Drift reports show which principles the codebase is drifting from, with trend data, hotspot directories, co-change partners, blast radius, and compliance history.
 
 ### Interactive HTML dashboards
 
@@ -99,6 +99,8 @@ You approved the plan and saw the review. Canon drove everything else.
 | Learner | Review data analysis, principle improvement suggestions |
 | Evaluator | Lightweight quality gate — structural signal verdict (PASS/FAIL) on engineer diffs |
 | Janitor | Background workspace housekeeping — prunes stale worktrees and orphaned workspaces |
+
+Every agent commit carries Canon provenance trailers (workflow, agent, step, task ID) so every change traces back to the plan that produced it. The security agent handles vulnerability assessment and threat modeling; its findings gate the review verdict.
 
 ---
 
@@ -190,6 +192,47 @@ The **learner** mines build history, review data, and drift trends to propose pr
 **Trace-driven evolution** goes deeper: `attribute_failure` maps build failures back to specific principles, `evaluate_candidate` gates whether a proposed change actually improves fitness, and `select_mutation_targets` identifies which principles are highest-leverage to evolve next.
 
 The learning → evolution cycle is always advisory: Canon surfaces proposals; you decide what applies.
+
+---
+
+## Adaptive Supervision
+
+Canon asks for approval where it matters and gets out of your way where it doesn't.
+
+Every build gets a computed tier — **autonomous**, **light-touch**, or **supervised** — based on blast radius, compliance history, and build scope. Higher tiers skip human checkpoints for routine low-risk work; lower tiers keep all gates active.
+
+| Tier | What gets skipped |
+|------|------------------|
+| `supervised` | Nothing — all human checkpoints active |
+| `light-touch` | Build-step progress checkpoints only |
+| `autonomous` | Build-step checkpoints + advisory WARNING close-outs |
+
+Two gates are mandatory at every tier: **plan approval** and the **review verdict**. These are where wrong assumptions get caught — they are never skipped.
+
+---
+
+## Quality Gates That Never Skip
+
+Some gates are deterministic code, not model judgment — they run on every build regardless of tier.
+
+Canon ships 35 hook scripts. Key gates that always run:
+
+| Gate | What it catches |
+|------|----------------|
+| Dead-wire reachability | Newly exported symbols with zero real callers |
+| Phantom-claim check | Summary claiming changes the diff doesn't contain |
+| Scope guard | Scribe deleting more than this build's own additions |
+| Pre-push review | Principle compliance check before any push |
+
+Build integrity doesn't depend on the model remembering to run them.
+
+---
+
+## Durable Builds
+
+A build can survive a crash, session restart, or context-window compaction. Canon's durable journal, decisions ledger, and checkpoint files record every step — a resumed session rehydrates from those files, not from memory.
+
+The architect writes Architecture Decision Records to `docs/adr/` for decisions that are hard-to-reverse and worth recording. 27 ADRs are in the Canon repo at HEAD, covering every major design choice in the system.
 
 ---
 
