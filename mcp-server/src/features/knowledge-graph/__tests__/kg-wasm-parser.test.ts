@@ -370,11 +370,12 @@ describe("kg-wasm-parser — duplicate overlay id: first-wins policy", () => {
 
     writeFileSync(
       join(tmpDir, ".canon", "kg-languages", `${dupId}-a.json`),
-      JSON.stringify({ extensions: [`.${dupId}a`], grammarFile: wasmFile, id: dupId, nodeKinds }),
+      // Use charset-compliant extensions (^\.[a-z0-9]+$ — no hyphens allowed)
+      JSON.stringify({ extensions: [".ext1"], grammarFile: wasmFile, id: dupId, nodeKinds }),
     );
     writeFileSync(
       join(tmpDir, ".canon", "kg-languages", `${dupId}-b.json`),
-      JSON.stringify({ extensions: [`.${dupId}b`], grammarFile: wasmFile, id: dupId, nodeKinds }),
+      JSON.stringify({ extensions: [".ext2"], grammarFile: wasmFile, id: dupId, nodeKinds }),
     );
     // Write a stub wasm so existsSync passes (both files reference the same wasm)
     writeFileSync(join(tmpDir, ".canon", "grammars", wasmFile), "not a wasm file");
@@ -416,11 +417,12 @@ describe("kg-wasm-parser — duplicate overlay id: first-wins policy", () => {
 
     writeFileSync(
       join(tmpDir, ".canon", "kg-languages", `${dupId}-first.json`),
-      JSON.stringify({ extensions: [`.${dupId}1`], grammarFile: wasmFile, id: dupId, nodeKinds }),
+      // Use charset-compliant extensions (^\.[a-z0-9]+$ — no hyphens allowed)
+      JSON.stringify({ extensions: [".ext3"], grammarFile: wasmFile, id: dupId, nodeKinds }),
     );
     writeFileSync(
       join(tmpDir, ".canon", "kg-languages", `${dupId}-second.json`),
-      JSON.stringify({ extensions: [`.${dupId}2`], grammarFile: wasmFile, id: dupId, nodeKinds }),
+      JSON.stringify({ extensions: [".ext4"], grammarFile: wasmFile, id: dupId, nodeKinds }),
     );
     writeFileSync(join(tmpDir, ".canon", "grammars", wasmFile), "not a wasm file");
 

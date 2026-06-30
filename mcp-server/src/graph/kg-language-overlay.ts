@@ -70,6 +70,11 @@ type RawOverlayEntry = {
 /**
  * Validate the `extensions` field of a parsed overlay entry.
  * Returns the string[] or null on violation.
+ *
+ * Security (inert-C / decision inert-03): extensions are a closed identifier domain
+ * (file extension strings), not free text.  Each entry must match `^\.[a-z0-9]+$`
+ * to prevent label-injection via specially-crafted extension strings.  A charset
+ * mismatch skips the entire overlay entry (fail-closed).
  */
 function validateExtensions(obj: Record<string, unknown>, id: string): string[] | null {
   if (!Array.isArray(obj.extensions)) {
@@ -79,6 +84,16 @@ function validateExtensions(obj: Record<string, unknown>, id: string): string[] 
   if (!obj.extensions.every((e) => typeof e === "string")) {
     console.warn(`kg-language-overlay: [${id}] 'extensions' must be string[] — skipping`);
     return null;
+  }
+  // Charset constraint: each extension must be a safe lowercase file-extension identifier.
+  const EXT_CHARSET = /^\.[a-z0-9]+$/;
+  for (const ext of obj.extensions as string[]) {
+    if (!EXT_CHARSET.test(ext)) {
+      console.warn(
+        `kg-language-overlay: [${id}] extension '${ext}' does not match ^\\.[a-z0-9]+$ — skipping`,
+      );
+      return null;
+    }
   }
   return obj.extensions as string[];
 }
@@ -107,6 +122,14 @@ function validateOverlayEntry(
     return null;
   }
   const id = obj.id.trim();
+
+  // Charset constraint (inert-C / decision inert-03): id is a closed identifier domain.
+  // Allow only lowercase alphanumeric, hyphen, and underscore to prevent label-injection.
+  const ID_CHARSET = /^[a-z0-9_-]+$/;
+  if (!ID_CHARSET.test(id)) {
+    console.warn(`kg-language-overlay: [${id}] 'id' does not match ^[a-z0-9_-]+$ — skipping`);
+    return null;
+  }
 
   // Built-in collision: built-in wins, overlay entry dropped
   if (builtinIds.has(id)) {

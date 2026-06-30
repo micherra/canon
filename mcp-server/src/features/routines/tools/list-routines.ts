@@ -1,3 +1,4 @@
+import { renderUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import { loadAllRoutines } from "@shared/routine.ts";
@@ -59,13 +60,19 @@ export async function listRoutines(
       const state = await readRoutineState(projectDir, routine.name);
       const last_run = state?.last_run ?? null;
 
+      // Fence project-local title via renderUntrusted. Plugin titles are trusted (dc-05).
+      const title = renderUntrusted(routine.title, {
+        ref: `.canon/routines/${routine.name}`,
+        source: routine.source,
+      });
+
       return {
         drift,
         last_run,
         name: routine.name,
         resolved_binding,
         status: routine.status,
-        title: routine.title,
+        title,
       };
     }),
   );

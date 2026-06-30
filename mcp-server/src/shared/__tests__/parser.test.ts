@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { brandUntrusted, rawUntrustedForStructuralUse } from "../lib/overlay-untrusted-text.ts";
 import {
   extractSections,
   filterBodyBySections,
@@ -116,15 +117,15 @@ Prevents injection attacks.`;
 
     const p = parsePrinciple(content, "/path/to/file.md");
     expect(p.id).toBe("validate-inputs");
-    expect(p.title).toBe("Validate at Trust Boundaries");
+    expect(rawUntrustedForStructuralUse(p.title)).toBe("Validate at Trust Boundaries");
     expect(p.severity).toBe("rule");
     expect(p.scope.layers).toEqual(["api"]);
     expect(p.scope.file_patterns).toEqual(["src/routes/**"]);
     expect(p.tags).toEqual(["security", "validation"]);
     expect(p.archived).toBe(false);
     expect(p.filePath).toBe("/path/to/file.md");
-    expect(p.body).toContain("Always validate user input");
-    expect(p.body).toContain("## Rationale");
+    expect(rawUntrustedForStructuralUse(p.body)).toContain("Always validate user input");
+    expect(rawUntrustedForStructuralUse(p.body)).toContain("## Rationale");
   });
 
   it("parses archived: true", () => {
@@ -269,7 +270,7 @@ Summary paragraph.
 
 The excuse table.`;
     const p = parsePrinciple(content, "test.md");
-    expect(p.anti_rationalization).toContain("The excuse table.");
+    expect(rawUntrustedForStructuralUse(p.anti_rationalization!)).toContain("The excuse table.");
   });
 
   it("populates verification field when section present", () => {
@@ -287,7 +288,7 @@ Summary paragraph.
 npm test
 \`\`\``;
     const p = parsePrinciple(content, "test.md");
-    expect(p.verification).toContain("npm test");
+    expect(rawUntrustedForStructuralUse(p.verification!)).toContain("npm test");
   });
 
   it("leaves fields undefined when sections absent", () => {
@@ -324,8 +325,8 @@ Rationale text.
 
 Table content.`;
     const p = parsePrinciple(content, "test.md");
-    expect(p.body).toContain("## Rationale");
-    expect(p.body).not.toContain("## Anti-Rationalization");
+    expect(rawUntrustedForStructuralUse(p.body)).toContain("## Rationale");
+    expect(rawUntrustedForStructuralUse(p.body)).not.toContain("## Anti-Rationalization");
   });
 });
 
@@ -336,20 +337,32 @@ describe("filterBodyBySections", () => {
   const verification = "Shell commands.";
 
   it("returns summary + requested section only when sections list provided", () => {
-    const result = filterBodyBySections(body, antiRat, verification, ["anti_rationalization"]);
-    expect(result).toContain(summaryParagraph);
-    expect(result).toContain("## Anti-Rationalization");
-    expect(result).toContain(antiRat);
-    expect(result).not.toContain("## Verification");
-    expect(result).not.toContain(verification);
+    const result = filterBodyBySections(
+      brandUntrusted(body),
+      brandUntrusted(antiRat),
+      brandUntrusted(verification),
+      ["anti_rationalization"],
+    );
+    const raw = rawUntrustedForStructuralUse(result);
+    expect(raw).toContain(summaryParagraph);
+    expect(raw).toContain("## Anti-Rationalization");
+    expect(raw).toContain(antiRat);
+    expect(raw).not.toContain("## Verification");
+    expect(raw).not.toContain(verification);
   });
 
   it("returns full body when sections list is empty", () => {
-    const result = filterBodyBySections(body, antiRat, verification, []);
-    expect(result).toContain(summaryParagraph);
-    expect(result).toContain("## Rationale");
-    expect(result).toContain("## Anti-Rationalization");
-    expect(result).toContain("## Verification");
+    const result = filterBodyBySections(
+      brandUntrusted(body),
+      brandUntrusted(antiRat),
+      brandUntrusted(verification),
+      [],
+    );
+    const raw = rawUntrustedForStructuralUse(result);
+    expect(raw).toContain(summaryParagraph);
+    expect(raw).toContain("## Rationale");
+    expect(raw).toContain("## Anti-Rationalization");
+    expect(raw).toContain("## Verification");
   });
 });
 

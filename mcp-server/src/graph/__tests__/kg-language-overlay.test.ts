@@ -311,6 +311,149 @@ describe("case 5: KG integrity", () => {
   });
 });
 
+// ─── Case 7: Charset constraint — id field ────────────────────────────────
+
+describe("case 7: charset constraint on id (^[a-z0-9_-]+$)", () => {
+  it("rejects id containing injection-shaped characters (semicolon)", () => {
+    writeOverlayJson(tmpDir, "bad-id.json", {
+      extensions: [".go"],
+      grammarFile: "tree-sitter-go.wasm",
+      id: "go; rm -rf /",
+      nodeKinds: VALID_NODE_KINDS,
+    });
+    touchGrammarFile(tmpDir, "tree-sitter-go.wasm");
+
+    const result = loadOverlayConfigs(tmpDir, BUILTIN_IDS);
+    expect(result).toHaveLength(0);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("skipping"));
+  });
+
+  it("rejects id containing uppercase characters", () => {
+    writeOverlayJson(tmpDir, "bad-id-upper.json", {
+      extensions: [".go"],
+      grammarFile: "tree-sitter-go.wasm",
+      id: "Go",
+      nodeKinds: VALID_NODE_KINDS,
+    });
+    touchGrammarFile(tmpDir, "tree-sitter-go.wasm");
+
+    const result = loadOverlayConfigs(tmpDir, BUILTIN_IDS);
+    expect(result).toHaveLength(0);
+  });
+
+  it("rejects id containing spaces", () => {
+    writeOverlayJson(tmpDir, "bad-id-space.json", {
+      extensions: [".go"],
+      grammarFile: "tree-sitter-go.wasm",
+      id: "my lang",
+      nodeKinds: VALID_NODE_KINDS,
+    });
+    touchGrammarFile(tmpDir, "tree-sitter-go.wasm");
+
+    const result = loadOverlayConfigs(tmpDir, BUILTIN_IDS);
+    expect(result).toHaveLength(0);
+  });
+
+  it("accepts a valid lowercase id matching ^[a-z0-9_-]+$", () => {
+    writeOverlayJson(tmpDir, "valid-id.json", {
+      extensions: [".go"],
+      grammarFile: "tree-sitter-go.wasm",
+      id: "go",
+      nodeKinds: VALID_NODE_KINDS,
+    });
+    touchGrammarFile(tmpDir, "tree-sitter-go.wasm");
+
+    const result = loadOverlayConfigs(tmpDir, BUILTIN_IDS);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("go");
+  });
+
+  it("accepts id with hyphens and underscores", () => {
+    writeOverlayJson(tmpDir, "valid-id-hyph.json", {
+      extensions: [".my"],
+      grammarFile: "tree-sitter-my-lang.wasm",
+      id: "my-lang_2",
+      nodeKinds: VALID_NODE_KINDS,
+    });
+    touchGrammarFile(tmpDir, "tree-sitter-my-lang.wasm");
+
+    const result = loadOverlayConfigs(tmpDir, BUILTIN_IDS);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("my-lang_2");
+  });
+});
+
+// ─── Case 8: Charset constraint — extensions field ────────────────────────
+
+describe("case 8: charset constraint on extensions (^\\.[a-z0-9]+$)", () => {
+  it("rejects an extension containing injection-shaped characters (semicolon)", () => {
+    writeOverlayJson(tmpDir, "bad-ext.json", {
+      extensions: [".go; system()"],
+      grammarFile: "tree-sitter-go.wasm",
+      id: "go",
+      nodeKinds: VALID_NODE_KINDS,
+    });
+    touchGrammarFile(tmpDir, "tree-sitter-go.wasm");
+
+    const result = loadOverlayConfigs(tmpDir, BUILTIN_IDS);
+    expect(result).toHaveLength(0);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("skipping"));
+  });
+
+  it("rejects an extension without a leading dot", () => {
+    writeOverlayJson(tmpDir, "bad-ext-nodot.json", {
+      extensions: ["go"],
+      grammarFile: "tree-sitter-go.wasm",
+      id: "go",
+      nodeKinds: VALID_NODE_KINDS,
+    });
+    touchGrammarFile(tmpDir, "tree-sitter-go.wasm");
+
+    const result = loadOverlayConfigs(tmpDir, BUILTIN_IDS);
+    expect(result).toHaveLength(0);
+  });
+
+  it("rejects an extension containing uppercase characters", () => {
+    writeOverlayJson(tmpDir, "bad-ext-upper.json", {
+      extensions: [".Go"],
+      grammarFile: "tree-sitter-go.wasm",
+      id: "go",
+      nodeKinds: VALID_NODE_KINDS,
+    });
+    touchGrammarFile(tmpDir, "tree-sitter-go.wasm");
+
+    const result = loadOverlayConfigs(tmpDir, BUILTIN_IDS);
+    expect(result).toHaveLength(0);
+  });
+
+  it("accepts valid extensions matching ^\\.[a-z0-9]+$", () => {
+    writeOverlayJson(tmpDir, "valid-ext.json", {
+      extensions: [".go", ".gox"],
+      grammarFile: "tree-sitter-go.wasm",
+      id: "go",
+      nodeKinds: VALID_NODE_KINDS,
+    });
+    touchGrammarFile(tmpDir, "tree-sitter-go.wasm");
+
+    const result = loadOverlayConfigs(tmpDir, BUILTIN_IDS);
+    expect(result).toHaveLength(1);
+    expect(result[0].extensions).toEqual([".go", ".gox"]);
+  });
+
+  it("rejects the entire entry when any one extension fails charset check (fail-closed)", () => {
+    writeOverlayJson(tmpDir, "mixed-ext.json", {
+      extensions: [".go", ".GO"],
+      grammarFile: "tree-sitter-go.wasm",
+      id: "go",
+      nodeKinds: VALID_NODE_KINDS,
+    });
+    touchGrammarFile(tmpDir, "tree-sitter-go.wasm");
+
+    const result = loadOverlayConfigs(tmpDir, BUILTIN_IDS);
+    expect(result).toHaveLength(0);
+  });
+});
+
 // ─── Case 6: Empty / absent overlay dir → [] ─────────────────────────────
 
 describe("case 6: empty or absent overlay dir", () => {
