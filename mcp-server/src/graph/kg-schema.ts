@@ -10,7 +10,7 @@ import * as sqliteVec from "sqlite-vec";
 
 // Schema version — increment when DDL changes require a migration
 
-export const SCHEMA_VERSION = "5";
+export const SCHEMA_VERSION = "6";
 
 // DDL statements (v1+v2 base schema)
 
@@ -21,8 +21,8 @@ const DDL_STATEMENTS = [
     value TEXT NOT NULL
   )`,
 
-  // Note: schema_version is set to '5' for new databases.
-  // runMigrations() will upgrade existing v1/v2/v3/v4 databases.
+  // Note: schema_version is set to '6' for new databases.
+  // runMigrations() will upgrade existing v1–v5 databases.
   `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`,
 
   // Files table
@@ -196,6 +196,41 @@ const DDL_STATEMENTS = [
   )`,
 
   `CREATE INDEX IF NOT EXISTS idx_file_tags_tag ON file_tags(tag)`,
+
+  // ── v6: doc corpus tables ──────────────────────────────────────────────────
+
+  // doc_chunks — one row per heading-section chunk from a markdown knowledge doc
+  `CREATE TABLE IF NOT EXISTS doc_chunks (
+    chunk_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    corpus        TEXT    NOT NULL,
+    doc_path      TEXT    NOT NULL,
+    heading_path  TEXT,
+    chunk_index   INTEGER NOT NULL,
+    char_start    INTEGER NOT NULL,
+    char_end      INTEGER NOT NULL,
+    content       TEXT    NOT NULL,
+    content_hash  TEXT    NOT NULL,
+    trust_tier    TEXT    NOT NULL DEFAULT 'internal',
+    updated_at    TEXT    NOT NULL,
+    UNIQUE(corpus, doc_path, chunk_index)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_doc_chunks_corpus   ON doc_chunks(corpus)`,
+  `CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc_path ON doc_chunks(corpus, doc_path)`,
+
+  // doc_vectors — vec0 virtual table for semantic KNN over doc chunks
+  `CREATE VIRTUAL TABLE IF NOT EXISTS doc_vectors USING vec0(
+    chunk_id  INTEGER PRIMARY KEY,
+    embedding float[384]
+  )`,
+
+  // doc_chunk_meta — shadow table for vector staleness tracking
+  `CREATE TABLE IF NOT EXISTS doc_chunk_meta (
+    chunk_id    INTEGER PRIMARY KEY REFERENCES doc_chunks(chunk_id) ON DELETE CASCADE,
+    text_hash   TEXT NOT NULL,
+    model_id    TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+  )`,
 ];
 
 // Migration definitions
@@ -294,6 +329,41 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
     },
     version: "5",
+  },
+  {
+    up: (db) => {
+      // sqlite-vec must be loaded before vec0 DDL — idempotent call.
+      sqliteVec.load(db);
+
+      db.exec(`CREATE TABLE IF NOT EXISTS doc_chunks (
+        chunk_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        corpus        TEXT    NOT NULL,
+        doc_path      TEXT    NOT NULL,
+        heading_path  TEXT,
+        chunk_index   INTEGER NOT NULL,
+        char_start    INTEGER NOT NULL,
+        char_end      INTEGER NOT NULL,
+        content       TEXT    NOT NULL,
+        content_hash  TEXT    NOT NULL,
+        trust_tier    TEXT    NOT NULL DEFAULT 'internal',
+        updated_at    TEXT    NOT NULL,
+        UNIQUE(corpus, doc_path, chunk_index)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_doc_chunks_corpus   ON doc_chunks(corpus)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc_path ON doc_chunks(corpus, doc_path)`);
+      db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS doc_vectors USING vec0(
+        chunk_id  INTEGER PRIMARY KEY,
+        embedding float[384]
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS doc_chunk_meta (
+        chunk_id    INTEGER PRIMARY KEY REFERENCES doc_chunks(chunk_id) ON DELETE CASCADE,
+        text_hash   TEXT NOT NULL,
+        model_id    TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+      )`);
+      db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
+    },
+    version: "6",
   },
 ];
 

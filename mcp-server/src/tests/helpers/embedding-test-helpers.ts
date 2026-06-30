@@ -37,12 +37,28 @@ export function randomEmbedding(seed = 0): Float32Array {
  */
 export class MockEmbeddingService {
   private seed = 0;
+  private _nextEmbedding: Float32Array | null = null;
+
+  /** Override the next embedOne/embed call to return a specific vector. */
+  setNextEmbedding(vec: Float32Array): void {
+    this._nextEmbedding = vec;
+  }
 
   async embed(texts: string[]): Promise<Float32Array[]> {
+    if (this._nextEmbedding !== null) {
+      const v = this._nextEmbedding;
+      this._nextEmbedding = null;
+      return texts.map(() => v);
+    }
     return texts.map((_, i) => randomEmbedding(this.seed + i));
   }
 
   async embedOne(_text: string): Promise<Float32Array> {
+    if (this._nextEmbedding !== null) {
+      const v = this._nextEmbedding;
+      this._nextEmbedding = null;
+      return v;
+    }
     return randomEmbedding(this.seed++);
   }
 
