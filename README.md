@@ -12,6 +12,8 @@ Canon is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/p
 
 Canon has strong opinions about software engineering and shares them with every agent it spawns. Principles are loaded per task, enforced during implementation, and drift-tracked across sessions. When the codebase diverges from your standards, Canon tells you.
 
+Under the hood: ~57 MCP tools across 11 areas (orchestration, principles, knowledge graph, review, evolution, loops, routines, diagnostics, and more). Canon runs as a local HTTP daemon — multiple Claude sessions can build concurrently and safely.
+
 ---
 
 ## How It Works
@@ -36,7 +38,7 @@ For multi-task builds, the architect produces a `task-dag.yaml` that expresses o
 
 Claude builds a knowledge graph of your codebase: import/export relationships, function calls, architectural layer assignments, cycle detection, and hub identification. When an agent touches a file, the relevant context — callers, callees, blast radius, layer — is already in its prompt.
 
-You can also ask directly:
+For open-ended questions, `semantic_search` lets you search the indexed codebase in natural language. You can also ask directly:
 
 ```
 "What breaks if I change the User model?"
@@ -46,7 +48,7 @@ You can also ask directly:
 
 ### Principles with drift detection
 
-Canon ships with 59 built-in engineering principles across three severity tiers. Agents load the principles relevant to their task — matched by architectural layer and file path. Reviewers check compliance. Drift reports show which principles the codebase is drifting from, with trend data and hotspot directories.
+Canon ships with 64 built-in engineering principles across three severity tiers. Agents load the principles relevant to their task — matched by architectural layer and file path. Reviewers check compliance. Drift reports show which principles the codebase is drifting from, with trend data and hotspot directories.
 
 ### Interactive HTML dashboards
 
@@ -95,14 +97,16 @@ You approved the plan and saw the review. Canon drove everything else.
 | Shipper | Merge, PR creation, deployment prep |
 | Writer | Principle and convention authoring |
 | Learner | Review data analysis, principle improvement suggestions |
-
-Canon also includes background agents (evaluator, janitor) for quality gates and workspace cleanup.
+| Evaluator | Lightweight quality gate — structural signal verdict (PASS/FAIL) on engineer diffs |
+| Janitor | Background workspace housekeeping — prunes stale worktrees and orphaned workspaces |
 
 ---
 
 ## Principles
 
-Principles are the core of Canon. They are markdown files with YAML frontmatter that tell agents what rules, preferences, and conventions to apply. Canon ships with 85 built-in principles (7 rules, 35 strong-opinions, 43 conventions) covering security, architecture, testing, and code design. Your active principles live in `.canon/principles/` after init.
+Principles are the core of Canon. They are markdown files with YAML frontmatter that tell agents what rules, preferences, and conventions to apply. Canon ships with 64 built-in principles (6 rules, 36 strong-opinions, 22 conventions) covering security, architecture, testing, and code design.
+
+The principle model is two-layer: built-ins ship inside the plugin and load automatically at runtime. Your project-local principles live in `.canon/principles/` — create them with `/canon:edit-principle` and they override any built-in with the same `id`.
 
 ```yaml
 ---
@@ -136,7 +140,7 @@ When you touch `src/routes/orders.ts`, Canon loads principles scoped to the `api
 
 | Command | What it does |
 |---------|-------------|
-| `/canon:init` | Set up Canon in your project — copies starter principles, auto-detects conventions, generates CLAUDE.md, runs adoption scan |
+| `/canon:init` | Set up Canon in your project — creates project-local principle dirs, auto-detects conventions, generates CLAUDE.md, runs adoption scan |
 | `/canon:check` | Lightweight pre-commit principle compliance check |
 | `/canon:pr-review` | Review a PR or branch against principles |
 | `/canon:edit-principle` | Edit a principle — severity, scope, tags, or body |
@@ -145,6 +149,47 @@ When you touch `src/routes/orders.ts`, Canon loads principles scoped to the `api
 | `/canon:learn` | Analyze build patterns and suggest principle improvements |
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, MCP server health |
 | `/canon:clean` | Clean up workspace artifacts; optionally archive to project history |
+| `/canon:diagnose` | Targeted diagnostics for build issues, agent failures, and Canon configuration |
+| `/canon:routine` | Run a named routine on demand (e.g. `canon-maintenance`, `pr-review`) |
+| `/canon:routines` | List all available routines and their last-run status |
+| `/canon:craft-audit` | Audit engineering craft quality against Canon's strong-opinions |
+
+---
+
+## Loops & Routines
+
+Canon keeps working after the PR is created.
+
+**Loops** are Canon's periodic-observation artifact class — they observe, diff, and surface signals at named lifecycle moments (post-ship, session-start, background). Four user-facing loops ship out of the box:
+
+| Loop | What it watches |
+|------|----------------|
+| `ship-watch` | Post-ship: monitors PR comments and CI results; auto-triages clear defects |
+| `session-watch` | Session-start: surfaces stale context, pending reviews, drift accumulation |
+| `harness-watch` | Background: watches for learner-due signals and plugin update availability |
+| `evolve` | Long-running: drives the learning/evolution cycle on a schedule |
+
+**Routines** are scheduled cloud agents. Three ship by default:
+
+| Routine | What it does |
+|---------|-------------|
+| `canon-maintenance` | Periodic workspace pruning and stale-workspace cleanup |
+| `pr-review` | Scheduled PR review pass against open PRs |
+| `release-ahead` | Monitors for upstream Canon plugin updates |
+
+Run `/canon:routines` to see current status. Run `/canon:routine <name>` to trigger one immediately.
+
+---
+
+## Learning & Evolution
+
+Canon gets better at your codebase over time.
+
+The **learner** mines build history, review data, and drift trends to propose principle improvements. Run `/canon:learn` to kick off an analysis. Review proposals with `/canon:review-learnings` — every proposal is HITL-gated; nothing applies automatically.
+
+**Trace-driven evolution** goes deeper: `attribute_failure` maps build failures back to specific principles, `evaluate_candidate` gates whether a proposed change actually improves fitness, and `select_mutation_targets` identifies which principles are highest-leverage to evolve next.
+
+The learning → evolution cycle is always advisory: Canon surfaces proposals; you decide what applies.
 
 ---
 
@@ -171,7 +216,7 @@ Canon is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/p
 /plugin marketplace add micherra/canon
 
 # Install the plugin
-/plugin install canon@micherra-canon
+/plugin install canon@canon-marketplace
 ```
 
 Or install from a local clone:
@@ -195,7 +240,7 @@ Run this once inside your project:
 ```
 
 Canon will:
-- Copy 59 built-in principles into `.canon/principles/`
+- Create `.canon/principles/` for your project-local principles (built-ins load from the plugin automatically — init does not copy them)
 - Scan your codebase to auto-detect conventions and generate `.canon/CONVENTIONS.md`
 - Generate or update `CLAUDE.md` with Canon orchestration instructions
 - Run an adoption scan for existing principle violations (pass `--no-scan` to skip)
