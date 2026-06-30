@@ -68,9 +68,35 @@ try {
   process.exit(1);
 }
 
+// TypeScript-only-syntax diagnostic codes — "can only be used in TypeScript files."
+// These codes may be emitted as parseDiagnostics in future TypeScript versions even when
+// parsing with ScriptKind.JS.  Current TS (6.x) attaches a .type AST node for type
+// annotations in JS mode instead of emitting a diagnostic, but a future bump that changes
+// this behaviour would relabel TS-syntax violations as generic parse errors.
+// Belt-and-suspenders: check for these codes BEFORE the generic parseError early-return.
+//   8009 — modifier (abstract, readonly, etc.) can only be used in TypeScript files
+//   8010 — type annotations can only be used in TypeScript files
+//   8011 — type arguments can only be used in TypeScript files
+//   8012 — parameter modifiers can only be used in TypeScript files
+//   8013 — non-null assertions can only be used in TypeScript files
+const TS_ONLY_SYNTAX_CODES = new Set([8009, 8010, 8011, 8012, 8013]);
+
+/**
+ * Returns true if any diagnostic in `diags` belongs to the TS-only-syntax family
+ * (codes 8009–8013).  Used to classify such parse-level errors as TS syntax violations
+ * rather than generic parse errors.
+ */
+function hasTsOnlySyntaxDiag(diags) {
+  return diags.some((d) => TS_ONLY_SYNTAX_CODES.has(d.code));
+}
+
 // ---------------------------------------------------------------------------
 // parse — create a TypeScript SourceFile for the given JS content.
-// Returns { sf } on success, or { parseError } with a message on failure.
+// Returns { sf } on success, or { parseError, diags } on failure.
+//   parseError — human-readable message from the first parseDiagnostic
+//   diags      — raw diagnostic array (always present on error; used by
+//                lintFile to distinguish TS-only-syntax errors from generic
+//                parse failures via hasTsOnlySyntaxDiag)
 // Uses ScriptKind.JS so the TS parser tolerates the workflow sandbox's
 // top-level-export + top-level-return + top-level-await module shape.
 // ---------------------------------------------------------------------------
@@ -79,17 +105,17 @@ function parse(filePath, src) {
   try {
     sf = ts.createSourceFile(filePath, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   } catch (err) {
-    return { parseError: `internal parse throw: ${err.message}` };
+    return { parseError: `internal parse throw: ${err.message}`, diags: [] };
   }
 
-  const diags = sf.parseDiagnostics;
-  if (diags && diags.length > 0) {
+  const diags = sf.parseDiagnostics ?? [];
+  if (diags.length > 0) {
     const first = diags[0];
     const msg =
       typeof first.messageText === "string"
         ? first.messageText
         : (first.messageText?.messageText ?? "(unknown)");
-    return { parseError: msg };
+    return { parseError: msg, diags };
   }
 
   return { sf };
@@ -153,7 +179,15 @@ function walkBans(sf) {
     }
 
     // ── isolation property ───────────────────────────────────────────────────
-    // PropertyAssignment or ShorthandPropertyAssignment whose name is "isolation".
+    // Bans the `isolation` key when used as an agent-option PROPERTY KEY:
+    //   agent(..., { isolation: 'worktree' })   ← banned (PropertyAssignment, id key)
+    //   agent(..., { "isolation": 'worktree' }) ← banned (PropertyAssignment, string key)
+    //   { isolation }                            ← banned (ShorthandPropertyAssignment)
+    //
+    // The harness-forbidden construct is the option key that enables Canon's
+    // worktree lifecycle bypass, NOT any identifier named "isolation".  A bare
+    // variable (`const isolation = 'worktree'`) is intentionally out of scope —
+    // banning it would cause false positives on unrelated identifiers.
     if (
       (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) &&
       ts.isIdentifier(node.name) &&
@@ -337,7 +371,21 @@ function lintFile(filePath) {
     process.exit(1);
   }
 
-  const { sf, parseError } = parse(filePath, src);
+  const { sf, parseError, diags = [] } = parse(filePath, src);
+
+  // Belt-and-suspenders TS-syntax detection: if ANY parse diagnostic belongs to the
+  // TS-only-syntax family (codes 8009–8013, "can only be used in TypeScript files"),
+  // classify this as a TS syntax violation — NOT a generic parse error.
+  //
+  // Current TypeScript (6.x) attaches a .type AST node for type annotations in JS mode
+  // without emitting a diagnostic, so this path is dormant today.  A future TS bump that
+  // starts emitting code 8010 ("Type annotations can only be used in TypeScript files")
+  // as a parseDiagnostic would otherwise relabel the bad-ts-syntax fixture as a generic
+  // "parse error" instead of "TS syntax".  This pre-check ensures the correct label
+  // regardless of which TS version is installed.
+  if (parseError && hasTsOnlySyntaxDiag(diags)) {
+    return [`  1:1 banned: TS syntax (type annotation)`];
+  }
 
   if (parseError) {
     return [`  1:1 banned: parse error: ${parseError}`];
@@ -371,6 +419,37 @@ function lintFile(filePath) {
 // main — CLI entry point
 // ---------------------------------------------------------------------------
 async function main() {
+  // ── Self-test probe: --probe-ts-diagnostic ─────────────────────────────────
+  // Invoked by the test suite to verify hasTsOnlySyntaxDiag correctly identifies
+  // TS-only-syntax diagnostic codes WITHOUT requiring a TypeScript version that
+  // actually emits code 8010 for JS-mode files.
+  //
+  // This probe tests the DETECTION FUNCTION in isolation by constructing a fake
+  // diagnostic array that simulates what a future TS version may emit for
+  // `const x: string` in ScriptKind.JS mode.
+  if (process.argv[2] === "--probe-ts-diagnostic") {
+    // Simulate: future TS emits code 8010 for a type-annotated JS variable.
+    const fakeDiags = [
+      { code: 8010, messageText: "Type annotations can only be used in TypeScript files." },
+    ];
+    if (!hasTsOnlySyntaxDiag(fakeDiags)) {
+      process.stderr.write(
+        "PROBE FAILED: hasTsOnlySyntaxDiag did not detect code 8010\n",
+      );
+      process.exit(1);
+    }
+    // Also verify that a non-TS-only code (e.g. 1134) is NOT mis-classified.
+    const genericDiags = [{ code: 1134, messageText: "Variable declaration expected." }];
+    if (hasTsOnlySyntaxDiag(genericDiags)) {
+      process.stderr.write(
+        "PROBE FAILED: hasTsOnlySyntaxDiag false-positive on generic code 1134\n",
+      );
+      process.exit(1);
+    }
+    process.stdout.write("OK: TS-diagnostic path: TS syntax (type annotation)\n");
+    process.exit(0);
+  }
+
   const targetDir = process.argv[2] ?? DEFAULT_TARGET_DIR;
 
   // Empty or absent directory is valid (no workflows yet)

@@ -25,8 +25,9 @@ Every workflow script MUST:
    - `Date.now()` — use `args.ts` or a pre-computed constant instead
    - `Math.random()` — vary by index (`i`, `args.seed`) instead
    - `argless new Date()` — use `new Date(args.ts)` if a timestamp is needed
-   - `isolation: 'worktree'` (or any `isolation` property) — Canon CLAUDE.md prohibits
-     `isolation` in workflow agents; Canon owns the worktree lifecycle
+   - `isolation` **agent-option key** — Canon CLAUDE.md prohibits the `isolation`
+     property key in agent option objects (`agent(..., { isolation: ... })`); a bare
+     variable named `isolation` is NOT banned
 
 4. **Never use `.claude/workflows/` name-install paths** for Inc 0. Use `scriptPath`.
 
@@ -40,7 +41,7 @@ any script containing:
 | `Date.now()` | Non-deterministic — invalidates resume cache |
 | `Math.random()` | Non-deterministic — invalidates resume cache |
 | `new Date()` (argless) | Non-deterministic — invalidates resume cache |
-| `isolation` property | Canon prohibits isolation in workflow agent calls |
+| `isolation` agent-option key | Canon prohibits the `isolation` KEY in agent option objects (`agent(..., { isolation: ... })`); a bare variable named `isolation` is NOT banned — the boundary is the property key, not the identifier name |
 | TypeScript syntax | Workflow sandbox is plain JS; TS fails to parse |
 | Non-literal `meta` | The harness requires a static, pure-literal meta object |
 | Malformed JS | Scripts that cannot parse are rejected |

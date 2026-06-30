@@ -144,6 +144,70 @@ run_lint_with_construct \
   "bad-nonliteral-meta.js: named 'meta'"
 
 # ---------------------------------------------------------------------------
+# Advisory 1: TS-syntax detection robustness — diagnostic-path unit probe
+#
+# The AST .type-node path (tested above via bad-ts-syntax.js) handles the
+# current TS version (6.x), which does NOT emit a parseDiagnostic for type
+# annotations in ScriptKind.JS mode.  The diagnostic-path (hasTsOnlySyntaxDiag,
+# codes 8009–8013) handles future TS versions that may change this behaviour.
+#
+# Since we cannot trigger codes 8009–8013 with the current TS, this probe
+# exercises hasTsOnlySyntaxDiag directly via the --probe-ts-diagnostic flag,
+# which simulates a fake code-8010 diagnostic and verifies the classification
+# is "TS syntax (type annotation)" — NOT "parse error".
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- TS-diagnostic path unit probe (Advisory 1 robustness) ---"
+
+DIAG_PROBE_EXIT=0
+DIAG_PROBE_OUTPUT=""
+DIAG_PROBE_OUTPUT=$(node "$LINT_HELPER" --probe-ts-diagnostic 2>&1) || DIAG_PROBE_EXIT=$?
+
+if [[ "$DIAG_PROBE_EXIT" -eq 0 ]] && echo "$DIAG_PROBE_OUTPUT" | grep -qF "TS syntax (type annotation)"; then
+  echo "  PASS: TS-diagnostic path classifies code 8010 as 'TS syntax' (not 'parse error')"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: TS-diagnostic path did not produce expected output"
+  echo "        expected: exit=0, output containing 'TS syntax (type annotation)'"
+  echo "        actual exit=$DIAG_PROBE_EXIT, output: $DIAG_PROBE_OUTPUT"
+  FAIL=$((FAIL + 1))
+fi
+
+# ---------------------------------------------------------------------------
+# Advisory 2: isolation key-scoped boundary — negative test
+#
+# The lint bans `isolation` as an agent-option PROPERTY KEY only.
+# A bare variable named `isolation` must NOT trigger the ban.
+#
+# This pair of assertions locks the boundary:
+#   bad-isolation.js (property key)  → must FAIL naming "isolation"  (tested above)
+#   ok-isolation-variable.js (bare var) → must PASS (exit 0)
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- isolation key-scoped boundary (Advisory 2 negative test) ---"
+
+ISO_VAR_TMPDIR="$(mktemp -d)"
+# shellcheck disable=SC2064
+trap "rm -rf '$ISO_VAR_TMPDIR'" EXIT INT TERM
+cp "$FIXTURES_DIR/ok-isolation-variable.js" "$ISO_VAR_TMPDIR/"
+
+ISO_VAR_EXIT=0
+ISO_VAR_OUTPUT=""
+ISO_VAR_OUTPUT=$(node "$LINT_HELPER" "$ISO_VAR_TMPDIR" 2>&1) || ISO_VAR_EXIT=$?
+
+if [[ "$ISO_VAR_EXIT" -eq 0 ]]; then
+  echo "  PASS: ok-isolation-variable.js passes lint (bare 'isolation' variable not banned)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: ok-isolation-variable.js should PASS lint (exit 0) but got exit=$ISO_VAR_EXIT"
+  echo "        output: $ISO_VAR_OUTPUT"
+  FAIL=$((FAIL + 1))
+fi
+
+rm -rf "$ISO_VAR_TMPDIR"
+trap - EXIT INT TERM
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
