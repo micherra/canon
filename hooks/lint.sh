@@ -150,6 +150,31 @@ check_mcp_json_payload_shellcheck() {
   return "$sc_ok"
 }
 
+# Check 4 — workflows/ CI lint
+# Runs the node-AST lint helper against workflows/*.js (via hooks/workflows-lint.sh).
+# The helper rejects Date.now(), Math.random(), argless new Date(), isolation agent-
+# option keys, TypeScript syntax, malformed JS, and non-literal meta exports.
+# Fails closed when node or the typescript dep is absent (hooks-fail-closed).
+#
+# SKIP CONDITIONS (no workflow scripts to validate):
+#   (a) workflows/ directory absent in the repo being checked — nothing to lint.
+#   (b) hooks/workflows-lint.sh not found alongside this script (e.g. isolated
+#       fixture repos in lint.test.sh that copy only lint.sh) — helper unavailable.
+# Both are CORRECT skip conditions, not fail-closed weakening:
+#   - (a) no scripts → nothing to validate → exit 0 ✓
+#   - (b) workflows/ present but node/typescript absent → helper still fails closed ✓
+check_workflows_lint() {
+  if [[ ! -d "$REPO_ROOT/workflows" ]]; then
+    echo "NOTICE: hooks/lint.sh: workflows/ directory absent — skipping workflows lint (nothing to validate)." >&2
+    return 0
+  fi
+  if [[ ! -f "$SCRIPT_DIR/workflows-lint.sh" ]]; then
+    echo "NOTICE: hooks/lint.sh: hooks/workflows-lint.sh not found alongside lint.sh — skipping workflows lint." >&2
+    return 0
+  fi
+  bash "$SCRIPT_DIR/workflows-lint.sh"
+}
+
 if ! check_toolchain_pins; then
   FAILED=$(( FAILED + 1 ))
 fi
@@ -159,6 +184,10 @@ if ! check_mcp_json_args_token; then
 fi
 
 if ! check_mcp_json_payload_shellcheck; then
+  FAILED=$(( FAILED + 1 ))
+fi
+
+if ! check_workflows_lint; then
   FAILED=$(( FAILED + 1 ))
 fi
 
