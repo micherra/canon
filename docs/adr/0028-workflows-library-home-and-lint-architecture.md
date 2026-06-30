@@ -1,12 +1,12 @@
 ---
-adr: "0026"
+adr: "0028"
 title: "workflows/ library home, node-AST lint via hooks/lint.sh, and scriptPath discovery for Inc 0"
 status: accepted
 date: "2026-06-29"
 build: "workflow-integration-epic-increment-0-canon-probe-canary-workflow-ci"
 ---
 
-# ADR-0026: workflows/ library home, node-AST lint via hooks/lint.sh, and scriptPath discovery for Increment 0
+# ADR-0028: workflows/ library home, node-AST lint via hooks/lint.sh, and scriptPath discovery for Increment 0
 
 ## Context
 
