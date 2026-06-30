@@ -48,6 +48,7 @@ async function hashDir(dir: string): Promise<string> {
     .sort();
 
   for (const filePath of files) {
+    // biome-ignore lint/performance/noAwaitInLoops: deterministic hashing requires sequential, ordered reads
     const content = await readFile(filePath);
     hash.update(filePath.replace(dir, ""));
     hash.update(content);
