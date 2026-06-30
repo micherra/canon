@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  type ArtifactTrustTier,
   type AssembledArtifact,
   buildContextProvenanceRecord,
   type ContextProvenanceRecord,
@@ -341,6 +342,99 @@ describe("buildContextProvenanceRecord", () => {
       expect(primerArtifact.content_hash).toBe(hashContent("Full testing primer content"));
     });
   });
+
+  describe("trust_tier field", () => {
+    it("all assembled artifacts carry trust_tier: 'trusted' by default", () => {
+      const record = buildContextProvenanceRecord({
+        ...baseInput,
+        finalPreloadPrompt: "Rule content here",
+        skills: [
+          {
+            kind: "rule" as ProvenanceArtifactKind,
+            id: "errors-are-values",
+            path: "rules/errors-are-values.md",
+            originalContent: "Rule content here",
+            inContextText: "Rule content here",
+            blanked: false,
+          },
+        ],
+      });
+
+      expect(record.assembled_artifacts).toHaveLength(1);
+      expect(record.assembled_artifacts[0].trust_tier).toBe("trusted");
+    });
+
+    it("blanked artifacts also carry trust_tier: 'trusted'", () => {
+      const record = buildContextProvenanceRecord({
+        ...baseInput,
+        finalPreloadPrompt: "Slim summary",
+        sidecarPath: "/path/to/sidecar.json",
+        skills: [
+          {
+            kind: "primer" as ProvenanceArtifactKind,
+            id: "testing",
+            path: "primers/testing.md",
+            originalContent: "Full primer content",
+            inContextText: "",
+            blanked: true,
+          },
+        ],
+      });
+
+      expect(record.assembled_artifacts[0].trust_tier).toBe("trusted");
+    });
+
+    it("explicitly-passed trust_tier is used when provided", () => {
+      const record = buildContextProvenanceRecord({
+        ...baseInput,
+        finalPreloadPrompt: "Overlay data",
+        skills: [
+          {
+            kind: "ref" as ProvenanceArtifactKind,
+            id: "some-overlay",
+            path: ".canon/overlays/some-overlay.md",
+            originalContent: "Overlay content",
+            inContextText: "Overlay data",
+            blanked: false,
+            trust_tier: "untrusted-project-local" as ArtifactTrustTier,
+          },
+        ],
+      });
+
+      expect(record.assembled_artifacts[0].trust_tier).toBe("untrusted-project-local");
+    });
+
+    it("trust_tier is present on every artifact in a multi-skill record", () => {
+      const finalPreloadPrompt = "Rule text here.";
+      const record = buildContextProvenanceRecord({
+        ...baseInput,
+        finalPreloadPrompt,
+        sidecarPath: "/sidecar.json",
+        skills: [
+          {
+            kind: "rule" as ProvenanceArtifactKind,
+            id: "r1",
+            path: "rules/r1.md",
+            originalContent: "Rule text here",
+            inContextText: "Rule text here",
+            blanked: false,
+          },
+          {
+            kind: "primer" as ProvenanceArtifactKind,
+            id: "p1",
+            path: "primers/p1.md",
+            originalContent: "Primer content",
+            inContextText: "",
+            blanked: true,
+          },
+        ],
+      });
+
+      for (const artifact of record.assembled_artifacts) {
+        expect(artifact.trust_tier).toBe("trusted");
+      }
+    });
+  });
 });
 
 // Type-level checks: ensure exported types are accessible
@@ -370,4 +464,5 @@ const _typeCheck3: AssembledArtifact = {
   path: "p",
   content_hash: "h",
   char_span: null,
+  trust_tier: "trusted",
 };

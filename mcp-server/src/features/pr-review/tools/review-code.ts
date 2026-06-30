@@ -6,6 +6,7 @@ import { initDatabase } from "@graph/kg-schema.ts";
 import type { FileMetrics } from "@graph/kg-types.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import { loadConfigNumber } from "@shared/lib/config.ts";
+import { renderUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import { loadAllPrinciples, matchPrinciples } from "@shared/matcher.ts";
 import { filterBodyBySections } from "@shared/parser.ts";
 
@@ -222,13 +223,22 @@ export async function reviewCode(
 
   const allForReview = [...capped, ...injected];
   const sections = input.sections ?? [];
-  const principlesToEvaluate: PrincipleForReview[] = allForReview.map((p) => ({
-    body: filterBodyBySections(p.body, p.anti_rationalization, p.verification, sections),
-    principle_id: p.id,
-    principle_title: p.title,
-    review_hint: computeReviewHint(p.id, input.code),
-    severity: p.severity,
-  }));
+  const principlesToEvaluate: PrincipleForReview[] = allForReview.map((p) => {
+    const ref = `.canon/principles/${p.id}`;
+    return {
+      // CRITICAL-1 fix: render both title and body via the boundary module so project-local
+      // content is fenced before reaching the model. filterBodyBySections now returns
+      // UntrustedText; renderUntrusted unwraps through the fence for project-local content.
+      body: renderUntrusted(
+        filterBodyBySections(p.body, p.anti_rationalization, p.verification, sections),
+        { ref, source: p.source },
+      ),
+      principle_id: p.id,
+      principle_title: renderUntrusted(p.title, { ref, source: p.source }),
+      review_hint: computeReviewHint(p.id, input.code),
+      severity: p.severity,
+    };
+  });
 
   const ruleCount = allForReview.filter((p) => p.severity === "rule").length;
   const opinionCount = allForReview.filter((p) => p.severity === "strong-opinion").length;

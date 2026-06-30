@@ -51,6 +51,7 @@ function makeArtifact(
     path: `rules/${id}.md`,
     content_hash: overrides?.content_hash ?? RULE_HASH,
     char_span: overrides?.char_span ?? ([0, RAW_RULE_BODY.length] as [number, number]),
+    trust_tier: "trusted" as const,
     ...overrides,
   };
 }

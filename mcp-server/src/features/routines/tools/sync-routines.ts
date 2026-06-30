@@ -36,6 +36,10 @@ function toEntry(
     | { ok: true; kind: "desktop"; path: string },
 ): SyncEntry {
   if (result.kind === "recipe") {
+    // Recipe is returned unfenced for all sources (project-local and plugin alike).
+    // Injection-inertness of the recipe content is handled upstream by neutralizeOverlayText
+    // in emitCloudRecipe/buildSkillContent (neutralize-not-fence design decision, ADR-0026):
+    // the recipe stays a clean, pasteable /schedule document with no sentinels.
     return { kind: "recipe", name: routine.name, recipe: result.recipe };
   }
   return { kind: "desktop", name: routine.name, path: result.path };

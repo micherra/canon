@@ -44,6 +44,7 @@ function sampleArtifact(overrides?: Partial<AssembledArtifact>): AssembledArtifa
     path: "rules/agent-tdd.md",
     content_hash: "abc123def456abc123def456abc123def456abc123def456abc123def456abc123",
     char_span: [0, 100],
+    trust_tier: "trusted",
     ...overrides,
   };
 }
@@ -237,6 +238,7 @@ describe("no content in artifacts", () => {
       path: "primers/backend-data.md",
       content_hash: "cafebabe00000000cafebabe00000000cafebabe00000000cafebabe00000000",
       char_span: [10, 500],
+      trust_tier: "trusted",
     };
 
     store.appendEvent("context_provenance", {
@@ -268,6 +270,7 @@ describe("no content in artifacts", () => {
       "char_span",
       "source",
       "sidecar_path",
+      "trust_tier",
     ]);
     for (const key of Object.keys(resultArtifact)) {
       expect(ALLOWED_KEYS.has(key)).toBe(true);
@@ -290,6 +293,7 @@ describe("no content in artifacts", () => {
       char_span: null,
       source: "sidecar",
       sidecar_path: "/tmp/sidecar-data.json",
+      trust_tier: "trusted",
     };
 
     store.appendEvent("context_provenance", {

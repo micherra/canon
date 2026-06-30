@@ -34,6 +34,7 @@
  */
 
 import { DEFAULT_LAYER_MAPPINGS, VALID_LAYERS } from "@shared/lib/config.ts";
+import { brandUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import type { Principle } from "@shared/parser.ts";
 import { describe, expect, it } from "vitest";
 import {
@@ -48,17 +49,20 @@ import {
 
 // ---- Helpers ----
 
-function makePrinciple(overrides: Partial<Principle> = {}): Principle {
+function makePrinciple(
+  overrides: Omit<Partial<Principle>, "title" | "body"> & { title?: string; body?: string } = {},
+): Principle {
+  const { title = "Test Principle", body = "Some body text.", ...rest } = overrides;
   return {
     id: "test-principle",
-    title: "Test Principle",
     severity: "convention",
     scope: { layers: [], file_patterns: [] },
     tags: [],
     archived: false,
-    body: "Some body text.",
     filePath: "principles/conventions/test-principle.md",
-    ...overrides,
+    ...rest,
+    title: brandUntrusted(title),
+    body: brandUntrusted(body),
   };
 }
 

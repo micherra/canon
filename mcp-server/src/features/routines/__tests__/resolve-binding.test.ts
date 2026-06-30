@@ -1,3 +1,4 @@
+import { brandUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import type { Routine } from "@shared/routine.ts";
 import { describe, expect, it } from "vitest";
 import { resolveBinding, resolveRoutineBinding } from "../services/resolve-binding.ts";
@@ -13,7 +14,7 @@ function makeNeeds(state: Routine["needs"]["state"], daemon: boolean): Routine["
 function makeRoutine(needs: Routine["needs"], binding_target?: Routine["binding_target"]): Routine {
   return {
     name: "test-routine",
-    title: "Test Routine",
+    title: brandUntrusted("Test Routine"),
     status: "enabled",
     trigger: { kind: "schedule", cron: "0 * * * *" },
     needs,
@@ -26,7 +27,7 @@ function makeRoutine(needs: Routine["needs"], binding_target?: Routine["binding_
       consent: "opt-in",
     },
     recurrence: "standing",
-    body: "",
+    body: brandUntrusted(""),
     source: "project",
     filePath: "/fake/routine.md",
   };
