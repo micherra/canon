@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { CANON_DIR, CANON_FILES } from "./constants.ts";
 import { buildLayerInferrer, DEFAULT_LAYER_MAPPINGS } from "./lib/config.ts";
+import { matchGlob } from "./lib/glob-matcher.ts";
+import { filterFilePatterns, filterLayers } from "./lib/overlay-closed-domain.ts";
 import { loadPrincipleFile, type Principle } from "./parser.ts";
 
 const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
@@ -31,22 +33,12 @@ export function inferLayer(filePath: string): string | undefined {
   return layer === "unknown" ? undefined : layer;
 }
 
-// Cache compiled glob regexes to avoid recompilation on every match
-const globRegexCache = new Map<string, RegExp>();
-
-function globToRegex(pattern: string): RegExp {
-  const cached = globRegexCache.get(pattern);
-  if (cached) return cached;
-
-  const regex = pattern
-    .replace(/\./g, "\\.")
-    .replace(/\*\*/g, "{{DOUBLESTAR}}")
-    .replace(/\*/g, "[^/]*")
-    .replace(/\{\{DOUBLESTAR\}\}/g, ".*");
-  const compiled = new RegExp(`(^|/)${regex}$`);
-  globRegexCache.set(pattern, compiled);
-  return compiled;
-}
+// File-pattern matching uses matchGlob from lib/glob-matcher.ts — a pure
+// O(m·n) DP wildcard matcher that admits no backtracking engine (see
+// ADR-0026 §Amendment-3).  The previous globToRegex + RegExp approach
+// closed the SyntaxError throw-DoS and nested-quantifier ReDoS but left the
+// sequential-wildcard class open (a*a*…a*b → 7.4 s at n=50 in V8).  The
+// linear matcher removes new RegExp from the match path entirely.
 
 function severityPassesFilter(severity: string, filter?: string): boolean {
   if (!filter) return true;
@@ -62,7 +54,7 @@ function matchesLayers(p: Principle, layers: string[]): boolean {
 /** Check if a principle matches the file pattern filter. */
 function matchesFilePattern(p: Principle, filePath: string | undefined): boolean {
   if (!filePath || p.scope.file_patterns.length === 0) return true;
-  return p.scope.file_patterns.some((pattern) => globToRegex(pattern).test(filePath));
+  return p.scope.file_patterns.some((pattern) => matchGlob(pattern, filePath));
 }
 
 /** Check if a principle matches the tag filter. */
@@ -268,14 +260,16 @@ function applySingleOverride(principle: Principle, override: PrincipleOverride):
   switch (override.action) {
     case "override-severity":
       return { ...principle, severity: override.severity };
-    case "narrow-scope":
+    case "narrow-scope": {
+      const source = `principle-overrides.yaml (id: ${override.principle_id})`;
       return {
         ...principle,
         scope: {
-          file_patterns: override.applies_to.file_patterns,
-          layers: override.applies_to.layers,
+          file_patterns: filterFilePatterns(override.applies_to.file_patterns, source),
+          layers: filterLayers(override.applies_to.layers, source),
         },
       };
+    }
     default:
       // Unknown action — silently skip override, keep principle unchanged
       return principle;
@@ -375,8 +369,12 @@ export async function loadAllPrinciples(
     return principleCache.principles;
   }
 
-  const projectPrinciples = await loadPrinciplesFromDir(join(projectDir, CANON_DIR, "principles"));
-  const pluginPrinciples = await loadPrinciplesFromDir(join(pluginDir, "principles"));
+  const projectPrinciples = (
+    await loadPrinciplesFromDir(join(projectDir, CANON_DIR, "principles"))
+  ).map((p) => ({ ...p, source: "project" as const }));
+  const pluginPrinciples = (await loadPrinciplesFromDir(join(pluginDir, "principles"))).map(
+    (p) => ({ ...p, source: "plugin" as const }),
+  );
 
   // Project-local takes precedence on ID conflict
   const seenIds = new Set(projectPrinciples.map((p) => p.id));
@@ -386,12 +384,7 @@ export async function loadAllPrinciples(
   const overrides = await loadOverrides(projectDir);
   const effective = applyOverrides(merged, overrides);
 
-  // Pre-compile all glob regexes while we're loading
-  for (const p of effective) {
-    for (const pattern of p.scope.file_patterns) {
-      globToRegex(pattern);
-    }
-  }
+  // matchGlob is a pure DP function — no compilation phase, no pre-warm needed.
 
   principleCache = { mtimeKey, principles: effective };
   return effective;

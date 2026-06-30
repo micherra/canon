@@ -319,3 +319,7 @@ These were evaluated and explicitly rejected:
 | **Later** | Thread 6 tail (C1/C5/C3/C4), L2/L3, X2/T1 | Scheduled scribe + janitor + digest + learner mining; LSP cross-checks; context-economy items. Follow Deterministic-Spine-then-Maintenance order. |
 | **Later** | Outdated violation detection, smarter scribe, idea-to-spec | Compound value features that improve over time. |
 | **Remaining Epic 6** | Auto-promotion/demotion thresholds, auto-apply policy | Needs sufficient build history to be meaningful. |
+
+## Related Initiatives
+
+- **RLM Follow-ups** — 6-item self-improvement program derived from the RLM article (subtraction-not-unification thesis; seam convention + reviewer-consolidation + budget meter). Phase 0 (seam convention) is in progress. Full program: [`docs/explore/rlm-followups/PROGRAM.md`](explore/rlm-followups/PROGRAM.md).

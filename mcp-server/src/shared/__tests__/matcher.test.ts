@@ -1,20 +1,27 @@
-import { describe, expect, it } from "vitest";
-import { inferLayer, matchPrinciples } from "../matcher.ts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { brandUntrusted, rawUntrustedForStructuralUse } from "../lib/overlay-untrusted-text.ts";
+import { inferLayer, loadAllPrinciples, matchPrinciples } from "../matcher.ts";
 import type { Principle } from "../parser.ts";
 
 // Principle overrides and parsePrinciple scope.tags tests are in matcher-overrides.test.ts
 
-function makePrinciple(overrides: Partial<Principle> = {}): Principle {
+function makePrinciple(
+  overrides: Omit<Partial<Principle>, "title" | "body"> & { title?: string; body?: string } = {},
+): Principle {
+  const { title = "Test", body = "Body", ...rest } = overrides;
   return {
     archived: false,
-    body: "Body",
     filePath: "test.md",
     id: "test",
     scope: { file_patterns: [], layers: [] },
     severity: "convention",
     tags: [],
-    title: "Test",
-    ...overrides,
+    ...rest,
+    title: brandUntrusted(title),
+    body: brandUntrusted(body),
   };
 }
 
@@ -343,5 +350,69 @@ describe("matchPrinciples", () => {
       const result = matchPrinciples([p], { computed_tags: [], layers: ["ui"] });
       expect(result.map((p) => p.id)).toContain("universal");
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadAllPrinciples — origin tagging (Layer 2 mixed-trust prerequisite)
+// ---------------------------------------------------------------------------
+
+describe("loadAllPrinciples — origin tagging", () => {
+  let tmpDir: string;
+  let pluginDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-matcher-origin-"));
+    pluginDir = join(tmpDir, "plugin");
+
+    // Plugin principles dir
+    await mkdir(join(pluginDir, "principles", "conventions"), { recursive: true });
+    await writeFile(
+      join(pluginDir, "principles", "conventions", "p-plugin.md"),
+      "---\nid: p-plugin\ntitle: Plugin Principle\nseverity: convention\n---\n\nPlugin body.",
+    );
+
+    // Project-local principles dir
+    await mkdir(join(tmpDir, ".canon", "principles", "conventions"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".canon", "principles", "conventions", "p-project.md"),
+      "---\nid: p-project\ntitle: Project Principle\nseverity: convention\n---\n\nProject body.",
+    );
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { force: true, recursive: true });
+  });
+
+  it("stamps plugin principles with source: 'plugin'", async () => {
+    const principles = await loadAllPrinciples(tmpDir, pluginDir);
+    const p = principles.find((x) => x.id === "p-plugin");
+    expect(p).toBeDefined();
+    expect(p!.source).toBe("plugin");
+  });
+
+  it("stamps project-local principles with source: 'project'", async () => {
+    const principles = await loadAllPrinciples(tmpDir, pluginDir);
+    const p = principles.find((x) => x.id === "p-project");
+    expect(p).toBeDefined();
+    expect(p!.source).toBe("project");
+  });
+
+  it("project-local principle wins on ID conflict and retains source: 'project'", async () => {
+    // Same ID in both dirs — project must win and be stamped as project
+    await writeFile(
+      join(pluginDir, "principles", "conventions", "conflict.md"),
+      "---\nid: conflict-id\ntitle: Plugin Version\nseverity: convention\n---\n\nPlugin conflict body.",
+    );
+    await writeFile(
+      join(tmpDir, ".canon", "principles", "conventions", "conflict.md"),
+      "---\nid: conflict-id\ntitle: Project Version\nseverity: convention\n---\n\nProject conflict body.",
+    );
+
+    const principles = await loadAllPrinciples(tmpDir, pluginDir);
+    const conflicts = principles.filter((x) => x.id === "conflict-id");
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].source).toBe("project");
+    expect(rawUntrustedForStructuralUse(conflicts[0].title)).toBe("Project Version");
   });
 });

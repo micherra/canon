@@ -17,6 +17,7 @@
  * - pure-io-service-split: all I/O happens in the tool layer, not here
  */
 
+import { rawUntrustedForStructuralUse } from "@shared/lib/overlay-untrusted-text.ts";
 import type { Principle } from "@shared/parser.ts";
 import type { FrontmatterSchemaFinding } from "./frontmatter-schema.ts";
 import type { IndexDriftFinding } from "./index-inventory.ts";
@@ -378,9 +379,12 @@ function hasNonEmptyExamples(body: string): boolean {
  *   `## ` heading or end of body).
  */
 export function checkMissingExamples(principles: Principle[]): MissingExampleFinding[] {
-  return principles
-    .filter((p) => !hasNonEmptyExamples(p.body ?? ""))
-    .map((p) => ({ file_path: p.filePath, principle_id: p.id, severity: p.severity }));
+  return (
+    principles
+      // body is UntrustedText — use rawUntrustedForStructuralUse for lint inspection (non-model-facing).
+      .filter((p) => !hasNonEmptyExamples(rawUntrustedForStructuralUse(p.body)))
+      .map((p) => ({ file_path: p.filePath, principle_id: p.id, severity: p.severity }))
+  );
 }
 
 // ---- Cited Paths ----

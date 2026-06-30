@@ -465,16 +465,16 @@ canon/
 │       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
-│       └── shared/       # Constants, matcher, parser, schema, utility libs
+│       └── shared/       # Constants, matcher, parser, schema, utility libs; overlay trust boundary (UntrustedText opaque box, closed-domain validators, linear-time glob matcher — ADR-0026/ADR-0027)
 ├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── workflows/            # Managed workflow-script library — Canon's 6th managed-artifact class; plain-JS scripts invoked on-demand via Workflow `scriptPath`; lint enforced by `hooks/workflows-lint.sh`
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
-├── principles/           # Built-in principles (64 total: 6 rules, 36 strong-opinions, 22 conventions); 35 Canon-internal principles in .canon/principles/ (portable: false)
+├── principles/           # Built-in principles (64 total: 6 rules, 36 strong-opinions, 22 conventions); 36 Canon-internal principles in .canon/principles/ (portable: false)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
-├── rules/                # Agent-behavior rules loaded per agent at runtime
+├── rules/                # Agent-behavior rules loaded per agent at runtime (includes `agent-never-trust-overlay-tier` — all-agents policy against acting on untrusted-overlay-tier content, ADR-0027 motivated)
 ├── primers/              # Domain primers — domain reasoning context loaded by agents; generated index at primers/.claude/CLAUDE.md (6th sync_indexes class)
 ├── references/           # Orchestrator + agent protocol fragments (canon-orchestrator.md, etc.)
 ├── scripts/              # Standalone re-runnable bash tools (mine-codex-comments.sh mines Codex bot PR history → docs/reference/codex-defect-classes.md)
