@@ -15,7 +15,7 @@ import { ingestDocCorpus } from "@graph/kg-doc-ingest.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import type { DocCorpusSource } from "@shared/constants.ts";
 import { MockEmbeddingService } from "@tests/helpers/embedding-test-helpers.ts";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 let tempDir: string;
 
@@ -214,6 +214,91 @@ describe("ingestDocCorpus", () => {
     const corpusSet = new Set(corpora.map((c) => c.corpus));
     expect(corpusSet.has("principles")).toBe(true);
     expect(corpusSet.has("references")).toBe(true);
+    db.close();
+  });
+
+  // Sad path (a): absent optional source fails open AND other corpora still indexed
+  test("sad-path(a): absent optional source does not prevent other corpora from being indexed", async () => {
+    writeDoc("principles/rule.md", "# Rule\n\nContent.");
+
+    const db = initDatabase(":memory:");
+    const embedSvc = new MockEmbeddingService();
+    const sources: DocCorpusSource[] = [
+      // This one is present — must still be indexed
+      makeSource("principles", "principles"),
+      // This one is absent (optional) — must fail open silently
+      {
+        corpus: "digest",
+        root: join(tempDir, "nonexistent-memory"),
+        trust_tier: "internal",
+        optional: true,
+      },
+    ];
+
+    await expect(ingestDocCorpus(db, sources, embedSvc)).resolves.not.toThrow();
+
+    // The present source must still be indexed despite the absent optional one
+    const count = (
+      db.prepare(`SELECT COUNT(*) as c FROM doc_chunks WHERE corpus = 'principles'`).get() as {
+        c: number;
+      }
+    ).c;
+    expect(count).toBeGreaterThanOrEqual(1);
+
+    // The absent source must produce zero rows
+    const digestCount = (
+      db.prepare(`SELECT COUNT(*) as c FROM doc_chunks WHERE corpus = 'digest'`).get() as {
+        c: number;
+      }
+    ).c;
+    expect(digestCount).toBe(0);
+
+    db.close();
+  });
+
+  // Sad path (d): zero stale chunks → embed() is never called (model load skipped)
+  test("sad-path(d): unchanged corpus on re-run does not call embed (zero stale → model load skipped)", async () => {
+    writeDoc("principles/stable.md", "## Stable Section\n\nContent that will not change.");
+
+    const db = initDatabase(":memory:");
+    const embedSvc = new MockEmbeddingService();
+    const sources: DocCorpusSource[] = [makeSource("principles", "principles")];
+
+    // First run: corpus is fresh → stale chunks exist → embed IS called
+    const embedSpyFirst = vi.spyOn(embedSvc, "embed");
+    await ingestDocCorpus(db, sources, embedSvc);
+    expect(embedSpyFirst).toHaveBeenCalledTimes(1);
+    embedSpyFirst.mockRestore();
+
+    // Second run: corpus unchanged → zero stale chunks → embed must NOT be called
+    const embedSpySecond = vi.spyOn(embedSvc, "embed");
+    await ingestDocCorpus(db, sources, embedSvc);
+    expect(embedSpySecond).not.toHaveBeenCalled();
+    embedSpySecond.mockRestore();
+
+    db.close();
+  });
+
+  // Sad path (e): empty markdown file at ingest level does not crash
+  test("sad-path(e): empty markdown file produces zero chunks and does not crash", async () => {
+    // Write an empty file alongside a valid one
+    writeDoc("principles/empty.md", "");
+    writeDoc("principles/valid.md", "# Valid\n\nHas real content.");
+
+    const db = initDatabase(":memory:");
+    const embedSvc = new MockEmbeddingService();
+    const sources: DocCorpusSource[] = [makeSource("principles", "principles")];
+
+    await expect(ingestDocCorpus(db, sources, embedSvc)).resolves.not.toThrow();
+
+    // Empty file must produce zero doc_chunks rows
+    const emptyChunks = db.prepare(`SELECT * FROM doc_chunks WHERE doc_path LIKE '%empty%'`).all();
+    expect(emptyChunks).toHaveLength(0);
+
+    // Valid file must still produce at least one chunk
+    const validChunks = db.prepare(`SELECT * FROM doc_chunks WHERE doc_path LIKE '%valid%'`).all();
+    expect(validChunks.length).toBeGreaterThan(0);
+
     db.close();
   });
 });

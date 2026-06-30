@@ -291,4 +291,104 @@ describe("searchKnowledge tool handler", () => {
       expect(result.results.length).toBeLessThanOrEqual(2);
     }
   });
+
+  // AC#2 / dc-03 discriminating retrieval: multi-chunk index, specific chunk found
+  it("dc-03 discriminating: query embedding matches the correct chunk out of multiple distractors", async () => {
+    // Seed 4 chunks with distinct embeddings (seeds 0, 1, 2, 3). The gotcha
+    // chunk uses seed 0. The mock query also uses seed 0 (_mockSeed=0),
+    // so KNN will rank the seed-0 chunk closest.
+    const gotchaContent =
+      "GOTCHA: stream-idle stall is a mid-run failure — resume-first, backoff does not apply.";
+    seedChunkWithEmbedding({ content: gotchaContent, embeddingSeed: 0 });
+    seedChunkWithEmbedding({ content: "Distractor doc about wave execution.", embeddingSeed: 1 });
+    seedChunkWithEmbedding({ content: "Distractor doc about shipper agent.", embeddingSeed: 2 });
+    seedChunkWithEmbedding({ content: "Distractor doc about learner scoring.", embeddingSeed: 3 });
+
+    // Query embedding: seed 0 (closest to the gotcha chunk)
+    _mockSeed = 0;
+    const result = await searchKnowledge(
+      { query: "stream idle stall mid-run failure", limit: 1 },
+      projectDir,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.results.length).toBe(1);
+      // The top-1 result must be the gotcha chunk, not a distractor
+      expect(result.results[0].content).toBe(gotchaContent);
+    }
+  });
+
+  // AC#5 / default trust filter: when trust is not specified, external chunks are excluded
+  it("AC#5: default trust ('internal') excludes external chunks when trust param is omitted", async () => {
+    // Seed an internal and an external chunk — both with seed 0 so both would
+    // match the query embedding equally. The default trust filter must exclude
+    // the external one.
+    seedChunkWithEmbedding({
+      corpus: "principles",
+      doc_path: "principles/internal.md",
+      content: "Internal authority guidance.",
+      trust_tier: "internal",
+      embeddingSeed: 0,
+    });
+    const extDb = initDatabase(dbPath);
+    const extStore = new DocVectorStore(extDb);
+    const extContent = "External overlay guidance.";
+    const extId = extStore.upsertDocChunk({
+      corpus: "external-overlay",
+      doc_path: "external-overlay/doc.md",
+      heading_path: "",
+      chunk_index: 0,
+      char_start: 0,
+      char_end: extContent.length,
+      content: extContent,
+      content_hash: DocVectorStore.textHash(extContent),
+      trust_tier: "external",
+      updated_at: new Date().toISOString(),
+    });
+    extStore.upsertDocVector(extId, randomEmbedding(0), DocVectorStore.textHash(extContent));
+    extDb.close();
+
+    _mockSeed = 0;
+    // No trust param — default must be "internal"
+    const result = await searchKnowledge({ query: "guidance" }, projectDir);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const hasExternal = result.results.some((r) => r.trust_tier === "external");
+      expect(hasExternal).toBe(false);
+      // The internal chunk must still appear
+      const hasInternal = result.results.some((r) => r.corpus === "principles");
+      expect(hasInternal).toBe(true);
+    }
+  });
+
+  // AC#5 (superset): .canon-proposed-learnings-sourced chunk is retrievable
+  it("AC#5 superset: chunk from .canon-proposed-learnings corpus is retrievable", async () => {
+    // Seed a chunk tagged with the .canon-proposed-learnings corpus
+    const proposedContent =
+      "Proposed learning: watch_FFFFF2 — doc-budget growth cycle at 2/2 threshold, promotion ready.";
+    seedChunkWithEmbedding({
+      corpus: ".canon-proposed-learnings",
+      doc_path: ".canon-proposed-learnings/batch-6-learnings.md",
+      content: proposedContent,
+      trust_tier: "internal",
+      embeddingSeed: 0,
+    });
+
+    _mockSeed = 0;
+    const result = await searchKnowledge(
+      { query: "doc budget growth cycle watch", corpora: [".canon-proposed-learnings"] },
+      projectDir,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.results.length).toBeGreaterThanOrEqual(1);
+      const found = result.results.find((r) => r.corpus === ".canon-proposed-learnings");
+      expect(found).toBeDefined();
+      // Content must be verbatim — the warning-fix behavioral proof
+      expect(found!.content).toBe(proposedContent);
+    }
+  });
 });
