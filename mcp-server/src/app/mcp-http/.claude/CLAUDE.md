@@ -41,7 +41,7 @@ Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer r
 - `createSessionTransport(port, server, headerDir)` — transport factory; wires `onsessioninitialized` and `onsessionclosed`
 - `teardownSession(sessionId)` — idempotent; isolation-finish-01 order: `server.close()` → `clearConnectionScope` → `clearSessionReady` → `evictStoresForScope` → `evictDriftDbForScope` → `evictJobManagerForScope`; refcount guard via `hasOtherSessionsForDir`; pending-handshake guard via `hasPendingHandshakeForDir`
 - `resolveSessionScope(session, headerDir)` — layered fail-closed: `x-canon-project-dir` header → `roots/list` retry (3×2s) → gate stays pending; scope never falls back to daemon cwd/env
-- `validateAndNormalizeDir(dir)` — `fs.realpath` normalization (handles macOS `/tmp`→`/private/tmp`; `path.resolve` is NOT sufficient)
+- `validateAndNormalizeDir(dir)` — allow-list barrier (`isSafeProjectDirInput` from `shared/lib/safe-project-dir.ts`, ADR-0028) applied BEFORE any fs access; returns `undefined` on barrier rejection (fail-closed); surviving inputs pass through `fs.realpath` normalization (handles macOS `/tmp`→`/private/tmp`; `path.resolve` is NOT sufficient)
 - `closeAllSessions()` — stops idle reaper; parallel teardown of all sessions; daemon SIGTERM path
 - `sessionCount()` — observability accessor
 - `startReaper()` / `stopReaper()` — unref'd interval; started lazily on first `onsessioninitialized`

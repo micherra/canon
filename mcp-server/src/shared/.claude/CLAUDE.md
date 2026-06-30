@@ -18,7 +18,7 @@ Shared kernel — cross-cutting utilities, constants, parsers, and low-level hel
 | `parser.ts` | Principle file parser: `Principle` (includes `portable?: boolean` field added 2026-06-12), `parsePrinciple`, `parsePortable`, `loadPrincipleFile`, `parseFrontmatter`, `extractSections`, `filterBodyBySections`; `parseFrontmatter` now delegates to `splitFrontmatter` from `lib/frontmatter.ts` (was `gray-matter`; R0) |
 
 **`lib/`** — Focused utility modules with no cross-context knowledge:
-<!-- last-updated: 2026-06-27 -->
+<!-- last-updated: 2026-06-30 -->
 
 | File | Key exports |
 |------|-------------|
@@ -38,6 +38,7 @@ Shared kernel — cross-cutting utilities, constants, parsers, and low-level hel
 | `overlay-untrusted-text.ts` | Opaque-box `UntrustedText` type (NOT a `string` subtype — opaque object, TS2322 on raw assignment to `string`); `brandUntrusted(v)` stamps at load boundary; `renderUntrusted(v, {source})` / `renderUntrustedProjection(...)` fence for `source==="project"`, pass through for plugin/undefined; `rawUntrustedForStructuralUse(v)` audited non-model-facing escape hatch; `mapUntrusted(v, fn)` brand-preserving transform. Added 2026-06-27 (ADR-0026) |
 | `overlay-closed-domain.ts` | Shared charset constants and filter functions for closed-domain Principle/Routine fields: `LAYER_CHARSET`, `FILE_PATTERN_CHARSET`, `TAG_CHARSET`; `filterLayers(arr)`, `filterFilePatterns(arr)`, `filterTagArray(arr)` — drop non-matching entries fail-closed (same posture as parser). Both writers (`parser.ts`, `matcher.ts`) import from this module. Added 2026-06-27 (ADR-0026 §Amendment-2) |
 | `glob-matcher.ts` | Linear-time O(m·n) DP wildcard matcher for Canon's restricted glob dialect (`*` = non-slash wildcard, `**` = full wildcard); `matchGlob(pattern, path): boolean`; no `new RegExp` at match time — eliminates throw-DoS and all ReDoS classes; `FILE_PATTERN_MAX_LEN` cap bounds the DP table. Replaces `globToRegex`+RegExp in `matcher.ts`. Added 2026-06-27 (ADR-0026 §Amendment-3) |
+| `safe-project-dir.ts` | `isSafeProjectDirInput(dir: string): boolean` — allow-list validation barrier for untrusted project-dir strings before any fs access; rejects empty, >4096 chars, NUL/control chars, relative paths, and raw `..` segments; no fixed safe root (projects may live at any absolute path). Applied in `session-manager.ts` `validateAndNormalizeDir`. Added 2026-06-30 (ADR-0028) |
 | `learn-lock.ts` | Auto-learn lock file management |
 | `janitor-lock.ts` | `acquireJanitorLock`, `commitJanitorLock`, `releaseJanitorLock`, `getLastJanitorTimestamp` — `.canon/janitor.lock` PID+mtime lock for janitor concurrency control; added 2026-04-23 |
 | `commit-trailers.ts` | `TrailerOpts`, `formatCommitTrailers`, `buildCommitMessage` — formats Canon-Workflow/Agent/State/Task git trailer blocks; added 2026-04-09 |
