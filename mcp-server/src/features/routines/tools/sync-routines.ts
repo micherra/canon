@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { brandUntrusted, renderUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import type { Routine } from "@shared/routine.ts";
@@ -37,19 +36,11 @@ function toEntry(
     | { ok: true; kind: "desktop"; path: string },
 ): SyncEntry {
   if (result.kind === "recipe") {
-    // Fence the recipe in the model-facing response for project-local routines.
-    // emitCloudRecipe is a pure function that returns the raw (unfenced) recipe string,
-    // intended as a user-paste /schedule artifact (no I/O). The model-facing tool response
-    // must fence project-local untrusted content at this boundary.
-    // Plugin routines are trusted (dc-05): recipe passed through unfenced.
-    const recipe =
-      routine.source === "project"
-        ? renderUntrusted(brandUntrusted(result.recipe), {
-            ref: `.canon/routines/${routine.name}`,
-            source: "project",
-          })
-        : result.recipe;
-    return { kind: "recipe", name: routine.name, recipe };
+    // Recipe is returned unfenced for all sources (project-local and plugin alike).
+    // Injection-inertness of the recipe content is handled upstream by neutralizeOverlayText
+    // in emitCloudRecipe/buildSkillContent (neutralize-not-fence design decision, ADR-0026):
+    // the recipe stays a clean, pasteable /schedule document with no sentinels.
+    return { kind: "recipe", name: routine.name, recipe: result.recipe };
   }
   return { kind: "desktop", name: routine.name, path: result.path };
 }
