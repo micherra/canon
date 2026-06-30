@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.15.0](https://github.com/micherra/canon/compare/v2.14.0...v2.15.0) (2026-06-30)
+
+
+### Features
+
+* **conventions:** human-narrative/machine-query seam + RLM follow-ups roadmap (Phase 0) ([#430](https://github.com/micherra/canon/issues/430)) ([b61c4cf](https://github.com/micherra/canon/commit/b61c4cf34dc040a1f41efca9a91f3b134de233da))
+* **evolution:** non-principle apply-channel enrichment for /canon:review-learnings — trace-driven-evolution Phase 1 ([#427](https://github.com/micherra/canon/issues/427)) ([8e34be7](https://github.com/micherra/canon/commit/8e34be78a6873afeef8ea36f7fa1270f990c5db1))
+* **security:** structural trust boundary for untrusted overlay records — opaque box + charset gate + linear glob ([#428](https://github.com/micherra/canon/issues/428)) ([b5957b6](https://github.com/micherra/canon/commit/b5957b6e84d0186b93da5e253c045179a54e7c98))
+
 ## [2.14.0](https://github.com/micherra/canon/compare/v2.13.0...v2.14.0) (2026-06-27)
 
 
