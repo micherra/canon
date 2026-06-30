@@ -52,7 +52,13 @@ Status: **IN PROGRESS** (canon--rlm-phase0-seam-convention build).
 **#2 Reviewer-consolidation**: Make the parallel-review consolidation step in the
 orchestrator a QUERY over existing `REVIEW-{step_id}.meta.json` sidecars instead of
 re-reading N fat `REVIEW-N.md` prose files. Folds into the `write_review` tool — no
-new artifact type; the sidecar already exists.
+new artifact type needed. The sidecar already exists on the single-reviewer
+`write_review` path, but the team-dispatch / numbered fan-out path
+(`agents/reviewer.md:138`) currently writes `REVIEW-{N}.md` via the raw `Write` tool
+and emits **no sidecar**. Migrating the fan-out path to call `write_review` with a
+per-reviewer `step_id` is the core build task for #2 — it is a **prerequisite**, not a
+precondition already satisfied. The consolidation-as-query only works after that
+migration.
 
 **#1a Budget meter**: Turn/token accounting per build step. Emit a `budget_debit`
 event per agent spawn with turn count and token estimate; surface per-step spend in
