@@ -17,7 +17,7 @@ import { DocVectorStore } from "@graph/kg-doc-store.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { searchKnowledge } from "../tools/search-knowledge.ts";
+import { resolveDefaultSources, searchKnowledge } from "../tools/search-knowledge.ts";
 
 // Mock EmbeddingService so no model is downloaded
 let _mockSeed = 0;
@@ -239,6 +239,25 @@ describe("searchKnowledge tool handler", () => {
     if (result.ok) {
       expect(result.results.length).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  it("resolveDefaultSources includes .canon-principles and .canon-proposed-learnings corpora", () => {
+    const fakeProjectDir = "/some/project";
+    const sources = resolveDefaultSources(fakeProjectDir);
+    const corpora = sources.map((s) => s.corpus);
+
+    expect(corpora).toContain(".canon-principles");
+    expect(corpora).toContain(".canon-proposed-learnings");
+
+    const canonPrinciples = sources.find((s) => s.corpus === ".canon-principles")!;
+    expect(canonPrinciples.root).toBe(path.join(fakeProjectDir, ".canon", "principles"));
+    expect(canonPrinciples.optional).toBe(true);
+    expect(canonPrinciples.trust_tier).toBe("internal");
+
+    const canonProposed = sources.find((s) => s.corpus === ".canon-proposed-learnings")!;
+    expect(canonProposed.root).toBe(path.join(fakeProjectDir, ".canon", "proposed-learnings"));
+    expect(canonProposed.optional).toBe(true);
+    expect(canonProposed.trust_tier).toBe("internal");
   });
 
   it("limit parameter caps result count", async () => {

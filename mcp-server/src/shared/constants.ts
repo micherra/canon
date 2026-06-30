@@ -64,6 +64,9 @@ export type DocCorpusSource = {
 /**
  * Default doc corpus sources for a Canon project.
  * Roots are relative to projectDir — callers must resolve them before use.
+ * The `.canon-principles` and `.canon-proposed-learnings` corpora are resolved
+ * to `.canon/principles/` and `.canon/proposed-learnings/` respectively by
+ * `resolveDefaultSources` in search-knowledge.ts.
  */
 export const DEFAULT_DOC_CORPUS_SOURCES: Omit<DocCorpusSource, "root">[] = [
   { corpus: "principles", optional: false, trust_tier: "internal" },
@@ -71,6 +74,8 @@ export const DEFAULT_DOC_CORPUS_SOURCES: Omit<DocCorpusSource, "root">[] = [
   { corpus: "agents", optional: false, trust_tier: "internal" },
   { corpus: "primers", optional: false, trust_tier: "internal" },
   { corpus: "digest", optional: true, trust_tier: "internal" },
+  { corpus: ".canon-principles", optional: true, trust_tier: "internal" },
+  { corpus: ".canon-proposed-learnings", optional: true, trust_tier: "internal" },
 ] as const;
 
 /** Canon data directory and file names. */

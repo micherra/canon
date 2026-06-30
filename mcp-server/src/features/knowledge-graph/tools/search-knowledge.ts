@@ -45,18 +45,27 @@ export type SearchKnowledgeOutput = {
  * Resolve the default corpus sources for `projectDir`.
  * In-repo sources (principles/, references/, agents/, primers/) are resolved
  * relative to the plugin root (projectDir). The digest source is resolved from
- * the user's memory directory.
+ * the user's memory directory. The .canon/principles and .canon/proposed-learnings
+ * sources are resolved relative to the .canon/ directory inside projectDir.
  */
-function resolveDefaultSources(projectDir: string): DocCorpusSource[] {
+export function resolveDefaultSources(projectDir: string): DocCorpusSource[] {
   const digestRoot = (() => {
     const sanitized = projectDir.replace(/\//g, "-");
     return join(homedir(), ".claude", "projects", sanitized, "memory");
   })();
 
-  return DEFAULT_DOC_CORPUS_SOURCES.map((src) => ({
-    ...src,
-    root: src.corpus === "digest" ? digestRoot : join(projectDir, src.corpus),
-  }));
+  return DEFAULT_DOC_CORPUS_SOURCES.map((src) => {
+    switch (src.corpus) {
+      case "digest":
+        return { ...src, root: digestRoot };
+      case ".canon-principles":
+        return { ...src, root: join(projectDir, ".canon", "principles") };
+      case ".canon-proposed-learnings":
+        return { ...src, root: join(projectDir, ".canon", "proposed-learnings") };
+      default:
+        return { ...src, root: join(projectDir, src.corpus) };
+    }
+  });
 }
 
 export async function searchKnowledge(
