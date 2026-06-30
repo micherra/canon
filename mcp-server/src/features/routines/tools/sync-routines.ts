@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { brandUntrusted, renderUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import type { Routine } from "@shared/routine.ts";
@@ -36,7 +37,18 @@ function toEntry(
     | { ok: true; kind: "desktop"; path: string },
 ): SyncEntry {
   if (result.kind === "recipe") {
-    return { kind: "recipe", name: routine.name, recipe: result.recipe };
+    // Fence the recipe in the model-facing response for project-local routines.
+    // emitCloudRecipe writes the raw (unfenced) disk artifact — correct for user-paste docs.
+    // The model-facing tool response must be fenced for project-local untrusted content.
+    // Plugin routines are trusted (dc-05): recipe passed through unfenced.
+    const recipe =
+      routine.source === "project"
+        ? renderUntrusted(brandUntrusted(result.recipe), {
+            ref: `.canon/routines/${routine.name}`,
+            source: "project",
+          })
+        : result.recipe;
+    return { kind: "recipe", name: routine.name, recipe };
   }
   return { kind: "desktop", name: routine.name, path: result.path };
 }
