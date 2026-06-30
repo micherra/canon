@@ -232,7 +232,7 @@ Build integrity doesn't depend on the model remembering to run them.
 
 A build can survive a crash, session restart, or context-window compaction. Canon's durable journal, decisions ledger, and checkpoint files record every step — a resumed session rehydrates from those files, not from memory.
 
-The architect writes Architecture Decision Records to `docs/adr/` for decisions that are hard-to-reverse and worth recording. 27 ADRs are in the Canon repo at HEAD, covering every major design choice in the system.
+The architect writes Architecture Decision Records to `docs/adr/` for decisions that are hard-to-reverse and worth recording — Canon's own repo carries more than two dozen, documenting the significant design choices behind the system.
 
 ---
 
