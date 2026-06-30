@@ -90,6 +90,7 @@ async function scanDir(
     (e) => e.endsWith(".md") && e !== "README.md" && !e.startsWith("."),
   );
   for (const filename of mdFiles) {
+    // biome-ignore lint/performance/noAwaitInLoops: fail-fast sequential scan — Promise.all would change error semantics (first-error short-circuit) and lose ordered accumulation
     const result = await readFrontmatter(join(fullDir, filename));
     if (!result.ok) {
       return { error: result.error, skipped: false };
@@ -106,6 +107,7 @@ async function scanDir(
 async function collectFiles(cls: ArtifactClass, projectDir: string): Promise<ScanResult> {
   const files: Array<{ filename: string; frontmatter: string }> = [];
   for (const dir of CLASS_DIRS[cls]) {
+    // biome-ignore lint/performance/noAwaitInLoops: fail-fast sequential scan — Promise.all would change error semantics (first-error short-circuit) and lose ordered accumulation
     const result = await scanDir(join(projectDir, dir), files);
     if (result.error) {
       return { ok: false, reason: result.error };
