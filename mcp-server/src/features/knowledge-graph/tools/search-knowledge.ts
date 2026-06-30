@@ -17,7 +17,12 @@ import { ensureDocCorpusFresh } from "@features/knowledge-graph/ensure-doc-corpu
 import { type DocSearchResult, DocVectorQuery } from "@graph/kg-doc-query.ts";
 import { EmbeddingService } from "@graph/kg-embedding.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
-import { CANON_DIR, CANON_FILES, type DocCorpusSource } from "@shared/constants.ts";
+import {
+  CANON_DIR,
+  CANON_FILES,
+  DEFAULT_DOC_CORPUS_SOURCES,
+  type DocCorpusSource,
+} from "@shared/constants.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 export type SearchKnowledgeInput = {
@@ -48,28 +53,10 @@ function resolveDefaultSources(projectDir: string): DocCorpusSource[] {
     return join(homedir(), ".claude", "projects", sanitized, "memory");
   })();
 
-  return [
-    {
-      corpus: "principles",
-      optional: false,
-      root: join(projectDir, "principles"),
-      trust_tier: "internal",
-    },
-    {
-      corpus: "references",
-      optional: false,
-      root: join(projectDir, "references"),
-      trust_tier: "internal",
-    },
-    { corpus: "agents", optional: false, root: join(projectDir, "agents"), trust_tier: "internal" },
-    {
-      corpus: "primers",
-      optional: false,
-      root: join(projectDir, "primers"),
-      trust_tier: "internal",
-    },
-    { corpus: "digest", optional: true, root: digestRoot, trust_tier: "internal" },
-  ];
+  return DEFAULT_DOC_CORPUS_SOURCES.map((src) => ({
+    ...src,
+    root: src.corpus === "digest" ? digestRoot : join(projectDir, src.corpus),
+  }));
 }
 
 export async function searchKnowledge(
