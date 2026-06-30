@@ -21,7 +21,7 @@ Sort directories by timestamp (newest first). If `--all` is passed, show all pro
 
 ### Step 2: Present proposals
 
-For each proposal directory, read all `.md` files within it (excluding any files inside `applied/`, `rejected/`, or `dismissed/` subdirectories). Parse the YAML frontmatter reading `id` first (preferred field), falling back to `proposal_id` for legacy files that predate the `id:` field. Also parse `type`, `confidence`, and `target`. The resolved identifier (whichever field was found) is referred to as `{proposal_id}` in the steps below; when logging to `learning.jsonl`, always use the log key `proposal_id` for backward compatibility regardless of which source field was found.
+For each proposal directory, read all `.md` files within it (excluding any files inside `applied/`, `rejected/`, or `dismissed/` subdirectories). Parse the YAML frontmatter reading `id` first (preferred field), falling back to `proposal_id` for legacy files that predate the `id:` field. Also parse `type`, `confidence`, and `target`. Additionally parse `apply_channel` and `artifact_class` (both may be absent on legacy learner proposals — this is expected; absence is handled in Step 3, not an error). The resolved identifier (whichever field was found) is referred to as `{proposal_id}` in the steps below; when logging to `learning.jsonl`, always use the log key `proposal_id` for backward compatibility regardless of which source field was found.
 
 If a target principle or convention referenced by a proposal no longer exists in its expected location, inform the user and skip the proposal:
 "Proposal {proposal_id} references {target} which no longer exists. Skipping."
@@ -36,12 +36,15 @@ Present a summary table:
 ```
 ## Proposed Learnings ({count} proposals)
 
-| # | Type | Target | Confidence | Observation (first line) |
-|---|------|--------|------------|------------------------|
-| 1 | new-convention | — | 0.85 | Error boundaries missing in 8/12 API handlers |
-| 2 | severity-change | no-silent-failures | 0.72 | 15 violations in last 10 reviews suggest promotion |
-| 3 | prune-watch | some-principle | 0.60 | Never triggered across 10 reviews (in cooling-off; not yet actionable) |
+| # | Type | Artifact class | Target | Confidence | Observation (first line) |
+|---|------|----------------|--------|------------|------------------------|
+| 1 | new-convention | — | — | 0.85 | Error boundaries missing in 8/12 API handlers |
+| 2 | severity-change | — | no-silent-failures | 0.72 | 15 violations in last 10 reviews suggest promotion |
+| 3 | prune-watch | — | some-principle | 0.60 | Never triggered across 10 reviews (in cooling-off; not yet actionable) |
+| 4 | evolution-candidate | primer | primers/diagnosis.md | 0.85 | Diagnosis primer missing structured guidance |
 ```
+
+Show `—` in the Artifact class column for proposals where `artifact_class` is absent.
 
 Then for each proposal (excluding `prune-watch` which is informational only), show the full content and ask:
 
@@ -69,7 +72,36 @@ For any `prune-candidate` proposal, apply the following checks before showing Ac
    "CAUTION: This proposal RETIRES a rule-severity principle — a hard, pre-commit-enforced constraint. Retiring it means pre-commit hooks will no longer block this violation. A non-null superseded_by link is required. Are you sure? (yes/no)"
    If the user answers anything other than "yes", reject the proposal.
 
-### Step 3: Apply accepted proposals
+### Step 3: Route and apply accepted proposals
+
+For each accepted proposal, determine the apply channel using a fail-closed allowlist on both the `apply_channel` and `artifact_class` fields:
+
+```
+raw   = frontmatter.apply_channel   # may be absent on legacy proposals
+class = frontmatter.artifact_class  # may be absent on legacy proposals
+
+# --- normalize channel (absent ≠ unrecognized) ---
+if raw is absent:
+    channel = "writer"                # legacy learner proposal → existing principle/convention path
+elif raw == "writer":
+    channel = "writer"
+elif raw == "engineer-build-flow":
+    channel = "engineer-build-flow"
+else:
+    → Arm F (fail-safe: surface manual-apply required; do not apply this proposal)
+
+# --- dispatch by channel ---
+if channel == "writer":
+    → apply via writer agent (see "Writer arm" below)
+elif channel == "engineer-build-flow":
+    if class in {"primer", "agent", "template"}:  → Arm M (markdown direct-write)
+    elif class == "tool-description":              → Arm T (surface-only + route to build flow)
+    else:                                          → Arm F (fail-safe)
+    # Note: artifact_class values "skill", "reference", "eval-surface", and any future class
+    # correctly fall through to Arm F — no in-command apply path is defined for them.
+```
+
+**Writer arm** (channel == "writer" OR absent apply_channel — legacy/principle path):
 
 Spawn the **writer agent** in `apply-proposal` mode for each accepted proposal. The writer handles conflict detection, format validation, and the actual edit — this command does not modify principle files directly.
 
@@ -81,6 +113,57 @@ For each accepted proposal:
    ```json
    {"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"..."}
    ```
+
+**Arm M — primer / agent / template direct-write:**
+
+1. Resolve `target_path` from proposal frontmatter. If `target_path` is absent or the file does not exist on disk under the matching artifact directory (`primers/`, `agents/`, `templates/`), fall through to Arm F — do not create new files.
+2. Extract the candidate body from the `## Proposed Change` section: the candidate body is everything between the opening fence (the line immediately after the `(full-file rewrite)` / `(span-guided …)` marker line) and the **final** closing fence of the `## Proposed Change` section. Nested ``` fences may appear inside the body — take the outermost span, do not stop at the first inner closing fence. If no `## Proposed Change` fenced block is found, or the extracted candidate body is empty or whitespace-only, fall through to Arm F (manual-apply required) — do NOT Write the target file.
+3. Read the CURRENT on-disk content of `target_path`. Render a diff (current vs candidate body) and present it to the reviewer before asking for confirmation:
+
+   ```
+   --- current: {target_path}
+   +++ proposed
+   [unified diff output showing what will change]
+   ```
+
+4. Ask: **"Accept / Reject / Skip this {artifact_class} change to {target_path}?"**
+
+   - **Accept**: Write the candidate body to `target_path` (full-file replace). Then call the `sync_indexes` MCP tool to refresh the index inventory row for this artifact class. Advise: `"Change applied to {target_path}. Run /canon:check to verify."` Then move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl` with `artifact_class` and `apply_channel` included:
+     ```json
+     {"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"...","artifact_class":"...","apply_channel":"engineer-build-flow"}
+     ```
+   - **Reject**: Ask for a reason. Move to `.canon/proposed-learnings/{timestamp}/rejected/`. Append: `{"timestamp":"...","proposal_id":"...","action":"rejected","reason":"...","artifact_class":"...","apply_channel":"engineer-build-flow"}`
+   - **Skip**: Leave the proposal file in place; do not append to `learning.jsonl`.
+
+**Arm T — tool-description surface-only (never auto-write):**
+
+Surface exactly:
+
+```
+Proposal {id} targets {target_path} (a TypeScript tool-description file).
+Auto-write is not supported for this artifact class — TypeScript changes require
+a compilation step and Canon build-flow review. To apply manually:
+  1. Open {target_path}
+  2. Apply the exact change shown in the ## Proposed Change block below.
+  3. Run `npm run build` to verify the TypeScript compiles.
+  4. Route via a Canon build flow under plan-approval HITL.
+
+[contents of ## Proposed Change block]
+```
+
+Do NOT write any file. Do NOT spawn the writer. Then ask: **"Note this for manual apply (Skip), or Dismiss?"** — leave in place on Skip (no `learning.jsonl` mutation), move to `.canon/proposed-learnings/{timestamp}/dismissed/` on Dismiss.
+
+**Arm F — manual-apply fail-safe:**
+
+Surface:
+```
+Proposal {id}: apply_channel '{raw}' / artifact_class '{class}' has no supported
+in-command apply path — manual-apply required. Surfacing for manual review; not applied.
+```
+
+Do NOT write any file. Do NOT spawn the writer. Leave the proposal in place (treat as Skip for audit: no `learning.jsonl` mutation unless the user explicitly Rejects or Dismisses afterward).
+
+**Reject / Dismiss / Skip mechanics (all channels):**
 
 For rejected proposals:
 1. Ask the user for a reason (brief, optional — press Enter to skip)
@@ -107,6 +190,10 @@ If any proposals were accepted, suggest the user run `/canon:check` to verify th
 
 - Only modifies files the user explicitly approves
 - All principle/convention edits go through the writer agent — this command never edits principle files directly
+- Non-principle markdown applies (primer/agent/template via `apply_channel: engineer-build-flow`) are written directly by this command after an explicit diff+Accept confirmation, then index-refreshed via `sync_indexes`; no writer agent is spawned for these
+- `tool-description` proposals and any unsupported `artifact_class` (including `skill`, `reference`, `eval-surface`) are surfaced as "manual-apply required" — never auto-written, never routed to the writer
+- Apply routing is fail-closed: absent `apply_channel` → writer path (legacy backward-compat); any `apply_channel` value other than `"writer"` or `"engineer-build-flow"` → manual-apply fail-safe; any `artifact_class` within `engineer-build-flow` not in {primer, agent, template, tool-description} → manual-apply fail-safe
+- Every channel is HITL-gated — all applies require explicit reviewer confirmation; auto-apply is not supported for any channel
 - Proposal files are moved (not deleted) to preserve audit trail
 - `learning.jsonl` is append-only
 - Never demote security-tagged rules; show extra confirmation for any rule demotion

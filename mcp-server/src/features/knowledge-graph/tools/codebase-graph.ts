@@ -11,6 +11,7 @@ import {
   loadLayerMappings,
   loadLayerMappingsStrict,
 } from "@shared/lib/config.ts";
+import { mapUntrusted, renderUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import { loadPathAliases } from "@shared/lib/paths.ts";
 import { loadAllPrinciples } from "@shared/matcher.ts";
 import {
@@ -229,7 +230,14 @@ function buildGraphOutput(
 
   const principles: Record<string, { title: string; severity: string; summary: string }> = {};
   for (const p of allPrinciples) {
-    principles[p.id] = { severity: p.severity, summary: extractSummary(p.body), title: p.title };
+    const ref = `.canon/principles/${p.id}`;
+    principles[p.id] = {
+      severity: p.severity,
+      // mapUntrusted applies extractSummary brand-preservingly; renderUntrusted unwraps
+      // through the fence for project-local content (dc-05: plugin is passthrough).
+      summary: renderUntrusted(mapUntrusted(p.body, extractSummary), { ref, source: p.source }),
+      title: renderUntrusted(p.title, { ref, source: p.source }),
+    };
   }
 
   return { edges, generated_at: new Date().toISOString(), insights, layers, nodes, principles };

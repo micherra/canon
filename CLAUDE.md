@@ -29,18 +29,20 @@ Everything else — research, design, implementation, review, testing — is age
 
 **Check conversation continuity first.** If the previous turn spawned a specialist agent and the user's follow-up continues the same topic, route to that same agent type. Reset on: explicit topic change, active pipeline, or clearly different intent.
 
-| Intent | Action |
-|--------|--------|
-| **build** | Auto-detect intent → follow the documented orchestration sequence |
-| **explore** | Auto-detect intent → follow the documented orchestration sequence (also for: brainstorming, "what if…", "I'm thinking about…") |
-| **test** | Auto-detect intent → follow the documented orchestration sequence |
-| **review** | Auto-detect intent → follow the documented orchestration sequence |
-| **security** | Auto-detect intent → follow the documented orchestration sequence |
+| Intent / signal | Routing / action |
+|---|---|
+| **build** (build, fix, change, improve — any scope) | PM triage → route to `canon:architect` or `canon:engineer` per the documented orchestration sequence |
+| **explore** (also brainstorming, "what if…", "I'm thinking about…") | Auto-detect → documented orchestration sequence |
+| **test** | Auto-detect → documented orchestration sequence |
+| **review** (review PR or branch) | Spawn `canon:reviewer` |
+| **security** (security audit) | Spawn `canon:security`, then `canon:reviewer`. Re-verify after a CRITICAL/BLOCKING safety-hook fix MUST dispatch a FRESH (non-author) adversarial agent — the author's "my listed cases are covered" framing structurally cannot hold the adversarial "the list is a hypothesis to attack" framing (watch_CCCCCCCCCCCC1). |
+| **investigate** ("how does X work") | Spawn `canon:architect` |
+| **scan for violations** (via init) | Spawn `canon:engineer` to scan + fix |
 | **question** | Respond directly — the lead has full Canon MCP access (`get_principles`, `list_principles`, `get_compliance`, `get_drift_report`) |
 | **chat** | Respond directly — Claude handles conversation natively; use PM requirements conversation for structured "should we build this?" evaluation |
-| **principle** | Spawn `canon:writer` |
-| **learn** | Spawn `canon:learner` |
-| **resume** | Read `journal.json`/`board.json` → continue the documented sequence from the last completed step |
+| **principle** (create/edit principle) | Spawn `canon:writer` via content flow (see `references/content-flow.md`) |
+| **learn** (analyze patterns) | Spawn `canon:learner` for mining |
+| **resume** (resume interrupted flow) | Read `journal.json`/`board.json` → continue the documented sequence from the last completed step (see Resume Protocol) |
 | **greeting** | Respond directly |
 
 ## Canon Should Be Invisible
@@ -70,16 +72,7 @@ Do not narrate individual tool calls. One line between state transitions is corr
 
 ### Intent Classification
 
-| Signal | Action |
-|--------|--------|
-| Build, fix, change, improve (any scope) | PM triage → route to `architect` or `engineer` |
-| Review PR or branch | Spawn `reviewer` |
-| Security audit | Spawn `security`, then `reviewer`. Re-verify after a CRITICAL/BLOCKING safety-hook fix MUST dispatch a FRESH (non-author) adversarial agent — the author's "my listed cases are covered" framing structurally cannot hold the adversarial "the list is a hypothesis to attack" framing (watch_CCCCCCCCCCCC1). |
-| Investigate / "how does X work" | Spawn `architect` |
-| Scan for violations (via init) | Spawn `engineer` to scan + fix |
-| Create/edit principle | Route to `writer` via content flow (see `references/content-flow.md`) |
-| Analyze patterns / learn | Route to `learner` for mining |
-| Resume interrupted flow | See Resume Protocol below |
+Intent → agent routing: see `## Intent Classification` above.
 
 ### Pre-Build Gate
 
@@ -119,11 +112,11 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **Storage**: `compute_autonomy_tier` logs its own `auto_decision` audit event to the execution store; no separate board-metadata write is needed.
 
-**User override**: Pass `override_tier: "supervised"` to force full supervision. The user can request this at any point by saying "supervised mode" or "full supervision".
+**User override**: Pass `override_tier: "supervised"` to force full supervision ("supervised mode" or "full supervision").
 
 ### Per-Message Re-Classification (L1)
 
-**Re-classify every user message.** Intent is per message, not session. Chat/question history does not make a subsequent build request "chat." Apply PM triage to every build request regardless of prior conversation flow.
+**Re-classify every user message.** Intent is per message, not session. Chat/question history does not make a subsequent build request "chat."
 
 ### Enforcement Gates (all L1)
 
@@ -131,7 +124,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **Pre-Write Gate**: Before `Edit`, `Write`, or `Bash` for code changes, verify the request is routed through a Canon build flow (architect + approved runbook). If not, stop and route through PM triage. Hard backstop: `canon-workspace-check.sh` hook (L4) blocks `Edit`/`Write`/tracked-`Bash` when no active workspace exists.
 
-**Pre-Analysis Gate**: Before producing substantive analytical text, verify it is on the Silent Dispatch allowlist (items 1–6). If not on the list, it is agent work — dispatch instead of writing it yourself. PM carve-out: requirements sharpening, scope questions, AC negotiation, and 1-2 MCP triage calls are permitted inline. Excluded: deep codebase investigation, root-cause analysis, design tradeoffs, implementation planning. Self-check: *"Am I about to write something a researcher or architect would produce?"* If yes, spawn that agent. L1-only — no L4 backstop; enforcement is entirely behavioral. Applies during build flows only. Question/chat intents respond directly and are exempt.
+**Pre-Analysis Gate**: Before producing substantive analytical text, verify it is on the Silent Dispatch allowlist (items 1–6). If not on the list, it is agent work — dispatch instead of writing it yourself. PM carve-out: requirements sharpening, scope questions, AC negotiation, and 1-2 MCP triage calls are permitted inline. Excluded: deep codebase investigation, root-cause analysis, design tradeoffs, implementation planning. Self-check: *"Am I about to write something a researcher or architect would produce?"* If yes, spawn that agent. L1-only; behavioral only. Applies during build flows only. Question/chat intents respond directly and are exempt.
 
 ### Setup
 
@@ -146,21 +139,21 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 4. Spawn `canon:engineer` with request, `worktree_path`, `turn_budget: {maxTurns}`.
 5. **Verify journaling**: After engineer returns, check the SUMMARY `### Status` field. If the engineer's SUMMARY reports `DONE` or `DONE_WITH_CONCERNS` AND the build is fix-type (no new contracts, no new exports), log the verify step as skipped: `batch_log_steps([{ step_id: "verify", status: "skipped", skip_reason: "fix-type build, no contract-level changes" }])`. Otherwise, dispatch a separate verify agent (or run `npm run build && npm run lint && npm test && bash hooks/lint.sh` inline) before proceeding to review.
 
-**Fast-path enrichment**: For 4+ files or 2+ workstreams, include in engineer spawn prompt: scope summary, key files with one-line purpose, known gotchas.
+| Build shape | Enrichment to append |
+|---|---|
+| 4+ files or 2+ workstreams | Fast-path (scope summary + key files + gotchas) |
+| Build addresses learner findings | Learner-proposal (retroactive grep + fix every instance) |
+| Deletes symbols, functions, types, or directory paths | Dead-code-removal (grep for symbol name, type name, path strings) |
+| Build requires agent X calls tool Y | Wiring-task (awk tools check + grep registration check, both required) |
+| Safety-hook bypass fixes | Hook-bypass-fix (vocabulary-free / fail-closed posture; if Nth patch → rethink) |
 
-**Learner-proposal enrichment**: When the build addresses learner findings, add to the engineer spawn prompt: "After implementing each proposal, grep the same file and related files in the same directory for existing instances of the violation pattern. Apply the fix retroactively to every instance found. List retroactive fixes in the Criteria Coverage table."
-
-**Dead-code-removal enrichment**: For builds that delete symbols, functions, types, or directory paths, add to the engineer spawn prompt: "After deleting each symbol, grep the full codebase for: (1) the symbol name as a string literal (catches constant arrays and config entries), (2) the TypeScript type name (catches orphan type declarations whose value-producers were deleted), (3) any directory path strings being removed (catches docstrings and comments). List all additional deletions in the Criteria Coverage table."
-
-**Wiring-task enrichment**: The standing dead-wire gate (Step Enforcement Contracts → Verify step) now enforces new-export reachability automatically; the manual checks below remain engineer-facing guidance for closing wiring ACs with explicit evidence. When the build spec requires that agent X calls tool Y (new or pre-existing), add to the engineer spawn prompt: "Before closing any AC that says agent X must call tool Y, verify: (1) `awk '/^tools:/{in_tools=1; next} in_tools && /^[^ \t]/{exit} in_tools{print}' agents/X.md | grep '  - mcp__canon__Y$'` returns a match — this confirms Y is in the `tools:` allowlist, not merely mentioned in the description or body; (2) `grep -rn '"Y"' mcp-server/src/app/register-*.ts` (quoted-string form in registration files) returns a non-empty result — a match only in a doc comment or non-registration file does not satisfy this condition. Both checks are required. List the command output as evidence in the Criteria Coverage table."
-
-**Hook-bypass-fix enrichment**: For safety-hook bypass fixes, add to the engineer spawn prompt: "Prefer a vocabulary-free / fail-closed-on-unrecognized predicate over an enumerated wrapper/token list — each new list item closes one form and opens the next unlisted one. If this fix is the Nth patch of the same bypass class, treat it as a posture rethink, not another enumeration (see `.canon/principles/conventions/security-hook-parser-allowlist-posture.md`, watch_UUUUUUUU2)."
+Append the matching enrichment text from `references/engineer-spawn-enrichment.md` to the engineer spawn prompt.
 
 #### Non-trivial path (PM → architect → execution)
 
 1. `init_workspace({ flow_name, task, branch, base_commit, tier, original_input, preflight: true })` → save `worktree_path`, `workspace`.
 2. **Write PRD**: Fill `templates/prd.md` → write to `${WORKSPACE}/plans/${SLUG}/prd.md`. Verify it exists before Step 3.
-3. **Spawn `canon:architect`** with request, requirements summary, `PRD_PATH`, `WORKSPACE`, `worktree_path`. The architect needs `worktree_path` to write qualifying ADRs into the build branch (see Durable ADR gate in `agents/architect.md`). **Pre-design probe obligation**: if the architect's DESIGN.md ASSUMPTIONS section contains any `confidence: medium` or `confidence: unknown` claim about external SDK behavior, protocol timing/ordering/availability, or existing hook/script behavior, a throwaway empirical probe must run before design freeze — committed to `${WORKSPACE}/plans/${SLUG}/PROBE-FINDINGS.md` and cited in DESIGN.md Research. Probes must invoke the capability; environment-inspection inferences do not count. If the probing agent lacks the required tool or spawn capability, the orchestrator takes over the probe. See `principles/conventions/probe-before-build-invoke-not-infer.md`.
+3. **Spawn `canon:architect`** with request, requirements summary, `PRD_PATH`, `WORKSPACE`, `worktree_path` (needed for durable ADR writes — see `agents/architect.md` Durable ADR gate). **Pre-design probe obligation**: if the architect's DESIGN.md ASSUMPTIONS section contains any `confidence: medium` or `confidence: unknown` claim about external SDK behavior, protocol timing/ordering/availability, or existing hook/script behavior, a throwaway empirical probe must run before design freeze — committed to `${WORKSPACE}/plans/${SLUG}/PROBE-FINDINGS.md` and cited in DESIGN.md Research. Probes must invoke the capability; environment-inspection inferences do not count. If the probing agent lacks the required tool or spawn capability, the orchestrator takes over the probe. See `principles/conventions/probe-before-build-invoke-not-infer.md`.
 4. **Validate architect output**: Check Requirements Coverage section. Surface any `descoped`/`partial`/missing requirements to user before proceeding. If the section is absent or has no rows, treat all requirements as `descoped` and surface to user. For `covered` rows, verify each names an owning runbook step — rows without an owner are treated as `partial`. Proceed silently if all requirements are `covered` with owners.
 5. Present runbook for user approval. Architect decides execution strategy — orchestrator follows it.
 6. `batch_log_steps` with all approved runbook steps.
@@ -181,30 +174,7 @@ TeamCreate/merge/cleanup operation.
 
 Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.
 
-**Reconciliation-on-resume (cliff detection → observe → surface).** Before
-continuing, call `reconcile_workspace({ workspace, emit_telemetry: true, source:
-"resume" })`. This both detects the cliff and (via `emit_telemetry: true`)
-records the `cliff_detected` telemetry automatically — mechanical enforcement, no
-separate logging instruction. Each entry in `incomplete_steps` is a
-`started`/`planned` step that either (a) has a declared artifact missing on disk
-(`missing_artifacts`), or (b) has an artifact present but still a `## Status:
-Partial` / `IN_PROGRESS` skeleton (`partial_artifacts`) — an agent that stopped
-before producing or finishing its artifact. For each entry:
-1. **Harvest** the dead agent's transcript (read-only, best-effort observation —
-   NOT recovery): call `capture_transcript({ workspace, step_id, agent_type,
-   agent_id?, source_path?, persist_path: true })`. Pass the `agent_id` from the
-   original Agent spawn result (or the journal) when available; if the agent died
-   before its completion was logged, pass `source_path` if known. If neither is
-   available, capture is a best-effort no-op (it returns a warning, never an
-   error) — proceed regardless. `persist_path: true` makes the recovered
-   transcript findable by `get_transcript` so the user can inspect it.
-2. If `needs_recovery: true`, **surface** the incomplete steps to the user via the
-   "Incomplete-step surfacing (cliff detected)" HITL pattern and STOP. **Do NOT
-   automatically re-spawn** — the user decides whether to manually re-run the
-   step, abandon it, or inspect the harvested transcript.
-
-Reconciliation runs against the BUILD journal. It is advisory and read-only — a
-`reconcile_workspace` error never blocks resume (treat as `needs_recovery:false`).
+Before continuing, call `reconcile_workspace({ workspace, emit_telemetry: true, source: "resume" })`; on `needs_recovery: true`, surface the Incomplete-step surfacing (cliff detected) HITL and STOP. Do NOT auto-respawn — the user decides whether to re-run, abandon, or inspect the harvested transcript. See `references/canon-orchestrator.md` § Reconciliation-on-Resume for the full harvest protocol.
 
 **In-session compaction uses the same durable artifacts.** Before any HITL gate or dispatch, durable `journal.json` + `get_decisions` + `checkpoint.md` are authoritative over in-context recollection. Full rehydration sequence: `references/canon-orchestrator.md` § In-Session Compaction Rehydration.
 
@@ -240,49 +210,9 @@ Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include r
 
 Three-phase loop: partition → spawn → consolidate. Reviewer is the concrete implementation; other team types follow the same pattern.
 
-#### Phase 1 — Partition
+Fan-out threshold: aggregate blast radius > ~50, OR multiple files with `impact_score > 0.7`, OR 3+ layers with cross-layer dependencies. Below threshold: single reviewer, full file list.
 
-Before spawning a team-dispatched review step, call `get_file_context` for each changed file and examine blast radius data (`in_degree`, `impact_score`, `blast_radius`). The fan-out decision is based on **aggregate blast radius** — NOT a fixed file count threshold. Signals that warrant fan-out:
-
-- Total blast radius entries across all changed files exceeds ~50 (many downstream dependents affected)
-- Multiple changed files have `impact_score > 0.7` (high-centrality changes)
-- Changed files span 3+ layers with cross-layer dependencies
-
-When fan-out is warranted, partition files into N groups (typically 2–3). Partitioning rules:
-
-- Files in the same dependency cycle stay together
-- High `in_degree` files get smaller groups (more attention per reviewer)
-- Files in the same directory/module stay together when possible
-- Co-change partners (from `co_change_partners`) stay together
-
-When fan-out is NOT warranted, spawn a single reviewer with the full file list (standard single-subagent pattern).
-
-#### Phase 2 — Spawn
-
-Spawn N reviewers in parallel via `Agent()`, each with:
-
-- The standard preloaded context from `resolve_agent_skills`
-- `WORKSPACE={workspace_path}` (workspace root, not worktree)
-- An explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`"
-- Their assigned file list
-- Their reviewer number: "You are reviewer {N} of {total}. Write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md`."
-- No `isolation` parameter (reviewers run in the shared workspace, not a worktree)
-
-#### Phase 3 — Consolidate
-
-After all reviewers complete, read all `REVIEW-{N}.md` files and consolidate into the final `REVIEW.md`:
-
-1. **Deduplicate**: Group violations by `(file_path, principle_id, line_number)`. Violations found by 2+ reviewers are confirmed — include them directly.
-2. **Identify minority findings**: Violations found by only 1 of N reviewers are minority findings. These are NOT dismissed — they get a verification probe.
-3. **Verification probe for minority findings**: For each minority finding:
-   a. Spawn a focused verification reviewer (a single `canon:reviewer` subagent) with ONLY the specific file and the minority finding's description: "Verify whether the following finding is a true positive: {violation description} at {file:line}. Grep for the pattern and report CONFIRMED or DISMISSED with evidence."
-   b. If CONFIRMED: promote to the consolidated `REVIEW.md` as a verified finding. Tag as `[minority-verified]`.
-   c. If DISMISSED: log in the consolidated `REVIEW.md` under a `### Dismissed Minority Findings` section with the dismissal reason. Do NOT silently drop.
-   d. **Scope limit**: If more than 5 minority findings exist, prioritize by severity (BLOCKING > WARNING) and blast radius. Probe the top 5; log the remainder as `[minority-unverified]` in the dismissed section.
-4. **Union**: Merge honored lists from all reviewers.
-5. **Score**: Sum scores across reviewers, adjusting for deduplicated violations.
-6. **Verdict**: Take worst-case verdict across all reviewers (BLOCKING > WARNING > CLEAN). Minority-verified findings count toward the verdict.
-7. Write using the `write_review` MCP tool.
+Read `references/team-dispatch-protocol.md` BEFORE spawning a team-dispatched review.
 
 ### Journal Protocol
 
@@ -315,7 +245,7 @@ At each consequential decision, call `log_decision({ workspace, decision_type, s
 
 After each completed step (alongside `log_step(...completed)`) and at each HITL gate, call `write_orchestrator_checkpoint({ workspace })` to refresh `${workspace}/checkpoint.md`. That write is **best-effort-observable** — failure returns a `ToolResult` error but never throws or silently succeeds.
 
-**Honesty clause (behavioral, not mechanical)**: these call sites are a behavioral obligation. The *tool* is deterministic and durable; Canon cannot intercept harness compaction and mechanically force the orchestrator to call these tools at every gate. `write_orchestrator_checkpoint` and `get_decisions` are the safety net — rehydration (see Resume Protocol + `references/canon-orchestrator.md` In-Session Compaction Rehydration) works regardless of how many gates were missed under compaction.
+**Honesty clause (behavioral)**: these call sites are a behavioral obligation — the tool is durable but the harness cannot mechanically force every call. `write_orchestrator_checkpoint` and `get_decisions` are the safety net for rehydration (see Resume Protocol + `references/canon-orchestrator.md` § In-Session Compaction Rehydration).
 
 ### Post-Subagent Artifact Check
 
@@ -364,16 +294,9 @@ checkpoint, Incomplete-step surfacing (cliff detected), merge conflict, gate fai
 
 ### Renderer Spawn Protocol
 
-Spawn `Agent()` (generic, not named). Use `model: "haiku"` for design templates; use `model: "sonnet"` for review, codebase-graph, and file-context templates (these require MCP tool calls and complex composition). Read the appropriate template from `templates/renderer-*.md`, fill `## Variables`, pass `## Prompt` section as spawn prompt. Renderer writes to `${WORKSPACE}/artifacts/` and does NOT modify the worktree.
+Spawn generic `Agent()` (not named). Use `model: "haiku"` for design; `model: "sonnet"` for review, codebase-graph, and file-context (these require MCP tool calls). Renderer writes to `${WORKSPACE}/artifacts/` and does NOT modify the worktree.
 
-| Checkpoint | Template | Output | Required variables |
-|------------|----------|--------|--------------------|
-| Design | `renderer-design.md` | `design.html` | `${WORKSPACE}`, `${SLUG}`, `${DESIGN_PATH}`, `${DAG_PATH}`, `${PRD_PATH}`, `${RUNBOOK_PATH}` |
-| Review | `renderer-review.md` | `review.html` | `${WORKSPACE}`, `${SLUG}`, `${BASE_COMMIT}`, `${WORKTREE_PATH}` |
-| Codebase graph | `renderer-codebase-graph.md` | `codebase-graph.html` | `${WORKSPACE}`, `${SLUG}`, `${DIFF_BASE}`, `${SOURCE_DIRS}` |
-| File context | `renderer-file-context.md` | `file-context.html` | `${WORKSPACE}`, `${SLUG}`, `${FILE_PATH}` |
-
-MCP requirements: `renderer-design.md` — none; `renderer-review.md` — `show_pr_impact` + `get_context`; `renderer-codebase-graph.md` — `codebase_graph`; `renderer-file-context.md` — `get_file_context`.
+Read `references/renderer-spawn-protocol.md` for the per-checkpoint template + variables before spawning a renderer.
 
 ### Post-Review Tester Enrichment
 
@@ -381,7 +304,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 
 ### Step Enforcement Contracts <!-- last-updated: 2026-06-12 -->
 
-**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh` → `bash hooks/dead-wire-gate.sh {base_commit}`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL. For builds with user-observable ACs, the verify step also drives the live app (background-launch + readiness-poll + curl/CLI-invocation, never `sleep N`), distinct from `npm test` — see `agents/tester.md` Live App Smoke. This closes the tests-pass-but-app-doesn't-boot gap.
+**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh` → `bash hooks/dead-wire-gate.sh {base_commit}`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL. For builds with user-observable ACs, the verify step also drives the live app (background-launch + readiness-poll + curl/CLI-invocation, never `sleep N`), distinct from `npm test` — see `agents/tester.md` Live App Smoke.
 
 `→ bash hooks/dead-wire-gate.sh {base_commit}` — standing dead-wire reachability postcondition. Must exit 0. Fails closed on any newly-exported symbol/tool with zero real references (suppress legitimate not-yet-wired exports with an inline `// canon:allow-unwired: <reason>` marker; audit via `grep -rn 'canon:allow-unwired'`). The doc-only verify-skip (`.md`/`.txt` only diffs) also skips this gate.
 
@@ -403,8 +326,8 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
    - **GitHub release**: release-please (`release-please.yml`) is the primary tag/release mechanism — it runs automatically on push to `main` and cuts `vX.Y.Z` tags + GitHub releases when the release PR merges. The shipper does NOT create tags or run `gh release create`.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
 4. **Fire `PushNotification` at build-complete** (after ship / PR created): call `PushNotification({ title: "Canon: Build Complete", message: "Build '{slug}' is done — PR created and ready for review." })`. This is the OS-push channel for HITL gates and build-complete signals (per channel split in `docs/supervised-build-quality.md:250`). Terminal digests (nightly digest, learner surfacing) remain terminal — do NOT convert them to push.
-   - **One-time user setup**: Desktop push works by default in the Claude.ai/API runtime — no setup needed. Phone push requires connecting **Remote Control** (optional one-time step). Not available on Bedrock/Vertex/Foundry — Canon runs on the Claude.ai/API path, so this is informational only.
-   - **LSP prerequisite**: The `LSP` tool (granted to reviewer, engineer, architect) requires `typescript-language-server` installed globally: `npm install -g typescript-language-server typescript`. Without it the tool will fail to return results.
+   - **One-time user setup**: Desktop push works by default. Phone push requires **Remote Control** (optional). Not available on Bedrock/Vertex/Foundry.
+   - **LSP prerequisite**: The `LSP` tool requires `typescript-language-server` globally: `npm install -g typescript-language-server typescript`.
 5. Verify file claims released.
 6. Record final flow metrics.
 
@@ -427,43 +350,11 @@ See Agent Spawn Error Handling below. For transient errors (429, auth, TTL), ret
 
 ### Multi-Session Concurrency <!-- last-updated: 2026-06-24 -->
 
-Canon runs as a shared HTTP daemon. Multiple Claude sessions may run concurrently against the same project — each session is a separate orchestrator instance sharing one server process. The protocols below prevent workspace corruption and stale-read hazards.
+Canon runs as a shared HTTP daemon. Multiple Claude sessions may run concurrently — each is a separate orchestrator instance sharing one server process.
 
-#### Workspace mutex (`.lock`)
+**Session-unique identity**: Pass `session_id` (`CLAUDE_CODE_SESSION_ID`) and `job_id` (first 8 chars of `basename($CLAUDE_JOB_DIR)`) to every `init_workspace` and `finalize_workspace` call. On `lock_gated: true` → surface the foreign-lock HITL (never delete `.lock` — TTL reclaim is automatic).
 
-`init_workspace` acquires an exclusive file mutex at `{workspace}/.lock` using POSIX-atomic exclusive-create (`O_EXCL`). The lock is released by `finalize_workspace`. Pass `session_id` and `job_id` to both tools so the shared daemon can identify which session holds the lock.
-
-**Session-unique identity**: The orchestrator MUST pass its own `session_id` (the value of `CLAUDE_CODE_SESSION_ID` in its environment) and `job_id` (first 8 chars of `basename($CLAUDE_JOB_DIR)`) to every `init_workspace` and `finalize_workspace` call. The shared daemon cannot read these values from `process.env` — they must be passed explicitly.
-
-**Foreign-lock HITL pattern**: When `init_workspace` returns `lock_gated: true`, the workspace is held by another session. Do NOT proceed. Surface to the user:
-
-```
-WORKSPACE LOCKED
-Workspace: {workspace}
-Owner session: {lock_owner.session_id}
-Owner job:     {lock_owner.job_id}
-Locked since:  {lock_owner.started_at}
-
-Options:
-  1. Wait for the other session to finalize and retry.
-  2. If the owner session is dead, retry — the TTL reclaim (2h) will fire automatically.
-  3. If you are certain the session is abandoned, contact the owner or wait for TTL.
-Do NOT manually delete .lock — race-free reclaim is automatic via TTL.
-```
-
-Locks are reclaimed automatically after a 2-hour TTL or when the owner process is confirmed dead (PID liveness check). Never manually delete `.lock` — the exclusive-create reclaim protocol is the only race-safe path.
-
-#### Pre-Mutate Re-Read Gate <!-- S7 -->
-
-Before any agent mutates a shared workspace artifact (journal, board, checkpoint), it must re-read the artifact immediately before the write — not rely on a stale in-context copy from an earlier read earlier in its turn. This prevents the "read-then-long-compute-then-stale-write" hazard where another session advanced the artifact while the agent was computing.
-
-**Protocol:**
-1. Before each `log_step` / `batch_log_steps` / `write_orchestrator_checkpoint` call, read the current `journal.json` state if needed for merge decisions.
-2. Use `write_orchestrator_checkpoint` immediately (not deferred) — a stale checkpoint blocks correct resume.
-3. When a `BOARD_LOCKED` error (version conflict) is returned by an MCP tool, treat it as a retryable conflict: re-read the current board state and re-apply your update against the new version.
-4. Never cache journal or board snapshots across multiple tool calls — each MCP call sees the current on-disk state.
-
-**Shell helper**: The `hooks/pre-mutate-reread.sh` script (S8) validates that an in-context snapshot age does not exceed a freshness threshold. Agents may invoke it before multi-step journal writes to detect stale-read hazards at the hook layer.
+Read `references/multi-session-concurrency.md` BEFORE handling a lock-gated init or mutating a shared artifact.
 
 ## Specialist Agents
 
@@ -483,48 +374,30 @@ Before any agent mutates a shared workspace artifact (journal, board, checkpoint
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
 
-**Spawn pattern**: Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`. Agent `name` MUST be session-unique: use `{agent-type}-{step_id}-{job_suffix}` where `job_suffix` is the first 8 chars of `basename($CLAUDE_JOB_DIR)` (read from the orchestrator's env) — e.g. `reviewer-review-72f2b372` not `reviewer-1`. `SendMessage` routes by bare agent name, so two concurrent sessions both spawning `reviewer-1` cross each other's mailboxes (D5 / watch_OOOOOOOOOO2).
+**Spawn pattern**: Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`. Agent `name` MUST be session-unique: use `{agent-type}-{step_id}-{job_suffix}` where `job_suffix` is the first 8 chars of `basename($CLAUDE_JOB_DIR)` — e.g. `reviewer-review-72f2b372` not `reviewer-1`. `SendMessage` routes by bare name; concurrent sessions sharing it cross mailboxes (watch_OOOOOOOOOO2).
 
 **Exceptions (no worktree needed):**
 - Agents writing exclusively to `.canon/` (gitignored). Currently: learner.
 
 ## Agent Spawn Error Handling
 
-Detect and retry transient failures:
-
 | Error pattern | Cause |
 |--------------|-------|
 | Rate limit (429, "rate limit") | API throttling |
 | Auth failure ("Not logged in", 401) | Parallel agents corrupting session credentials |
 | TTL ordering ("cache_control.ttl", "must not come after") | Long conversation + MCP cache ordering bug |
-| Stream idle timeout (agent stalls mid-run: no streaming output, tool-use history present) | Long composition or reading phase without output — **resume-first; backoff does not apply (see Stream-idle timeout recovery below)** |
+| Stream idle timeout (agent stalls mid-run: no streaming output, tool-use history present) | Long composition or reading phase without output — **resume-first; backoff does not apply** |
 
 Retry up to 3 times with exponential backoff (4s, 8s, 16s). Keep successful results; retry only failed ones. If all retries fail, pause and inform the user.
 
-**Stream-idle timeout recovery (watch_NNNNN2)**: A stream-idle stall is a mid-run failure, NOT a spawn failure — it is excluded from the backoff-retry path above. FIRST response: send the stalled agent a brief continuation message (SendMessage resume). Both observed instances (PR #336 renderer mid-composition; PR #338 engineer mid-reading) recovered losslessly with full context intact. Only if the resume elicits no response within ~30s, fall back to the Auto-Escalation Protocol and, if re-spawning, the Re-spawn Enrichment Protocol. Re-spawn is the fallback, never the first response.
-
-**Architect re-spawn tracking**: When architect requires 2+ spawn attempts, record reason in `log_step` outcome `review_verdict` field as `"respawn:{reason}"` (values: `artifacts_missing`, `rate_limit`, `auth_failure`, `ttl_ordering`, `timeout`).
+**Stream-idle timeout recovery (watch_NNNNN2)**: A stream-idle stall is a mid-run failure, NOT a spawn failure — resume-first (SendMessage); fall back to escalation-protocol only if no response within ~30s. See `references/escalation-protocol.md` for recovery detail.
 
 ### Auto-Escalation Protocol
 <!-- last-updated: 2026-05-21 -->
 
-When an agent failure or stuck condition is detected (`isStuck` returns true, agent returns error, or retry fails), call `get_next_escalation_strategy({ workspace, step_id, flow_config? })` BEFORE escalating to HITL.
+On agent failure or stuck condition, call `get_next_escalation_strategy({ workspace, step_id, flow_config? })` BEFORE escalating to HITL. Apply the returned strategy; when `is_terminal: true`, escalate to HITL.
 
-| Strategy | How to apply |
-|----------|-------------|
-| `add_primer` | Add the domain primer for the failing area to the re-spawn prompt: "Relevant domain primers: {domain}. Load from ${CLAUDE_PLUGIN_ROOT}/primers/{domain}.md." |
-| `increase_budget` | Double the `turn_budget` in the re-spawn prompt (cap at 80). |
-| `escalate_model` | Add `model: "opus"` to the Agent call. |
-| `narrow_scope` | Split the failing task's file list in half. Re-spawn with only the first half. Queue the second half as a follow-up. |
-| `hitl` | Current behavior — escalate to user via HITL. |
-
-**When to call**: Replace the current "retry once then HITL" pattern. On first failure: call `get_next_escalation_strategy`. On subsequent failures of the same step: call again (it tracks state and returns the next strategy). When `is_terminal: true`, escalate to HITL.
-
-**Flow-specific config**: Pass `flow_config: { skip_strategies: ["narrow_scope"] }` for security flows. The escalation tool handles the skip internally.
-
-**Timeout**: The tool enforces a 2-minute cumulative timeout. If the cascade has been running for 2+ minutes, it returns "hitl" regardless of remaining strategies. The orchestrator does not need to track time separately.
-
-**Adversarial-surface iteration signal**: When a fix loop runs 3+ rounds AND every reviewer finding in those rounds is a confirmed true positive on a NEW, distinct bypass or failure class (not a regression introduced by a prior fix, not noise, not churn), surface the following signal to the user BEFORE spawning another patch engineer: "Fix loop at N rounds: all findings are true positives on new bypass classes. This surface likely needs a vocabulary-free / authoritative-primitive design change rather than another patch iteration. Consider delegating to the authoritative platform primitive or relocating the gate — see `[[delegate-to-authoritative-primitive]]`." The discriminator: true positives on new classes (different shapes each round) → rethink signal; same shape re-introduced or churn → normal HITL escalation.
+Read `references/escalation-protocol.md` for strategy semantics and the adversarial-surface rethink signal.
 
 ## Re-spawn Enrichment Protocol
 
@@ -544,8 +417,6 @@ Loops are Canon's managed periodic-observation artifact class. A loop is authore
 and dispatched by the orchestrator via `CronCreate` (interval loops) or `ScheduleWakeup`
 (self-paced loops).
 
-**Command registration:** `/canon:loop-tick` (and all `/canon:*` slash commands under `skills/canon/commands/`) are registered as harness plugin commands via the `commands` field in `.claude-plugin/plugin.json` (`"commands": ["./skills/canon/commands/"]`). `/canon:loop-tick` is the **registered-install convenience form** of the tick — it works when the command is live in the running session. The default documented dispatch is the self-contained inline prompt (see Resilient dispatch below), which works on both fresh and stale installs. Registration (via the manifest) is distinct from scheduling (via `CronCreate`); dc-06 is preserved.
-
 **Resilient dispatch (ADR-0017):** The canonical tick prompt for loop `<id>` is:
 ```
 Run one tick of Canon loop "<id>": call get_loop_definition({ id: "<id>" }) to load its
@@ -553,110 +424,19 @@ definition + body, then execute that body's observe → diff → surface → wri
 pipeline (the steps in skills/canon/commands/loop-tick.md), using the loop's state.path
 (substitute ${WORKSPACE}) for the prior snapshot. Read-only observation only (dc-06).
 ```
-This inline prompt depends only on `get_loop_definition` — an always-available registered MCP
-tool — and therefore works on both fresh and stale plugin installs. There is no
-orchestrator-side probe for command registration, and no check-first branch is used; the
-inline form works uniformly, so no fallback logic is needed (Q1 inline-only decision, ADR-0017).
-`/canon:loop-tick <id>` (the slash command) is the registered-install convenience form;
-contributors must not "simplify" the inline dispatch back to a bare slash call.
-
-**Lifecycle-hook vocabulary:** `post-ship` | `on-long-dispatch` | `session-start`.
-At such a moment, the orchestrator calls:
-```
-list_loops({ lifecycle_hook, tier })
-# → for each interval loop with firing_posture[tier] === "auto":
-CronCreate({ schedule: "<interval>", command: "<inline tick prompt — see Resilient dispatch above>", max: <max_ticks> })
-# → for each self-paced loop with firing_posture[tier] === "auto":
-ScheduleWakeup({ delaySeconds: <initial_delay>, reason: "Starting <id>", prompt: "<inline tick prompt — see Resilient dispatch above>" })
-# → for each loop with firing_posture[tier] === "opt-in": ask user, then dispatch
-```
 
 **The non-declarative constraint (dc-06):** Nothing auto-starts. Only the orchestrator
 initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named lifecycle moment.
-No manifest, hook, or command frontmatter starts a loop — the capability ground truth is that
-a plugin cannot do this.
 
-**Phase history:** Phase A shipped the framework spine — schema, registry, MCP tools, `_probe`
-demo; no production loop ran. Phase B ships `loops/ship-watch.md` — the first real loop,
-dispatched via the post-ship tap. Phase C ships session-watch + self-paced mode.
-Phase D ships harness-watch — the accumulated-build-signal observer, fired post-ship, surfaces `run-learner`.
-Phase E ships evolve — the session-start attribution-signal observer, surfaces `run-evolve`.
-Discovery: `list_loops`.
+**Lifecycle-hook vocabulary:** `post-ship` | `on-long-dispatch` | `session-start`. At such a moment, call `list_loops({ lifecycle_hook, tier })` and dispatch per loop `firing_posture[tier]` and `mode`.
 
-**Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
-`list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop, branch on `loop.mode`:
-- `firing_posture[tier] === "auto"`:
-  - `mode: "interval"` → call `CronCreate({ schedule: loop.schedule.interval, command: "<inline tick prompt for <id> — see Resilient dispatch above>", max: loop.schedule.max_ticks })` immediately.
-  - `mode: "self-paced"` → call `ScheduleWakeup({ delaySeconds: <loop initial cadence>, reason: "Starting <id> at post-ship", prompt: "<inline tick prompt for <id> — see Resilient dispatch above>" })` immediately.
-- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; dispatch by mode on confirmation (CronCreate for interval, ScheduleWakeup for self-paced).
-- `firing_posture[tier] === "disabled"` → skip silently.
+**Named consumers (one-line each):**
+- `auto-triage-fix`: CLEAR PR-comment/CI defect → dispatch fix flow without asking; AMBIGUOUS → ask first; NEVER auto-merge.
+- `auto-plugin-update`: fires on `release_tag` — ASK-FIRST, never unattended before running `plugin-update`.
+- `run-learner`: fires on harness-watch `learner_due`; supervised → ask user first; autonomous/light-touch → auto-spawn.
+- `run-evolve`: fires on the `evolve` loop's `evolve_due`; supervised → ask user first; autonomous/light-touch → auto-spawn after a cost-visibility `PushNotification`. Proposals are HITL-gated regardless of tier.
 
-`ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in). It demonstrates the resilient inline dispatch form (mechanism-ships-first-instance, dc-06). `harness-watch` is a self-paced post-ship loop and is dispatched via `ScheduleWakeup`.
-
-**Session-start tap (Phase C+):** At session start, the orchestrator calls
-`list_loops({ lifecycle_hook: "session-start", tier })`. For each returned loop:
-- `firing_posture[tier] === "auto"` → start it now via `ScheduleWakeup` (self-paced mode):
-  ```
-  ScheduleWakeup({ delaySeconds: <initial_active_delay>, reason: "Starting <id> at session-start", prompt: "<inline tick prompt for <id> — see Resilient dispatch above>" })
-  ```
-- `firing_posture[tier] === "opt-in"` → offer the watch to the user first; call `ScheduleWakeup` only on confirmation.
-- `firing_posture[tier] === "disabled"` → skip silently.
-
-`session-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in).
-`evolve` is also a session-start loop (autonomous/light-touch → auto, supervised → opt-in); it observes
-accumulated attribution signal and surfaces `run-evolve` when gate-eligible targets exist.
-
-**Non-declarative invariant (dc-06):** Only the orchestrator initiates `CronCreate` or
-`ScheduleWakeup`. Authoring `loops/session-watch.md` only registers the definition — it does
-NOT start the loop. No manifest field, hook script, or command frontmatter can trigger
-scheduling automatically.
-
-**Consuming `orchestrator_action` (Phase B+):** When a `/canon:loop-tick` run surfaces a line
-`ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>`, the orchestrator (which is allowed to
-mutate — the loop is not) consumes it. The loop/runner only declared and surfaced the signal;
-acting is the orchestrator's job. dc-06 holds: `orchestrator_action` is a declarative signal the
-orchestrator consumes, NOT something the loop or the loop-tick runner executes. The loop's
-`guardrails.mutates_build` stays `false`.
-
-**`auto-triage-fix`** (fires on the `external_review_comment_ids` transition and the CI
-`pending → failure` transition):
-1. Reads the trigger source — the new PR comment(s) for the comment transition, or the failing
-   CI job logs (`gh pr checks` / run logs) for the CI transition.
-2. If a CLEAR actionable defect → dispatches a fix flow (engineer → re-run verify gates → push
-   to the build branch) WITHOUT asking first.
-3. If AMBIGUOUS / a question / design-level pushback → surfaces with a proposed approach and
-   ASKS first.
-4. NEVER auto-merges the PR.
-
-**`auto-plugin-update`** (fires on the `release_tag` transition): **ASK-FIRST, never unattended.**
-On a release tag being cut:
-1. Fire a `PushNotification` that a release tag was cut.
-2. ASK the user to confirm before running `plugin-update` (this is a mutating local action that
-   must not happen unattended — it swaps the installed plugin version mid-session).
-3. Run `plugin-update` + confirm the new version is active ONLY after explicit user confirmation.
-NEVER silently run plugin-update; the ask-first/confirm requirement is non-optional.
-
-**`run-learner`** (fires on the `harness-watch` `learner_due` false→true transition): The
-orchestrator spawns `canon:learner` per the learn-step protocol. Under the `supervised` tier,
-ASK the user first before spawning; under `autonomous` and `light-touch`, spawn the learner
-automatically. The learner pass NEVER mutates the build — it only analyzes patterns and writes
-to `.canon/`. dc-06 holds: the `harness-watch` loop only surfaces the signal via
-`ORCHESTRATOR_ACTION: run-learner field=learner_due loop=harness-watch`; the orchestrator
-spawns the learner.
-
-**`run-evolve`** (fires on the `evolve` loop's `evolve_due` false→true transition): The
-orchestrator spawns the learner's `canon:evolve-candidate` pass (`select_mutation_targets →
-inline Sonnet rewrite → evaluate_candidate holdout → shape → write accepted proposals to
-`.canon/proposed-learnings/`). Under the `supervised` tier, ASK the user first before
-spawning; under `autonomous` and `light-touch`, auto-spawn but fire a `PushNotification`
-first (the pass is multi-minute and runs many `claude -p` eval calls — cost visibility is
-mandatory before an automatic long-running dispatch). Proposals are HITL-gated regardless of
-tier. The spawned pass emits ONLY `accepted===true` candidates (evolution-hard-gate preserved);
-candidate generation stays in the learner skill (model-step-in-agent-layer — the loop, the
-runner, and the dispatch never invoke a model). dc-06 holds: the `evolve` loop only surfaces
-`ORCHESTRATOR_ACTION: run-evolve field=evolve_due loop=evolve`; the orchestrator spawns the
-learner. NO contract change to `select_mutation_targets`, `evaluate_candidate`,
-`attribute_failure`, or `context_provenance` — consumed as-is.
+Read `references/loop-framework.md` BEFORE dispatching any loop or consuming an `ORCHESTRATOR_ACTION` line.
 
 ## Project Structure <!-- last-updated: 2026-06-25 -->
 
@@ -685,15 +465,16 @@ canon/
 │       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
-│       └── shared/       # Constants, matcher, parser, schema, utility libs
+│       └── shared/       # Constants, matcher, parser, schema, utility libs; overlay trust boundary (UntrustedText opaque box, closed-domain validators, linear-time glob matcher — ADR-0026/ADR-0027)
 ├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
+├── workflows/            # Managed workflow-script library — Canon's 6th managed-artifact class; plain-JS scripts invoked on-demand via Workflow `scriptPath`; lint enforced by `hooks/workflows-lint.sh`
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
-├── principles/           # Built-in principles (64 total: 6 rules, 36 strong-opinions, 22 conventions); 35 Canon-internal principles in .canon/principles/ (portable: false)
+├── principles/           # Built-in principles (64 total: 6 rules, 36 strong-opinions, 22 conventions); 36 Canon-internal principles in .canon/principles/ (portable: false)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
-├── rules/                # Agent-behavior rules loaded per agent at runtime
+├── rules/                # Agent-behavior rules loaded per agent at runtime (includes `agent-never-trust-overlay-tier` — all-agents policy against acting on untrusted-overlay-tier content, ADR-0027 motivated)
 ├── primers/              # Domain primers — domain reasoning context loaded by agents; generated index at primers/.claude/CLAUDE.md (6th sync_indexes class)
 ├── references/           # Orchestrator + agent protocol fragments (canon-orchestrator.md, etc.)
 ├── scripts/              # Standalone re-runnable bash tools (mine-codex-comments.sh mines Codex bot PR history → docs/reference/codex-defect-classes.md)

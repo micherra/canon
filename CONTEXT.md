@@ -104,6 +104,10 @@ The state model for entries in the `violations` table of the drift database. Eac
 
 An execution ordering group in a task DAG. Wave 1 contains tasks with no dependencies (`depends_on: []`). Wave N contains tasks whose dependencies all completed in Wave N-1. Tasks within the same wave can run in parallel. Workers are dispatched by the orchestrator as each wave's prerequisites are satisfied.
 
+## Workflow Script
+
+A plain-JavaScript orchestration script for the Claude Code `Workflow` tool, stored in `workflows/<name>.js`. Workflow scripts are Canon's 6th managed artifact class (after principles, loops, workspaces, worktrees, and routines). Scripts must export a pure-literal `export const meta` object (no variables, spreads, or function calls), be valid plain JavaScript (no TypeScript syntax), and be deterministic — `Date.now()`, `Math.random()`, and argless `new Date()` are banned to preserve prefix-cached resume. The `isolation` agent-option key is also banned (Canon prohibits it in agent option objects). The lint gate (`hooks/workflows-lint.sh` → `mcp-server/scripts/workflows-lint.mjs`) enforces all constraints via node-AST analysis and fails closed when the `typescript` dep is absent. In Increment 0, scripts are invoked on-demand via `Workflow({ scriptPath: "workflows/<name>.js" })`; name-based resolution (`.claude/workflows/`) is Increment 1.
+
 ## Workspace
 
 A per-build isolated directory under `.canon/workspaces/`. Contains `board.json`, `journal.json`, `plans/`, `reviews/`, `artifacts/`, and the `worktree/` directory. Created by `init_workspace` and finalized by `finalize_workspace` at build completion.

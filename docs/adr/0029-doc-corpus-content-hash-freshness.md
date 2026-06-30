@@ -1,4 +1,4 @@
-# ADR-0026: Doc-corpus freshness is content-hash-keyed, not git-HEAD-keyed
+# ADR-0029: Doc-corpus freshness is content-hash-keyed, not git-HEAD-keyed
 
 - Status: Accepted
 - Date: 2026-06-29

@@ -19,6 +19,7 @@
  *   - trailing punctuation strip
  */
 
+import { brandUntrusted } from "@shared/lib/overlay-untrusted-text.ts";
 import type { Principle } from "@shared/parser.ts";
 import { describe, expect, it } from "vitest";
 import {
@@ -30,15 +31,22 @@ import {
 // ---- Fixtures ----
 
 function makePrinciple(
-  overrides: Partial<Principle> & { filePath: string; id: string; title: string },
+  overrides: Omit<Partial<Principle>, "title" | "body"> & {
+    filePath: string;
+    id: string;
+    title: string;
+    body?: string;
+  },
 ): Principle {
+  const { title, body = "Test principle body.", ...rest } = overrides;
   return {
     archived: false,
-    body: "Test principle body.",
     scope: { file_patterns: [], layers: [] },
     severity: "convention",
     tags: [],
-    ...overrides,
+    ...rest,
+    title: brandUntrusted(title),
+    body: brandUntrusted(body),
   };
 }
 

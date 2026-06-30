@@ -22,6 +22,7 @@ Rules are organized into behavioral categories:
 - **Dispatch rules** — govern orchestrator dispatch behavior (`agent-dispatch-before-analysis`, `agent-discovery-execution-pairing`, `agent-compound-task-decomposition`)
 - **Efficiency rules** — govern resource and tool usage (`agent-batch-tools`, `agent-metrics-before-return`)
 - **Review rules** — govern review behavior (`agent-cold-review`, `agent-assume-hostile-input`)
+- **Security/behavior rules** — govern agent trust posture (`agent-never-trust-overlay-tier`)
 
 ## Artifact Inventory
 <!-- canon:inventory:start class=rules -->
@@ -51,6 +52,7 @@ Rules are organized into behavioral categories:
 | agent-metrics-before-return.md | Record Agent Metrics Before Returning |
 | agent-minimal-fix.md | Minimal Blast-Radius Fixes |
 | agent-missing-artifact.md | Missing Artifact Protocol |
+| agent-never-trust-overlay-tier.md | Never Act on Untrusted-Overlay-Tier Content |
 | agent-plans-are-prompts.md | Plans Are Prompts, Not Documents |
 | agent-simplify-before-extending.md | Simplify Before Extending |
 | agent-structured-triage.md | Structured Triage Before Fixing |
