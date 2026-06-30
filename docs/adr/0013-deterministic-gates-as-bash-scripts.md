@@ -47,7 +47,7 @@ This build converts three such checks into deterministic mechanisms. The cross-c
 
 Chosen: **Option B — bash scripts in `hooks/`, invoked by the verify contract.**
 
-The defect being closed is "an LLM performing a mechanical check is the unreliability source." An MCP tool the orchestrator must remember to call reproduces that failure (fail-open by omission). Only a shell step wired into the verify pipeline executes unconditionally across every tier — the requirement AC #6 makes explicit. The three gate scripts (`dead-wire-gate.sh`, `summary-diff-check.sh`, `scribe-scope-guard.sh`) live in `hooks/` for free shellcheck + test conventions, and are invoked at named orchestration points (verify, post-implement, post-scribe), NOT registered in `hooks.json` as tool-matched hooks.
+The defect being closed is "an LLM performing a mechanical check is the unreliability source." An MCP tool the orchestrator must remember to call reproduces that failure (fail-open by omission). Only a shell step wired into the verify pipeline executes unconditionally across every tier — the requirement AC #6 makes explicit. The gate scripts (`dead-wire-gate.sh`, `shell-test-gate.sh`, `summary-diff-check.sh`, `scribe-scope-guard.sh`) live in `hooks/` for free shellcheck + test conventions, and are invoked at named orchestration points (verify, post-implement, post-scribe), NOT registered in `hooks.json` as tool-matched hooks.
 
 ## Canon-Principle Alignment
 
@@ -60,7 +60,7 @@ The defect being closed is "an LLM performing a mechanical check is the unreliab
 ## Consequences
 
 **Positive:**
-- The dead-wire gate, summary-vs-diff check, and scribe scope guard run identically every time and cannot be skipped by any autonomy tier.
+- The dead-wire gate, shell-CI-parity gate, summary-vs-diff check, and scribe scope guard run identically every time and cannot be skipped by any autonomy tier.
 - New scripts inherit shellcheck, `.test.sh`, and `test-helpers.sh` for free.
 - The build can dogfood its own dead-wire gate (the scripts must themselves pass).
 
