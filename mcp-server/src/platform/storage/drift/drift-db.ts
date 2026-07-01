@@ -58,6 +58,7 @@ export class DriftDb {
   private readonly stmtGetReviewsByPr: Database.Statement;
   private readonly stmtGetReviewsByBranchAndPr: Database.Statement;
   private readonly stmtGetViolationsByReviewId: Database.Statement;
+  private readonly stmtGetAllViolationsByReviewId: Database.Statement;
   private readonly stmtGetReviewIdsByPrinciple: Database.Statement;
   private readonly stmtGetLastReviewForPr: Database.Statement;
   private readonly stmtGetLastReviewForBranch: Database.Statement;
@@ -120,8 +121,16 @@ export class DriftDb {
       SELECT * FROM reviews WHERE branch = ? AND pr_number = ? ORDER BY timestamp ASC
     `);
 
+    // Two-views invariant: `most_violated` / historical drift analytics read ALL
+    // violations (open + resolved) via `includeResolvedViolations`; `get_compliance` /
+    // `getComplianceTrend` / re-review paths MUST stay open-only (closure-02 / Codex P2
+    // fix). Do not unify these two views.
     this.stmtGetViolationsByReviewId = db.prepare(`
       SELECT * FROM violations WHERE review_id = ? AND status = 'open'
+    `);
+
+    this.stmtGetAllViolationsByReviewId = db.prepare(`
+      SELECT * FROM violations WHERE review_id = ?
     `);
 
     // For principleId filtering: get review_ids that have a matching violation
@@ -239,13 +248,18 @@ export class DriftDb {
    * Fetch reviews with optional AND-filters: principleId, branch, prNumber.
    * Returns ReviewEntry[] with violations reconstituted from violations table.
    * Returns empty array when no reviews exist (define-errors-out-of-existence).
+   *
+   * `includeResolvedViolations` defaults to false (open-only) — byte-identical
+   * behavior for all callers that omit it. Only the drift-report aggregation
+   * path opts in; see the two-views invariant comment above the statements.
    */
   getReviews(options?: {
     principleId?: string;
     branch?: string;
     prNumber?: number;
+    includeResolvedViolations?: boolean;
   }): ReviewEntry[] {
-    const { principleId, branch, prNumber } = options ?? {};
+    const { principleId, branch, prNumber, includeResolvedViolations } = options ?? {};
 
     let rows: ReviewRow[];
 
@@ -266,8 +280,11 @@ export class DriftDb {
     }
 
     // Reconstitute violations for each review row
+    const violationsStmt = includeResolvedViolations
+      ? this.stmtGetAllViolationsByReviewId
+      : this.stmtGetViolationsByReviewId;
     return rows.map((row) => {
-      const violations = this.stmtGetViolationsByReviewId.all(row.review_id) as ViolationRow[];
+      const violations = violationsStmt.all(row.review_id) as ViolationRow[];
       return rowToReviewEntry(row, violations);
     });
   }

@@ -27,6 +27,7 @@ export class DriftStore {
     principleId?: string;
     branch?: string;
     prNumber?: number;
+    includeResolvedViolations?: boolean;
   }): Promise<ReviewEntry[]> {
     return getDriftDb(this.projectDir).getReviews(options);
   }

@@ -25,7 +25,7 @@ export async function getDriftReport(
   const store = new DriftStore(projectDir);
 
   const [reviews, principles] = await Promise.all([
-    store.getReviews(),
+    store.getReviews({ includeResolvedViolations: true }),
     loadAllPrinciples(projectDir, pluginDir),
   ]);
 
