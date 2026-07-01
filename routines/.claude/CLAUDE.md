@@ -7,5 +7,6 @@ Index of all Canon routines — automated tasks managed as first-class Canon art
 | name | status | resolved binding | trigger |
 |------|--------|-----------------|--------|
 | canon-maintenance | enabled | desktop-task | schedule(0 3 * * *) |
+| code-scanning-autofix | enabled | cloud-routine | schedule(0 9 * * 1) |
 | pr-review | enabled | cloud-routine | github-event(pull_request.opened|synchronize) |
 | release-ahead | enabled | cloud-routine | schedule(0 9 * * *) |
