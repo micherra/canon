@@ -96,9 +96,9 @@ const ATX_HEADING_RE = /^#{1,6}[ \t].*$/gm;
  * - The body is split on ATX headings (`^#{1,6}\s`); each section spans from its heading
  *   to the next heading (or EOF). Leading pre-heading preamble becomes one section with
  *   `heading: ""`. An empty body yields no sections.
- * - Fail-open: malformed frontmatter YAML never throws — falls back to treating the whole
- *   file as body (matcher-load-bearing fields are still never mutated because the caller
- *   only ever spans the body region it computed here).
+ * - Fail-open: malformed frontmatter YAML never throws — returns no sections (empty).
+ *   The body boundary is unknown in that case, so no fallback span is emitted; any
+ *   fallback span would risk overlapping the frontmatter fence.
  */
 export function computeBodySections(fullFile: string): {
   frontmatterEnd: number;
