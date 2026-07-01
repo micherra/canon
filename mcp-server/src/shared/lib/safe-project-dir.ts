@@ -7,7 +7,7 @@ import { isAbsolute } from "node:path";
  * Returns false (fail-closed) for:
  * - empty string or over-length string (> 4096 UTF-16 code units (characters))
  * - strings containing NUL bytes or ASCII control characters (0x00–0x1f)
- * - relative paths (not starting with separator)
+ * - non-absolute paths (rejected via `isAbsolute` — POSIX paths without a leading "/", and on Windows paths lacking a drive letter or UNC root)
  * - paths that contain a raw ".." segment, split on both "/" and "\", checked
  *   BEFORE normalization (traversal attempt) — normalization would resolve
  *   ".." away before the check ever saw it

@@ -34,8 +34,9 @@ Normalize the input and require it to start with a known base directory.
 
 ### Option B: Allow-list of safe patterns on the raw input (CHOSEN)
 A pure validator `isSafeProjectDirInput(dir)` rejects, before any fs access: empty/over-length input,
-NUL and control characters, non-absolute paths, and any path bearing a `..` segment after
-normalization. The existing `realpath` canonicalization is kept (resolves symlinks).
+NUL and control characters, non-absolute paths, and any path bearing a raw `..` segment (checked
+BEFORE normalization, on segments split by both `/` and `\`, so `/a/../b` cannot be normalized away).
+The existing `realpath` canonicalization is kept (resolves symlinks).
 - **Pros**: Fits the domain (no fixed root needed); genuinely constrains the boundary (relative,
   traversal, and injection inputs are rejected fail-closed); single chokepoint — both untrusted entry
   paths already funnel through `validateAndNormalizeDir`, so there is no second-writer bypass (the
