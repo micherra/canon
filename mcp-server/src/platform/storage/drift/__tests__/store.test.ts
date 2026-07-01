@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { CANON_DIR } from "@shared/constants.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { analyzeDrift } from "../analyzer.ts";
 import { DriftStore } from "../store.ts";
 
 function makeTmpDir(): string {
@@ -394,5 +395,38 @@ describe("DriftStore (SQLite-backed)", () => {
     await store.appendReview(makeReview({ files: ["src/a.ts"] }));
     const results = await store.getReviewsForFiles([]);
     expect(results).toEqual([]);
+  });
+
+  // Regression pin: get_compliance path stays open-only (sug_KKKKKK1)
+
+  it("getReviews({ principleId }) without includeResolvedViolations stays open-only — resolved violations do not inflate get_compliance counts", async () => {
+    // Same call shape get-compliance.ts uses: store.getReviews({ principleId }).
+    // Seed an open violation, then resolve it via the closure-02 auto-closure path.
+    await store.appendReview(
+      makeReview({
+        files: ["src/a.ts"],
+        honored: [],
+        review_id: "rev_seed",
+        violations: [{ file_path: "src/a.ts", principle_id: "thin-handlers", severity: "rule" }],
+      }),
+    );
+    await store.appendReview(
+      makeReview({
+        files: ["src/a.ts"],
+        honored: ["thin-handlers"],
+        review_id: "rev_clean",
+        timestamp: "2026-03-16T00:00:00Z",
+        violations: [],
+      }),
+    );
+
+    // get-compliance.ts never passes includeResolvedViolations — must stay open-only.
+    const reviews = await store.getReviews({ principleId: "thin-handlers" });
+    const report = analyzeDrift(reviews, ["thin-handlers"], { principleId: "thin-handlers" });
+    const stats = report.most_violated.find((s) => s.principle_id === "thin-handlers");
+
+    // The resolved violation must not surface: no stats entry (mirrors get-compliance.ts's
+    // resolveStats fallback — 0 total_violations, compliance_rate 100).
+    expect(stats).toBeUndefined();
   });
 });

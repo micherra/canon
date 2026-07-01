@@ -297,3 +297,77 @@ describe("read-path exclusion: getReviews reconstitutes only open violations", (
     expect(store.getClosures().countOpenViolations()).toBe(1);
   });
 });
+
+// ---- getReviews({ includeResolvedViolations }) — sug_KKKKKK1 ----
+
+describe("getReviews({ includeResolvedViolations }) — historical drift-report view", () => {
+  let store: DriftDb;
+
+  beforeEach(() => {
+    ({ store } = makeDb());
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test("default (absent flag) stays open-only even when resolved violations exist", () => {
+    const seedReview = makeReviewEntry({
+      files: ["src/foo.ts"],
+      honored: [],
+      review_id: "rev_seed",
+      violations: [{ file_path: "src/foo.ts", principle_id: "deep-modules", severity: "rule" }],
+    });
+    store.appendReview(seedReview);
+
+    const cleanReview = makeReviewEntry({
+      files: ["src/foo.ts"],
+      honored: ["deep-modules"],
+      review_id: "rev_clean",
+      timestamp: new Date(Date.now() + 1000).toISOString(),
+      violations: [],
+    });
+    store.appendReview(cleanReview);
+
+    // Default: open-only — the resolved violation is invisible
+    const defaultResults = store.getReviews();
+    const seedDefault = defaultResults.find((r) => r.review_id === "rev_seed");
+    expect(seedDefault!.violations).toEqual([]);
+
+    // Opt-in: open + resolved — the resolved violation is visible
+    const inclusiveResults = store.getReviews({ includeResolvedViolations: true });
+    const seedInclusive = inclusiveResults.find((r) => r.review_id === "rev_seed");
+    expect(seedInclusive!.violations).toHaveLength(1);
+    expect(seedInclusive!.violations[0].principle_id).toBe("deep-modules");
+  });
+
+  test("includeResolvedViolations: true does not duplicate open violations", () => {
+    const seedReview = makeReviewEntry({
+      files: ["src/foo.ts", "src/bar.ts"],
+      honored: [],
+      review_id: "rev_seed",
+      violations: [
+        { file_path: "src/foo.ts", principle_id: "deep-modules", severity: "rule" },
+        { file_path: "src/bar.ts", principle_id: "thin-handlers", severity: "strong-opinion" },
+      ],
+    });
+    store.appendReview(seedReview);
+
+    // Resolve only the deep-modules violation
+    const cleanReview = makeReviewEntry({
+      files: ["src/foo.ts"],
+      honored: ["deep-modules"],
+      review_id: "rev_clean",
+      timestamp: new Date(Date.now() + 1000).toISOString(),
+      violations: [],
+    });
+    store.appendReview(cleanReview);
+
+    const inclusiveResults = store.getReviews({ includeResolvedViolations: true });
+    const seedInclusive = inclusiveResults.find((r) => r.review_id === "rev_seed");
+    // Both violations present exactly once each (open + resolved rows are disjoint)
+    expect(seedInclusive!.violations).toHaveLength(2);
+    const principleIds = seedInclusive!.violations.map((v) => v.principle_id).sort();
+    expect(principleIds).toEqual(["deep-modules", "thin-handlers"]);
+  });
+});
