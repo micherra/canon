@@ -105,7 +105,7 @@ Suggest: Add to CONVENTIONS.md — "{convention text}"
 
 **Goal**: Track the full lifecycle of conventions — from task-level patterns to project conventions to formal principles, and flag stale conventions.
 
-This dimension merges three analyses:
+This dimension merges four analyses:
 
 ### Sub-analysis A: Task convention promotion
 
@@ -208,6 +208,64 @@ Suggest: {update convention to match current practice | remove convention | inve
 days_since_last_instance: {D}, confirming_instances: {C}
 confidence: {score:.2f} ({label})
 Action: {no write needed | annotated with reinforcement | annotated with decay marker | marked for archival}
+```
+
+### Sub-analysis E: Success-pattern mining <!-- last-updated: 2026-07-01 -->
+
+**Goal**: Mine the clean-build corpus for recurring elegant resolutions and propose them as conventions. Positive-signal source; surface-only.
+
+**Data source**: the auto-memory build-digest corpus — resolve the memory dir from `project_dir` by replacing `/` with `-` (mirror `resolveAutoMemoryDir` in `mcp-server/src/features/orchestration/services/digest-writer.ts`), then read `~/.claude/projects/<dashed>/memory/build-digest-*.md`. Read PRIOR builds' digests (the current build's digest is written at finalize, after the learn step) — this is what makes recurrence cross-independent-build by construction.
+
+**Clean-build filter**: a digest qualifies iff its "Build Metrics" show `Violations found: 0` AND `Fix iterations: 0` (parse both numbers from the digest body). `Review verdict ∈ {clean, approve, none}` corroborates but is not required.
+
+**Algorithm**:
+1. Collect clean digests (per the filter above).
+2. Grep each for the literal `**Notable resolution**:` line, skip digests with no such line.
+3. Group semantically-similar resolutions (same as Sub-analysis A step 3 groups task-convention bullets).
+4. A group is promotable only when it recurs across **≥3 distinct clean builds (distinct slugs)**.
+
+**Weighting note**: Because the corpus is pre-filtered to clean outcomes, every member's `computeOutcomeWeight` sits at the uplift band (CLEAN/approve = 1.15, `mcp-server/src/features/history/services/judge-weight.ts` lines 52-57), so 3 distinct clean builds always clears the existing weighted-≥3 promotion bar (Sub-analysis A) while 2 do not. Sub-analysis E inherits that bar; it does NOT re-use `recurring_violations[].weighted_instance_count` (violation-keyed — no rows for clean builds).
+
+**Cross-checks before surfacing** (guardrail b): skip any candidate already in `.canon/CONVENTIONS.md` or already covered by a principle (`list_principles` index) — identical to `codebase-patterns` and Sub-analysis A.
+
+**Cooling-off** (reuse): first qualifying learn run writes a `success-pattern-watch` (`status: watch`, `evidence_count: 1`, `watch_threshold: 2`) to `.canon/proposed-learnings/`; a second independent learn run that re-confirms promotes it to a surfaced `success-pattern-candidate` (`status: candidate`, `evidence_count: 2`). Decays/archives via the existing CONSOLIDATE Sub-analysis D + `computeWatchConfidence` — no new decay engine.
+
+**Surface-only** (guardrail c): output is a proposal file only; acceptance routes PM → writer (`references/content-flow.md`). The learner has no edit capability over CONVENTIONS.md/principles.
+
+**Enrichment-only** (guardrail d): NEVER promote from a single digest's `notable_resolution` line; the ≥3-build recurrence + cross-check + cooling-off are prerequisites.
+
+**Minimum threshold**: below 3 distinct clean builds carrying a matching resolution → note "Skipped: success-pattern — {N} < 3 distinct clean builds."
+
+**Output schema**:
+```
+---
+id: success_{deterministic_hash}
+type: success-pattern          # success-pattern-watch on first obs; success-pattern-candidate after cooling-off
+dimension: convention-lifecycle
+target: {proposed convention text}
+status: watch                  # watch -> candidate (after 2-run cooling-off)
+evidence_count: {1..}          # cooling-off observation count (learn runs)
+watch_threshold: 2
+confidence: {low|medium|high}
+created: {YYYY-MM-DD}
+last_updated: {YYYY-MM-DD}
+origin_builds: [{slug-1}, {slug-2}, {slug-3}]   # the ≥3 distinct clean builds
+---
+
+## Observation
+{grouped notable_resolution, with the ≥3 distinct clean build slugs and weighted count}
+
+## Proposed Change
+Add to CONVENTIONS.md — "{convention text}"
+
+## Evidence
+- Clean builds: {slug-1}, {slug-2}, {slug-3} (0 violations, 0 fix each)
+- Weighted recurrence: {W} across {N} distinct clean builds
+- Notable-resolution lines: "{line-1}" / "{line-2}" / "{line-3}"
+
+## Cross-check
+- Not already in .canon/CONVENTIONS.md: {confirmed}
+- Not already covered by a principle: {confirmed, principle index checked}
 ```
 
 ---
