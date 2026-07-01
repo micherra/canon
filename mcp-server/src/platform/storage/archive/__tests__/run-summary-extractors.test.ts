@@ -27,9 +27,7 @@ describe("extractNotableResolution", () => {
 `;
 
     const result = extractNotableResolution(summary);
-    expect(result).toBe(
-      "Deterministic and never-throw, matches sibling extractors",
-    );
+    expect(result).toBe("Deterministic and never-throw, matches sibling extractors");
   });
 
   test("no ### Decisions, ### Deviations present returns first deviation reason", () => {
@@ -105,9 +103,7 @@ Line three of the reason
 `;
     const result = extractNotableResolution(summary);
     expect(result).not.toContain("\n");
-    expect(result).toBe(
-      "Line one of the reason Line two of the reason Line three of the reason",
-    );
+    expect(result).toBe("Line one of the reason Line two of the reason Line three of the reason");
   });
 
   test("does not confuse Decisions Applied bullet section with Decisions table", () => {

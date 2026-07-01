@@ -222,12 +222,31 @@ function splitTableRow(line: string): string[] {
   return withoutOuterPipes.split("|").map((cell) => cell.trim());
 }
 
+/**
+ * Extract the body of a `### {headingText}` section: everything from the line
+ * after the heading up to the next `##`/`###` heading, or end of string.
+ *
+ * Deliberately avoids a `$`-in-lookahead end marker: with the `m` flag, `$`
+ * matches end-of-LINE (not end-of-string), which truncates the capture after
+ * the section's first line whenever no further heading follows. Finding the
+ * next-heading index directly (or falling back to string length) sidesteps
+ * that bug entirely.
+ */
+function extractSectionBody(content: string, headingText: string): string {
+  const headingMatch = content.match(new RegExp(`^###\\s+${headingText}\\s*\\n`, "m"));
+  if (!headingMatch || headingMatch.index === undefined) return "";
+
+  const rest = content.slice(headingMatch.index + headingMatch[0].length);
+  const nextHeadingMatch = rest.match(/\n#{2,3}\s/);
+  return rest.slice(0, nextHeadingMatch?.index ?? rest.length);
+}
+
 /** Extract the Rationale cell from the first data row of the `### Decisions` table. */
 function extractFromDecisionsTable(content: string): string {
-  const sectionMatch = content.match(/^###\s+Decisions\s*\n([\s\S]*?)(?=\n##|\n###|$)/m);
-  if (!sectionMatch?.[1]) return "";
+  const section = extractSectionBody(content, "Decisions");
+  if (!section) return "";
 
-  const tableLines = sectionMatch[1]
+  const tableLines = section
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.startsWith("|"));
@@ -243,10 +262,9 @@ function extractFromDecisionsTable(content: string): string {
 
 /** Extract the reason text of the first item under `### Deviations` (after `**{id}**:`). */
 function extractFromDeviations(content: string): string {
-  const sectionMatch = content.match(/^###\s+Deviations\s*\n([\s\S]*?)(?=\n##|\n###|$)/m);
-  if (!sectionMatch?.[1]) return "";
+  const body = extractSectionBody(content, "Deviations");
+  if (!body) return "";
 
-  const body = sectionMatch[1];
   const startMatch = body.match(/^-\s*\*\*(.+?)\*\*:\s*/m);
   if (!startMatch || startMatch.index === undefined) return "";
 
@@ -258,10 +276,10 @@ function extractFromDeviations(content: string): string {
 
 /** Extract the text of the first bullet under `### Decisions made`. */
 function extractFromDesignDecisionsMade(content: string): string {
-  const sectionMatch = content.match(/^###\s+Decisions made\s*\n([\s\S]*?)(?=\n##|\n###|$)/m);
-  if (!sectionMatch?.[1]) return "";
+  const section = extractSectionBody(content, "Decisions made");
+  if (!section) return "";
 
-  for (const line of sectionMatch[1].split("\n")) {
+  for (const line of section.split("\n")) {
     const trimmed = line.trim();
     if (trimmed.startsWith("- ")) return trimmed.slice(2).trim();
   }

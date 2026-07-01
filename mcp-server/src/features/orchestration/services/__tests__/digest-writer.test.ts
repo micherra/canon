@@ -126,6 +126,13 @@ principles-checked: 5
 - information-hiding
 `;
 
+const FIXTURE_SUMMARY_WITH_DECISIONS = `### Decisions
+
+| ID | Decision | Rationale |
+|----|----------|-----------|
+| d1 | Used a pure extractor | Keeps the digest field never-throw and easy to test |
+`;
+
 // ---- resolveAutoMemoryDir ----
 
 describe("resolveAutoMemoryDir", () => {
@@ -285,6 +292,26 @@ describe("extractDigestData", () => {
     expect(data.slug).toBeTruthy();
     expect(typeof data.slug).toBe("string");
   });
+
+  test("populates notable_resolution from a *-SUMMARY.md Decisions table", async () => {
+    await writeFile(join(workspace, "journal.json"), FIXTURE_JOURNAL, "utf-8");
+
+    const plansDir = join(workspace, "plans", "my-slug");
+    await mkdir(plansDir, { recursive: true });
+    await writeFile(join(plansDir, "task-01-SUMMARY.md"), FIXTURE_SUMMARY_WITH_DECISIONS, "utf-8");
+
+    const data = extractDigestData(workspace);
+
+    expect(data.notable_resolution).toBe("Keeps the digest field never-throw and easy to test");
+  });
+
+  test("notable_resolution is empty string when no SUMMARY or DESIGN present", async () => {
+    await writeFile(join(workspace, "journal.json"), FIXTURE_JOURNAL, "utf-8");
+
+    const data = extractDigestData(workspace);
+
+    expect(data.notable_resolution).toBe("");
+  });
 });
 
 // ---- formatDigestMarkdown ----
@@ -295,6 +322,7 @@ describe("formatDigestMarkdown", () => {
     date: "2026-01-15",
     effortEstimate: "2 hours",
     fixIterations: 1,
+    notable_resolution: "",
     outcome: "Add feature",
     reviewVerdict: "CLEAN",
     slug: "test-slug",
@@ -351,6 +379,24 @@ describe("formatDigestMarkdown", () => {
 
     expect(md).toContain("1h 5m");
   });
+
+  test("emits ### Notable Resolution section with the frozen line when notable_resolution is populated", () => {
+    const data = { ...baseData, notable_resolution: "Used a pure extractor for the digest field" };
+    const md = formatDigestMarkdown(data);
+
+    expect(md).toContain("### Notable Resolution");
+    const matches = md.match(/\*\*Notable resolution\*\*: /g);
+    expect(matches?.length).toBe(1);
+    expect(md).toContain("**Notable resolution**: Used a pure extractor for the digest field");
+  });
+
+  test("omits the ### Notable Resolution section entirely when notable_resolution is empty", () => {
+    const data = { ...baseData, notable_resolution: "" };
+    const md = formatDigestMarkdown(data);
+
+    expect(md).not.toContain("### Notable Resolution");
+    expect(md).not.toContain("**Notable resolution**:");
+  });
 });
 
 // ---- formatMemoryIndexEntry ----
@@ -361,6 +407,7 @@ describe("formatMemoryIndexEntry", () => {
     date: "2026-01-15",
     effortEstimate: "2 hours",
     fixIterations: 0,
+    notable_resolution: "",
     outcome: "Add feature",
     reviewVerdict: "CLEAN",
     slug: "test-slug",

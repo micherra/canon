@@ -23,6 +23,7 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import {
+  extractNotableResolution,
   parsePlanningBrief,
   parseReviewFile,
 } from "@platform/storage/archive/run-summary-extractors.ts";
@@ -44,6 +45,7 @@ type DigestData = {
   effortEstimate: string;
   valueEstimate: string;
   outcome: string;
+  notable_resolution: string;
 };
 
 // ---- Minimal journal types (local — avoids importing the full orchestration journal) ----
@@ -127,6 +129,23 @@ function readPlanningBriefFields(
   };
 }
 
+/** Read the notable-resolution digest field from the engineer SUMMARY (fallback: DESIGN.md). */
+function readNotableResolutionFields(
+  workspace: string,
+  slug: string,
+): { notableResolution: string } {
+  const plansDir = join(workspace, "plans", slug);
+  const summaryMatches = existsSync(plansDir) ? globSync("*-SUMMARY.md", { cwd: plansDir }) : [];
+  const summaryContent = summaryMatches[0]
+    ? readFileSync(join(plansDir, summaryMatches[0]), "utf-8")
+    : "";
+
+  const designPath = join(plansDir, "DESIGN.md");
+  const designContent = existsSync(designPath) ? readFileSync(designPath, "utf-8") : undefined;
+
+  return { notableResolution: extractNotableResolution(summaryContent, designContent) };
+}
+
 /** Count violations across all review files in the workspace reviews directory. */
 function countReviewViolations(workspace: string): number {
   const reviewsDir = join(workspace, "reviews");
@@ -171,12 +190,14 @@ export function extractDigestData(workspace: string): DigestData {
   const date = new Date().toISOString().slice(0, 10);
   const { effortEstimate, valueEstimate, outcome } = readPlanningBriefFields(workspace, slug);
   const violationCount = countReviewViolations(workspace);
+  const { notableResolution } = readNotableResolutionFields(workspace, slug);
 
   return {
     branch,
     date,
     effortEstimate,
     fixIterations,
+    notable_resolution: notableResolution,
     outcome,
     reviewVerdict,
     slug,
@@ -227,6 +248,9 @@ export function formatDigestMarkdown(data: DigestData): string {
   const verdict = data.reviewVerdict ?? "none";
   const name = `build-digest-${data.date}-${data.slug}`;
   const description = `Build digest for ${data.slug}: ${verdict}, ${duration}`;
+  const notableResolutionSection = data.notable_resolution
+    ? `\n### Notable Resolution\n\n**Notable resolution**: ${data.notable_resolution}\n`
+    : "";
 
   return `---
 name: ${name}
@@ -255,7 +279,7 @@ metadata:
 - **Fix iterations**: ${data.fixIterations}
 - **Review verdict**: ${verdict}
 - **Violations found**: ${data.violationCount}
-`;
+${notableResolutionSection}`;
 }
 
 /**
