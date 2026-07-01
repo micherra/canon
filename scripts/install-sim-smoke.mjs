@@ -58,6 +58,7 @@ import {
   resolveHeadersHelper,
   runHeadersHelper,
   attemptHttpHandshake,
+  redactSecrets,
 } from "./lib/install-sim-http.mjs";
 
 // ── Guard 3: release containment ────────────────────────────────────────────
@@ -177,6 +178,40 @@ function selfTestContainmentTripwire() {
   } finally {
     rmSyncFs(tmpRoot, { recursive: true, force: true });
   }
+}
+
+/**
+ * Self-test for redactSecrets (scripts/lib/install-sim-http.mjs): verifies a
+ * Bearer token embedded in either the raw stdout-slice form or the
+ * JSON.stringify(parsed) form never survives into a `reason` string.
+ * No test framework exists for scripts/lib/*.mjs (co-located *.test.sh files
+ * only cover bash scripts) — this inline assertion is the coverage for it.
+ */
+function selfTestRedactSecrets() {
+  const rawStdout = `{"Authorization":"Bearer sk-live-SECRET-TOKEN-VALUE"} trailing garbage`;
+  const redactedRaw = redactSecrets(rawStdout);
+  if (redactedRaw.includes("SECRET-TOKEN-VALUE")) {
+    throw new Error(
+      `[redact-secrets-self-test] Bearer token survived redaction of raw stdout slice: ${redactedRaw}`,
+    );
+  }
+
+  const parsedJson = JSON.stringify({ Authorization: "Bearer sk-live-SECRET-TOKEN-VALUE", extra: "field" });
+  const redactedJson = redactSecrets(parsedJson);
+  if (redactedJson.includes("SECRET-TOKEN-VALUE")) {
+    throw new Error(
+      `[redact-secrets-self-test] Bearer token survived redaction of JSON.stringify(parsed): ${redactedJson}`,
+    );
+  }
+
+  // Diagnostic value preserved: still shows the key was present, just not its value.
+  if (!redactedJson.includes("Authorization") || !redactedJson.includes("extra")) {
+    throw new Error(
+      `[redact-secrets-self-test] Redaction over-scrubbed non-secret diagnostic fields: ${redactedJson}`,
+    );
+  }
+
+  console.log("[install-sim] redactSecrets self-test: Bearer token redacted, diagnostic fields preserved.");
 }
 
 // ── Repo root resolution ────────────────────────────────────────────────────
@@ -551,6 +586,11 @@ async function runSelfCheck() {
   console.log("\n[install-sim][self-check/guard3] Running Guard 3 containment tripwire self-test...");
   selfTestContainmentTripwire();
   console.log("[install-sim][self-check/guard3] PASS.");
+
+  // redactSecrets self-test: verify a leaked Bearer token never survives into a reason string.
+  console.log("\n[install-sim][self-check/redact] Running redactSecrets self-test...");
+  selfTestRedactSecrets();
+  console.log("[install-sim][self-check/redact] PASS.");
 
   const { archivePath, userProjectDir, cleanup } = await setupInstallEnv();
   const nodeModulesPath = findNodeModules();

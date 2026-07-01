@@ -232,9 +232,11 @@ export function _registerRootsChangedHandlerForTest(
  * Input is barrier-validated by isSafeProjectDirInput BEFORE any fs access
  * (CodeQL js/path-injection allow-list strategy; see docs/adr/0030).
  *
- * PROBE FINDING: must use fs.realpath, NOT path.resolve, to handle macOS symlinks
- * like /tmp → /private/tmp. Without realpath, two sessions with the same physical
- * directory can produce distinct scope keys, breaking refcounted eviction.
+ * PROBE FINDING: resolve() below only strips residual `.` segments — it does NOT
+ * follow symlinks. Callers MUST still canonicalize with fs.realpath (not rely on
+ * resolve() alone) to handle macOS symlinks like /tmp → /private/tmp. Without
+ * realpath, two sessions with the same physical directory can produce distinct
+ * scope keys, breaking refcounted eviction.
  */
 async function validateAndNormalizeDir(dir: string): Promise<string | undefined> {
   try {
