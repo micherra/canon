@@ -5,10 +5,12 @@ import { isAbsolute } from "node:path";
  * filesystem access (CodeQL js/path-injection sanitizer; see docs/adr/0029).
  *
  * Returns false (fail-closed) for:
- * - empty string or over-length string (> 4096 bytes)
+ * - empty string or over-length string (> 4096 UTF-16 code units (characters))
  * - strings containing NUL bytes or ASCII control characters (0x00–0x1f)
  * - relative paths (not starting with separator)
- * - paths that contain a ".." segment after normalization (traversal attempt)
+ * - paths that contain a raw ".." segment, split on both "/" and "\", checked
+ *   BEFORE normalization (traversal attempt) — normalization would resolve
+ *   ".." away before the check ever saw it
  *
  * There is no fixed safe root for Canon project dirs (a project can live at any
  * absolute path), so this uses CodeQL's documented allow-list-of-safe-patterns

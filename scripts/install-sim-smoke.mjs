@@ -367,6 +367,10 @@ async function setupInstallEnv() {
 
 // ── HTTP sub-test helper ─────────────────────────────────────────────────────
 
+// Known `label` values passed by call sites below — used to constrain the debug
+// log against a closed set rather than logging the parameter unconstrained.
+const KNOWN_SUB_TEST_LABELS = new Set(["normal", "self-check/broken", "self-check/fixed"]);
+
 /**
  * Run a single HTTP handshake sub-test with the given options.
  *
@@ -392,8 +396,11 @@ async function runHttpSubTest({
 }) {
   const helperPath = resolveHeadersHelper(headersHelperRaw, installEnvForHelper, expandEnvToken);
   if (DEBUG) {
-    console.error(`[install-sim][${label}] headersHelper resolved: <redacted>`);
-    console.error(`[install-sim][${label}] url: <redacted>`);
+    // Constrain `label` against a known-literal allow-list before logging — CodeQL's
+    // clear-text-logging sanitizer recognizes comparison-against-constants as a taint break.
+    const safeLabel = KNOWN_SUB_TEST_LABELS.has(label) ? label : "unknown";
+    console.error(`[install-sim][${safeLabel}] headersHelper resolved: <redacted>`);
+    console.error(`[install-sim][${safeLabel}] url: <redacted>`);
   }
 
   const headerResult = runHeadersHelper(
@@ -684,6 +691,28 @@ async function runSelfCheck() {
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 
+// Known built-in Error constructor names — used to constrain `err?.name` against a
+// closed set before logging it. CodeQL's clear-text-logging sanitizer recognizes a
+// value narrowed by comparison against constants as no longer tainted; an unbounded
+// `err?.name` is not, since a thrown value's `.name` can carry arbitrary attacker-
+// or env-derived text.
+const KNOWN_ERROR_NAMES = new Set([
+  "Error",
+  "TypeError",
+  "RangeError",
+  "SyntaxError",
+  "ReferenceError",
+  "EvalError",
+  "URIError",
+  "AggregateError",
+]);
+
+/** @param {unknown} err */
+function safeErrorName(err) {
+  const name = err instanceof Error ? err.name : undefined;
+  return name && KNOWN_ERROR_NAMES.has(name) ? name : "Error";
+}
+
 async function main() {
   try {
     let exitCode;
@@ -694,8 +723,9 @@ async function main() {
     }
     process.exit(exitCode);
   } catch (err) {
-    console.error(`[install-sim] UNEXPECTED ERROR: ${err?.name ?? "Error"}`);
-    if (DEBUG) console.error("[install-sim] Error name:", err?.name ?? "Error");
+    const safeName = safeErrorName(err);
+    console.error(`[install-sim] UNEXPECTED ERROR: ${safeName}`);
+    if (DEBUG) console.error("[install-sim] Error name:", safeName);
     process.exit(1);
   }
 }

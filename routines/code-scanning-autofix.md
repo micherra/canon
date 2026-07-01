@@ -48,9 +48,15 @@ via the ambient GitHub token in the cloud environment.
 #### Steps each run
 
 1. **Fetch open alerts.**
+
+   Derive the `owner/repo` slug from the current checkout at runtime — never hardcode it —
+   so the routine stays portable across forks and repo renames:
    ```
-   gh api 'repos/micherra/canon/code-scanning/alerts?state=open&per_page=100'
+   REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+   gh api "repos/${REPO}/code-scanning/alerts?state=open&per_page=100"
    ```
+   (`$GITHUB_REPOSITORY` is an equivalent source when running inside a GitHub Actions
+   context where it is already set.)
 
 2. **If zero open alerts:** exit cleanly with a "code-scanning clean" log line.
 
