@@ -21,7 +21,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evictStoresForScope } from "@domains/workspaces/execution-store-cache.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -232,6 +232,17 @@ export function _registerRootsChangedHandlerForTest(
  * Input is barrier-validated by isSafeProjectDirInput BEFORE any fs access
  * (CodeQL js/path-injection allow-list strategy; see docs/adr/0030).
  *
+ * The two inline checks directly below duplicate isSafeProjectDirInput's dot-dot
+ * and absolute-path rules in the exact shape CodeQL's js/path-injection query
+ * recognizes as barrier guards (`x.includes("..")` and `path.isAbsolute(x)`
+ * evaluated directly in the same function as the fs sinks below). CodeQL's local
+ * dataflow does not treat a call to a separately-defined boolean helper function
+ * as a sanitizer, so isSafeProjectDirInput alone — while behaviorally correct and
+ * unit-tested — does not clear the static-analysis alert. Kept isSafeProjectDirInput
+ * as the primary, more precise (segment-based, not raw-substring) barrier for
+ * defense-in-depth; these two lines are redundant with it for all real inputs.
+ * See ADR-0030.
+ *
  * PROBE FINDING: must use fs.realpath, NOT path.resolve, to handle macOS symlinks
  * like /tmp → /private/tmp. Without realpath, two sessions with the same physical
  * directory can produce distinct scope keys, breaking refcounted eviction.
@@ -239,6 +250,8 @@ export function _registerRootsChangedHandlerForTest(
 async function validateAndNormalizeDir(dir: string): Promise<string | undefined> {
   try {
     if (!isSafeProjectDirInput(dir)) return undefined; // barrier BEFORE fs access (ADR-0030)
+    if (dir.includes("..")) return undefined; // CodeQL-recognized dot-dot barrier guard
+    if (!isAbsolute(dir)) return undefined; // CodeQL-recognized isAbsolute barrier guard
     const resolved = resolve(dir); // normalize (removes any residual .)
     if (!existsSync(resolved) || !statSync(resolved).isDirectory()) return undefined;
     return await realpath(resolved);
