@@ -230,7 +230,7 @@ export function _registerRootsChangedHandlerForTest(
  * Returns the normalized path or undefined if invalid.
  *
  * Input is barrier-validated by isSafeProjectDirInput BEFORE any fs access
- * (CodeQL js/path-injection allow-list strategy; see docs/adr/0029).
+ * (CodeQL js/path-injection allow-list strategy; see docs/adr/0030).
  *
  * PROBE FINDING: must use fs.realpath, NOT path.resolve, to handle macOS symlinks
  * like /tmp → /private/tmp. Without realpath, two sessions with the same physical
@@ -238,7 +238,7 @@ export function _registerRootsChangedHandlerForTest(
  */
 async function validateAndNormalizeDir(dir: string): Promise<string | undefined> {
   try {
-    if (!isSafeProjectDirInput(dir)) return undefined; // barrier BEFORE fs access (ADR-0029)
+    if (!isSafeProjectDirInput(dir)) return undefined; // barrier BEFORE fs access (ADR-0030)
     const resolved = resolve(dir); // normalize (removes any residual .)
     if (!existsSync(resolved) || !statSync(resolved).isDirectory()) return undefined;
     return await realpath(resolved);

@@ -2,7 +2,7 @@ import { isAbsolute } from "node:path";
 
 /**
  * Allow-list validation barrier for an untrusted project-dir string before any
- * filesystem access (CodeQL js/path-injection sanitizer; see docs/adr/0029).
+ * filesystem access (CodeQL js/path-injection sanitizer; see docs/adr/0030).
  *
  * Returns false (fail-closed) for:
  * - empty string or over-length string (> 4096 UTF-16 code units (characters))
@@ -14,7 +14,7 @@ import { isAbsolute } from "node:path";
  *
  * There is no fixed safe root for Canon project dirs (a project can live at any
  * absolute path), so this uses CodeQL's documented allow-list-of-safe-patterns
- * strategy rather than containment. See ADR-0029.
+ * strategy rather than containment. See ADR-0030.
  */
 export function isSafeProjectDirInput(dir: string): boolean {
   if (dir.length === 0 || dir.length > 4096) return false;
