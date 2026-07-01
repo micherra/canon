@@ -23,6 +23,17 @@ if (_hfCacheOverride) {
   env.cacheDir = _hfCacheOverride;
 }
 
+/**
+ * Structural interface covering the methods new doc-corpus modules consume.
+ * Allows tests to pass MockEmbeddingService without subclassing EmbeddingService.
+ */
+export type EmbeddingServiceLike = {
+  embed(texts: string[]): Promise<Float32Array[]>;
+  embedOne(text: string): Promise<Float32Array>;
+  dispose(): void;
+  readonly isLoaded: boolean;
+};
+
 // Pipeline factory — injectable for testing
 
 /** Quantization dtype literal accepted by @huggingface/transformers pipeline options */

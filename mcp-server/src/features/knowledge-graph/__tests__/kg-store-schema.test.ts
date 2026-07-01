@@ -108,12 +108,12 @@ describe("Schema v3 — vector tables", () => {
     expect(colNames).toContain("updated_at");
   });
 
-  test("schema_version is '5' for new databases", () => {
+  test("schema_version is '6' for new databases", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
       | { value: string }
       | undefined;
-    expect(row?.value).toBe("5");
-    expect(SCHEMA_VERSION).toBe("5");
+    expect(row?.value).toBe("6");
+    expect(SCHEMA_VERSION).toBe("6");
   });
 
   test("entity_vectors accepts insert with valid embedding", () => {
@@ -141,27 +141,27 @@ describe("Schema v3 — migration from v2", () => {
     // then calling runMigrations() to migrate forward.
     const db = initDatabase(":memory:");
 
-    // Confirm the migration already ran (new DB starts at v5)
+    // Confirm the migration already ran (new DB starts at v6)
     const before = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(before.value).toBe("5");
+    expect(before.value).toBe("6");
 
-    // Simulate a v2 DB: downgrade schema_version to '2' and drop v3 tables
+    // Simulate a v2 DB: downgrade schema_version to "2" and drop v3 tables
     db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
     db.exec(`DROP TABLE IF EXISTS entity_vector_meta`);
     db.exec(`DROP TABLE IF EXISTS summary_vector_meta`);
     // Note: vec0 virtual tables need sqlite-vec loaded; can't drop and recreate
     // but we can verify meta tables are created by the migration
 
-    // Re-run migrations — should upgrade from 2 to 3 to 4 to 5
+    // Re-run migrations — should upgrade from 2 to 3 to 4 to 5 to 6
     runMigrations(db);
 
-    // schema_version should now be '5' (all pending migrations run)
+    // schema_version should now be '6' (all pending migrations run)
     const after = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(after.value).toBe("5");
+    expect(after.value).toBe("6");
 
     // entity_vector_meta should exist
     const metaTable = db
@@ -179,7 +179,7 @@ describe("Schema v3 — migration from v2", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("5");
+    expect(row.value).toBe("6");
     db.close();
   });
 });

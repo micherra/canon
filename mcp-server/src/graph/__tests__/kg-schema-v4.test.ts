@@ -49,7 +49,7 @@ describe("migration v4 — hotspot_scores and co_change_edges", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("5");
+    expect(row.value).toBe("6");
     db.close();
   });
 
@@ -118,7 +118,7 @@ describe("migration v4 — hotspot_scores and co_change_edges", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("5");
+    expect(row.value).toBe("6");
     expect(tableExists(db, "hotspot_scores")).toBe(true);
     expect(tableExists(db, "co_change_edges")).toBe(true);
     db.close();

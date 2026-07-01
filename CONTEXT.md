@@ -28,6 +28,10 @@ A project-level pattern recorded in `.canon/CONVENTIONS.md`. Less formal than a 
 
 A directed acyclic graph of task dependencies, stored in `task-dag.yaml` under the workspace plans directory. Each node names a task, its dependent tasks (`depends_on`), and its target files. The DAG enables parallel dispatch: tasks with no unresolved dependencies are dispatched as wave 1; subsequent waves run after their dependencies complete.
 
+## Doc Corpus
+
+The set of markdown knowledge sources indexed by the parallel doc-vector index: `principles/**`, `references/**`, `.canon/principles/**`, `.canon/proposed-learnings/**`, and out-of-repo build digests (from the Claude Code memory dir). Distinct from the structural code KG (which scans TypeScript import/export graphs). Each source is stamped with a `trust_tier` at ingest time (v1: all `internal`). Freshness is keyed by a content-hash over all corpus file stats (`doc_corpus_hash` in the `meta` table, per ADR-0029) — not git-HEAD — because build digests and `.canon/` paths mutate without commits. Queried via `search_knowledge`.
+
 ## Decisions Ledger
 
 The durable record of consequential orchestrator decisions (HITL gate outcomes, scope cuts, AC changes, tier overrides, merge-conflict resolutions) stored as `orchestrator_decision` events on the execution-store event log. Written via `log_decision` (authoritative — store failure surfaces as error, not silently swallowed) and read via `get_decisions` (returns structured `DecisionRecord[]` + rendered markdown table). Used during in-session compaction rehydration and explicit resume to restore decided state without relying on conversation memory. Built on the event log per ADR-0010 — not on `cliff-ledger.ts`, which is a `Set<string>` de-dupe ledger for a different purpose.
