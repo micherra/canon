@@ -148,7 +148,8 @@ describe("end-to-end provenance chain: emit → back-fill → summary join", () 
     };
     expect(emittedRecord.step_id).toBe(STEP_ID);
     expect(emittedRecord.agent_id).toBeNull(); // not yet back-filled
-    expect(emittedRecord.assembled_artifacts).toHaveLength(1);
+    // 2 artifacts: the "agent-tdd" rule + the agent-def artifact for agents/engineer.md (TASK-001)
+    expect(emittedRecord.assembled_artifacts).toHaveLength(2);
     expect(emittedRecord.assembled_artifacts[0].id).toBe("agent-tdd");
 
     // PIECE 2: BACK-FILL — logStep completed with agent_id writes back-fill event

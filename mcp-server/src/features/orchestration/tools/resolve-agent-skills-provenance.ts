@@ -97,15 +97,18 @@ export function emitContextProvenance(input: {
   stepId?: string;
   disclosed: ResolveAgentSkillsResult;
   preDisclosureSkills: ResolvedSkill[];
+  /** The agent-def body already read at the spawn seam. Optional (TASK-001). */
+  agentDef?: { path: string; fullFile: string };
 }): void {
   // Fail-open: no workspace → no store to write to; silent skip.
   if (!input.workspace) return;
 
-  const { workspace, stepId, disclosed, preDisclosureSkills } = input;
+  const { workspace, stepId, disclosed, preDisclosureSkills, agentDef } = input;
 
   let record: ContextProvenanceRecord;
   try {
     record = buildContextProvenanceRecord({
+      agentDef,
       agentName: disclosed.agent_name,
       finalPreloadPrompt: disclosed.preload_prompt,
       sidecarPath: disclosed.full_data_path,

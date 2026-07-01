@@ -254,16 +254,19 @@ function resolveSkills(
 }
 
 /** Apply disclosure (if projectDir present), emit provenance, return final result. */
-async function applyDisclosureAndEmit(
-  result: ResolveAgentSkillsResult,
-  skills: ResolvedSkill[],
-  projectDir: string | undefined,
-  options: ResolveAgentSkillsOptions | undefined,
-): Promise<ResolveAgentSkillsResult> {
+async function applyDisclosureAndEmit(args: {
+  result: ResolveAgentSkillsResult;
+  skills: ResolvedSkill[];
+  projectDir: string | undefined;
+  options: ResolveAgentSkillsOptions | undefined;
+  agentDef: { path: string; fullFile: string };
+}): Promise<ResolveAgentSkillsResult> {
+  const { result, skills, projectDir, options, agentDef } = args;
   if (projectDir) {
     const disclosed = await applyAgentSkillsDisclosure(result, projectDir);
     // Emit provenance AFTER disclosure so char_span reflects the final prompt.
     emitContextProvenance({
+      agentDef,
       disclosed,
       preDisclosureSkills: skills,
       stepId: options?.step_id,
@@ -274,6 +277,7 @@ async function applyDisclosureAndEmit(
   // Non-disclosure branch: result has full content and no full_data_path.
   // Emit provenance when workspace is present (fail-open on absent workspace).
   emitContextProvenance({
+    agentDef,
     disclosed: result,
     preDisclosureSkills: skills,
     stepId: options?.step_id,
@@ -334,6 +338,12 @@ export async function resolveAgentSkills(
     skills,
     unresolved,
   };
-  const final = await applyDisclosureAndEmit(result, skills, projectDir, options);
+  const final = await applyDisclosureAndEmit({
+    agentDef: { fullFile: agentFile, path: agentPath },
+    options,
+    projectDir,
+    result,
+    skills,
+  });
   return toolOk<ResolveAgentSkillsResult>(final);
 }

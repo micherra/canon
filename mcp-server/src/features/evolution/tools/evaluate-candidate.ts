@@ -11,7 +11,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, normalize, sep } from "node:path";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
@@ -22,6 +22,7 @@ import {
 } from "../services/candidate-injection.ts";
 import type { PerSplit } from "../services/eval-runner.ts";
 import { decideGate, parseSummary, runSplit } from "../services/eval-runner.ts";
+import { checkFrontmatterImmutable } from "../services/frontmatter-guard.ts";
 
 /** Input schema for evaluate_candidate. */
 export const EvaluateCandidateInputSchema = z.object({
@@ -67,6 +68,15 @@ export type EvaluateCandidateResult = {
   size_delta: number;
   /** Number of judge votes used on the holdout gate run. Documents AC#7. */
   judge_votes_holdout: number;
+  /**
+   * Present ONLY when the runtime frontmatter-reject guard rejected an agent-def candidate
+   * before any subprocess ran (TASK-003, dc-08). Additive-optional — existing consumers
+   * already treat `accepted:false` as "do not propose"; this field adds a typed reason.
+   */
+  guard_rejection?: {
+    reason: "frontmatter_modified" | "frontmatter_unverifiable";
+    fields?: string[];
+  };
 };
 
 /** Number of judge votes for the holdout gate run (AC#7, evaluate-candidate-04). */
@@ -142,6 +152,30 @@ async function runAllSplits(
   }
 
   return toolOk(scores);
+}
+
+/** True iff targetPath's first path segment is "agents" (an agent-def artifact). */
+function isAgentDefTarget(targetPath: string): boolean {
+  const normalized = normalize(targetPath);
+  return normalized.split(sep)[0] === "agents";
+}
+
+/** Build the zeroed-out rejection result for a frontmatter-guard reject (dc-08). */
+function buildGuardRejectionResult(
+  reason: "frontmatter_modified" | "frontmatter_unverifiable",
+  fields: string[] | undefined,
+): EvaluateCandidateResult {
+  const emptySplit: PerSplitResult = { baseline_passed: 0, candidate_passed: 0, total: 0 };
+  return {
+    accepted: false,
+    baseline_score: 0,
+    candidate_score: 0,
+    guard_rejection: fields ? { fields, reason } : { reason },
+    judge_votes_holdout: HOLDOUT_JUDGE_VOTES,
+    per_split: { holdout: emptySplit, train: emptySplit, val: emptySplit },
+    regressed: false,
+    size_delta: 0,
+  };
 }
 
 /** Cheap dry-run sanity check — verifies the eval script is reachable. */
@@ -238,6 +272,16 @@ export async function evaluateCandidate(
     realContent = await readFile(join(project_dir, target_path), "utf-8");
   } catch {
     realContent = "";
+  }
+
+  // TASK-003 (dc-08): agent-def candidates are rejected BEFORE any subprocess if their
+  // frontmatter block differs from baseline. Fail-closed, never throws. Skipped for
+  // non-agent-def targets (unchanged behavior).
+  if (isAgentDefTarget(target_path)) {
+    const fmResult = checkFrontmatterImmutable(realContent, candidate_text);
+    if (!fmResult.ok) {
+      return toolOk(buildGuardRejectionResult(fmResult.reason, fmResult.fields));
+    }
   }
 
   const sanityCheck = await checkScriptReachable(project_dir, candidate_text, target_path);
