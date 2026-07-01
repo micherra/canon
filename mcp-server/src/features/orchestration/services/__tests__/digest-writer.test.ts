@@ -302,7 +302,7 @@ describe("extractDigestData", () => {
 
     const data = extractDigestData(workspace);
 
-    expect(data.notable_resolution).toBe("Keeps the digest field never-throw and easy to test");
+    expect(data.notableResolution).toBe("Keeps the digest field never-throw and easy to test");
   });
 
   test("notable_resolution is empty string when no SUMMARY or DESIGN present", async () => {
@@ -310,7 +310,7 @@ describe("extractDigestData", () => {
 
     const data = extractDigestData(workspace);
 
-    expect(data.notable_resolution).toBe("");
+    expect(data.notableResolution).toBe("");
   });
 });
 
@@ -322,7 +322,7 @@ describe("formatDigestMarkdown", () => {
     date: "2026-01-15",
     effortEstimate: "2 hours",
     fixIterations: 1,
-    notable_resolution: "",
+    notableResolution: "",
     outcome: "Add feature",
     reviewVerdict: "CLEAN",
     slug: "test-slug",
@@ -381,7 +381,7 @@ describe("formatDigestMarkdown", () => {
   });
 
   test("emits ### Notable Resolution section with the frozen line when notable_resolution is populated", () => {
-    const data = { ...baseData, notable_resolution: "Used a pure extractor for the digest field" };
+    const data = { ...baseData, notableResolution: "Used a pure extractor for the digest field" };
     const md = formatDigestMarkdown(data);
 
     expect(md).toContain("### Notable Resolution");
@@ -391,7 +391,7 @@ describe("formatDigestMarkdown", () => {
   });
 
   test("omits the ### Notable Resolution section entirely when notable_resolution is empty", () => {
-    const data = { ...baseData, notable_resolution: "" };
+    const data = { ...baseData, notableResolution: "" };
     const md = formatDigestMarkdown(data);
 
     expect(md).not.toContain("### Notable Resolution");
@@ -407,7 +407,7 @@ describe("formatMemoryIndexEntry", () => {
     date: "2026-01-15",
     effortEstimate: "2 hours",
     fixIterations: 0,
-    notable_resolution: "",
+    notableResolution: "",
     outcome: "Add feature",
     reviewVerdict: "CLEAN",
     slug: "test-slug",

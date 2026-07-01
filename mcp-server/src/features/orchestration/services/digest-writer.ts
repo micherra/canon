@@ -45,7 +45,7 @@ type DigestData = {
   effortEstimate: string;
   valueEstimate: string;
   outcome: string;
-  notable_resolution: string;
+  notableResolution: string;
 };
 
 // ---- Minimal journal types (local — avoids importing the full orchestration journal) ----
@@ -197,7 +197,7 @@ export function extractDigestData(workspace: string): DigestData {
     date,
     effortEstimate,
     fixIterations,
-    notable_resolution: notableResolution,
+    notableResolution,
     outcome,
     reviewVerdict,
     slug,
@@ -248,8 +248,8 @@ export function formatDigestMarkdown(data: DigestData): string {
   const verdict = data.reviewVerdict ?? "none";
   const name = `build-digest-${data.date}-${data.slug}`;
   const description = `Build digest for ${data.slug}: ${verdict}, ${duration}`;
-  const notableResolutionSection = data.notable_resolution
-    ? `\n### Notable Resolution\n\n**Notable resolution**: ${data.notable_resolution}\n`
+  const notableResolutionSection = data.notableResolution
+    ? `\n### Notable Resolution\n\n**Notable resolution**: ${data.notableResolution}\n`
     : "";
 
   return `---
