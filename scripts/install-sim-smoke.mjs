@@ -394,11 +394,12 @@ async function runHttpSubTest({
   label,
   helperCwd,
 }) {
+  // Constrain `label` against a known-literal allow-list before logging — CodeQL's
+  // clear-text-logging sanitizer recognizes comparison-against-constants as a taint break.
+  const safeLabel = KNOWN_SUB_TEST_LABELS.has(label) ? label : "unknown";
+
   const helperPath = resolveHeadersHelper(headersHelperRaw, installEnvForHelper, expandEnvToken);
   if (DEBUG) {
-    // Constrain `label` against a known-literal allow-list before logging — CodeQL's
-    // clear-text-logging sanitizer recognizes comparison-against-constants as a taint break.
-    const safeLabel = KNOWN_SUB_TEST_LABELS.has(label) ? label : "unknown";
     console.error(`[install-sim][${safeLabel}] headersHelper resolved: <redacted>`);
     console.error(`[install-sim][${safeLabel}] url: <redacted>`);
   }
@@ -411,7 +412,7 @@ async function runHttpSubTest({
 
   if (!headerResult.ok) {
     console.error(
-      `[install-sim][${label}] headersHelper FAILED (fail-closed): ${headerResult.reason}`,
+      `[install-sim][${safeLabel}] headersHelper FAILED (fail-closed): ${headerResult.reason}`,
     );
     return { ok: false, reason: headerResult.reason };
   }
