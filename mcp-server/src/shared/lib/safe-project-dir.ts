@@ -1,4 +1,4 @@
-import { isAbsolute, sep } from "node:path";
+import { isAbsolute } from "node:path";
 
 /**
  * Allow-list validation barrier for an untrusted project-dir string before any
@@ -20,6 +20,9 @@ export function isSafeProjectDirInput(dir: string): boolean {
   if (!isAbsolute(dir)) return false;
   // Check raw segments for ".." before normalization (normalize resolves ".." away,
   // so a post-normalize check alone misses "/a/../b" style traversal attempts).
-  if (dir.split(sep).includes("..")) return false;
+  // Segments are split on both "/" and "\" regardless of host platform — Node on
+  // Windows accepts either separator, so a platform-`sep`-only split (POSIX "/")
+  // fails to isolate a backslash-delimited ".." segment on a Windows client.
+  if (dir.split(/[/\\]/).includes("..")) return false;
   return true;
 }
