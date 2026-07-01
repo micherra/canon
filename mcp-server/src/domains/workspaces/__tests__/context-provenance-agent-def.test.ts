@@ -79,6 +79,16 @@ describe("computeBodySections", () => {
     expect(() => computeBodySections(fullFile)).not.toThrow();
   });
 
+  it("malformed frontmatter YAML never yields a section span overlapping the frontmatter fence", () => {
+    // splitFrontmatter throws on this input (unclosed bracket) — the catch branch must not
+    // fall back to treating the WHOLE file (frontmatter included) as one mutable section.
+    const fullFile = "---\n[unclosed: [nested\n---\n# Heading\n\nBody.\n";
+    const { sections } = computeBodySections(fullFile);
+    // No section may claim the frontmatter fence — the only safe fail-open answer when
+    // we can't locate the body boundary is to emit no mutable spans at all.
+    expect(sections).toEqual([]);
+  });
+
   it("never throws on empty input", () => {
     expect(() => computeBodySections("")).not.toThrow();
     expect(computeBodySections("").sections).toEqual([]);
@@ -178,6 +188,16 @@ describe("buildContextProvenanceRecord — agent-def artifact", () => {
         agentDef: { path: "agents/engineer.md", fullFile },
       }),
     ).not.toThrow();
+  });
+
+  it("malformed agent-def frontmatter never yields a mutable section overlapping the frontmatter fence", () => {
+    const fullFile = "---\n[bad yaml\n---\n# Heading\n\nBody.\n";
+    const record = buildContextProvenanceRecord({
+      ...baseInput,
+      agentDef: { path: "agents/engineer.md", fullFile },
+    });
+    const artifact = record.assembled_artifacts.find((a) => a.kind === "agent-def");
+    expect(artifact?.sections).toEqual([]);
   });
 
   it("handles an empty-body agent-def file without throwing", () => {

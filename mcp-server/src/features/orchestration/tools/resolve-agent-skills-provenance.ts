@@ -9,6 +9,7 @@
  * PRE-disclosure content (the real artifact wording).
  */
 
+import { relative } from "node:path";
 import {
   type ArtifactTrustTier,
   buildContextProvenanceRecord,
@@ -17,6 +18,28 @@ import {
 } from "@domains/workspaces/context-provenance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { ResolveAgentSkillsResult, ResolvedSkill } from "./resolve-agent-skills.ts";
+
+/**
+ * Relativize an artifact's absolute on-disk path to be project-root-relative
+ * (e.g. "agents/engineer.md" instead of "/abs/plugin/dir/agents/engineer.md").
+ *
+ * Every downstream consumer of `target_artifact.path` (classifyArtifact,
+ * isGateEligible/isGuardrailTarget, isAgentDefTarget in evaluate-candidate.ts)
+ * keys on a project-root-relative first path segment ("agents/", "rules/", ...).
+ * Recording the absolute path made every one of those checks silently fail on
+ * real input — they only ever passed against hand-written relative fixtures.
+ *
+ * `pluginDir` is the same root the caller used to construct the absolute path
+ * in the first place (`resolve(pluginDir, "agents", ...)` / `join(pluginDir,
+ * KIND_TO_DIR[kind], ...)`), so `relative(pluginDir, absolutePath)` reverses
+ * that construction exactly. Fail-open: when `pluginDir` is absent (direct
+ * unit-test calls to emitContextProvenance with no real plugin root), the
+ * path is left as-is — unchanged from prior behavior.
+ */
+function toProjectRelativePath(pluginDir: string | undefined, absolutePath: string): string {
+  if (!pluginDir) return absolutePath;
+  return relative(pluginDir, absolutePath);
+}
 
 /** Mapping from skill kind to the label used in the formatted preload section. */
 const KIND_LABEL: Record<string, string> = {
@@ -30,6 +53,7 @@ const KIND_LABEL: Record<string, string> = {
 function buildSkillInputs(
   preDisclosureSkills: ResolvedSkill[],
   disclosed: ResolveAgentSkillsResult,
+  pluginDir: string | undefined,
 ) {
   const hasSidecar = Boolean(disclosed.full_data_path);
   return preDisclosureSkills.map((preSk) => {
@@ -44,7 +68,7 @@ function buildSkillInputs(
       inContextText,
       kind: preSk.kind as ProvenanceArtifactKind,
       originalContent,
-      path: preSk.path,
+      path: toProjectRelativePath(pluginDir, preSk.path),
       // Plugin/frontmatter skills are always trusted — explicit tier for audit clarity.
       // Untrusted-overlay entries use a separate code path with trust_tier: "untrusted-project-local".
       trust_tier: "trusted" as ArtifactTrustTier,
@@ -91,6 +115,11 @@ function appendProvenanceEvent(
  * @param input.stepId            - Durable journal step_id join key (optional).
  * @param input.disclosed         - Post-disclosure ResolveAgentSkillsResult.
  * @param input.preDisclosureSkills - Skills array BEFORE disclosure (full content for hash).
+ * @param input.pluginDir         - Root the agent-def/skill absolute paths were resolved
+ *   against; used to relativize `target_artifact.path` for every artifact kind so
+ *   downstream consumers (classifyArtifact, isGateEligible, isAgentDefTarget) key
+ *   correctly on the real emitted path. Optional — fail-open when absent (paths recorded
+ *   as-is, matching prior behavior).
  */
 export function emitContextProvenance(input: {
   workspace?: string;
@@ -99,20 +128,24 @@ export function emitContextProvenance(input: {
   preDisclosureSkills: ResolvedSkill[];
   /** The agent-def body already read at the spawn seam. Optional (TASK-001). */
   agentDef?: { path: string; fullFile: string };
+  pluginDir?: string;
 }): void {
   // Fail-open: no workspace → no store to write to; silent skip.
   if (!input.workspace) return;
 
-  const { workspace, stepId, disclosed, preDisclosureSkills, agentDef } = input;
+  const { workspace, stepId, disclosed, preDisclosureSkills, agentDef, pluginDir } = input;
+  const relativizedAgentDef = agentDef
+    ? { fullFile: agentDef.fullFile, path: toProjectRelativePath(pluginDir, agentDef.path) }
+    : undefined;
 
   let record: ContextProvenanceRecord;
   try {
     record = buildContextProvenanceRecord({
-      agentDef,
+      agentDef: relativizedAgentDef,
       agentName: disclosed.agent_name,
       finalPreloadPrompt: disclosed.preload_prompt,
       sidecarPath: disclosed.full_data_path,
-      skills: buildSkillInputs(preDisclosureSkills, disclosed),
+      skills: buildSkillInputs(preDisclosureSkills, disclosed, pluginDir),
       spawnedAt: new Date().toISOString(),
       stepId: stepId ?? null,
       workspace,

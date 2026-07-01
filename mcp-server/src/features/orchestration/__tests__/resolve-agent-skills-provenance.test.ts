@@ -409,6 +409,46 @@ describe("emitContextProvenance — agent-def artifact (TASK-001)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Test: recorded artifact paths are project-root-relative, not absolute
+// (watch_XXXXXXXXX1 — downstream consumers key on a relative first path
+// segment; the real emitted value from resolveAgentSkills was absolute.)
+// ---------------------------------------------------------------------------
+
+describe("emitContextProvenance — recorded artifact paths are plugin-relative", () => {
+  it("agent-def artifact path is EXACTLY 'agents/<name>.md' — not absolute", async () => {
+    const workspace = seedWorkspace(tmpBase, "flow-relpath-01");
+    await resolveAgentSkills({ agent_name: "engineer" }, pluginDir, undefined, {
+      step_id: "implement",
+      workspace,
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getEventsByType("context_provenance");
+    const record = events[0].payload as {
+      assembled_artifacts: Array<{ kind: string; path: string }>;
+    };
+    const agentDef = record.assembled_artifacts.find((a) => a.kind === "agent-def");
+    expect(agentDef?.path).toBe("agents/engineer.md");
+  });
+
+  it("rule (preload skill) artifact path is EXACTLY 'rules/<id>.md' — not absolute", async () => {
+    const workspace = seedWorkspace(tmpBase, "flow-relpath-02");
+    await resolveAgentSkills({ agent_name: "engineer" }, pluginDir, undefined, {
+      step_id: "implement",
+      workspace,
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getEventsByType("context_provenance");
+    const record = events[0].payload as {
+      assembled_artifacts: Array<{ kind: string; path: string }>;
+    };
+    const rule = record.assembled_artifacts.find((a) => a.kind === "rule");
+    expect(rule?.path).toBe("rules/test-rule.md");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Test: emitContextProvenance helper directly — pure unit
 // ---------------------------------------------------------------------------
 

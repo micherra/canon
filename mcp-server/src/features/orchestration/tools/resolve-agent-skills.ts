@@ -260,14 +260,16 @@ async function applyDisclosureAndEmit(args: {
   projectDir: string | undefined;
   options: ResolveAgentSkillsOptions | undefined;
   agentDef: { path: string; fullFile: string };
+  pluginDir: string;
 }): Promise<ResolveAgentSkillsResult> {
-  const { result, skills, projectDir, options, agentDef } = args;
+  const { result, skills, projectDir, options, agentDef, pluginDir } = args;
   if (projectDir) {
     const disclosed = await applyAgentSkillsDisclosure(result, projectDir);
     // Emit provenance AFTER disclosure so char_span reflects the final prompt.
     emitContextProvenance({
       agentDef,
       disclosed,
+      pluginDir,
       preDisclosureSkills: skills,
       stepId: options?.step_id,
       workspace: options?.workspace,
@@ -279,6 +281,7 @@ async function applyDisclosureAndEmit(args: {
   emitContextProvenance({
     agentDef,
     disclosed: result,
+    pluginDir,
     preDisclosureSkills: skills,
     stepId: options?.step_id,
     workspace: options?.workspace,
@@ -341,6 +344,7 @@ export async function resolveAgentSkills(
   const final = await applyDisclosureAndEmit({
     agentDef: { fullFile: agentFile, path: agentPath },
     options,
+    pluginDir,
     projectDir,
     result,
     skills,

@@ -108,7 +108,13 @@ export function computeBodySections(fullFile: string): {
   try {
     body = splitFrontmatter(fullFile).body;
   } catch {
-    body = fullFile;
+    // Malformed frontmatter YAML: we cannot determine where the body begins.
+    // Falling back to body = fullFile would make frontmatterEnd 0, and the
+    // no-headings fallback below would then emit a [0, fullFile.length) section —
+    // a "mutable" span that INCLUDES the frontmatter fence, violating the
+    // "frontmatter excluded from every section span" invariant. Fail open with
+    // no sections instead of a span that overlaps the fence.
+    return { frontmatterEnd: fullFile.length, sections: [] };
   }
   const frontmatterEnd = fullFile.length - body.length;
 
