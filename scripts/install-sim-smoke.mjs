@@ -58,6 +58,7 @@ import {
   resolveHeadersHelper,
   runHeadersHelper,
   attemptHttpHandshake,
+  redactSecrets,
 } from "./lib/install-sim-http.mjs";
 
 // ── Guard 3: release containment ────────────────────────────────────────────
@@ -177,6 +178,40 @@ function selfTestContainmentTripwire() {
   } finally {
     rmSyncFs(tmpRoot, { recursive: true, force: true });
   }
+}
+
+/**
+ * Self-test for redactSecrets (scripts/lib/install-sim-http.mjs): verifies a
+ * Bearer token embedded in either the raw stdout-slice form or the
+ * JSON.stringify(parsed) form never survives into a `reason` string.
+ * No test framework exists for scripts/lib/*.mjs (co-located *.test.sh files
+ * only cover bash scripts) — this inline assertion is the coverage for it.
+ */
+function selfTestRedactSecrets() {
+  const rawStdout = `{"Authorization":"Bearer sk-live-SECRET-TOKEN-VALUE"} trailing garbage`;
+  const redactedRaw = redactSecrets(rawStdout);
+  if (redactedRaw.includes("SECRET-TOKEN-VALUE")) {
+    throw new Error(
+      `[redact-secrets-self-test] Bearer token survived redaction of raw stdout slice: ${redactedRaw}`,
+    );
+  }
+
+  const parsedJson = JSON.stringify({ Authorization: "Bearer sk-live-SECRET-TOKEN-VALUE", extra: "field" });
+  const redactedJson = redactSecrets(parsedJson);
+  if (redactedJson.includes("SECRET-TOKEN-VALUE")) {
+    throw new Error(
+      `[redact-secrets-self-test] Bearer token survived redaction of JSON.stringify(parsed): ${redactedJson}`,
+    );
+  }
+
+  // Diagnostic value preserved: still shows the key was present, just not its value.
+  if (!redactedJson.includes("Authorization") || !redactedJson.includes("extra")) {
+    throw new Error(
+      `[redact-secrets-self-test] Redaction over-scrubbed non-secret diagnostic fields: ${redactedJson}`,
+    );
+  }
+
+  console.log("[install-sim] redactSecrets self-test: Bearer token redacted, diagnostic fields preserved.");
 }
 
 // ── Repo root resolution ────────────────────────────────────────────────────
@@ -367,6 +402,10 @@ async function setupInstallEnv() {
 
 // ── HTTP sub-test helper ─────────────────────────────────────────────────────
 
+// Known `label` values passed by call sites below — used to constrain the debug
+// log against a closed set rather than logging the parameter unconstrained.
+const KNOWN_SUB_TEST_LABELS = new Set(["normal", "self-check/broken", "self-check/fixed"]);
+
 /**
  * Run a single HTTP handshake sub-test with the given options.
  *
@@ -390,10 +429,14 @@ async function runHttpSubTest({
   label,
   helperCwd,
 }) {
+  // Constrain `label` against a known-literal allow-list before logging — CodeQL's
+  // clear-text-logging sanitizer recognizes comparison-against-constants as a taint break.
+  const safeLabel = KNOWN_SUB_TEST_LABELS.has(label) ? label : "unknown";
+
   const helperPath = resolveHeadersHelper(headersHelperRaw, installEnvForHelper, expandEnvToken);
   if (DEBUG) {
-    console.error(`[install-sim][${label}] headersHelper resolved: ${helperPath}`);
-    console.error(`[install-sim][${label}] url: ${expandedUrl}`);
+    console.error(`[install-sim][${safeLabel}] headersHelper resolved: <redacted>`);
+    console.error(`[install-sim][${safeLabel}] url: <redacted>`);
   }
 
   const headerResult = runHeadersHelper(
@@ -404,7 +447,7 @@ async function runHttpSubTest({
 
   if (!headerResult.ok) {
     console.error(
-      `[install-sim][${label}] headersHelper FAILED (fail-closed): ${headerResult.reason}`,
+      `[install-sim][${safeLabel}] headersHelper FAILED (fail-closed): ${headerResult.reason}`,
     );
     return { ok: false, reason: headerResult.reason };
   }
@@ -474,7 +517,7 @@ async function runNormalMode() {
           `CANON_DAEMON_PORT expansion may have failed.`,
       );
     }
-    console.log(`[install-sim] Expanded url: ${expandedUrl}`);
+    console.log("[install-sim] Expanded url: <redacted>");
 
     // Boot daemon on the ephemeral port.
     ({ proc } = await startTestDaemon({ archivePath, userProjectDir, port, tokenFile }));
@@ -543,6 +586,11 @@ async function runSelfCheck() {
   console.log("\n[install-sim][self-check/guard3] Running Guard 3 containment tripwire self-test...");
   selfTestContainmentTripwire();
   console.log("[install-sim][self-check/guard3] PASS.");
+
+  // redactSecrets self-test: verify a leaked Bearer token never survives into a reason string.
+  console.log("\n[install-sim][self-check/redact] Running redactSecrets self-test...");
+  selfTestRedactSecrets();
+  console.log("[install-sim][self-check/redact] PASS.");
 
   const { archivePath, userProjectDir, cleanup } = await setupInstallEnv();
   const nodeModulesPath = findNodeModules();
@@ -684,6 +732,28 @@ async function runSelfCheck() {
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 
+// Known built-in Error constructor names — used to constrain `err?.name` against a
+// closed set before logging it. CodeQL's clear-text-logging sanitizer recognizes a
+// value narrowed by comparison against constants as no longer tainted; an unbounded
+// `err?.name` is not, since a thrown value's `.name` can carry arbitrary attacker-
+// or env-derived text.
+const KNOWN_ERROR_NAMES = new Set([
+  "Error",
+  "TypeError",
+  "RangeError",
+  "SyntaxError",
+  "ReferenceError",
+  "EvalError",
+  "URIError",
+  "AggregateError",
+]);
+
+/** @param {unknown} err */
+function safeErrorName(err) {
+  const name = err instanceof Error ? err.name : undefined;
+  return name && KNOWN_ERROR_NAMES.has(name) ? name : "Error";
+}
+
 async function main() {
   try {
     let exitCode;
@@ -694,8 +764,9 @@ async function main() {
     }
     process.exit(exitCode);
   } catch (err) {
-    console.error(`[install-sim] UNEXPECTED ERROR: ${err.message}`);
-    if (DEBUG) console.error(err.stack);
+    const safeName = safeErrorName(err);
+    console.error(`[install-sim] UNEXPECTED ERROR: ${safeName}`);
+    if (DEBUG) console.error("[install-sim] Error name:", safeName);
     process.exit(1);
   }
 }

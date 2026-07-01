@@ -1,0 +1,30 @@
+import { isAbsolute } from "node:path";
+
+/**
+ * Allow-list validation barrier for an untrusted project-dir string before any
+ * filesystem access (CodeQL js/path-injection sanitizer; see docs/adr/0030).
+ *
+ * Returns false (fail-closed) for:
+ * - empty string or over-length string (> 4096 UTF-16 code units (characters))
+ * - strings containing NUL bytes or ASCII control characters (0x00–0x1f)
+ * - non-absolute paths (rejected via `isAbsolute` — POSIX paths without a leading "/", and on Windows paths lacking a drive letter or UNC root)
+ * - paths that contain a raw ".." segment, split on both "/" and "\", checked
+ *   BEFORE normalization (traversal attempt) — normalization would resolve
+ *   ".." away before the check ever saw it
+ *
+ * There is no fixed safe root for Canon project dirs (a project can live at any
+ * absolute path), so this uses CodeQL's documented allow-list-of-safe-patterns
+ * strategy rather than containment. See ADR-0030.
+ */
+export function isSafeProjectDirInput(dir: string): boolean {
+  if (dir.length === 0 || dir.length > 4096) return false;
+  if (Array.from(dir).some((c) => c.charCodeAt(0) < 0x20)) return false; // NUL + control chars
+  if (!isAbsolute(dir)) return false;
+  // Check raw segments for ".." before normalization (normalize resolves ".." away,
+  // so a post-normalize check alone misses "/a/../b" style traversal attempts).
+  // Segments are split on both "/" and "\" regardless of host platform — Node on
+  // Windows accepts either separator, so a platform-`sep`-only split (POSIX "/")
+  // fails to isolate a backslash-delimited ".." segment on a Windows client.
+  if (dir.split(/[/\\]/).includes("..")) return false;
+  return true;
+}
