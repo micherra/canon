@@ -220,7 +220,13 @@ ambiguous | insufficient`. Absent signal rows → cohort zeros + `insufficient` 
 
 **Apply-provenance call-sites**: `record_applied_evolution` is invoked from the
 `review-learnings` apply path (Writer arm + Arm M), guarded on `type == "evolution-candidate"`
-(legacy proposals carry no holdout scores and get NO record). See `skills/canon/commands/review-learnings.md`.
+(legacy proposals — new-convention, severity-change, prune — carry no holdout scores and get
+NO record; Arm T / Arm F never write, so never record). The Writer arm captures `before_hash`
+from the on-disk target BEFORE spawning the writer (hashing after the edit would make
+`before_hash == after_hash`); Arm M reuses the pre-write content it already read for the diff.
+The command does not commit, so `applying_commit` is left null at record time (back-filled later
+from the `Canon-Evolution:` trailer). The record only writes a drift.db row — no revert/quarantine/merge.
+See `skills/canon/commands/review-learnings.md`.
 
 **`Canon-Evolution:` trailer** (`shared/lib/commit-trailers.ts`) — optional `evolutionId?`
 on `TrailerOpts` appends a `Canon-Evolution: {id}` line after `Canon-Task` (or after
