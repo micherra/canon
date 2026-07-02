@@ -1,12 +1,12 @@
 ---
-adr: "0030"
+adr: "0031"
 title: "Agent-definition-body provenance rides the resolve_agent_skills seam"
 status: accepted
 date: "2026-07-01"
 build: "phase-2-agent-definition-body-provenance-seam-trace-driven-evolution"
 ---
 
-# ADR-0030: Agent-definition-body provenance rides the resolve_agent_skills seam
+# ADR-0031: Agent-definition-body provenance rides the resolve_agent_skills seam
 
 ## Context
 
@@ -121,7 +121,7 @@ scope.
   (`flagged[]`) even though frontmatter is immutable for mutation — intentional (drift ≠ mutation
   scope), but a reader must understand the split.
 - Agent-def attribution ships on `cliff_event` AND `review_violation` (see Amendment-1); the
-  `review_violation` join is via the code-author agent-def (ADR-0031), not a per-violation step key.
+  `review_violation` join is via the code-author agent-def (ADR-0032), not a per-violation step key.
 
 ## Amendment-1 (2026-07-01) — Expansion-2: runtime frontmatter-reject guard
 
@@ -144,7 +144,7 @@ generated candidate attempts one.
 ## Revisit-If
 
 - A `step_id`-keyed review-violation (or test_failure) event type is added → refine the
-  review_violation→agent-def join (currently the code-author join, ADR-0031) with per-step precision,
+  review_violation→agent-def join (currently the code-author join, ADR-0032) with per-step precision,
   and extend agent-def attribution to test_failure.
 - A spawn path is introduced that does NOT call `resolve_agent_skills` and must still yield
   agent-def provenance → reconsider a dedicated capture point.

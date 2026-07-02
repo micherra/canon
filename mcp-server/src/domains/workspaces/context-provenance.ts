@@ -3,13 +3,13 @@
  *
  * This file is PURE: types + pure functions only. No I/O, no DB, no store import.
  * Import only `node:crypto` and `splitFrontmatter` from `@shared/lib/frontmatter.ts`
- * (also pure — no I/O; ADR-0030).
+ * (also pure — no I/O; ADR-0031).
  *
  * Design: ADR-0018 — spans are computed against the POST-disclosure final preload_prompt;
  * content_hash is computed from PRE-disclosure content (the real artifact wording).
  * These two facts answer different questions and come from different stages intentionally.
  *
- * Agent-def provenance (ADR-0030): the "agent-def" kind hashes the WHOLE agent file
+ * Agent-def provenance (ADR-0031): the "agent-def" kind hashes the WHOLE agent file
  * (frontmatter included) so drift detection stays honest, while `sections` — the
  * mutable-scope granularity — cover the body ONLY. Frontmatter is excluded from every
  * section span by construction (offsets start at frontmatterEnd or later).

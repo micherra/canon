@@ -1,16 +1,16 @@
 ---
-adr: "0031"
+adr: "0032"
 title: "review_violation to agent-def attribution joins on the code-author agent-def, not a per-violation step key"
 status: accepted
 date: "2026-07-01"
 build: "phase-2-agent-definition-body-provenance-seam-trace-driven-evolution"
 ---
 
-# ADR-0031: review_violation to agent-def attribution joins on the code-author agent-def
+# ADR-0032: review_violation to agent-def attribution joins on the code-author agent-def
 
 ## Context
 
-Phase-2 (this build) adds agent-def provenance (ADR-0030). At plan approval the user expanded scope:
+Phase-2 (this build) adds agent-def provenance (ADR-0031). At plan approval the user expanded scope:
 `attribute_failure` must attribute a **review_violation** to the agent-def, not only a `cliff_event`.
 
 A `ReviewViolation` (`archive-types.ts`) is `{ principle_id, severity, file_path, message }` — it carries

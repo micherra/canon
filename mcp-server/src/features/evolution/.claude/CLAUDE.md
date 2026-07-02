@@ -27,10 +27,10 @@ features/evolution/
 │   ├── mutation-selection.ts   # selectMutationTargets() — pure join+rank+filter; PLUGIN_ARTIFACT_ROOTS eligibility check
 │   ├── mutation-proposal.ts    # shapeMutationProposal() — shapes accepted eval result into MutationProposal
 │   ├── attribution-types.ts    # Mutator-facing output types: FailureKind, AttributedArtifact, FailureAttribution, AttributeFailureResult
-│   ├── attribution-join.ts     # attributeFailures() — pure join of provenance + failure sources; review_violation attributes via BOTH the rule edge (principle_id==artifact_id) and the code-author agent-def edge (ADR-0031)
+│   ├── attribution-join.ts     # attributeFailures() — pure join of provenance + failure sources; review_violation attributes via BOTH the rule edge (principle_id==artifact_id) and the code-author agent-def edge (ADR-0032)
 │   ├── attribution-provenance-source.ts  # readProvenance() — reads live workspace or archived RunSummary
 │   ├── attribution-failure-sources.ts   # collectFailureSources() — reads review violations + cliff events
-│   └── frontmatter-guard.ts    # checkFrontmatterImmutable() — pure runtime frontmatter-immutability guard (ADR-0030 amendment)
+│   └── frontmatter-guard.ts    # checkFrontmatterImmutable() — pure runtime frontmatter-immutability guard (ADR-0031 amendment)
 └── __tests__/
     ├── decide-gate.test.ts
     ├── parse-summary.test.ts
@@ -70,7 +70,7 @@ Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
 - `regressed` — `true` iff candidate regressed holdout.
 - `size_delta` — Candidate length minus baseline file length (chars). Signal only, not a gate.
 - `judge_votes_holdout` — Always `3` (documents AC#7, evaluate-candidate-04).
-- `guard_rejection?` — additive-optional; present ONLY when the frontmatter-reject guard rejected an agent-def candidate before any subprocess ran (ADR-0030 amendment). `{ reason: "frontmatter_modified" | "frontmatter_unverifiable"; fields?: string[] }`. Backward compatible — existing consumers already treat `accepted:false` as "do not propose".
+- `guard_rejection?` — additive-optional; present ONLY when the frontmatter-reject guard rejected an agent-def candidate before any subprocess ran (ADR-0031 amendment). `{ reason: "frontmatter_modified" | "frontmatter_unverifiable"; fields?: string[] }`. Backward compatible — existing consumers already treat `accepted:false` as "do not propose".
 
 **Runtime frontmatter-reject guard (`checkFrontmatterImmutable`, `services/frontmatter-guard.ts`):** when `target_path`'s first segment is `agents` (`isAgentDefTarget`), the handler compares the RAW frontmatter block (`---\n...\n---`, byte-for-byte) of `candidate_text` against baseline BEFORE `checkScriptReachable`/any subprocess. Differing blocks → `accepted:false` + `guard_rejection:{reason:"frontmatter_modified", fields}` (`fields` = best-effort top-level YAML keys that changed — a diagnostic, never the basis of the comparison). Unparseable frontmatter on either side → fail-closed `guard_rejection:{reason:"frontmatter_unverifiable"}`. Never throws. Body-only candidates proceed to normal scoring unaffected.
 
@@ -182,11 +182,11 @@ return empty output.
 
 **Fail behavior**: fail-open — absent provenance, reviews, or cliff events yield empty sub-arrays, not errors. `INVALID_INPUT` when both or neither of `workspace`/`archive_id` are given.
 
-## Attribution Join Contract (ADR-0024, ADR-0031)
+## Attribution Join Contract (ADR-0024, ADR-0032)
 
 - **`review_violation`** — TWO independent join edges may fire per violation (both can attribute the same violation):
   - `join_basis: "principle_id==artifact_id"` — joined on `violation.principle_id == assembled_artifacts[].id`; inferred, lossy; lossy cases become `unattributed[]` or `ambiguous[]`.
-  - `join_basis: "code_author_agent_def"` (ADR-0031) — joined on the DISTINCT `agent-def` artifacts owned by a code-authoring agent (`CODE_AUTHORING_AGENTS = {"engineer"}`) present anywhere in the run's provenance array — no per-violation step-key threading (every engineer step loads the same `agents/engineer.md`, so the mutation target is singular and hash-verifiable regardless of which step produced the reviewed code). Confidence: `high` when `hash_verified` and exactly one distinct code-author agent-def; `medium` + `ambiguous:true` when more than one distinct agent-def is present. A reviewer-only step's agent-def is NOT attributed via this edge (only `CODE_AUTHORING_AGENTS` steps qualify).
+  - `join_basis: "code_author_agent_def"` (ADR-0032) — joined on the DISTINCT `agent-def` artifacts owned by a code-authoring agent (`CODE_AUTHORING_AGENTS = {"engineer"}`) present anywhere in the run's provenance array — no per-violation step-key threading (every engineer step loads the same `agents/engineer.md`, so the mutation target is singular and hash-verifiable regardless of which step produced the reviewed code). Confidence: `high` when `hash_verified` and exactly one distinct code-author agent-def; `medium` + `ambiguous:true` when more than one distinct agent-def is present. A reviewer-only step's agent-def is NOT attributed via this edge (only `CODE_AUTHORING_AGENTS` steps qualify).
 - **`cliff_event`** — joined on `cliff.step_id == provenance.step_id` (`join_basis: "cliff_step_id"`); exact, high-confidence; widening `RawArtifact.kind` to include `"agent-def"` was the only change needed — the existing loop already attributes every artifact in a matched step.
 - **`test_failure`** — DEFERRED; no durable joinable key in current trace schema. Re-add per ADR-0024 Revisit-If once a `step_id`-keyed test_failure event type is available.
 - **content_hash** — re-hashed from the raw (untrimmed) pre-disclosure artifact body via `hashContent`; mismatch → `flagged[]` with `hash_verified: false`; exact match → `hash_verified: true`. Fail-closed: only exact SHA256 match counts. For `agent-def`, the hash covers the WHOLE file (frontmatter included) — `readCurrentBody` byte-identity re-check is unchanged.

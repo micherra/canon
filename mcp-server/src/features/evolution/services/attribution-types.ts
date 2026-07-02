@@ -12,7 +12,7 @@
  *   - "review_violation" — TWO independent join edges may fire per violation:
  *       - join_basis "principle_id==artifact_id" — joined via in-context artifact_id (inferred, lossy)
  *       - join_basis "code_author_agent_def" — joined via the code-authoring agent-def present in
- *         provenance (ADR-0031); no per-violation step-key threading (all engineer steps share one
+ *         provenance (ADR-0032); no per-violation step-key threading (all engineer steps share one
  *         agents/engineer.md, so the mutation target is singular and hash-verifiable regardless).
  *   - "cliff_event"      — joined via cliff.step_id == provenance.step_id (exact, clean)
  *   - test_failure is a DEFERRED variant — no durable test_failure event keyed by step_id

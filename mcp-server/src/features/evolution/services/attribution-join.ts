@@ -182,7 +182,7 @@ function attributeRuleViolation(
 }
 
 /**
- * join_basis "code_author_agent_def" (ADR-0031) — every code review violation attributes to
+ * join_basis "code_author_agent_def" (ADR-0032) — every code review violation attributes to
  * each DISTINCT code-authoring agent-def present in provenance, computed purely from the
  * provenance array. No per-violation step-key threading: all engineer steps share one
  * agents/engineer.md, so the mutation target is singular and hash-verifiable regardless of

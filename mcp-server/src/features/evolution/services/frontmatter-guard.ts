@@ -1,5 +1,5 @@
 /**
- * frontmatter-guard.ts — pure runtime frontmatter-immutability guard (TASK-003, ADR-0030
+ * frontmatter-guard.ts — pure runtime frontmatter-immutability guard (TASK-003, ADR-0031
  * amendment). Sibling pre-eval check to `checkScriptReachable` in evaluate-candidate.ts.
  *
  * Enforces AC#6 at mutation-RUNTIME (complements the provenance-layer section-span
