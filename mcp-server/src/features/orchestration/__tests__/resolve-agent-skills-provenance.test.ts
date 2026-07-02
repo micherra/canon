@@ -10,7 +10,7 @@
  * - registration: register-agent-teams passes step_id.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -142,7 +142,8 @@ describe("emitContextProvenance — non-disclosed preload with step_id", () => {
       preload_prompt_hash: string;
     };
 
-    expect(record.assembled_artifacts).toHaveLength(1);
+    // 2 artifacts: the resolved "test-rule" skill + the new agent-def artifact (TASK-001)
+    expect(record.assembled_artifacts).toHaveLength(2);
     const artifact = record.assembled_artifacts[0];
     expect(artifact.id).toBe("test-rule");
     // Hash of the pre-disclosure content
@@ -285,7 +286,8 @@ describe("emitContextProvenance — progressive disclosure (>12k)", () => {
       }>;
     };
 
-    expect(record.assembled_artifacts).toHaveLength(1);
+    // 2 artifacts: the blanked "big-rule" skill + the new agent-def artifact (TASK-001)
+    expect(record.assembled_artifacts).toHaveLength(2);
     const artifact = record.assembled_artifacts[0];
     expect(artifact.id).toBe("big-rule");
     // content_hash still from pre-disclosure content (not empty string)
@@ -293,6 +295,156 @@ describe("emitContextProvenance — progressive disclosure (>12k)", () => {
     expect(artifact.char_span).toBeNull();
     expect(artifact.source).toBe("sidecar");
     expect(artifact.sidecar_path).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test: agent-def artifact emission (TASK-001 / dc-01, dc-02, dc-03, dc-06)
+// ---------------------------------------------------------------------------
+
+describe("emitContextProvenance — agent-def artifact (TASK-001)", () => {
+  it("appends exactly one kind:'agent-def' artifact for agents/<name>.md, joined on (workspace, step_id)", async () => {
+    const workspace = seedWorkspace(tmpBase, "flow-agentdef-01");
+    await resolveAgentSkills({ agent_name: "engineer" }, pluginDir, undefined, {
+      step_id: "implement",
+      workspace,
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getEventsByType("context_provenance");
+    expect(events).toHaveLength(1);
+    const record = events[0].payload as {
+      step_id: string | null;
+      assembled_artifacts: Array<{ kind: string; path: string; id: string }>;
+    };
+    expect(record.step_id).toBe("implement");
+
+    const agentDefArtifacts = record.assembled_artifacts.filter((a) => a.kind === "agent-def");
+    expect(agentDefArtifacts).toHaveLength(1);
+    expect(agentDefArtifacts[0].path.endsWith("agents/engineer.md")).toBe(true);
+    expect(agentDefArtifacts[0].id).toBe("engineer");
+  });
+
+  it("agent-def content_hash equals hashContent of the whole agent file (frontmatter included)", async () => {
+    const workspace = seedWorkspace(tmpBase, "flow-agentdef-02");
+    const wholeFile = readFileSync(join(pluginDir, "agents", "engineer.md"), "utf-8");
+
+    await resolveAgentSkills({ agent_name: "engineer" }, pluginDir, undefined, {
+      step_id: "implement",
+      workspace,
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getEventsByType("context_provenance");
+    const record = events[0].payload as {
+      assembled_artifacts: Array<{ kind: string; content_hash: string }>;
+    };
+    const agentDef = record.assembled_artifacts.find((a) => a.kind === "agent-def");
+    expect(agentDef?.content_hash).toBe(hashContent(wholeFile));
+  });
+
+  it("agent-def sections never overlap frontmatter (dc-06 guard)", async () => {
+    const workspace = seedWorkspace(tmpBase, "flow-agentdef-03");
+    await resolveAgentSkills({ agent_name: "engineer" }, pluginDir, undefined, {
+      step_id: "implement",
+      workspace,
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getEventsByType("context_provenance");
+    const record = events[0].payload as {
+      assembled_artifacts: Array<{
+        kind: string;
+        sections?: Array<{ heading: string; span: [number, number] }>;
+      }>;
+    };
+    const agentDef = record.assembled_artifacts.find((a) => a.kind === "agent-def");
+    expect(agentDef?.sections).toBeDefined();
+    // "name: engineer" is a frontmatter line — must never appear as a section heading
+    for (const section of agentDef?.sections ?? []) {
+      expect(section.heading).not.toContain("name: engineer");
+    }
+  });
+
+  it("agent-def char_span is null (body is not part of preload_prompt)", async () => {
+    const workspace = seedWorkspace(tmpBase, "flow-agentdef-04");
+    await resolveAgentSkills({ agent_name: "engineer" }, pluginDir, undefined, {
+      step_id: "implement",
+      workspace,
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getEventsByType("context_provenance");
+    const record = events[0].payload as {
+      assembled_artifacts: Array<{ kind: string; char_span: [number, number] | null }>;
+    };
+    const agentDef = record.assembled_artifacts.find((a) => a.kind === "agent-def");
+    expect(agentDef?.char_span).toBeNull();
+  });
+
+  it("emission is fail-open — resolveAgentSkills still returns ok when the agent-def emit runs", async () => {
+    const workspace = seedWorkspace(tmpBase, "flow-agentdef-05");
+    const out = await resolveOk(
+      resolveAgentSkills({ agent_name: "engineer" }, pluginDir, undefined, {
+        step_id: "implement",
+        workspace,
+      }),
+    );
+    expect(out.agent_name).toBe("engineer");
+  });
+
+  it("pre-existing INVALID_INPUT for a truly-absent agent file is unchanged", async () => {
+    const workspace = seedWorkspace(tmpBase, "flow-agentdef-06");
+    const result = await resolveAgentSkills(
+      { agent_name: "does-not-exist" },
+      pluginDir,
+      undefined,
+      {
+        step_id: "implement",
+        workspace,
+      },
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test: recorded artifact paths are project-root-relative, not absolute
+// (watch_XXXXXXXXX1 — downstream consumers key on a relative first path
+// segment; the real emitted value from resolveAgentSkills was absolute.)
+// ---------------------------------------------------------------------------
+
+describe("emitContextProvenance — recorded artifact paths are plugin-relative", () => {
+  it("agent-def artifact path is EXACTLY 'agents/<name>.md' — not absolute", async () => {
+    const workspace = seedWorkspace(tmpBase, "flow-relpath-01");
+    await resolveAgentSkills({ agent_name: "engineer" }, pluginDir, undefined, {
+      step_id: "implement",
+      workspace,
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getEventsByType("context_provenance");
+    const record = events[0].payload as {
+      assembled_artifacts: Array<{ kind: string; path: string }>;
+    };
+    const agentDef = record.assembled_artifacts.find((a) => a.kind === "agent-def");
+    expect(agentDef?.path).toBe("agents/engineer.md");
+  });
+
+  it("rule (preload skill) artifact path is EXACTLY 'rules/<id>.md' — not absolute", async () => {
+    const workspace = seedWorkspace(tmpBase, "flow-relpath-02");
+    await resolveAgentSkills({ agent_name: "engineer" }, pluginDir, undefined, {
+      step_id: "implement",
+      workspace,
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getEventsByType("context_provenance");
+    const record = events[0].payload as {
+      assembled_artifacts: Array<{ kind: string; path: string }>;
+    };
+    const rule = record.assembled_artifacts.find((a) => a.kind === "rule");
+    expect(rule?.path).toBe("rules/test-rule.md");
   });
 });
 

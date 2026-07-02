@@ -137,3 +137,19 @@ At every `learn` step, run the `artifact-retirement` dimension alongside the oth
 **Output**: write proposals to `.canon/proposed-learnings/` (for cooling-off tracking) and summarize in the `### Prune Candidates (artifact-retirement)` section of `.canon/LEARNING-REPORT.md`.
 
 Full algorithm, safety gates, output schema, and non-overlap explanation: `references/learner-dimensions.md` → `## Dimension: artifact-retirement`.
+
+## Success-pattern dimension (positive-signal mining)
+
+At every `learn` step, run Sub-analysis E (`convention-lifecycle` → Success-pattern mining) alongside the other sub-analyses. This is a positive-signal source: it mines the clean-build corpus for recurring elegant resolutions and proposes them as conventions.
+
+**Corpus read-path**: resolve the auto-memory dir from `project_dir` by replacing `/` with `-` (mirrors `resolveAutoMemoryDir` in `mcp-server/src/features/orchestration/services/digest-writer.ts`), then read `~/.claude/projects/<dashed>/memory/build-digest-*.md`. Read PRIOR builds' digests — the current build's own digest isn't written until finalize, after the learn step.
+
+**Clean-build filter**: a digest qualifies only when its Build Metrics show `Violations found: 0` AND `Fix iterations: 0`.
+
+**Load-bearing invariant: propose-only, HITL-gated, NEVER auto-apply.** The learner emits a success-pattern *proposal* only. It has no edit capability over `.canon/CONVENTIONS.md` or principles. Acceptance routes through the PM → writer content flow (`references/content-flow.md`). This invariant is non-negotiable and must not be weakened.
+
+**Recurrence gate**: grep each clean digest for the literal `**Notable resolution**:` line, group semantically-similar resolutions, and require recurrence across **≥3 distinct clean builds (distinct slugs)** before a group is promotable. Below threshold → emit "Skipped: success-pattern — {N} < 3 distinct clean builds."
+
+**Cross-check + cooling-off (reuse)**: before surfacing, skip any candidate already in `.canon/CONVENTIONS.md` or already covered by a principle (`list_principles` index). First qualifying learn run writes a `success-pattern-watch` (`status: watch`, `evidence_count: 1`) to `.canon/proposed-learnings/`; a second independent learn run that re-confirms promotes it to a surfaced `success-pattern-candidate` (`status: candidate`, `evidence_count: 2`). Decays/archives via the existing CONSOLIDATE Sub-analysis D + `computeWatchConfidence` — no new decay engine.
+
+Full algorithm, output schema, and weighting note: `references/learner-dimensions.md` → `## Dimension: convention-lifecycle` → Sub-analysis E.

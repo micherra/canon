@@ -25,7 +25,7 @@ import {
   selectMutationTargetsHandler,
 } from "@features/evolution/tools/select-mutation-targets.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { gatedWrapHandler } from "./server-state.ts";
+import { gatedWrapHandler, pluginDir } from "./server-state.ts";
 
 export function registerEvolutionTools(server: McpServer): void {
   server.registerTool(
@@ -57,7 +57,7 @@ export function registerEvolutionTools(server: McpServer): void {
         "Fail-open: absent provenance or reviews → partial output, not error.",
       inputSchema: AttributeFailureInputSchema.shape,
     },
-    gatedWrapHandler(async (input) => attributeFailure(input)),
+    gatedWrapHandler(async (input) => attributeFailure(input, pluginDir)),
   );
 
   server.registerTool(
@@ -75,6 +75,6 @@ export function registerEvolutionTools(server: McpServer): void {
         "INVALID_INPUT when both or neither of workspace/archive_id are provided.",
       inputSchema: SelectMutationTargetsInputSchema.shape,
     },
-    gatedWrapHandler(async (input) => selectMutationTargetsHandler(input)),
+    gatedWrapHandler(async (input) => selectMutationTargetsHandler(input, pluginDir)),
   );
 }
