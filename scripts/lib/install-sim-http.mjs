@@ -17,6 +17,25 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
+ * Strip likely-secret material from a string before it enters a `reason`/log
+ * string. Redacts (1) double-quoted JSON `"Authorization":"..."` values and
+ * (2) any `Bearer <token>` sequence, so a malformed headersHelper response can
+ * never leak the bearer token into CI logs via a diagnostic `reason` string
+ * (Copilot re-review: PR #436).
+ *
+ * Diagnostic value is preserved — callers still see that the field was
+ * present and malformed, just not its contents.
+ *
+ * @param {string} str - Raw string that may contain secret material.
+ * @returns {string} The same string with secret-shaped substrings redacted.
+ */
+export function redactSecrets(str) {
+  return str
+    .replace(/"Authorization"\s*:\s*"[^"]*"/gi, `"Authorization":"<redacted>"`)
+    .replace(/Bearer\s+\S+/gi, "Bearer <redacted>");
+}
+
+/**
  * Resolve the headersHelper path by expanding ${VAR} / ${VAR:-default} tokens.
  *
  * CC expands ${...} in headersHelper empirically (PROBE-FINDINGS.md §A §2).
@@ -60,20 +79,20 @@ export function runHeadersHelper(helperPath, env, cwd) {
     } catch (err) {
       return {
         ok: false,
-        reason: `headersHelper stdout is not valid JSON: ${err.message} (got: ${stdout.trim().slice(0, 80)})`,
+        reason: `headersHelper stdout is not valid JSON: ${err.message} (got: ${redactSecrets(stdout.trim().slice(0, 80))})`,
       };
     }
     if (typeof parsed !== "object" || parsed === null || !parsed.Authorization) {
       return {
         ok: false,
-        reason: `headersHelper JSON missing Authorization key (got: ${JSON.stringify(parsed)})`,
+        reason: `headersHelper JSON missing Authorization key (got: ${redactSecrets(JSON.stringify(parsed))})`,
       };
     }
     return { ok: true, headers: parsed };
   } catch (err) {
     return {
       ok: false,
-      reason: `headersHelper script failed (exit non-zero or not found): ${err.message}`,
+      reason: `headersHelper script failed (exit non-zero or not found): ${redactSecrets(err.message)}`,
     };
   }
 }

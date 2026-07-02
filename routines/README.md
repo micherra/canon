@@ -62,6 +62,7 @@ To browse and manage existing routines, use `/canon:routines`.
 
 | Name | Title | Binding | Trigger |
 |------|-------|---------|---------|
+| `code-scanning-autofix` | Code-Scanning Auto-Fix Check | cloud | Mondays at 09:00 UTC |
 | `release-ahead` | Release Ahead Check | cloud | daily at 09:00 UTC |
 | `pr-review` | Automated PR Review | cloud | on PR open/update |
 | `canon-maintenance` | Canon Maintenance Run | desktop | nightly at 03:00 |
