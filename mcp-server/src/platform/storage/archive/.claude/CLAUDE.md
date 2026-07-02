@@ -13,10 +13,10 @@ Platform-level build-archive persistence: copies workspace artifacts to `.canon/
 | `archive-types.ts` | Shared types owned by this module: `RunbookStep`, `PlannerContext`, `StepOutcome`, `ReviewViolation`, `ReviewResult`, `ArtifactInventory`, `RunSummary`; re-exports `ContextProvenanceSummary` from `@domains/workspaces/context-provenance`; `features/history/history-types.ts` re-exports these for backward compat. Updated 2026-06-24. |
 | `archive-service.ts` | `archiveWorkspace(input)` — copies artifact dirs + files, generates `run-summary.json`, records `ArchiveManifestEntry` in drift.db; async, never throws (returns `{ archived: false, error }` on any failure) |
 | `run-summary-builder.ts` | `buildRunSummary(input)` — assembles a `RunSummary` from workspace files; always returns a valid object (never throws); composes extractors; calls `extractContextProvenance` to populate `context_provenance` field. Updated 2026-06-24. |
-| `run-summary-extractors.ts` | `parsePlanningBrief`, `parseReviewFile`, `parseRunbookSteps` — pure text-parsing helpers; no I/O; never throw; return partial/empty data on parse errors |
+| `run-summary-extractors.ts` | `parsePlanningBrief`, `parseReviewFile`, `parseRunbookSteps`, `extractNotableResolution` — pure text-parsing helpers; no I/O; never throw; return partial/empty data on parse errors |
 
 ## Contracts
-<!-- last-updated: 2026-06-24 (RunSummary.context_provenance: new optional field; ContextProvenanceSummary re-exported from archive-types.ts) -->
+<!-- last-updated: 2026-07-01 (extractNotableResolution: new pure extractor; extractSectionBody: shared section-body helper, fixes m-flag $ truncation bug) -->
 
 **`archiveWorkspace(input: ArchiveWorkspaceInput)`** → `Promise<ArchiveWorkspaceResult>` — archives workspace to `.canon/history/{slug}/`; fail-open (archive failure must not block workspace pruning); `archived: false` + `error` on any path; `run_summary_generated: false` when summary assembly fails (archive still proceeds).
 
@@ -25,6 +25,8 @@ Platform-level build-archive persistence: copies workspace artifacts to `.canon/
 **`buildRunSummary`** — never throws; each extraction sub-call is independently wrapped; missing files return `null` / empty arrays.
 
 **`parsePlanningBrief` / `parseReviewFile` / `parseRunbookSteps`** — pure; no I/O; never throw.
+
+**`extractNotableResolution(summaryContent, designContent?)`** — pure, no I/O, never throws; ≤200-char single-line output (whitespace collapsed, newlines stripped). Source precedence: engineer SUMMARY `### Decisions` table (Rationale cell of first data row) → SUMMARY `### Deviations` (reason text of first item) → DESIGN.md `### Decisions made` (first bullet) → `""`. Backs the build-digest `### Notable Resolution` section (`digest-writer.ts`, `features/orchestration/`). Shares the internal `extractSectionBody(content, headingText)` helper with the other section-scoped extractors — finds the next-heading index directly rather than an `m`-flag `$` lookahead, which previously truncated Decisions/Deviations bodies to their first line.
 
 ## Invariants
 <!-- last-updated: 2026-06-12 -->

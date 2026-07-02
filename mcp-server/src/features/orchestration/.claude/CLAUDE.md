@@ -32,11 +32,12 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 | `write-test-report.ts` | `write_test_report` |
 
 **`services/`** — Business logic backing tools.
-<!-- last-updated: 2026-06-24 (finalize-helpers.ts + transcript-capture-hook.ts: extracted from orchestration-journal.ts; context-provenance-backfill.ts: agent_id back-fill for context_provenance events) -->
+<!-- last-updated: 2026-07-01 (digest-writer.ts: notableResolution field + Notable Resolution section) -->
 
 | File | Responsibility |
 |------|---------------|
 | `artifact-matching.ts` | Pure artifact-path resolution — `artifactExists`, `scanArtifactList`, `classifyArtifact`, `scanArtifacts` (+ `ArtifactScan` type), `computeSummaryGlobFallback`. Extracted from `orchestration-journal.ts` for line-count compliance + compute/effect separation. |
+| `digest-writer.ts` | Best-effort build-digest writer for `finalizeWorkspace` — `tryWriteBuildDigest(workspace, projectDir)` writes a structured Claude Code auto-memory file (never throws, returns `false` on failure); `extractDigestData(workspace)` builds `DigestData` (includes `notableResolution: string`, sourced via `readNotableResolutionFields` → `extractNotableResolution` from `@platform/storage/archive/run-summary-extractors.ts`); `formatDigestMarkdown(data)` emits the frozen `### Notable Resolution` / `**Notable resolution**: {text}` section, omitted when `notableResolution` is empty. |
 | `cliff-ledger.ts` | Per-session surface-once de-dupe ledger for cliff detection — `readLedger`, `appendLedger`, `filterUnsurfaced`, `cliffSignature`; stored at `${workspace}/.cliff-surfaced.json`; fail-open (ENOENT → empty set); atomic rename write; used by loop runner to suppress repeated cliff surfacing across ticks. <!-- last-updated: 2026-06-11 --> |
 | `context-provenance-backfill.ts` | `backfillContextProvenanceAgentId(workspace, stepId, agentId)` — back-fills `agent_id` on the `context_provenance` event keyed by `step_id`; called from `log_step`/`batch_log_steps` when a step completes with an `agent_id`; fail-open. Added 2026-06-24. |
 | `finalize-helpers.ts` | Pure compute helpers extracted from `orchestration-journal.ts` for 600-line compliance: `computeFlowOutcome`, `computeTotalDurationMs`, `getStepsMissingSkipReason`. `workspace-cleanup.ts` imports `computeFlowOutcome` directly from here (not via barrel). Added 2026-06-24. |
