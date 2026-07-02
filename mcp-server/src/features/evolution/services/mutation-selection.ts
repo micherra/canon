@@ -302,6 +302,25 @@ function rankAndCap(
   return { overflow, selected };
 }
 
+/**
+ * Derive the implicated principle_id for a mutation target.
+ *
+ * For every kind EXCEPT agent-def, target_artifact.id IS the principle_id
+ * (rule/ref/primer/template file ids == the principle they carry) — unchanged.
+ *
+ * For kind:"agent-def" the id is the AGENT NAME ("engineer"), not a principle
+ * (ADR-0032 code-author join). Surface the violated principle from the attributed
+ * violation instead, so downstream recurrence/learning stays keyed by principle.
+ * A cliff_event agent-def has no attributed violation → null (a write-cliff has
+ * no principle), which is also correct.
+ */
+function derivePrincipleId(attr: FailureAttribution): string | null {
+  if (attr.target_artifact.kind === "agent-def") {
+    return attr.attributed_violations[0]?.principle_id ?? null;
+  }
+  return attr.target_artifact.id || null;
+}
+
 /** Build a single MutationTarget from a FailureAttribution + bodies map. */
 function buildMutationTarget(
   attr: FailureAttribution,
@@ -317,7 +336,7 @@ function buildMutationTarget(
     confidence: attr.confidence,
     failure_kind: attr.failure_kind,
     gate_eligible: true,
-    principle_id: attr.target_artifact.id || null,
+    principle_id: derivePrincipleId(attr),
     target_path: path,
   };
 }
