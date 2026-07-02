@@ -219,7 +219,7 @@ For each hunk in the diff, inspect the enclosing function for the following bug 
 
 For every deleted line, name the invariant or behavior it enforced, then search the new code for where that invariant is re-established. If you cannot find it, that is a finding. (This is distinct from Stage 4 drift, which audits changed *files*, not deleted *behavior*.)
 
-**Realpath seam check (watch_NNNNN3)**: For any new code path that compares or maps on a filesystem path from an external source, verify the path is normalized via `fs.realpath`, not `path.resolve`. Flag `resolve()` at a NEW path-comparison seam (map key / equality / prefix match) fed by an external source as a `contract-parity-across-layers` WARNING when a sibling seam in the same module uses `fs.realpath`.
+**Realpath seam check (watch_NNNNN3)**: For any new code path that compares or maps on a filesystem path from an external source, verify the path is normalized via `fs.realpath`, not `path.resolve`. Flag `resolve()` at a NEW path-comparison seam (map key / equality / prefix match) fed by an external source as a `correctness-scan` finding (`severity: "strong-opinion"` → WARNING) when a sibling seam in the same module uses `fs.realpath`.
 
 **Cold-start & subprocess test audit (watch_TTTTTT1, watch_VVVVVV1)**: audit new or touched test files for explicit timeout on cold-start tests (KG scanner, DB connection, git subprocess, full-project scan) and absolute-bin `execFileSync` for subprocess-invoking tests — see `[[tests-are-deterministic]]`.
 
