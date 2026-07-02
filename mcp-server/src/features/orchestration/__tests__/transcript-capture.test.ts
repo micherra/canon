@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClaudeCodeEntry } from "../services/transcript-transformer.ts";
 import { captureTranscript } from "../tools/capture-transcript.ts";
 import { getTranscript } from "../tools/get-transcript.ts";
@@ -440,5 +440,102 @@ describe("captureTranscript — source_path and persist_path (harvest-02)", () =
     expect(result.warning).toContain("no source_path or agent_id provided");
     expect(result.entry_count).toBe(0);
     expect(result.transcript_path).toBe("");
+  });
+});
+
+describe("captureTranscript — cache usage telemetry write (dc-03)", () => {
+  function makeCacheUsageCCEntries(): ClaudeCodeEntry[] {
+    return [
+      {
+        agentId: AGENT_ID,
+        isSidechain: true,
+        message: { content: "Please implement the feature.", role: "user" },
+        parentUuid: "parent-uuid",
+        timestamp: "2026-07-02T00:00:00.000Z",
+        type: "user",
+      },
+      {
+        agentId: AGENT_ID,
+        isSidechain: true,
+        message: {
+          content: "Working on it.",
+          role: "assistant",
+          usage: {
+            cache_creation_input_tokens: 20,
+            cache_read_input_tokens: 100,
+            input_tokens: 30,
+            output_tokens: 12,
+          },
+        },
+        parentUuid: "parent-uuid",
+        timestamp: "2026-07-02T00:00:01.000Z",
+        type: "assistant",
+      },
+    ];
+  }
+
+  it("writes cache_read_tokens, cache_creation_tokens, and cache_hit_ratio into the state's metrics JSON", async () => {
+    const workspace = makeTmpDir();
+    setupWorkspace(workspace, makeMinimalFlow());
+
+    const fakeHome = makeTmpDir();
+    plantAgentTranscript(fakeHome, AGENT_ID, makeCacheUsageCCEntries());
+
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+
+    try {
+      const result = await captureTranscript({
+        agent_id: AGENT_ID,
+        agent_type: "engineer",
+        projectDir: process.cwd(),
+        step_id: "build",
+        workspace,
+      });
+
+      assertOk(result);
+
+      const store = getExecutionStore(workspace);
+      const state = store.getState("build");
+      expect(state?.metrics?.cache_read_tokens).toBe(100);
+      expect(state?.metrics?.cache_creation_tokens).toBe(20);
+      // ratio = 100 / (100 + 20 + 30) = 0.6667
+      expect(state?.metrics?.cache_hit_ratio).toBeCloseTo(100 / 150, 10);
+    } finally {
+      process.env.HOME = originalHome;
+    }
+  });
+
+  it("a forced updateStateMetrics failure does not change captureTranscript's returned status (fail-open)", async () => {
+    const workspace = makeTmpDir();
+    setupWorkspace(workspace, makeMinimalFlow());
+
+    const fakeHome = makeTmpDir();
+    plantAgentTranscript(fakeHome, AGENT_ID, makeCacheUsageCCEntries());
+
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+
+    const store = getExecutionStore(workspace);
+    const spy = vi.spyOn(store, "updateStateMetrics").mockImplementation(() => {
+      throw new Error("simulated metrics-write failure");
+    });
+
+    try {
+      const result = await captureTranscript({
+        agent_id: AGENT_ID,
+        agent_type: "engineer",
+        projectDir: process.cwd(),
+        step_id: "build",
+        workspace,
+      });
+
+      assertOk(result);
+      expect(result.entry_count).toBe(2);
+      expect(result.transcript_path).not.toBe("");
+    } finally {
+      spy.mockRestore();
+      process.env.HOME = originalHome;
+    }
   });
 });

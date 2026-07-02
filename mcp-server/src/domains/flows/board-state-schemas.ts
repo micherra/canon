@@ -58,6 +58,8 @@ const WaveResultSchema = z.object({
 });
 
 export const StateMetricsSchema = z.object({
+  cache_creation_tokens: z.number().optional(),
+  cache_hit_ratio: z.number().optional(),
   cache_read_tokens: z.number().optional(),
   cache_write_tokens: z.number().optional(),
   duration_ms: z.number().optional(),
