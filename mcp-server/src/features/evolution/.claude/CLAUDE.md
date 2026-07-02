@@ -24,12 +24,13 @@ features/evolution/
 │   ├── eval-runner.ts          # parseSummary, decideGate, runSplit (pure + one I/O fn)
 │   ├── candidate-injection.ts  # withInjectedCandidate (ADR-0022) + withInjectedGuardrailCandidate (ADR-0025) + isGuardrailTarget()
 │   ├── mutation-types.ts       # Pure types: MutationTarget, GateIneligibleTarget, SkippedAttribution, SelectMutationTargetsResult, MutationProposal, ArtifactClass; budget constants DEFAULT_MAX_TARGETS_PER_PASS, CANDIDATES_PER_TARGET
-│   ├── mutation-selection.ts   # selectMutationTargets() — pure join+rank+filter; PLUGIN_ARTIFACT_ROOTS eligibility check
+│   ├── mutation-selection.ts   # selectMutationTargets() — pure join+rank+filter; PLUGIN_ARTIFACT_ROOTS eligibility check; derivePrincipleId() keys agent-def targets off the violated principle, not the agent name (Codex P2 #2)
 │   ├── mutation-proposal.ts    # shapeMutationProposal() — shapes accepted eval result into MutationProposal
 │   ├── attribution-types.ts    # Mutator-facing output types: FailureKind, AttributedArtifact, FailureAttribution, AttributeFailureResult
 │   ├── attribution-join.ts     # attributeFailures() — pure join of provenance + failure sources; review_violation attributes via BOTH the rule edge (principle_id==artifact_id) and the code-author agent-def edge (ADR-0032)
 │   ├── attribution-provenance-source.ts  # readProvenance() — reads live workspace or archived RunSummary
 │   ├── attribution-failure-sources.ts   # collectFailureSources() — reads review violations + cliff events
+│   ├── artifact-path-resolver.ts  # resolveArtifactReadPath() — pure cross-root re-read resolver: project_dir-first, pluginDir-fallback for trusted plugin-tier artifacts (Codex P2 #1)
 │   └── frontmatter-guard.ts    # checkFrontmatterImmutable() — pure runtime frontmatter-immutability guard (ADR-0031 amendment)
 └── __tests__/
     ├── decide-gate.test.ts
@@ -39,6 +40,7 @@ features/evolution/
     ├── guardrail-injection-integration.test.ts  # Integration: guardrail sandbox build + isGuardrailTarget predicate
     ├── mutation-proposal.test.ts
     ├── mutation-selection.test.ts
+    ├── mutation-selection-principle-id.test.ts  # derivePrincipleId(): agent-def -> violated principle_id, cliff agent-def -> null, rule/cliff-on-rule unchanged
     ├── mutator-gate-integration.test.ts
     ├── proposal-shape-parity.test.ts    # Proposal frontmatter matches canonical template in SKILL.md
     ├── select-mutation-targets.test.ts
@@ -47,6 +49,7 @@ features/evolution/
     ├── attribution-provenance-source.test.ts
     ├── attribution-failure-sources.test.ts
     ├── attribution-join-agent-def.test.ts        # cliff->agent-def + review_violation->agent-def code-author join (7 cases)
+    ├── artifact-path-resolver.test.ts            # self-host, foreign-install fallback, overlay never-fallback, fail-closed missing, absolute-as-is
     ├── frontmatter-guard.test.ts                 # 11 pure unit cases for checkFrontmatterImmutable
     ├── evaluate-candidate-frontmatter-guard.test.ts  # 4 handler-wiring cases — asserts zero runShell calls on reject
     └── agent-def-real-path-integration.test.ts   # end-to-end: resolveAgentSkills -> readProvenance -> attributeFailures -> selectMutationTargets -> evaluateCandidate's frontmatter guard, using the REAL emitted path (no hand-written fixture)
@@ -87,6 +90,8 @@ Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
 - `gate_ineligible[]` — `GateIneligibleTarget[]`: paths rejected as not gate-eligible (typed bucket, not dropped); `reason` values: `tool_description_not_loadable`, `file_missing`, `path_traversal`, `harness_entrypoint`.
 - `skipped[]` — `SkippedAttribution[]`: attributions not promoted before eligibility check; `reason` values: `hash_unverified`, `confidence_below_high`, `budget_exhausted`.
 - `meta` — `{ attributions_seen, selected, budget }` for observability.
+
+**`principle_id` semantics (`derivePrincipleId`, Codex P2 #2):** for every `target_artifact.kind` EXCEPT `"agent-def"`, `principle_id === target_artifact.id` (rule/ref/primer/template file ids ARE the principle they carry — unchanged). For `kind:"agent-def"`, `target_artifact.id` is the AGENT NAME (e.g. `"engineer"`), not a principle — `principle_id` is instead the VIOLATED principle from `attributed_violations[0].principle_id`, or `null` for a `cliff_event` agent-def attribution (a write-cliff has no principle). This keeps downstream recurrence/learning keyed by principle even when the mutation target is an agent-def.
 
 **Selection policy (deterministic, in order):**
 1. Filter: `hash_verified === true` AND `confidence === "high"`.
@@ -181,6 +186,8 @@ return empty output.
 - `ambiguous[]` — violations that matched multiple provenance steps (surfaced, not silently resolved).
 
 **Fail behavior**: fail-open — absent provenance, reviews, or cliff events yield empty sub-arrays, not errors. `INVALID_INPUT` when both or neither of `workspace`/`archive_id` are given.
+
+**Cross-root artifact re-read (`resolveArtifactReadPath`, `services/artifact-path-resolver.ts`, Codex P2 #1):** both `attribute_failure`'s `readCurrentBody` seam and `select_mutation_targets`' baseline-body read resolve provenance paths project_dir-first, falling back to `pluginDir` when the path's first segment is a `PLUGIN_ARTIFACT_ROOTS` dir AND the artifact is absent from `project_dir` AND present under `pluginDir` — closes the cross-root gap where a trusted plugin-tier artifact (e.g. `agents/engineer.md`) absent from `project_dir` under a foreign plugin install was spuriously `hash_unverified`/missing. The committable `project_dir` copy still wins when present (mutation-apply semantics unchanged — this is a READ-path fix only). Untrusted `.canon/` overlay paths never fall back (ADR-0027 trust boundary). `pluginDir` is threaded in as an optional handler param (`attributeFailure(input, pluginDir?)`, `selectMutationTargetsHandler(input, pluginDir?)`), injected from server-state by `register-evolution.ts` — same pattern as `register-agent-teams.ts`. It is NOT a public schema field on either tool's `Input`.
 
 ## Attribution Join Contract (ADR-0024, ADR-0032)
 
