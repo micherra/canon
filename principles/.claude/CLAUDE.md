@@ -40,6 +40,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | command-query-separation.md | Commands and Queries Don't Mix |
 | compose-from-small-to-large.md | Compose UI from Small to Large |
 | consistent-abstraction-levels.md | Each Function Operates at One Abstraction Level |
+| content-addressed-resolver-fail-loud.md | Resolvers Are Content-Addressed and Fail Loud |
 | decompose-by-domain-not-layer.md | Decompose by Business Domain, Not Technical Layer |
 | deep-modules.md | Deep Modules, Simple Interfaces |
 | define-errors-out-of-existence.md | Define Errors Out of Existence |
@@ -67,6 +68,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | minimize-attack-surface.md | Minimize the Attack Surface |
 | minimize-client-side-state.md | Minimize Client-Side State |
 | no-hidden-side-effects.md | No Hidden Side Effects |
+| no-literal-repo-state-counts.md | No Hand-Maintained Literal Repo-State Counts in Long-Lived Docs |
 | normalize-first-denormalize-intentionally.md | Normalize First, Denormalize With Justification |
 | observable-best-effort.md | Best-Effort Operations Must Be Observable |
 | one-behavior-per-test.md | One Behavior Per Test |
@@ -111,7 +113,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 - Principles should be specific and actionable — not aspirational
 - Rules (6): `secrets-never-in-code`, `least-privilege-access`, `fail-closed-by-default`, `validate-at-trust-boundaries`, `refactoring-integrity`, `hooks-fail-closed` (added 2026-05-29 — safety/guard hooks must fail closed on extraction failure or missing tooling; scoped to `hooks/**`). Note: `no-llm-calls-in-mcp-tools` relocated to `.canon/principles/rules/` (Canon-internal, portable: false).
 - Strong opinions cover architecture, testing, error handling, data flow
-- Conventions cover naming, file organization, test structure (20 total in `principles/conventions/`; 25 Canon-internal conventions in `.canon/principles/conventions/`, portable: false)
+- Conventions cover naming, file organization, test structure (25 total in `principles/conventions/` — `ls principles/conventions/*.md | wc -l`; 37 Canon-internal conventions in `.canon/principles/conventions/`, portable: false — `ls .canon/principles/conventions/*.md | wc -l`)
 - `accumulator-test-coverage` (added 2026-05-16) — accumulator functions in `mcp-server/**` require at least one test case with N>1 input and exact numeric assertion; capped accumulators require below-cap, at-cap, and above-cap cases
 - `source-shared-hook-helpers` (added 2026-05-29) — hooks that parse Claude Code `tool_input` JSON must source `hooks/lib/canon-hook-lib.sh` and use `canon_extract_command`; no inlined extraction expressions; scoped to `hooks/**`
 - `hooks-observable-failures` (added 2026-05-29) — bare silent swallows (`|| true`, `2>/dev/null`) in `hooks/**` must carry a justifying comment, emit `CANON WARNING:` to stderr, or exit non-zero; the `hooks/**`-scoped sibling of `observable-best-effort` at convention severity (see decision quality-coverage-01); scoped to `hooks/**`

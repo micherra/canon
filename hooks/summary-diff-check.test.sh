@@ -391,6 +391,114 @@ run_checker_with_output 2 "PHANTOM-CLAIM (symbol): phantomCamelCase" \
   "fabricated camelCase symbol absent from diff → still exit 2 (guard intact)"
 
 # ---------------------------------------------------------------------------
+# TC10: WORKTREE_PATH ARG HONORED — hook invoked from the WRONG CWD (a main
+# tree whose HEAD hasn't advanced) but given the real change via the trailing
+# worktree_path arg → produces the CORRECT result (PASS), proving -C makes
+# CWD irrelevant. Mirrors PROBE-FINDINGS.md Probe 1.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- worktree_path arg honored from wrong CWD (regression: watch_CCCCCCCCCCCC2) --"
+
+WT10_MAIN="$TMP_DIR/wt10-main"
+mkdir -p "$WT10_MAIN"
+git -C "$WT10_MAIN" init -q
+git -C "$WT10_MAIN" config user.email "test@example.com"
+git -C "$WT10_MAIN" config user.name "Test User"
+git -C "$WT10_MAIN" config commit.gpgsign false
+echo "base" > "$WT10_MAIN/base.txt"
+git -C "$WT10_MAIN" add base.txt
+git -C "$WT10_MAIN" commit -q -m "base"
+BASE10=$(git -C "$WT10_MAIN" rev-parse HEAD)
+
+WT10_LINKED="$TMP_DIR/wt10-linked"
+git -C "$WT10_MAIN" worktree add -q -b wt10-branch "$WT10_LINKED" HEAD
+
+mkdir -p "$WT10_LINKED/hooks"
+echo "// added: hooks/real-file10.sh" > "$WT10_LINKED/hooks/real-file10.sh"
+git -C "$WT10_LINKED" add hooks/real-file10.sh
+git -C "$WT10_LINKED" commit -q -m "add real file"
+
+SUMMARY10="$TMP_DIR/summary10.md"
+build_summary \
+  "| \`hooks/real-file10.sh\` | added | real |" \
+  "Added real content." \
+  > "$SUMMARY10"
+
+# Run FROM the main tree (wrong CWD, HEAD == BASE10 there) WITH the linked
+# worktree passed as worktree_path.
+actual_exit=0
+output=$(cd "$WT10_MAIN" && bash "$CHECKER" "$SUMMARY10" "$BASE10" "$WT10_LINKED" 2>&1) || actual_exit=$?
+if [[ "$actual_exit" -eq 0 ]]; then
+  echo "  PASS: worktree_path arg makes CWD irrelevant (correct PASS from wrong CWD)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: worktree_path arg honored"
+  echo "        expected exit=0, got exit=$actual_exit"
+  echo "        output: $output"
+  FAIL=$((FAIL + 1))
+fi
+
+# Sanity baseline: WITHOUT worktree_path, the same invocation from the wrong
+# CWD reproduces the pre-existing false-phantom bug — proving the arg made
+# the real difference.
+baseline_exit=0
+(cd "$WT10_MAIN" && bash "$CHECKER" "$SUMMARY10" "$BASE10") >/dev/null 2>&1 || baseline_exit=$?
+if [[ "$baseline_exit" -eq 2 ]]; then
+  echo "  PASS: without worktree_path, wrong CWD reproduces the false-phantom bug (baseline)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: expected the no-arg wrong-CWD baseline to reproduce phantom (exit 2), got $baseline_exit"
+  FAIL=$((FAIL + 1))
+fi
+
+git -C "$WT10_MAIN" worktree remove --force "$WT10_LINKED" >/dev/null 2>&1 || true
+
+# ---------------------------------------------------------------------------
+# TC11: BACKWARD-COMPAT — worktree_path arg absent, invoked from the correct
+# worktree CWD → identical behavior to before (PASS). Confirms no regression.
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- backward-compat: worktree_path absent, correct CWD (should PASS) --"
+
+REPO11="$TMP_DIR/repo11"
+setup_diff_repo "$REPO11" "hooks/file-d.sh"
+BASE11=$(git -C "$REPO11" rev-parse HEAD~1)
+
+SUMMARY11="$TMP_DIR/summary11.md"
+build_summary \
+  "| \`hooks/file-d.sh\` | added | clean |" \
+  "Added some content." \
+  > "$SUMMARY11"
+
+run_checker 0 "$REPO11" "$SUMMARY11" "$BASE11" \
+  "backward-compat: no worktree_path arg → unchanged behavior (exit 0)"
+
+# ---------------------------------------------------------------------------
+# TC12: INVALID worktree_path — non-existent directory → fail-closed exit 2
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- invalid worktree_path (non-directory) → fail-closed exit 2 --"
+
+REPO12="$TMP_DIR/repo12"
+setup_diff_repo "$REPO12" "hooks/file-e.sh"
+BASE12=$(git -C "$REPO12" rev-parse HEAD~1)
+
+SUMMARY12="$TMP_DIR/summary12.md"
+build_summary "| \`hooks/file-e.sh\` | added | x |" "Added content." > "$SUMMARY12"
+
+actual_exit=0
+output=$(cd "$REPO12" && bash "$CHECKER" "$SUMMARY12" "$BASE12" "/nonexistent/worktree/path" 2>&1) || actual_exit=$?
+if [[ "$actual_exit" -eq 2 ]] && echo "$output" | grep -qF "CANON: summary-diff-check failed-closed — worktree_path not a directory"; then
+  echo "  PASS: invalid worktree_path → fail-closed exit 2 with message"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: invalid worktree_path handling"
+  echo "        expected exit=2 with failed-closed message, got exit=$actual_exit"
+  echo "        output: $output"
+  FAIL=$((FAIL + 1))
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

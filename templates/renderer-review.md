@@ -562,6 +562,10 @@ null-safe `escapeHtml` form noted there). Do NOT redefine or re-implement them h
 
 Color constants, CSS property values, and numeric values do not need escaping.
 
+## Composition Protocol
+
+**Write incrementally (watch_KKKKKK1)**: after completing MCP tool calls, write each major section to the output file before beginning the next — write the `<head>` block first, then each file-card / content section, then the graph section, then close the document. Do NOT compose the full HTML string in context and Write once: if the session times out before the Write call, the artifact is lost. A partial artifact on disk is recoverable; one that never reached Write is not.
+
 ## Step 8 — Write output
 
 NEVER echo the HTML or large content into your response — compose it and write directly to the output path; if large, write then Edit-append. Echoing the artifact will exceed the output-token limit and fail the render.

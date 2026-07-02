@@ -33,6 +33,12 @@ complaints, observed failures, metrics showing the gap, or explicit user request
 
 ## Acceptance Criteria
 
+<!-- VERIFICATION NOTE (sug_MMMMM2): Any AC asserting current system behavior ("X already blocks Y",
+     "the hook currently passes Z") MUST be verified empirically — probe the code, run the test, or
+     read the file — before finalizing. Memory-based current-behavior claims frequently misstate it
+     (especially hook behavior). If unverified, mark UNVERIFIED and task the architect with
+     confirmation before scoping. -->
+
 | # | Criterion | Verification | Type |
 |---|-----------|--------------|------|
 | 1 | {What must be true when this build is done} | {How to verify — automated test, manual check, or metric} | mechanical \| manual |

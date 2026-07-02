@@ -219,6 +219,10 @@ For each hunk in the diff, inspect the enclosing function for the following bug 
 
 For every deleted line, name the invariant or behavior it enforced, then search the new code for where that invariant is re-established. If you cannot find it, that is a finding. (This is distinct from Stage 4 drift, which audits changed *files*, not deleted *behavior*.)
 
+**Realpath seam check (watch_NNNNN3)**: For any new code path that compares or maps on a filesystem path from an external source, verify the path is normalized via `fs.realpath`, not `path.resolve`. Flag `resolve()` at a NEW path-comparison seam (map key / equality / prefix match) fed by an external source as a `correctness-scan` finding (`severity: "strong-opinion"` → WARNING) when a sibling seam in the same module uses `fs.realpath`.
+
+**Cold-start & subprocess test audit (watch_TTTTTT1, watch_VVVVVV1)**: audit new or touched test files for explicit timeout on cold-start tests (KG scanner, DB connection, git subprocess, full-project scan) and absolute-bin `execFileSync` for subprocess-invoking tests — see `[[tests-are-deterministic]]`.
+
 ### Serialization
 
 Correctness findings are written into the `write_review` `violations[]` array using the reserved `principle_id: "correctness-scan"`:
@@ -288,6 +292,10 @@ Output format — list findings as advisory items:
 - `path:line` — {behavior}: {why it is non-obvious}
 
 **Deduplication rule**: If a gotcha is already flagged as a Stage 1 principle violation (e.g., `explicit-contracts`, `errors-are-values`, `naming-reveals-intent`), do NOT duplicate it here. This axis covers behavior that falls outside loaded principle scope.
+
+#### Literal Repo-State Counts (watch_NNNNNN1)
+
+When the diff adds or modifies a `.md` file that persists across releases (protocol files, agent definitions, public README), scan for a bare literal integer describing a count of living repo objects (files matching a glob, principles, hooks, stages, ADRs) with no mechanical link to its source of truth. Flag as an advisory finding under `literal-repo-state-count` — see `[[no-literal-repo-state-counts]]`.
 
 #### Test Quality — Interaction-Only Tests
 
@@ -818,7 +826,7 @@ Based on the most severe finding across all six stages:
 | Verdict | Condition | Effect |
 |---------|-----------|--------|
 | **BLOCKING** | Any `rule`-severity violation | Build must stop |
-| **WARNING** | `strong-opinion` violations, Stage 2/4 WARNINGs, Stage 6 scope-parity WARNINGs, no `rule` violations | Build proceeds, address violations |
+| **WARNING** | `strong-opinion` violations, Stage 1.5 realpath-seam WARNINGs, Stage 2/4 WARNINGs, Stage 6 scope-parity WARNINGs, no `rule` violations | Build proceeds, address violations |
 | **CLEAN** | No violations, or only `convention`-level | Build proceeds |
 
 **Before assigning the verdict:**

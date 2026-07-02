@@ -82,6 +82,16 @@ test("debounce calls handler after delay", () => {
 });
 ```
 
+## Cold-start tests need explicit timeouts (watch_TTTTTT1)
+
+Any test that initializes a KG scanner, database connection, git subprocess, or full-project scan from cold state should set an explicit per-test timeout (`{ timeout: 30_000 }`) instead of relying on vitest's 5-second default. That default is calibrated for pre-warmed, in-process unit tests — cold-start initialization is fundamentally slower and its cost varies with host load and merge-time parallel-runner pressure, not just the code under test.
+
+A test that is green at authoring time but sits close to the default timeout is a latent flakiness vector: it stays green until a later, unrelated change (a base-branch merge adding parallel test files, a busier CI runner) tips it over. Placing an expensive cold-start test first in a file — before the process is warm — makes this worse, since its measured cost is a function of system state at that moment. Reference fix: PR #325/#349.
+
+## Subprocess path-determinism in vitest (watch_VVVVVV1)
+
+When a test invokes an external CLI (`depcruise`, `eslint`, `tsc`), use `execFileSync` with an absolute `node_modules/.bin/<binary>` path, an explicit `cwd` (the package root), absolute config/src paths, and an explicit `{ timeout }` (~25_000ms) — not `npm run <script>`. `npm run` spawns a sub-shell that resolves the binary from the ambient PATH, which is non-deterministic when vitest spawns parallel worker threads or when the runner's cwd differs from the package root: the same test can pass in isolation and fail under full-suite parallel load. Reference fix: `ddd-alignment-integration.test.ts`, PR #357.
+
 ## Exceptions
 
 Performance benchmarks and load tests are inherently non-deterministic — they measure timing, not correctness. These should be clearly separated from the deterministic test suite (e.g., in a `benchmarks/` directory) and should use statistical thresholds rather than exact assertions. Randomized property-based tests (e.g., fast-check) are acceptable when they use a fixed seed for reproducibility.
@@ -99,6 +109,8 @@ Performance benchmarks and load tests are inherently non-deterministic — they 
 
 - [ ] No `Date.now()` or `new Date()` calls in test files — grep for `Date.now()` and `new Date()` in `**/*.test.*` and `**/*.spec.*` files. Each match should use an injected clock, not the real clock.
 - [ ] No real `setTimeout` or `setInterval` in tests without fake timers — grep for `setTimeout(` in test files and confirm each is either wrapped in `vi.useFakeTimers()` / `jest.useFakeTimers()` or is an explicit integration test in a `benchmarks/` directory.
+- [ ] Cold-start tests (KG scanner, DB connection, git subprocess, full-project scan from cold state) carry an explicit `{ timeout: 30_000 }` rather than relying on the vitest default.
+- [ ] Tests invoking an external CLI use `execFileSync` with an absolute `node_modules/.bin/<binary>` path and explicit `cwd`, not `npm run <script>`.
 
 ## Related
 

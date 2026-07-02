@@ -554,6 +554,10 @@ null-safe `escapeHtml` form noted there). Do NOT redefine or re-implement it her
 the build-time content escaper only; the runtime `escHtml` helper inside the Canvas force-sim
 script in Step 4.5 is a separate, page-embedded function and is unaffected.)
 
+## Composition Protocol
+
+**Write incrementally (watch_KKKKKK1)**: after completing MCP tool calls, write each major section to the output file before beginning the next — write the `<head>` block first, then each file-card / content section, then the graph section, then close the document. Do NOT compose the full HTML string in context and Write once: if the session times out before the Write call, the artifact is lost. A partial artifact on disk is recoverable; one that never reached Write is not.
+
 ## Step 6 — Write output
 
 NEVER echo the HTML or large content into your response — compose it and write directly to the output path; if large, write then Edit-append. Echoing the artifact will exceed the output-token limit and fail the render.

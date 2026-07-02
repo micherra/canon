@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.16.0](https://github.com/micherra/canon/compare/v2.15.0...v2.16.0) (2026-07-02)
+
+
+### Features
+
+* **evolution:** agent-definition-body provenance seam + review-violation code-author join + frontmatter guard (trace-driven-evolution Phase 2) ([#438](https://github.com/micherra/canon/issues/438)) ([8b4a073](https://github.com/micherra/canon/commit/8b4a07373e934612c6d00969b509d0b367f2d89c))
+* **hooks:** shell-CI-parity verify gate — execute hook test suites locally (watch_BBBBBBBBB1) ([#434](https://github.com/micherra/canon/issues/434)) ([4c6da9d](https://github.com/micherra/canon/commit/4c6da9dae345734f211feac55eed2793cbeade4b))
+* **knowledge:** search_knowledge tool + doc-vector index (KG schema v6, R2 keystone) ([#435](https://github.com/micherra/canon/issues/435)) ([dfbd4c8](https://github.com/micherra/canon/commit/dfbd4c85fe39d9169991eff037498362e169fcf1))
+* **learner:** M1 success-pattern learner — positive-signal mining (AgentKB R4) ([#437](https://github.com/micherra/canon/issues/437)) ([09ed7ce](https://github.com/micherra/canon/commit/09ed7cec3cc60e7b77a31f140cc8b1a197aaef1c))
+* **loops:** ship-watch auto-enable-merge consumer — arm squash auto-merge on CI-green ([#440](https://github.com/micherra/canon/issues/440)) ([5445291](https://github.com/micherra/canon/commit/5445291c6543525d66326073a1f2002b60f19748))
+* **principles:** promote 12 threshold-met learnings — 3 conventions + diff-hook worktree_path fix + protocol clauses ([#441](https://github.com/micherra/canon/issues/441)) ([1d946e3](https://github.com/micherra/canon/commit/1d946e31978b39df7d8954bdeac35554828b5c18))
+* **workflows:** Inc 0 — canon-probe canary + node-AST workflows/ CI lint ([#431](https://github.com/micherra/canon/issues/431)) ([76612f3](https://github.com/micherra/canon/commit/76612f3943a322c7a176a961a18f5e1fafb5e02a))
+
+
+### Bug Fixes
+
+* **diagnostics:** drift-report most_violated blind to resolved violations (sug_KKKKKK1) ([#439](https://github.com/micherra/canon/issues/439)) ([2198c49](https://github.com/micherra/canon/commit/2198c496c7529e546261678ab02ca0643fb0df96))
+* **security:** resolve 11 open CodeQL code-scanning alerts + add code-scanning-autofix routine ([#436](https://github.com/micherra/canon/issues/436)) ([c46e10a](https://github.com/micherra/canon/commit/c46e10a1143bd51adb44486c659b05416b512b7f))
+
 ## [2.15.0](https://github.com/micherra/canon/compare/v2.14.0...v2.15.0) (2026-06-30)
 
 
