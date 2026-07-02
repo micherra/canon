@@ -214,6 +214,10 @@ describe("cliff_event exact step join", () => {
   });
 });
 
+// NOTE: agent-def attribution edges (cliff_event -> agent-def, TASK-001; review_violation ->
+// agent-def code-author join, TASK-002) live in attribution-join-agent-def.test.ts (split for
+// the 600-line file cap).
+
 // ---------------------------------------------------------------------------
 // 3. Multi-step ambiguous review_violation
 // ---------------------------------------------------------------------------

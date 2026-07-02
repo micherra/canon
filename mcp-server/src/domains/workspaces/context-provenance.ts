@@ -2,20 +2,30 @@
  * Context Provenance — types and pure builder helpers.
  *
  * This file is PURE: types + pure functions only. No I/O, no DB, no store import.
- * Import only `node:crypto`.
+ * Import only `node:crypto` and `splitFrontmatter` from `@shared/lib/frontmatter.ts`
+ * (also pure — no I/O; ADR-0031).
  *
  * Design: ADR-0018 — spans are computed against the POST-disclosure final preload_prompt;
  * content_hash is computed from PRE-disclosure content (the real artifact wording).
  * These two facts answer different questions and come from different stages intentionally.
+ *
+ * Agent-def provenance (ADR-0031): the "agent-def" kind hashes the WHOLE agent file
+ * (frontmatter included) so drift detection stays honest, while `sections` — the
+ * mutable-scope granularity — cover the body ONLY. Frontmatter is excluded from every
+ * section span by construction (offsets start at frontmatterEnd or later).
  */
 
 import { createHash } from "node:crypto";
+import { splitFrontmatter } from "@shared/lib/frontmatter.ts";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type ProvenanceArtifactKind = "rule" | "ref" | "primer" | "template";
+export type ProvenanceArtifactKind = "rule" | "ref" | "primer" | "template" | "agent-def";
+
+/** A body-relative (whole-file-offset) markdown ATX-heading section span. */
+export type SectionSpan = { heading: string; span: [number, number] };
 
 /**
  * Trust tier for assembled artifacts.
@@ -40,6 +50,7 @@ export type AssembledArtifact = {
   source?: "sidecar"; // present iff blanked by progressive disclosure
   sidecar_path?: string; // = full_data_path; present iff source === "sidecar"
   trust_tier: ArtifactTrustTier; // required — declares the provenance trust boundary
+  sections?: SectionSpan[]; // populated only for kind:"agent-def" — body-only mutable spans
 };
 
 export type ContextProvenanceRecord = {
@@ -73,6 +84,72 @@ export function hashContent(s: string): string {
   return createHash("sha256").update(s, "utf-8").digest("hex");
 }
 
+/** Matches an ATX heading line (1-6 `#` followed by a space/tab), per line. */
+const ATX_HEADING_RE = /^#{1,6}[ \t].*$/gm;
+
+/**
+ * Split an agent-def file's BODY into markdown ATX-heading sections. Pure, no I/O.
+ *
+ * - Frontmatter is split off via `splitFrontmatter` (same fence semantics as every other
+ *   frontmatter call site); `frontmatterEnd` is the whole-file char offset where the body
+ *   begins. Every returned section span starts at or after `frontmatterEnd` by construction.
+ * - The body is split on ATX headings (`^#{1,6}\s`); each section spans from its heading
+ *   to the next heading (or EOF). Leading pre-heading preamble becomes one section with
+ *   `heading: ""`. An empty body yields no sections.
+ * - Fail-open: malformed frontmatter YAML never throws — returns no sections (empty).
+ *   The body boundary is unknown in that case, so no fallback span is emitted; any
+ *   fallback span would risk overlapping the frontmatter fence.
+ */
+export function computeBodySections(fullFile: string): {
+  frontmatterEnd: number;
+  sections: SectionSpan[];
+} {
+  let body: string;
+  try {
+    body = splitFrontmatter(fullFile).body;
+  } catch {
+    // Malformed frontmatter YAML: we cannot determine where the body begins.
+    // Falling back to body = fullFile would make frontmatterEnd 0, and the
+    // no-headings fallback below would then emit a [0, fullFile.length) section —
+    // a "mutable" span that INCLUDES the frontmatter fence, violating the
+    // "frontmatter excluded from every section span" invariant. Fail open with
+    // no sections instead of a span that overlaps the fence.
+    return { frontmatterEnd: fullFile.length, sections: [] };
+  }
+  const frontmatterEnd = fullFile.length - body.length;
+
+  const headings: Array<{ index: number; text: string }> = [];
+  ATX_HEADING_RE.lastIndex = 0;
+  let match: RegExpExecArray | null = ATX_HEADING_RE.exec(body);
+  while (match !== null) {
+    headings.push({ index: match.index, text: match[0] });
+    match = ATX_HEADING_RE.exec(body);
+  }
+
+  const sections: SectionSpan[] = [];
+  if (headings.length === 0) {
+    if (body.length > 0) {
+      sections.push({ heading: "", span: [frontmatterEnd, frontmatterEnd + body.length] });
+    }
+    return { frontmatterEnd, sections };
+  }
+
+  if (headings[0].index > 0) {
+    sections.push({ heading: "", span: [frontmatterEnd, frontmatterEnd + headings[0].index] });
+  }
+
+  for (let i = 0; i < headings.length; i++) {
+    const start = headings[i].index;
+    const end = i + 1 < headings.length ? headings[i + 1].index : body.length;
+    sections.push({
+      heading: headings[i].text.trim(),
+      span: [frontmatterEnd + start, frontmatterEnd + end],
+    });
+  }
+
+  return { frontmatterEnd, sections };
+}
+
 /**
  * Build a ContextProvenanceRecord from resolved skills.
  *
@@ -101,46 +178,27 @@ export function buildContextProvenanceRecord(input: {
     blanked: boolean;
     trust_tier?: ArtifactTrustTier; // defaults to "trusted" when omitted
   }>;
+  /** The agent-def body already read at the spawn seam (resolve_agent_skills). Optional. */
+  agentDef?: { path: string; fullFile: string };
 }): ContextProvenanceRecord {
-  const { workspace, stepId, agentName, spawnedAt, finalPreloadPrompt, sidecarPath, skills } =
-    input;
+  const {
+    workspace,
+    stepId,
+    agentName,
+    spawnedAt,
+    finalPreloadPrompt,
+    sidecarPath,
+    skills,
+    agentDef,
+  } = input;
 
-  const assembled_artifacts: AssembledArtifact[] = skills.map((skill) => {
-    // content_hash from PRE-disclosure original content — always, even when blanked
-    const content_hash = hashContent(skill.originalContent);
+  const assembled_artifacts: AssembledArtifact[] = skills.map((skill) =>
+    buildSkillArtifact(skill, finalPreloadPrompt, sidecarPath),
+  );
 
-    const trust_tier: ArtifactTrustTier = skill.trust_tier ?? "trusted";
-
-    if (skill.blanked) {
-      // Blanked by progressive disclosure: span is null; wording lives in the sidecar file
-      const artifact: AssembledArtifact = {
-        char_span: null,
-        content_hash,
-        id: skill.id,
-        kind: skill.kind,
-        path: skill.path,
-        sidecar_path: sidecarPath,
-        source: "sidecar",
-        trust_tier,
-      };
-      return artifact;
-    }
-
-    // Locate the span in the POST-disclosure final prompt (errors-are-values: no throw)
-    const start = finalPreloadPrompt.indexOf(skill.inContextText);
-    const char_span: [number, number] | null =
-      start === -1 ? null : [start, start + skill.inContextText.length];
-
-    const artifact: AssembledArtifact = {
-      char_span,
-      content_hash,
-      id: skill.id,
-      kind: skill.kind,
-      path: skill.path,
-      trust_tier,
-    };
-    return artifact;
-  });
+  if (agentDef) {
+    assembled_artifacts.push(buildAgentDefArtifact(agentDef));
+  }
 
   return {
     agent_id: null, // back-filled later by log_step
@@ -151,4 +209,75 @@ export function buildContextProvenanceRecord(input: {
     step_id: stepId,
     workspace,
   };
+}
+
+/** Build one AssembledArtifact for a resolved skill (rule/ref/primer/template). */
+function buildSkillArtifact(
+  skill: {
+    kind: ProvenanceArtifactKind;
+    id: string;
+    path: string;
+    originalContent: string;
+    inContextText: string;
+    blanked: boolean;
+    trust_tier?: ArtifactTrustTier;
+  },
+  finalPreloadPrompt: string,
+  sidecarPath: string | undefined,
+): AssembledArtifact {
+  // content_hash from PRE-disclosure original content — always, even when blanked
+  const content_hash = hashContent(skill.originalContent);
+  const trust_tier: ArtifactTrustTier = skill.trust_tier ?? "trusted";
+
+  if (skill.blanked) {
+    // Blanked by progressive disclosure: span is null; wording lives in the sidecar file
+    return {
+      char_span: null,
+      content_hash,
+      id: skill.id,
+      kind: skill.kind,
+      path: skill.path,
+      sidecar_path: sidecarPath,
+      source: "sidecar",
+      trust_tier,
+    };
+  }
+
+  // Locate the span in the POST-disclosure final prompt (errors-are-values: no throw)
+  const start = finalPreloadPrompt.indexOf(skill.inContextText);
+  const char_span: [number, number] | null =
+    start === -1 ? null : [start, start + skill.inContextText.length];
+
+  return {
+    char_span,
+    content_hash,
+    id: skill.id,
+    kind: skill.kind,
+    path: skill.path,
+    trust_tier,
+  };
+}
+
+/**
+ * Build the single agent-def AssembledArtifact. Whole-file hash (frontmatter included —
+ * Finding 5: keeps readCurrentBody byte-identity untouched); `sections` cover the BODY
+ * only (frontmatter excluded by construction).
+ */
+function buildAgentDefArtifact(agentDef: { path: string; fullFile: string }): AssembledArtifact {
+  const { sections } = computeBodySections(agentDef.fullFile);
+  return {
+    char_span: null, // body not part of preload_prompt — never indexOf against it
+    content_hash: hashContent(agentDef.fullFile),
+    id: agentIdFromPath(agentDef.path),
+    kind: "agent-def",
+    path: agentDef.path,
+    sections,
+    trust_tier: "trusted",
+  };
+}
+
+/** Derive the agent name (artifact id) from an `agents/<name>.md` path. No I/O. */
+function agentIdFromPath(path: string): string {
+  const base = path.split(/[\\/]/).pop() ?? path;
+  return base.endsWith(".md") ? base.slice(0, -3) : base;
 }

@@ -15,10 +15,10 @@
  */
 
 import { readFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
+import { resolveArtifactReadPath } from "../services/artifact-path-resolver.ts";
 import {
   collectArchivedFailureSources,
   collectFailureSources,
@@ -64,10 +64,17 @@ type AttributeFailureInput = z.input<typeof AttributeFailureInputSchema>;
  * attribute_failure — main handler.
  *
  * Wires: provenance source → failure sources → pure join → ToolResult.
- * readCurrentBody seam reads artifact bodies from project_dir (fail-open: null on missing).
+ * readCurrentBody seam reads artifact bodies via resolveArtifactReadPath
+ * (project_dir-first, pluginDir-fallback for trusted plugin-tier artifacts;
+ * fail-open: null on missing).
+ *
+ * @param pluginDir - Optional absolute plugin root; injected from server-state by
+ *   register-evolution.ts so a trusted plugin-tier artifact absent from project_dir
+ *   (foreign plugin install) is still found. Not a public schema field.
  */
 export async function attributeFailure(
   input: AttributeFailureInput,
+  pluginDir?: string,
 ): Promise<ToolResult<AttributeFailureResult>> {
   const { workspace, archive_id, project_dir } = input;
 
@@ -100,15 +107,13 @@ export async function attributeFailure(
     ? collectFailureSources(workspace, project_dir)
     : collectArchivedFailureSources(archive_id!, project_dir);
 
-  // 3. readCurrentBody seam — reads artifact from project_dir, fail-open
-  // Honor absolute paths: when provenance records an absolute path (e.g. from
-  // resolve_agent_skills using pluginDir), use it directly. Relative paths are
-  // joined with project_dir. join(project_dir, absolutePath) would yield an
-  // incorrect nested path (e.g. /tmp/proj//absolute/path).
+  // 3. readCurrentBody seam — reads artifact via the cross-root resolver, fail-open.
+  // Absolute provenance paths are honored as-is; relative paths resolve project_dir
+  // first, then fall back to pluginDir for a trusted plugin-tier artifact absent
+  // from project_dir (foreign plugin install). Overlay (.canon/) never falls back.
   const readCurrentBody = (artifactPath: string): string | null => {
     try {
-      const resolved = isAbsolute(artifactPath) ? artifactPath : join(project_dir, artifactPath);
-      return readFileSync(resolved, "utf-8");
+      return readFileSync(resolveArtifactReadPath(artifactPath, project_dir, pluginDir), "utf-8");
     } catch {
       return null;
     }
