@@ -2,8 +2,12 @@
 # shell-test-gate.sh — Shell-CI parity gate.
 #
 # Invoked by the verify contract (not as a hooks.json PreToolUse hook).
-# Signature: bash hooks/shell-test-gate.sh <base_commit>
-# Run from the worktree root.
+# Signature: bash hooks/shell-test-gate.sh <base_commit> [worktree_path]
+# Run from the worktree root, OR pass the worktree as the optional trailing
+# worktree_path arg — the git diff scope check resolves via `git -C
+# "$worktree_path"`, and the hooks/**/*.test.sh enumeration resolves under it
+# too, making CWD irrelevant (watch_CCCCCCCCCCCC2). Absent → current
+# CWD-relative behavior (backward-compatible).
 #
 # When any hooks/**/*.sh or *.mjs file changed in base..HEAD, executes the
 # full hooks/**/*.test.sh suite set that CI's `shell` job runs, aggregating
@@ -33,16 +37,34 @@
 set -euo pipefail
 
 BASE_COMMIT="${1:-}"
+WORKTREE_PATH="${2:-}"
 
 # ---------------------------------------------------------------------------
 # Argument validation (fail-closed)
 # ---------------------------------------------------------------------------
 if [[ -z "$BASE_COMMIT" ]]; then
-  echo "CANON: shell-test-gate failed-closed — usage: shell-test-gate.sh <base_commit>" >&2
+  echo "CANON: shell-test-gate failed-closed — usage: shell-test-gate.sh <base_commit> [worktree_path]" >&2
   exit 2
 fi
 
-if ! git rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
+if [[ -n "$WORKTREE_PATH" ]] && [[ ! -d "$WORKTREE_PATH" ]]; then
+  echo "CANON: shell-test-gate failed-closed — worktree_path not a directory: $WORKTREE_PATH" >&2
+  exit 2
+fi
+
+# GIT_C prefixes every internal git call with -C "$WORKTREE_PATH" when set,
+# making CWD irrelevant; empty (CWD-relative) when unset. Bash 3.2-safe empty
+# array expansion (house idiom — see push-to-main-guard.sh contract).
+# WORKTREE_PREFIX resolves the hooks/**/*.test.sh enumeration under the same
+# worktree — `git -C` only repoints git's own commands, not `find`.
+GIT_C=()
+WORKTREE_PREFIX=""
+if [[ -n "$WORKTREE_PATH" ]]; then
+  GIT_C=(-C "$WORKTREE_PATH")
+  WORKTREE_PREFIX="${WORKTREE_PATH%/}/"
+fi
+
+if ! git "${GIT_C[@]+"${GIT_C[@]}"}" rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
   echo "CANON: shell-test-gate failed-closed — invalid base commit: $BASE_COMMIT" >&2
   exit 2
 fi
@@ -56,7 +78,7 @@ DIFF_OUTPUT=""
 # matches the .sh filter and correctly fires the gate) AND the added
 # destination path.  With default rename detection ON, only the destination
 # path is reported, causing a false no-op when a hook .sh is moved/renamed.
-if ! DIFF_OUTPUT=$(git diff --name-only --no-renames "${BASE_COMMIT}..HEAD" 2>&1); then
+if ! DIFF_OUTPUT=$(git "${GIT_C[@]+"${GIT_C[@]}"}" diff --name-only --no-renames "${BASE_COMMIT}..HEAD" 2>&1); then
   echo "CANON: shell-test-gate failed-closed — git diff failed: $DIFF_OUTPUT" >&2
   exit 2
 fi
@@ -86,7 +108,7 @@ fi
 # (add -L for symlinks or explicit hidden-dir paths as needed).
 # ---------------------------------------------------------------------------
 SUITE_LIST=""
-if ! SUITE_LIST=$(find hooks -type f -name '*.test.sh' 2>&1 | sort); then
+if ! SUITE_LIST=$(find "${WORKTREE_PREFIX}hooks" -type f -name '*.test.sh' 2>&1 | sort); then
   echo "CANON: shell-test-gate failed-closed — find failed: $SUITE_LIST" >&2
   exit 2
 fi
