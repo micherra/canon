@@ -439,10 +439,11 @@ initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named life
 **Lifecycle-hook vocabulary:** `post-ship` | `on-long-dispatch` | `session-start`. At such a moment, call `list_loops({ lifecycle_hook, tier })` and dispatch per loop `firing_posture[tier]` and `mode`.
 
 **Named consumers (one-line each):**
-- `auto-triage-fix`: CLEAR PR-comment/CI defect → dispatch fix flow without asking; AMBIGUOUS → ask first; NEVER auto-merge.
+- `auto-triage-fix`: CLEAR PR-comment/CI defect → dispatch fix flow without asking; AMBIGUOUS → ask first; NEVER auto-merge (that is `auto-enable-merge`'s job).
 - `auto-plugin-update`: fires on `release_tag` — ASK-FIRST, never unattended before running `plugin-update`.
 - `run-learner`: fires on harness-watch `learner_due`; supervised → ask user first; autonomous/light-touch → auto-spawn.
 - `run-evolve`: fires on the `evolve` loop's `evolve_due`; supervised → ask user first; autonomous/light-touch → auto-spawn after a cost-visibility `PushNotification`. Proposals are HITL-gated regardless of tier.
+- `auto-enable-merge`: fires on `ci_conclusion` pending→success while PR OPEN & not-already-armed → orchestrator runs `gh pr merge --auto --squash`; autonomous/light-touch unattended, supervised ASK-FIRST; runner read-only (dc-06).
 
 Read `references/loop-framework.md` BEFORE dispatching any loop or consuming an `ORCHESTRATOR_ACTION` line.
 

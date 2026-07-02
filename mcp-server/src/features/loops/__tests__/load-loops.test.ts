@@ -295,23 +295,50 @@ describe("loadLoopsFromDir — ship-watch orchestrator_action directives", () =>
     expect(rule?.orchestrator_action).toBe("auto-triage-fix");
   });
 
-  it("ci_conclusion transition carries orchestrator_action: auto-triage-fix", async () => {
+  it("ci_conclusion (to: failure) transition carries orchestrator_action: auto-triage-fix", async () => {
     const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
     const shipWatch = result.valid.find((d) => d.id === "ship-watch");
     expect(shipWatch).toBeDefined();
     if (!shipWatch) return;
-    const rule = shipWatch.surface.on_transition.find((r) => r.field === "ci_conclusion");
+    const rule = shipWatch.surface.on_transition.find(
+      (r) => r.field === "ci_conclusion" && r.to === "failure",
+    );
     expect(rule).toBeDefined();
     expect(rule?.orchestrator_action).toBe("auto-triage-fix");
   });
 
-  it("ci_conclusion transition retains terminate: true (AC3 regression guard)", async () => {
+  it("ci_conclusion (to: failure) transition retains terminate: true (AC3 regression guard)", async () => {
     const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
     const shipWatch = result.valid.find((d) => d.id === "ship-watch");
     expect(shipWatch).toBeDefined();
     if (!shipWatch) return;
-    const rule = shipWatch.surface.on_transition.find((r) => r.field === "ci_conclusion");
+    const rule = shipWatch.surface.on_transition.find(
+      (r) => r.field === "ci_conclusion" && r.to === "failure",
+    );
     expect(rule?.terminate).toBe(true);
+  });
+
+  it("ci_conclusion (to: success) transition carries orchestrator_action: auto-enable-merge", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const shipWatch = result.valid.find((d) => d.id === "ship-watch");
+    expect(shipWatch).toBeDefined();
+    if (!shipWatch) return;
+    const rule = shipWatch.surface.on_transition.find(
+      (r) => r.field === "ci_conclusion" && r.to === "success",
+    );
+    expect(rule).toBeDefined();
+    expect(rule?.orchestrator_action).toBe("auto-enable-merge");
+  });
+
+  it("ci_conclusion (to: success) transition does NOT set terminate (keeps watching until resolved)", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const shipWatch = result.valid.find((d) => d.id === "ship-watch");
+    expect(shipWatch).toBeDefined();
+    if (!shipWatch) return;
+    const rule = shipWatch.surface.on_transition.find(
+      (r) => r.field === "ci_conclusion" && r.to === "success",
+    );
+    expect(rule?.terminate).toBeFalsy();
   });
 
   it("release_tag transition carries orchestrator_action: auto-plugin-update", async () => {
