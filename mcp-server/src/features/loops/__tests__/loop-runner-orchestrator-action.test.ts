@@ -105,6 +105,16 @@ describe("runner orchestrator_action surfacing (AC4 — value-agnostic)", () => 
     expect(line).toBe("ORCHESTRATOR_ACTION: run-learner field=learner_due loop=harness-watch");
   });
 
+  it("rule with auto-enable-merge → correct ORCHESTRATOR_ACTION line (ci_conclusion)", () => {
+    const rule: FiredRule = {
+      field: "ci_conclusion",
+      message: "CI is green on the open PR — surfacing auto-enable-merge.",
+      orchestrator_action: "auto-enable-merge",
+    };
+    const line = surfaceLine(rule, "ship-watch");
+    expect(line).toBe("ORCHESTRATOR_ACTION: auto-enable-merge field=ci_conclusion loop=ship-watch");
+  });
+
   it("rule without orchestrator_action → null (no signal line)", () => {
     const rule: FiredRule = {
       field: "ci_conclusion",

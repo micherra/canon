@@ -80,7 +80,8 @@ Loops may attach to these named lifecycle moments:
 
 **`orchestrator_action` on a transition rule (Phase B+):** A transition rule may declare an
 optional `orchestrator_action` field (derive-from-const `z.enum(ORCHESTRATOR_ACTIONS)` with
-members `auto-triage-fix`, `auto-plugin-update`, `run-learner`, and `run-evolve`). This is an
+members `auto-triage-fix`, `auto-plugin-update`, `run-learner`, `run-evolve`, and
+`auto-enable-merge`). This is an
 orchestrator-consumed signal — the loop/runner NEVER executes it. The runner surfaces a
 structured `ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>` line when the transition
 fires; the orchestrator reads and acts on it. See CLAUDE.md § Loop Framework, "Consuming

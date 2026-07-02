@@ -4,10 +4,10 @@ description: >-
   Full Canon loop dispatch framework. Covers command registration, resilient
   dispatch, lifecycle-hook vocabulary and code, phase history, post-ship tap,
   session-start tap, non-declarative invariant, orchestrator_action consumption,
-  and the four named consumers (auto-triage-fix, auto-plugin-update, run-learner, run-evolve).
+  and the five named consumers (auto-triage-fix, auto-plugin-update, run-learner, run-evolve, auto-enable-merge).
 ---
 
-# Loop Framework <!-- last-updated: 2026-06-22 -->
+# Loop Framework <!-- last-updated: 2026-07-01 -->
 
 <!-- Managed by Canon. Manual edits are preserved. -->
 
@@ -95,7 +95,8 @@ orchestrator consumes, NOT something the loop or the loop-tick runner executes. 
    to the build branch) WITHOUT asking first.
 3. If AMBIGUOUS / a question / design-level pushback → surfaces with a proposed approach and
    ASKS first.
-4. NEVER auto-merges the PR.
+4. NEVER auto-merges the PR (arming auto-merge is the separate, CI-green-gated
+   `auto-enable-merge` consumer's job, not auto-triage-fix's).
 
 **`auto-plugin-update`** (fires on the `release_tag` transition): **ASK-FIRST, never unattended.**
 On a release tag being cut:
@@ -126,3 +127,19 @@ runner, and the dispatch never invoke a model). dc-06 holds: the `evolve` loop o
 `ORCHESTRATOR_ACTION: run-evolve field=evolve_due loop=evolve`; the orchestrator spawns the
 learner. NO contract change to `select_mutation_targets`, `evaluate_candidate`,
 `attribute_failure`, or `context_provenance` — consumed as-is.
+
+**`auto-enable-merge`** (fires on the `ship-watch` `ci_conclusion` `pending → success`
+transition, while the PR is OPEN and auto-merge is not already enabled):
+1. Read-only precheck: `gh pr view <pr> --json state,autoMergeRequest`.
+2. Guard (idempotent + scoped): proceed only if `state === "OPEN"` AND `autoMergeRequest` is
+   null (not already armed). Else no-op — do not retry the same tick.
+3. Tier gate: under `autonomous`/`light-touch`, run `gh pr merge <pr> --auto --squash`
+   unattended. Under `supervised`, ASK the user first (AskUserQuestion); run only on
+   confirmation.
+4. Squash only — no merge-commit or rebase mode. GitHub branch protection still gates the
+   actual merge; arming is safe even under contention.
+This consumer does NOT merge on CI red, does NOT fire on the loop's first tick (ADR-0002
+baseline-only), and does NOT retroactively arm prior PRs. dc-06 holds: `ship-watch` only
+surfaces `ORCHESTRATOR_ACTION: auto-enable-merge field=ci_conclusion loop=ship-watch`;
+`guardrails.mutates_build` stays `false` and no mutating `gh` is on the loop's
+`observe.shell_commands` allowlist — the orchestrator does the mutation, not the runner.
