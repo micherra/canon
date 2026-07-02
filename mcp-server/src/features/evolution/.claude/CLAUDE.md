@@ -5,10 +5,12 @@
 ## Purpose
 
 The `evolution/` feature module implements Canon's trace-driven evolution
-pipeline (Phase 1). It provides three MCP tools:
+pipeline (Phase 1). It provides five MCP tools:
 - `evaluate_candidate` — offline fitness gate (§7 strict-holdout, ADR-0022/ADR-0025 dual injection)
 - `attribute_failure` — attribution consumer: joins recorded `context_provenance` with review violations + cliff events to localize each failure to the in-context artifact (ADR-0024)
 - `select_mutation_targets` — deterministic (no model calls) selection layer: composes `attribute_failure`, applies policy + budget, returns construction-ready `MutationTarget[]` for the learner
+- `record_applied_evolution` — authoritative/fail-closed apply-provenance write to drift.db `applied_evolutions` (ADR-0034)
+- `get_evolution_outcomes` — fail-open, target-scoped, apply-anchored regression HYPOTHESIS reader
 
 All tools are **offline** — never called on the build hot path.
 
@@ -189,6 +191,42 @@ return empty output.
 
 **Cross-root artifact re-read (`resolveArtifactReadPath`, `services/artifact-path-resolver.ts`, Codex P2 #1):** both `attribute_failure`'s `readCurrentBody` seam and `select_mutation_targets`' baseline-body read resolve provenance paths project_dir-first, falling back to `pluginDir` when the path's first segment is a `PLUGIN_ARTIFACT_ROOTS` dir AND the artifact is absent from `project_dir` AND present under `pluginDir` — closes the cross-root gap where a trusted plugin-tier artifact (e.g. `agents/engineer.md`) absent from `project_dir` under a foreign plugin install was spuriously `hash_unverified`/missing. The committable `project_dir` copy still wins when present (mutation-apply semantics unchanged — this is a READ-path fix only). Untrusted `.canon/` overlay paths never fall back (ADR-0027 trust boundary). `pluginDir` is threaded in as an optional handler param (`attributeFailure(input, pluginDir?)`, `selectMutationTargetsHandler(input, pluginDir?)`), injected from server-state by `register-evolution.ts` — same pattern as `register-agent-teams.ts`. It is NOT a public schema field on either tool's `Input`.
 
+## Tools: `record_applied_evolution` + `get_evolution_outcomes` (ADR-0034)
+
+Post-apply evolution regression detection (Inc 1 + Inc 2). Backed by the drift.db
+`applied_evolutions` table (v12 migration) + `AppliedEvolutionsDao`.
+
+**`record_applied_evolution` (`tools/record-applied-evolution.ts`)** — AUTHORITATIVE /
+FAIL-CLOSED write. Input carries pre-computed `before_hash`/`after_hash` (the call-site
+hashes on-disk content via `hashContent`; the tool never reads files), `principle_id`
+(nullable — null for agent-def cliff targets), `holdout_baseline`/`holdout_candidate`,
+`apply_base_commit` (optional; the apply does not commit — `applying_commit` stays null,
+back-filled later from the `Canon-Evolution:` trailer), `applied_at`, `project_dir`.
+Reaches drift.db via `getDriftDb(project_dir).getAppliedEvolutions().record(...)`.
+A storage failure returns a `ToolResult` error (`UNEXPECTED`) — NEVER fail-open, since
+a lost provenance record is the exact gap this closes. Idempotent on `proposal_id`.
+
+**`get_evolution_outcomes` (`tools/get-evolution-outcomes.ts`)** — FAIL-OPEN read.
+Input `{ proposal_id, project_dir }`. Loads the `applied_evolutions` row
+(`PROPOSAL_NOT_RECORDED` if absent; `INVALID_INPUT` if `proposal_id` empty), then splits
+the TARGET-SCOPED signal into a pre/post cohort anchored on `applied_at`:
+principle-carrying targets → `reviews`⋈`violations` filtered by `principle_id`; agent-def
+cliff targets (`principle_id` null) → `cliff_events` filtered by the agent derived from
+`target_path` (`canon:` prefix stripped). Confidence reuses `deriveTier(score, min(preEvents,
+postEvents))` — `insufficient` when either side < 5. Concurrent applies touching the same
+signal (via `listAppliedSince`) set `ambiguous:true` + `confounding_proposal_ids[]`, verdict
+`ambiguous`. Verdict ∈ `regression_candidate | no_signal_change | improvement_candidate |
+ambiguous | insufficient`. Absent signal rows → cohort zeros + `insufficient` (never an error).
+
+**Apply-provenance call-sites**: `record_applied_evolution` is invoked from the
+`review-learnings` apply path (Writer arm + Arm M), guarded on `type == "evolution-candidate"`
+(legacy proposals carry no holdout scores and get NO record). See `skills/canon/commands/review-learnings.md`.
+
+**`Canon-Evolution:` trailer** (`shared/lib/commit-trailers.ts`) — optional `evolutionId?`
+on `TrailerOpts` appends a `Canon-Evolution: {id}` line after `Canon-Task` (or after
+`Canon-State` when no task). Additive/backward-compatible; enables later back-fill of
+`applied_evolutions.applying_commit` from git history.
+
 ## Attribution Join Contract (ADR-0024, ADR-0032)
 
 - **`review_violation`** — TWO independent join edges may fire per violation (both can attribute the same violation):
@@ -197,7 +235,7 @@ return empty output.
 - **`cliff_event`** — joined on `cliff.step_id == provenance.step_id` (`join_basis: "cliff_step_id"`); exact, high-confidence; widening `RawArtifact.kind` to include `"agent-def"` was the only change needed — the existing loop already attributes every artifact in a matched step.
 - **`test_failure`** — DEFERRED; no durable joinable key in current trace schema. Re-add per ADR-0024 Revisit-If once a `step_id`-keyed test_failure event type is available.
 - **content_hash** — re-hashed from the raw (untrimmed) pre-disclosure artifact body via `hashContent`; mismatch → `flagged[]` with `hash_verified: false`; exact match → `hash_verified: true`. Fail-closed: only exact SHA256 match counts. For `agent-def`, the hash covers the WHOLE file (frontmatter included) — `readCurrentBody` byte-identity re-check is unchanged.
-- **Hypothesis vocabulary** — all `hypothesis` strings use presence/context vocabulary; "caused"/"causes" are prohibited (verified by grep on every build).
+- **Hypothesis vocabulary** — all `hypothesis` strings use presence/context vocabulary; "caused"/"causes" are prohibited (verified by grep on every build). This grep now covers BOTH `services/attribution-join.ts` AND `tools/get-evolution-outcomes.ts` — the latter's `hypothesis`/verdict narrative uses candidate-regression/correlation phrasing; the whole file has zero `caus(e|ed|es)` matches (a dedicated unit test greps the source). Note the constraint bans the substring, so "because" is also excluded.
 - **`deriveConfidence`** now keys on `join_basis` (was `failureKind`) — `FailureAttribution["join_basis"]` has 3 values: `"cliff_step_id"`, `"principle_id==artifact_id"`, `"code_author_agent_def"`.
 
 ## Known Constraints

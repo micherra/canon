@@ -21,11 +21,38 @@ import {
   evaluateCandidate,
 } from "@features/evolution/tools/evaluate-candidate.ts";
 import {
+  GetEvolutionOutcomesInputSchema,
+  getEvolutionOutcomes,
+} from "@features/evolution/tools/get-evolution-outcomes.ts";
+import {
+  RecordAppliedEvolutionInputSchema,
+  recordAppliedEvolution,
+} from "@features/evolution/tools/record-applied-evolution.ts";
+import {
   SelectMutationTargetsInputSchema,
   selectMutationTargetsHandler,
 } from "@features/evolution/tools/select-mutation-targets.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { gatedWrapHandler, pluginDir } from "./server-state.ts";
+
+const RECORD_APPLIED_EVOLUTION_DESC =
+  "Record durable apply-provenance for an applied evolution-candidate " +
+  "(drift.db applied_evolutions, ADR-0034). Writes one row tying proposal_id ↔ " +
+  "target_path ↔ before/after content hash ↔ holdout scores ↔ applied_at ↔ " +
+  "apply_base_commit. AUTHORITATIVE / FAIL-CLOSED: a storage failure returns a " +
+  "ToolResult error, never fail-open — a lost provenance record is the exact gap " +
+  "this closes. Idempotent on proposal_id (re-apply upserts). Only " +
+  "evolution-candidate proposals (carrying holdout scores) are recorded.";
+
+const GET_EVOLUTION_OUTCOMES_DESC =
+  "Read a target-scoped, apply-anchored regression HYPOTHESIS for a recorded " +
+  "evolution-candidate. Splits the target-scoped signal (reviews⋈violations per " +
+  "principle_id, or cliff_events per agent_type) into a pre/post cohort anchored on " +
+  "applied_at, reports a delta and a reused confidence tier (insufficient when either " +
+  "side < 5 events), and flags concurrent-change confounds as ambiguous. " +
+  "HYPOTHESIS VOCABULARY ONLY — presence/correlation phrasing, never proven causation. " +
+  "FAIL-OPEN: absent signal rows → insufficient verdict, not an error. " +
+  "PROPOSAL_NOT_RECORDED when no applied_evolutions row exists.";
 
 export function registerEvolutionTools(server: McpServer): void {
   server.registerTool(
@@ -76,5 +103,23 @@ export function registerEvolutionTools(server: McpServer): void {
       inputSchema: SelectMutationTargetsInputSchema.shape,
     },
     gatedWrapHandler(async (input) => selectMutationTargetsHandler(input, pluginDir)),
+  );
+
+  server.registerTool(
+    "record_applied_evolution",
+    {
+      description: RECORD_APPLIED_EVOLUTION_DESC,
+      inputSchema: RecordAppliedEvolutionInputSchema.shape,
+    },
+    gatedWrapHandler(async (input) => recordAppliedEvolution(input)),
+  );
+
+  server.registerTool(
+    "get_evolution_outcomes",
+    {
+      description: GET_EVOLUTION_OUTCOMES_DESC,
+      inputSchema: GetEvolutionOutcomesInputSchema.shape,
+    },
+    gatedWrapHandler(async (input) => getEvolutionOutcomes(input)),
   );
 }
