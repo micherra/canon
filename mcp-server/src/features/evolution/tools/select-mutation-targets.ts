@@ -18,10 +18,10 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
+import { resolveArtifactReadPath } from "../services/artifact-path-resolver.ts";
 import {
   collectArchivedFailureSources,
   collectFailureSources,
@@ -75,27 +75,26 @@ type SelectMutationTargetsInput = z.input<typeof SelectMutationTargetsInputSchem
 // Helpers — extracted to keep the handler under the line/complexity limits
 // ---------------------------------------------------------------------------
 
-/** Resolve an artifact path to an absolute path, honoring absolute inputs. */
-function resolvePath(artifactPath: string, projectDir: string): string {
-  return isAbsolute(artifactPath) ? artifactPath : join(projectDir, artifactPath);
-}
-
 /**
  * readBodiesAndExistence — read baseline bodies + existence for each attribution.
  *
  * I/O injected here so selectMutationTargets stays pure.
+ * Resolves each path project_dir-first with a pluginDir fallback for trusted
+ * plugin-tier artifacts (resolveArtifactReadPath); existence + body keys stay on
+ * the ORIGINAL relative path so downstream lookups are unaffected.
  * Fail-open: file-read errors return "" rather than propagating.
  */
 function readBodiesAndExistence(
   attributions: FailureAttribution[],
   projectDir: string,
+  pluginDir?: string,
 ): { bodies: Record<string, string>; existing: Record<string, boolean> } {
   const bodies: Record<string, string> = {};
   const existing: Record<string, boolean> = {};
 
   for (const attr of attributions) {
     const path = attr.target_artifact.path;
-    const resolved = resolvePath(path, projectDir);
+    const resolved = resolveArtifactReadPath(path, projectDir, pluginDir);
     const fileExists = existsSync(resolved);
     existing[path] = fileExists;
     if (fileExists) {
@@ -149,9 +148,15 @@ function collectAttributionSources(
  *
  * Fail-open for every source: absent provenance, absent REVIEW.md, absent
  * artifact bodies all produce partial results rather than errors.
+ *
+ * @param pluginDir - Optional absolute plugin root; injected from server-state by
+ *   register-evolution.ts so a trusted plugin-tier artifact absent from project_dir
+ *   (foreign plugin install) is still found for the hash re-check + baseline read.
+ *   Not a public schema field.
  */
 export async function selectMutationTargetsHandler(
   input: SelectMutationTargetsInput,
+  pluginDir?: string,
 ): Promise<ToolResult<SelectMutationTargetsResult>> {
   const { workspace, archive_id, project_dir, max_targets_per_pass } = input;
 
@@ -171,10 +176,10 @@ export async function selectMutationTargetsHandler(
     );
   }
 
-  // readCurrentBody seam — fail-open, honor absolute paths
+  // readCurrentBody seam — fail-open; project_dir-first, pluginDir-fallback
   const readCurrentBody = (artifactPath: string): string | null => {
     try {
-      return readFileSync(resolvePath(artifactPath, project_dir), "utf-8");
+      return readFileSync(resolveArtifactReadPath(artifactPath, project_dir, pluginDir), "utf-8");
     } catch {
       return null;
     }
@@ -184,7 +189,11 @@ export async function selectMutationTargetsHandler(
   const joinResult = collectAttributionSources(workspace, archive_id, project_dir, readCurrentBody);
 
   // Read baseline bodies + existence (I/O injected here; selectMutationTargets stays pure)
-  const { bodies, existing } = readBodiesAndExistence(joinResult.attributions, project_dir);
+  const { bodies, existing } = readBodiesAndExistence(
+    joinResult.attributions,
+    project_dir,
+    pluginDir,
+  );
 
   // Pure selection
   const selectionResult = selectMutationTargets(joinResult.attributions, bodies, existing, {
