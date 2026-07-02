@@ -116,37 +116,102 @@ function attributeViolations(ctx: ViolationCtx): number {
   let checks = 0;
 
   for (const violation of ctx.violations) {
-    const candidates = findArtifactCandidates(ctx.provenance, violation.principle_id);
+    const ruleResult = attributeRuleViolation(ctx, violation);
+    checks += ruleResult.checks;
 
-    if (candidates.length === 0) {
+    const codeAuthorResult = attributeCodeAuthorViolation(ctx, violation);
+    checks += codeAuthorResult.checks;
+
+    if (!ruleResult.attributed && !codeAuthorResult.attributed) {
       ctx.unattributed.push({
         reason: provenanceEmpty ? "no_provenance" : "no_in_context_artifact",
         violation,
       });
-      continue;
     }
+  }
 
-    const { deduplicatedArtifact, owningSteps } = extractOwningInfo(candidates);
+  return checks;
+}
+
+/** join_basis "principle_id==artifact_id" — inferred, lossy. Returns {attributed, checks}. */
+function attributeRuleViolation(
+  ctx: ViolationCtx,
+  violation: ReviewViolation,
+): { attributed: boolean; checks: number } {
+  const candidates = findArtifactCandidates(ctx.provenance, violation.principle_id);
+  if (candidates.length === 0) return { attributed: false, checks: 0 };
+
+  const { deduplicatedArtifact, owningSteps } = extractOwningInfo(candidates);
+
+  const currentBody = ctx.readCurrentBody(deduplicatedArtifact.path);
+  const { attributedArtifact, flagEntry } = verifyArtifact(deduplicatedArtifact, currentBody);
+  if (flagEntry !== null) ctx.flagged.push(flagEntry);
+
+  const transcript = collectTranscriptEvidence(
+    owningSteps,
+    deduplicatedArtifact.id,
+    ctx.getTranscriptExcerpt,
+  );
+  const ambiguous = owningSteps.length > 1;
+  const confidence = deriveConfidence({
+    ambiguous,
+    hashVerified: attributedArtifact.hash_verified,
+    hasTranscript: transcript.length > 0,
+    joinBasis: "principle_id==artifact_id",
+  });
+  const hypothesis = buildViolationHypothesis(
+    deduplicatedArtifact.id,
+    owningSteps,
+    violation.principle_id,
+  );
+
+  ctx.attributions.push({
+    ambiguous,
+    attributed_violations: [violation],
+    confidence,
+    failure_kind: "review_violation",
+    hypothesis,
+    join_basis: "principle_id==artifact_id",
+    owning_steps: owningSteps,
+    presence_in_context: true,
+    target_artifact: attributedArtifact,
+    transcript_evidence: transcript,
+  });
+
+  return { attributed: true, checks: 1 };
+}
+
+/**
+ * join_basis "code_author_agent_def" (ADR-0032) — every code review violation attributes to
+ * each DISTINCT code-authoring agent-def present in provenance, computed purely from the
+ * provenance array. No per-violation step-key threading: all engineer steps share one
+ * agents/engineer.md, so the mutation target is singular and hash-verifiable regardless of
+ * which step produced the reviewed code. Returns {attributed, checks}.
+ */
+function attributeCodeAuthorViolation(
+  ctx: ViolationCtx,
+  violation: ReviewViolation,
+): { attributed: boolean; checks: number } {
+  const codeAuthorDefs = findCodeAuthorAgentDefs(ctx.provenance);
+  let checks = 0;
+
+  for (const { artifact, owningSteps } of codeAuthorDefs) {
     checks += 1;
-
-    const currentBody = ctx.readCurrentBody(deduplicatedArtifact.path);
-    const { attributedArtifact, flagEntry } = verifyArtifact(deduplicatedArtifact, currentBody);
+    const currentBody = ctx.readCurrentBody(artifact.path);
+    const { attributedArtifact, flagEntry } = verifyArtifact(artifact, currentBody);
     if (flagEntry !== null) ctx.flagged.push(flagEntry);
 
-    const transcript = collectTranscriptEvidence(
-      owningSteps,
-      deduplicatedArtifact.id,
-      ctx.getTranscriptExcerpt,
-    );
-    const ambiguous = owningSteps.length > 1;
+    // Ambiguous at the DISTINCT-artifact level, not the step level: multiple engineer steps
+    // sharing one agents/engineer.md is NOT ambiguous (same mutation target).
+    const ambiguous = codeAuthorDefs.length > 1;
     const confidence = deriveConfidence({
       ambiguous,
-      failureKind: "review_violation",
       hashVerified: attributedArtifact.hash_verified,
-      hasTranscript: transcript.length > 0,
+      hasTranscript: false,
+      joinBasis: "code_author_agent_def",
     });
-    const hypothesis = buildViolationHypothesis(
-      deduplicatedArtifact.id,
+    const hypothesis = buildCodeAuthorHypothesis(
+      artifact.path,
       owningSteps,
       violation.principle_id,
     );
@@ -157,15 +222,59 @@ function attributeViolations(ctx: ViolationCtx): number {
       confidence,
       failure_kind: "review_violation",
       hypothesis,
-      join_basis: "principle_id==artifact_id",
+      join_basis: "code_author_agent_def",
       owning_steps: owningSteps,
       presence_in_context: true,
       target_artifact: attributedArtifact,
-      transcript_evidence: transcript,
+      transcript_evidence: [],
     });
   }
 
-  return checks;
+  return { attributed: codeAuthorDefs.length > 0, checks };
+}
+
+/** The agent whose behavior produces code that review violations are found in.
+ *  Revisit-if: add other code-writing roles here if their output becomes principle-reviewed. */
+const CODE_AUTHORING_AGENTS = new Set(["engineer"]);
+
+type CodeAuthorAgentDef = { artifact: RawArtifact; owningSteps: OwningStep[] };
+
+/** Collect DISTINCT (deduped by path) agent-def artifacts owned by a code-authoring agent. */
+function findCodeAuthorAgentDefs(provenance: ContextProvenanceSummary[]): CodeAuthorAgentDef[] {
+  const byPath = new Map<string, CodeAuthorAgentDef>();
+  for (const step of provenance) {
+    if (!CODE_AUTHORING_AGENTS.has(step.agent_name)) continue;
+    const owningStep: OwningStep = {
+      agent_id: step.agent_id,
+      agent_name: step.agent_name,
+      step_id: step.step_id,
+    };
+    for (const artifact of step.artifacts) {
+      if (artifact.kind !== "agent-def") continue;
+      const existing = byPath.get(artifact.path);
+      if (existing) {
+        existing.owningSteps.push(owningStep);
+      } else {
+        byPath.set(artifact.path, { artifact, owningSteps: [owningStep] });
+      }
+    }
+  }
+  return [...byPath.values()];
+}
+
+/** Build hypothesis string for a code_author_agent_def attribution. Presence vocabulary only. */
+function buildCodeAuthorHypothesis(
+  artifactPath: string,
+  owningSteps: OwningStep[],
+  principleId: string,
+): string {
+  const stepIds = owningSteps
+    .filter((s) => s.step_id !== null)
+    .map((s) => s.step_id ?? "unknown")
+    .join(", ");
+  const stepPart =
+    stepIds.length > 0 ? ` (step${owningSteps.length > 1 ? "s" : ""} ${stepIds})` : "";
+  return `'${artifactPath}' was engineer's persona${stepPart} when violation of ${principleId} was observed in engineer-authored code`;
 }
 
 /** Build hypothesis string for a review_violation attribution. */
@@ -224,9 +333,9 @@ function attributeCliffs(ctx: CliffCtx): number {
       );
       const confidence = deriveConfidence({
         ambiguous: false,
-        failureKind: "cliff_event",
         hashVerified: attributedArtifact.hash_verified,
         hasTranscript: transcript.length > 0,
+        joinBasis: "cliff_step_id",
       });
       const hypothesis = `Artifact '${rawArtifact.id}' was in ${matchingProv.agent_name}'s context (step ${cliff.step_id}) when the agent write-cliff was detected`;
 
@@ -253,7 +362,7 @@ function attributeCliffs(ctx: CliffCtx): number {
 // ---------------------------------------------------------------------------
 
 type RawArtifact = {
-  kind: "rule" | "ref" | "primer" | "template";
+  kind: "rule" | "ref" | "primer" | "template" | "agent-def";
   id: string;
   path: string;
   content_hash: string;
@@ -360,15 +469,16 @@ function collectTranscriptEvidence(
 
 /** Derive confidence deterministically from join basis + verification status. */
 function deriveConfidence(input: {
-  failureKind: "review_violation" | "cliff_event";
+  joinBasis: FailureAttribution["join_basis"];
   hashVerified: boolean;
   ambiguous: boolean;
   hasTranscript: boolean;
 }): AttributionConfidence {
-  const { failureKind, hashVerified, ambiguous, hasTranscript } = input;
+  const { joinBasis, hashVerified, ambiguous, hasTranscript } = input;
   if (!hashVerified) return "low";
-  if (failureKind === "cliff_event") return "high";
-  // review_violation: inferred join
+  if (joinBasis === "cliff_step_id") return "high";
+  if (joinBasis === "code_author_agent_def") return ambiguous ? "medium" : "high";
+  // principle_id==artifact_id: inferred join
   if (!ambiguous && hasTranscript) return "high";
   return "medium";
 }

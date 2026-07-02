@@ -1,12 +1,12 @@
 ---
-adr: "0031"
+adr: "0033"
 title: "Success-pattern learner mines the auto-memory digest corpus"
 status: accepted
 date: "2026-07-01"
 build: "m1-success-pattern-learner (AgentKB R4) — design"
 ---
 
-# ADR-0031: Success-pattern learner mines the auto-memory digest corpus
+# ADR-0033: Success-pattern learner mines the auto-memory digest corpus
 
 ## Context
 
