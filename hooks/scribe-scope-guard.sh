@@ -2,8 +2,11 @@
 # scribe-scope-guard.sh — Post-scribe CLAUDE.md over-trim guard.
 #
 # Invoked by the orchestrator after the scribe step (not as a hooks.json hook).
-# Signature: bash hooks/scribe-scope-guard.sh <base_commit> [threshold]
-# Run from the worktree root.
+# Signature: bash hooks/scribe-scope-guard.sh <base_commit> [threshold] [worktree_path]
+# Run from the worktree root, OR pass the worktree as the optional trailing
+# worktree_path arg — every internal git call then resolves via `git -C
+# "$worktree_path"`, making CWD irrelevant (watch_CCCCCCCCCCCC2). Absent →
+# current CWD-relative behavior (backward-compatible).
 #
 # Counts CLAUDE.md deletion lines from the scribe's own commit(s) — commits
 # carrying the 'Canon-Agent: scribe' trailer — in the range base_commit..HEAD.
@@ -33,12 +36,13 @@ set -euo pipefail
 
 BASE_COMMIT="${1:-}"
 THRESHOLD="${2:-5}"
+WORKTREE_PATH="${3:-}"
 
 # ---------------------------------------------------------------------------
 # Argument validation
 # ---------------------------------------------------------------------------
 if [[ -z "$BASE_COMMIT" ]]; then
-  echo "CANON: scribe-scope-guard failed-closed — usage: scribe-scope-guard.sh <base_commit> [threshold]" >&2
+  echo "CANON: scribe-scope-guard failed-closed — usage: scribe-scope-guard.sh <base_commit> [threshold] [worktree_path]" >&2
   exit 2
 fi
 
@@ -48,7 +52,20 @@ if ! echo "$THRESHOLD" | grep -qE '^[0-9]+$'; then
   exit 2
 fi
 
-if ! git rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
+if [[ -n "$WORKTREE_PATH" ]] && [[ ! -d "$WORKTREE_PATH" ]]; then
+  echo "CANON: scribe-scope-guard failed-closed — worktree_path not a directory: $WORKTREE_PATH" >&2
+  exit 2
+fi
+
+# GIT_C prefixes every internal git call with -C "$WORKTREE_PATH" when set,
+# making CWD irrelevant; empty (CWD-relative) when unset. Bash 3.2-safe empty
+# array expansion (house idiom — see push-to-main-guard.sh contract).
+GIT_C=()
+if [[ -n "$WORKTREE_PATH" ]]; then
+  GIT_C=(-C "$WORKTREE_PATH")
+fi
+
+if ! git "${GIT_C[@]+"${GIT_C[@]}"}" rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
   echo "CANON: scribe-scope-guard failed-closed — invalid base commit: $BASE_COMMIT" >&2
   exit 2
 fi
@@ -59,7 +76,7 @@ fi
 SCRIBE_COMMITS=()
 while IFS= read -r line; do
   [[ -n "$line" ]] && SCRIBE_COMMITS+=("$line")
-done < <(git log --no-merges --format='%H' -E --grep='^Canon-Agent: scribe[[:space:]]*$' "${BASE_COMMIT}..HEAD")
+done < <(git "${GIT_C[@]+"${GIT_C[@]}"}" log --no-merges --format='%H' -E --grep='^Canon-Agent: scribe[[:space:]]*$' "${BASE_COMMIT}..HEAD")
 
 # Fail-closed when no scribe commit found — the scribe range is unidentifiable
 # without the trailer; surfacing is safer than silently passing.
@@ -81,7 +98,7 @@ DELETION_COUNT=0
 for c in "${SCRIBE_COMMITS[@]}"; do
   NUMSTAT_OUTPUT=""
   # --format='' suppresses the commit header/body; only numstat lines remain.
-  if ! NUMSTAT_OUTPUT=$(git show --numstat --format='' --no-color "${c}" -- CLAUDE.md ':(glob)**/CLAUDE.md' 2>&1); then
+  if ! NUMSTAT_OUTPUT=$(git "${GIT_C[@]+"${GIT_C[@]}"}" show --numstat --format='' --no-color "${c}" -- CLAUDE.md ':(glob)**/CLAUDE.md' 2>&1); then
     echo "CANON: scribe-scope-guard failed-closed — git show failed for commit ${c}: $NUMSTAT_OUTPUT" >&2
     exit 2
   fi

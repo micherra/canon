@@ -48,7 +48,7 @@ For open-ended questions, `semantic_search` lets you search the indexed codebase
 
 ### Principles with drift detection
 
-Canon ships with 64 built-in engineering principles across three severity tiers. Agents load the principles relevant to their task — matched by architectural layer and file path. Reviewers check compliance. Drift reports show which principles the codebase is drifting from, with trend data, hotspot directories, co-change partners, blast radius, and compliance history.
+Canon ships with 67 built-in engineering principles (`ls principles/rules/*.md principles/strong-opinions/*.md principles/conventions/*.md | wc -l`) across three severity tiers. Agents load the principles relevant to their task — matched by architectural layer and file path. Reviewers check compliance. Drift reports show which principles the codebase is drifting from, with trend data, hotspot directories, co-change partners, blast radius, and compliance history.
 
 ### Interactive HTML dashboards
 
@@ -106,7 +106,7 @@ Every agent commit carries Canon provenance trailers (workflow, agent, step, tas
 
 ## Principles
 
-Principles are the core of Canon. They are markdown files with YAML frontmatter that tell agents what rules, preferences, and conventions to apply. Canon ships with 64 built-in principles (6 rules, 36 strong-opinions, 22 conventions) covering security, architecture, testing, and code design.
+Principles are the core of Canon. They are markdown files with YAML frontmatter that tell agents what rules, preferences, and conventions to apply. Canon ships with 67 built-in principles (6 rules, 36 strong-opinions, 25 conventions — `ls principles/rules/*.md principles/strong-opinions/*.md principles/conventions/*.md | wc -l`) covering security, architecture, testing, and code design.
 
 The principle model is two-layer: built-ins ship inside the plugin and load automatically at runtime. Your project-local principles live in `.canon/principles/` — create them with `/canon:edit-principle` and they override any built-in with the same `id`.
 

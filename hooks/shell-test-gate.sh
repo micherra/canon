@@ -2,8 +2,12 @@
 # shell-test-gate.sh — Shell-CI parity gate.
 #
 # Invoked by the verify contract (not as a hooks.json PreToolUse hook).
-# Signature: bash hooks/shell-test-gate.sh <base_commit>
-# Run from the worktree root.
+# Signature: bash hooks/shell-test-gate.sh <base_commit> [worktree_path]
+# Run from the worktree root, OR pass the worktree as the optional trailing
+# worktree_path arg — the git diff scope check resolves via `git -C
+# "$worktree_path"`, and the hooks/**/*.test.sh enumeration resolves under it
+# too, making CWD irrelevant (watch_CCCCCCCCCCCC2). Absent → current
+# CWD-relative behavior (backward-compatible).
 #
 # When any hooks/**/*.sh or *.mjs file changed in base..HEAD, executes the
 # full hooks/**/*.test.sh suite set that CI's `shell` job runs, aggregating
@@ -33,16 +37,34 @@
 set -euo pipefail
 
 BASE_COMMIT="${1:-}"
+WORKTREE_PATH="${2:-}"
 
 # ---------------------------------------------------------------------------
 # Argument validation (fail-closed)
 # ---------------------------------------------------------------------------
 if [[ -z "$BASE_COMMIT" ]]; then
-  echo "CANON: shell-test-gate failed-closed — usage: shell-test-gate.sh <base_commit>" >&2
+  echo "CANON: shell-test-gate failed-closed — usage: shell-test-gate.sh <base_commit> [worktree_path]" >&2
   exit 2
 fi
 
-if ! git rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
+if [[ -n "$WORKTREE_PATH" ]] && [[ ! -d "$WORKTREE_PATH" ]]; then
+  echo "CANON: shell-test-gate failed-closed — worktree_path not a directory: $WORKTREE_PATH" >&2
+  exit 2
+fi
+
+# GIT_C prefixes every internal git call with -C "$WORKTREE_PATH" when set,
+# making CWD irrelevant; empty (CWD-relative) when unset. Bash 3.2-safe empty
+# array expansion (house idiom — see push-to-main-guard.sh contract).
+# WORKTREE_PREFIX resolves the hooks/**/*.test.sh enumeration under the same
+# worktree — `git -C` only repoints git's own commands, not `find`.
+GIT_C=()
+WORKTREE_PREFIX=""
+if [[ -n "$WORKTREE_PATH" ]]; then
+  GIT_C=(-C "$WORKTREE_PATH")
+  WORKTREE_PREFIX="${WORKTREE_PATH%/}/"
+fi
+
+if ! git "${GIT_C[@]+"${GIT_C[@]}"}" rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
   echo "CANON: shell-test-gate failed-closed — invalid base commit: $BASE_COMMIT" >&2
   exit 2
 fi
@@ -56,7 +78,7 @@ DIFF_OUTPUT=""
 # matches the .sh filter and correctly fires the gate) AND the added
 # destination path.  With default rename detection ON, only the destination
 # path is reported, causing a false no-op when a hook .sh is moved/renamed.
-if ! DIFF_OUTPUT=$(git diff --name-only --no-renames "${BASE_COMMIT}..HEAD" 2>&1); then
+if ! DIFF_OUTPUT=$(git "${GIT_C[@]+"${GIT_C[@]}"}" diff --name-only --no-renames "${BASE_COMMIT}..HEAD" 2>&1); then
   echo "CANON: shell-test-gate failed-closed — git diff failed: $DIFF_OUTPUT" >&2
   exit 2
 fi
@@ -86,7 +108,7 @@ fi
 # (add -L for symlinks or explicit hidden-dir paths as needed).
 # ---------------------------------------------------------------------------
 SUITE_LIST=""
-if ! SUITE_LIST=$(find hooks -type f -name '*.test.sh' 2>&1 | sort); then
+if ! SUITE_LIST=$(find "${WORKTREE_PREFIX}hooks" -type f -name '*.test.sh' 2>&1 | sort); then
   echo "CANON: shell-test-gate failed-closed — find failed: $SUITE_LIST" >&2
   exit 2
 fi
@@ -112,6 +134,13 @@ fi
 # prevents the loop-stdin hang where a suite reading stdin blocks on the pipe
 # (PROBE-FINDINGS.md §3a — hang disappears entirely with </dev/null).
 #
+# When WORKTREE_PATH is set, each suite runs with CWD = WORKTREE_PATH (not the
+# caller's CWD). $t is already WORKTREE_PREFIX-prefixed, so it still resolves
+# correctly after the cd; but a suite that reads repo-root-relative paths
+# (e.g. `bash hooks/foo.sh`) needs CWD anchored at the target worktree to
+# match CI, which always runs suites from the checkout root (Codex P2 fix —
+# WORKTREE_PREFIX alone only fixed suite *discovery*, not suite *execution*).
+#
 # timeout (coreutils) is applied when available; not guaranteed on stock macOS.
 # CAP=180s is generous (slowest passing suite is ~31s; PROBE §3b); a timeout-
 # kill (rc 124/137) counts as a failure — fail-closed.
@@ -122,10 +151,18 @@ for t in "${SUITES[@]}"; do
   echo "=== $t ==="
   SUITE_RC=0
 
-  if command -v timeout >/dev/null 2>&1; then
-    timeout -k 5 180 bash "$t" </dev/null || SUITE_RC=$?
+  if [[ -n "$WORKTREE_PATH" ]]; then
+    if command -v timeout >/dev/null 2>&1; then
+      ( cd "$WORKTREE_PATH" && timeout -k 5 180 bash "$t" </dev/null ) || SUITE_RC=$?
+    else
+      ( cd "$WORKTREE_PATH" && bash "$t" </dev/null ) || SUITE_RC=$?
+    fi
   else
-    bash "$t" </dev/null || SUITE_RC=$?
+    if command -v timeout >/dev/null 2>&1; then
+      timeout -k 5 180 bash "$t" </dev/null || SUITE_RC=$?
+    else
+      bash "$t" </dev/null || SUITE_RC=$?
+    fi
   fi
 
   if [[ "$SUITE_RC" -ne 0 ]]; then
