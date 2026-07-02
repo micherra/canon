@@ -173,6 +173,119 @@ function finalizeStep(partial: Partial<RunbookStep>): RunbookStep {
   };
 }
 
+// ---- Notable resolution (digest enrichment) ----
+
+const NOTABLE_RESOLUTION_MAX_CHARS = 200;
+
+/**
+ * Extract a single-line "notable resolution" from an engineer SUMMARY (preferred)
+ * or architect DESIGN.md (fallback), for the build-digest `### Notable Resolution`
+ * section. First non-empty source wins:
+ *   1. summaryContent: first data row of the `### Decisions` table (Rationale cell)
+ *   2. summaryContent: first item under `### Deviations` (the reason after `**{id}**:`)
+ *   3. designContent: first bullet under `### Decisions made`
+ *   4. otherwise: ""
+ *
+ * Pure, no I/O, never throws — matches the sibling extractor contract. Result is
+ * capped at 200 chars, single line (newlines stripped, whitespace collapsed).
+ */
+export function extractNotableResolution(summaryContent: string, designContent?: string): string {
+  try {
+    const fromDecisions = extractFromDecisionsTable(summaryContent ?? "");
+    if (fromDecisions) return toSingleLine(fromDecisions);
+
+    const fromDeviations = extractFromDeviations(summaryContent ?? "");
+    if (fromDeviations) return toSingleLine(fromDeviations);
+
+    if (designContent) {
+      const fromDesign = extractFromDesignDecisionsMade(designContent);
+      if (fromDesign) return toSingleLine(fromDesign);
+    }
+
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+/** Collapse to a single line and cap at NOTABLE_RESOLUTION_MAX_CHARS. */
+function toSingleLine(text: string): string {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  return collapsed.length > NOTABLE_RESOLUTION_MAX_CHARS
+    ? collapsed.slice(0, NOTABLE_RESOLUTION_MAX_CHARS)
+    : collapsed;
+}
+
+/** Split a markdown table row into trimmed cells (outer pipes stripped). */
+function splitTableRow(line: string): string[] {
+  const withoutOuterPipes = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return withoutOuterPipes.split("|").map((cell) => cell.trim());
+}
+
+/**
+ * Extract the body of a `### {headingText}` section: everything from the line
+ * after the heading up to the next `##`/`###` heading, or end of string.
+ *
+ * Deliberately avoids a `$`-in-lookahead end marker: with the `m` flag, `$`
+ * matches end-of-LINE (not end-of-string), which truncates the capture after
+ * the section's first line whenever no further heading follows. Finding the
+ * next-heading index directly (or falling back to string length) sidesteps
+ * that bug entirely.
+ */
+function extractSectionBody(content: string, headingText: string): string {
+  const headingMatch = content.match(new RegExp(`^###\\s+${headingText}\\s*\\n`, "m"));
+  if (!headingMatch || headingMatch.index === undefined) return "";
+
+  const rest = content.slice(headingMatch.index + headingMatch[0].length);
+  const nextHeadingMatch = rest.match(/\n#{2,3}\s/);
+  return rest.slice(0, nextHeadingMatch?.index ?? rest.length);
+}
+
+/** Extract the Rationale cell from the first data row of the `### Decisions` table. */
+function extractFromDecisionsTable(content: string): string {
+  const section = extractSectionBody(content, "Decisions");
+  if (!section) return "";
+
+  const tableLines = section
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("|"));
+  if (tableLines.length < 3) return "";
+
+  const header = splitTableRow(tableLines[0]);
+  const dataRow = splitTableRow(tableLines[2]);
+  const rationaleIdx = header.findIndex((cell) => /rationale/i.test(cell));
+  if (rationaleIdx === -1) return "";
+
+  return dataRow[rationaleIdx] ?? "";
+}
+
+/** Extract the reason text of the first item under `### Deviations` (after `**{id}**:`). */
+function extractFromDeviations(content: string): string {
+  const body = extractSectionBody(content, "Deviations");
+  if (!body) return "";
+
+  const startMatch = body.match(/^-\s*\*\*(.+?)\*\*:\s*/m);
+  if (!startMatch || startMatch.index === undefined) return "";
+
+  const afterPrefix = body.slice(startMatch.index + startMatch[0].length);
+  const nextBulletIdx = afterPrefix.search(/\n-\s/);
+  const reason = nextBulletIdx === -1 ? afterPrefix : afterPrefix.slice(0, nextBulletIdx);
+  return reason.trim();
+}
+
+/** Extract the text of the first bullet under `### Decisions made`. */
+function extractFromDesignDecisionsMade(content: string): string {
+  const section = extractSectionBody(content, "Decisions made");
+  if (!section) return "";
+
+  for (const line of section.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("- ")) return trimmed.slice(2).trim();
+  }
+  return "";
+}
+
 // ---- Review file parsing ----
 
 /**

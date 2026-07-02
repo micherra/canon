@@ -31,7 +31,7 @@ function makeAttribution(
     hash_verified: boolean;
     confidence: FailureAttribution["confidence"];
     violationCount: number;
-    kind: "rule" | "ref" | "primer" | "template";
+    kind: "rule" | "ref" | "primer" | "template" | "agent-def";
     principle_id: string | null;
     char_span: [number, number] | null;
   }> = {},
@@ -411,6 +411,70 @@ describe("selectMutationTargets — MutationTarget shape", () => {
     const result = selectMutationTargets([attribution], {}, { "rules/foo.md": true });
 
     expect(result.targets[0].baseline_body).toBe("");
+  });
+
+  it("agent-def attribution resolves to artifact_class 'agent', gate_eligible, baseline_body populated (dc-05)", () => {
+    const attribution = makeAttribution("agents/engineer.md", {
+      kind: "agent-def",
+      principle_id: "engineer",
+    });
+    const result = selectMutationTargets(
+      [attribution],
+      { "agents/engineer.md": "---\nname: engineer\n---\n\n# Role\n\nWrite code.\n" },
+      { "agents/engineer.md": true },
+    );
+
+    expect(result.targets).toHaveLength(1);
+    const target = result.targets[0];
+    expect(target.artifact_class).toBe("agent");
+    expect(target.gate_eligible).toBe(true);
+    expect(target.baseline_body).toBe("---\nname: engineer\n---\n\n# Role\n\nWrite code.\n");
+    // dc-06 guard: no frontmatter line ("name: engineer") appears in any emitted mutable span text.
+    // The target itself carries no `sections` field (that lives on the provenance artifact, not
+    // the MutationTarget) — this assertion documents that the target contract stays hash+span only.
+    expect(target).not.toHaveProperty("sections");
+    expect(result.gate_ineligible).toHaveLength(0);
+  });
+
+  it("a code_author_agent_def attribution (TASK-002 / dc-07) also resolves to artifact_class 'agent', gate_eligible", () => {
+    const attribution: FailureAttribution = {
+      ambiguous: false,
+      attributed_violations: [
+        {
+          principle_id: "some-principle",
+          severity: "BLOCKING",
+          file_path: "src/foo.ts",
+          message: "Violation of some-principle",
+        },
+      ],
+      confidence: "high",
+      failure_kind: "review_violation",
+      hypothesis: "'agents/engineer.md' was engineer's persona when a violation was observed",
+      join_basis: "code_author_agent_def",
+      owning_steps: [{ step_id: "implement", agent_id: "agent-001", agent_name: "engineer" }],
+      presence_in_context: true,
+      target_artifact: {
+        char_span: null,
+        content_hash: "abc123",
+        hash_status: "verified",
+        hash_verified: true,
+        id: "engineer",
+        kind: "agent-def",
+        path: "agents/engineer.md",
+        span_available: false,
+      },
+      transcript_evidence: [],
+    };
+
+    const result = selectMutationTargets(
+      [attribution],
+      { "agents/engineer.md": "---\nname: engineer\n---\n\n# Role\n\nWrite code.\n" },
+      { "agents/engineer.md": true },
+    );
+
+    expect(result.targets).toHaveLength(1);
+    expect(result.targets[0].artifact_class).toBe("agent");
+    expect(result.targets[0].gate_eligible).toBe(true);
   });
 
   it("meta tracks attributions_seen, selected, budget", () => {

@@ -1,6 +1,6 @@
 # features/evolution/ — Trace-Driven Evolution Bounded Context
 
-<!-- last-updated: 2026-06-26 -->
+<!-- last-updated: 2026-07-01 -->
 
 ## Purpose
 
@@ -24,12 +24,14 @@ features/evolution/
 │   ├── eval-runner.ts          # parseSummary, decideGate, runSplit (pure + one I/O fn)
 │   ├── candidate-injection.ts  # withInjectedCandidate (ADR-0022) + withInjectedGuardrailCandidate (ADR-0025) + isGuardrailTarget()
 │   ├── mutation-types.ts       # Pure types: MutationTarget, GateIneligibleTarget, SkippedAttribution, SelectMutationTargetsResult, MutationProposal, ArtifactClass; budget constants DEFAULT_MAX_TARGETS_PER_PASS, CANDIDATES_PER_TARGET
-│   ├── mutation-selection.ts   # selectMutationTargets() — pure join+rank+filter; PLUGIN_ARTIFACT_ROOTS eligibility check
+│   ├── mutation-selection.ts   # selectMutationTargets() — pure join+rank+filter; PLUGIN_ARTIFACT_ROOTS eligibility check; derivePrincipleId() keys agent-def targets off the violated principle, not the agent name (Codex P2 #2)
 │   ├── mutation-proposal.ts    # shapeMutationProposal() — shapes accepted eval result into MutationProposal
 │   ├── attribution-types.ts    # Mutator-facing output types: FailureKind, AttributedArtifact, FailureAttribution, AttributeFailureResult
-│   ├── attribution-join.ts     # attributeFailures() — pure join of provenance + failure sources
+│   ├── attribution-join.ts     # attributeFailures() — pure join of provenance + failure sources; review_violation attributes via BOTH the rule edge (principle_id==artifact_id) and the code-author agent-def edge (ADR-0032)
 │   ├── attribution-provenance-source.ts  # readProvenance() — reads live workspace or archived RunSummary
-│   └── attribution-failure-sources.ts   # collectFailureSources() — reads review violations + cliff events
+│   ├── attribution-failure-sources.ts   # collectFailureSources() — reads review violations + cliff events
+│   ├── artifact-path-resolver.ts  # resolveArtifactReadPath() — pure cross-root re-read resolver: project_dir-first, pluginDir-fallback for trusted plugin-tier artifacts (Codex P2 #1)
+│   └── frontmatter-guard.ts    # checkFrontmatterImmutable() — pure runtime frontmatter-immutability guard (ADR-0031 amendment)
 └── __tests__/
     ├── decide-gate.test.ts
     ├── parse-summary.test.ts
@@ -38,13 +40,19 @@ features/evolution/
     ├── guardrail-injection-integration.test.ts  # Integration: guardrail sandbox build + isGuardrailTarget predicate
     ├── mutation-proposal.test.ts
     ├── mutation-selection.test.ts
+    ├── mutation-selection-principle-id.test.ts  # derivePrincipleId(): agent-def -> violated principle_id, cliff agent-def -> null, rule/cliff-on-rule unchanged
     ├── mutator-gate-integration.test.ts
     ├── proposal-shape-parity.test.ts    # Proposal frontmatter matches canonical template in SKILL.md
     ├── select-mutation-targets.test.ts
     ├── attribution-join.test.ts           # 17 pure unit tests (happy path, byte-identity, cliff join, lossy paths)
     ├── attribute-failure.test.ts          # 6 integration tests (real SQLite + REVIEW.md)
     ├── attribution-provenance-source.test.ts
-    └── attribution-failure-sources.test.ts
+    ├── attribution-failure-sources.test.ts
+    ├── attribution-join-agent-def.test.ts        # cliff->agent-def + review_violation->agent-def code-author join (7 cases)
+    ├── artifact-path-resolver.test.ts            # self-host, foreign-install fallback, overlay never-fallback, fail-closed missing, absolute-as-is
+    ├── frontmatter-guard.test.ts                 # 11 pure unit cases for checkFrontmatterImmutable
+    ├── evaluate-candidate-frontmatter-guard.test.ts  # 4 handler-wiring cases — asserts zero runShell calls on reject
+    └── agent-def-real-path-integration.test.ts   # end-to-end: resolveAgentSkills -> readProvenance -> attributeFailures -> selectMutationTargets -> evaluateCandidate's frontmatter guard, using the REAL emitted path (no hand-written fixture)
 ```
 
 Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
@@ -65,6 +73,9 @@ Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
 - `regressed` — `true` iff candidate regressed holdout.
 - `size_delta` — Candidate length minus baseline file length (chars). Signal only, not a gate.
 - `judge_votes_holdout` — Always `3` (documents AC#7, evaluate-candidate-04).
+- `guard_rejection?` — additive-optional; present ONLY when the frontmatter-reject guard rejected an agent-def candidate before any subprocess ran (ADR-0031 amendment). `{ reason: "frontmatter_modified" | "frontmatter_unverifiable"; fields?: string[] }`. Backward compatible — existing consumers already treat `accepted:false` as "do not propose".
+
+**Runtime frontmatter-reject guard (`checkFrontmatterImmutable`, `services/frontmatter-guard.ts`):** when `target_path`'s first segment is `agents` (`isAgentDefTarget`), the handler compares the RAW frontmatter block (`---\n...\n---`, byte-for-byte) of `candidate_text` against baseline BEFORE `checkScriptReachable`/any subprocess. Differing blocks → `accepted:false` + `guard_rejection:{reason:"frontmatter_modified", fields}` (`fields` = best-effort top-level YAML keys that changed — a diagnostic, never the basis of the comparison). Unparseable frontmatter on either side → fail-closed `guard_rejection:{reason:"frontmatter_unverifiable"}`. Never throws. Body-only candidates proceed to normal scoring unaffected.
 
 ## Tool: `select_mutation_targets`
 
@@ -79,6 +90,8 @@ Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
 - `gate_ineligible[]` — `GateIneligibleTarget[]`: paths rejected as not gate-eligible (typed bucket, not dropped); `reason` values: `tool_description_not_loadable`, `file_missing`, `path_traversal`, `harness_entrypoint`.
 - `skipped[]` — `SkippedAttribution[]`: attributions not promoted before eligibility check; `reason` values: `hash_unverified`, `confidence_below_high`, `budget_exhausted`.
 - `meta` — `{ attributions_seen, selected, budget }` for observability.
+
+**`principle_id` semantics (`derivePrincipleId`, Codex P2 #2):** for every `target_artifact.kind` EXCEPT `"agent-def"`, `principle_id === target_artifact.id` (rule/ref/primer/template file ids ARE the principle they carry — unchanged). For `kind:"agent-def"`, `target_artifact.id` is the AGENT NAME (e.g. `"engineer"`), not a principle — `principle_id` is instead the VIOLATED principle from `attributed_violations[0].principle_id`, or `null` for a `cliff_event` agent-def attribution (a write-cliff has no principle). This keeps downstream recurrence/learning keyed by principle even when the mutation target is an agent-def.
 
 **Selection policy (deterministic, in order):**
 1. Filter: `hash_verified === true` AND `confidence === "high"`.
@@ -174,13 +187,18 @@ return empty output.
 
 **Fail behavior**: fail-open — absent provenance, reviews, or cliff events yield empty sub-arrays, not errors. `INVALID_INPUT` when both or neither of `workspace`/`archive_id` are given.
 
-## Attribution Join Contract (ADR-0024)
+**Cross-root artifact re-read (`resolveArtifactReadPath`, `services/artifact-path-resolver.ts`, Codex P2 #1):** both `attribute_failure`'s `readCurrentBody` seam and `select_mutation_targets`' baseline-body read resolve provenance paths project_dir-first, falling back to `pluginDir` when the path's first segment is a `PLUGIN_ARTIFACT_ROOTS` dir AND the artifact is absent from `project_dir` AND present under `pluginDir` — closes the cross-root gap where a trusted plugin-tier artifact (e.g. `agents/engineer.md`) absent from `project_dir` under a foreign plugin install was spuriously `hash_unverified`/missing. The committable `project_dir` copy still wins when present (mutation-apply semantics unchanged — this is a READ-path fix only). Untrusted `.canon/` overlay paths never fall back (ADR-0027 trust boundary). `pluginDir` is threaded in as an optional handler param (`attributeFailure(input, pluginDir?)`, `selectMutationTargetsHandler(input, pluginDir?)`), injected from server-state by `register-evolution.ts` — same pattern as `register-agent-teams.ts`. It is NOT a public schema field on either tool's `Input`.
 
-- **`review_violation`** — joined on `violation.principle_id == assembled_artifacts[].id`; the only edge the recorded data supports; lossy cases become `unattributed[]` or `ambiguous[]`.
-- **`cliff_event`** — joined on `cliff.step_id == provenance.step_id`; exact, high-confidence.
+## Attribution Join Contract (ADR-0024, ADR-0032)
+
+- **`review_violation`** — TWO independent join edges may fire per violation (both can attribute the same violation):
+  - `join_basis: "principle_id==artifact_id"` — joined on `violation.principle_id == assembled_artifacts[].id`; inferred, lossy; lossy cases become `unattributed[]` or `ambiguous[]`.
+  - `join_basis: "code_author_agent_def"` (ADR-0032) — joined on the DISTINCT `agent-def` artifacts owned by a code-authoring agent (`CODE_AUTHORING_AGENTS = {"engineer"}`) present anywhere in the run's provenance array — no per-violation step-key threading (every engineer step loads the same `agents/engineer.md`, so the mutation target is singular and hash-verifiable regardless of which step produced the reviewed code). Confidence: `high` when `hash_verified` and exactly one distinct code-author agent-def; `medium` + `ambiguous:true` when more than one distinct agent-def is present. A reviewer-only step's agent-def is NOT attributed via this edge (only `CODE_AUTHORING_AGENTS` steps qualify).
+- **`cliff_event`** — joined on `cliff.step_id == provenance.step_id` (`join_basis: "cliff_step_id"`); exact, high-confidence; widening `RawArtifact.kind` to include `"agent-def"` was the only change needed — the existing loop already attributes every artifact in a matched step.
 - **`test_failure`** — DEFERRED; no durable joinable key in current trace schema. Re-add per ADR-0024 Revisit-If once a `step_id`-keyed test_failure event type is available.
-- **content_hash** — re-hashed from the raw (untrimmed) pre-disclosure artifact body via `hashContent`; mismatch → `flagged[]` with `hash_verified: false`; exact match → `hash_verified: true`. Fail-closed: only exact SHA256 match counts.
+- **content_hash** — re-hashed from the raw (untrimmed) pre-disclosure artifact body via `hashContent`; mismatch → `flagged[]` with `hash_verified: false`; exact match → `hash_verified: true`. Fail-closed: only exact SHA256 match counts. For `agent-def`, the hash covers the WHOLE file (frontmatter included) — `readCurrentBody` byte-identity re-check is unchanged.
 - **Hypothesis vocabulary** — all `hypothesis` strings use presence/context vocabulary; "caused"/"causes" are prohibited (verified by grep on every build).
+- **`deriveConfidence`** now keys on `join_basis` (was `failureKind`) — `FailureAttribution["join_basis"]` has 3 values: `"cliff_step_id"`, `"principle_id==artifact_id"`, `"code_author_agent_def"`.
 
 ## Known Constraints
 
