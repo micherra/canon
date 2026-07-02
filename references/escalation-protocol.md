@@ -15,7 +15,7 @@ description: >-
 **Purpose**: Strategy semantics and rethink signals for agent failures. Read BEFORE applying a strategy returned by `get_next_escalation_strategy`, and for the adversarial-surface rethink signal. See `CLAUDE.md` § Auto-Escalation Protocol for the inline one-liner and `CLAUDE.md` § Agent Spawn Error Handling for the error-pattern table.
 
 ### Auto-Escalation Protocol
-<!-- last-updated: 2026-05-21 -->
+<!-- last-updated: 2026-07-02 -->
 
 When an agent failure or stuck condition is detected (`isStuck` returns true, agent returns error, or retry fails), call `get_next_escalation_strategy({ workspace, step_id, flow_config? })` BEFORE escalating to HITL.
 
@@ -33,7 +33,9 @@ When an agent failure or stuck condition is detected (`isStuck` returns true, ag
 
 **Timeout**: The tool enforces a 2-minute cumulative timeout. If the cascade has been running for 2+ minutes, it returns "hitl" regardless of remaining strategies. The orchestrator does not need to track time separately.
 
-**Adversarial-surface iteration signal**: When a fix loop runs 3+ rounds AND every reviewer finding in those rounds is a confirmed true positive on a NEW, distinct bypass or failure class (not a regression introduced by a prior fix, not noise, not churn), surface the following signal to the user BEFORE spawning another patch engineer: "Fix loop at N rounds: all findings are true positives on new bypass classes. This surface likely needs a vocabulary-free / authoritative-primitive design change rather than another patch iteration. Consider delegating to the authoritative platform primitive or relocating the gate — see `[[delegate-to-authoritative-primitive]]`." The discriminator: true positives on new classes (different shapes each round) → rethink signal; same shape re-introduced or churn → normal HITL escalation.
+**Adversarial-surface iteration signal**: When a fix loop OR a security-re-review loop runs 3+ rounds AND every reviewer finding in those rounds is a confirmed true positive on a NEW, distinct bypass or failure class (not a regression introduced by a prior fix, not noise, not churn), surface the following signal to the user BEFORE spawning another patch engineer: "Fix loop at N rounds: all findings are true positives on new bypass classes. This surface likely needs a vocabulary-free / authoritative-primitive design change rather than another patch iteration. Consider delegating to the authoritative platform primitive or relocating the gate — see `[[delegate-to-authoritative-primitive]]`." The discriminator: true positives on new classes (different shapes each round) → rethink signal; same shape re-introduced or churn → normal HITL escalation.
+
+**Newer corroborating instances (watch_JJJJJJ2)**: PR #419 — an 8-round CWD-scoping and push-detection trajectory — converged by relocating the gate to git's own `pre-push` hook, an authority relocation rather than another parser patch (the user manually invoked the stop-and-rethink after round 4, one round later than the signal above would have fired). PR #428 — a 7-pass security re-review arc over a prompt-injection trust boundary — converged via a compile-time opaque `UntrustedText` type (closes the fencing-coverage enumeration at the type checker) and a linear-time DP `matchGlob` engine replacement (closes the ReDoS class structurally rather than blocking specific patterns). Both convergences are structural changes, not enumeration, reinforcing the discriminator above: keep enumerating and the loop continues; replace the enumeration with a structural or authoritative primitive and it terminates.
 
 ### Stream-Idle Timeout Recovery Detail
 

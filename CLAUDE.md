@@ -86,6 +86,8 @@ Every build request goes through PM triage: (1) sharpen requirements, (2) assess
 | **Clear** | Well-defined feature, possible implicit assumptions | Stress-test protocol → `sharpened-request.md` |
 | **Fuzzy** | Vague outcome, multiple valid interpretations | Diverge-then-converge → stress-test → `sharpened-request.md` |
 
+**Hook-behavior claims (sug_MMMMM2)**: any PRD assertion about what a hook currently blocks or passes must be verified by reading the hook source or a test probe — not inferred from agent session logs (logs reflect the current bug, not intended behavior). See `[[probe-before-build-invoke-not-infer]]` — that principle covers the architect's empirical-verification obligation for design assumptions; this clause is the distinct PM/PRD-authoring surface (current-behavior claims written into Acceptance Criteria before the architect is even spawned).
+
 **Step 2 — Scope check and routing** (1-2 MCP calls: `get_file_context`, `graph_query`):
 
 | Scope | Routing |
@@ -305,6 +307,8 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 ### Step Enforcement Contracts <!-- last-updated: 2026-06-12 -->
 
 **Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh` → `bash hooks/dead-wire-gate.sh {base_commit} [worktree_path]` → `bash hooks/shell-test-gate.sh {base_commit} [worktree_path]`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL. For builds with user-observable ACs, the verify step also drives the live app (background-launch + readiness-poll + curl/CLI-invocation, never `sleep N`), distinct from `npm test` — see `agents/tester.md` Live App Smoke.
+
+**Pre-existing failure proof requirement (sug_UUUU1)**: an engineer SUMMARY claiming gate failures are "pre-existing" or "unrelated to my diff" is an assertion, not proof. Before accepting it, the orchestrator MUST independently re-run the failing gate with the build's changes stashed (`git stash && <gate> && git stash pop`) or verify via `git diff {base_commit}..HEAD --name-only` that the failing files were untouched. Gate exits 0 after stash ⇒ genuinely pre-existing (classify per In-wave baseline). Gate exits non-zero after stash, or the files WERE touched ⇒ build-introduced; fix before review.
 
 **CWD for diff hooks (watch_CCCCCCCCCCCC2)**: `hooks/summary-diff-check.sh`, `hooks/dead-wire-gate.sh`, `hooks/scribe-scope-guard.sh`, and `hooks/shell-test-gate.sh` resolve `git` from CWD. Invoke each with the build worktree as CWD, OR pass the worktree as the trailing `worktree_path` arg (which applies `git -C` internally). Invoking from the WORKSPACE dir (`.canon/workspaces/…`, gitignored) silently resolves to the main working tree and produces 100% false phantom-claim / wrong-count reports. `hooks/adr-number-check.sh` was evaluated and intentionally excluded: it's a hooks.json PreToolUse hook that runs in the same CWD as the actual `git push` Bash call it intercepts — there is no orchestrator-mediated wrong-CWD invocation path for it.
 

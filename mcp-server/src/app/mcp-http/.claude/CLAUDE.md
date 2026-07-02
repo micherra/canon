@@ -47,7 +47,7 @@ Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer r
 - `startReaper()` / `stopReaper()` — unref'd interval; started lazily on first `onsessioninitialized`
 
 ## Invariants
-<!-- last-updated: 2026-06-11 -->
+<!-- last-updated: 2026-07-02 -->
 - `loopback-host.ts` is the sole definition of the loopback allowlist — do NOT redeclare `LOOPBACK_ALLOWED_HOSTS` or `extractLoopbackHostname` in `auth.ts`, `daemon.ts`, or `http-server.ts`; divergent copies are a security-consistency risk
 - `authenticate` always checks remoteAddress (loopback) BEFORE Host header BEFORE token comparison — order is security-critical (defense-in-depth)
 - `loadOrCreateToken` returns `{ ok: false }` on any fs error — callers must serve 503 (never fall through to auth)
@@ -60,3 +60,4 @@ Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer r
 - Scope is immutable after first registration — `roots/list_changed` events that attempt re-registration are logged and dropped
 - `server.close()` fires BEFORE eviction chain (isolation-finish-01) — tools must not run against a scope that is being evicted
 - Pending handshake blocks eviction — a session in scope-resolution cannot be evicted by a concurrent teardown
+- **Realpath at path-comparison seams (watch_NNNNN3)**: every new code path using a filesystem path as a map key, equality comparator, or string-prefix matcher MUST normalize via `fs.realpath()` (not `path.resolve()`) when the path could originate outside the process (client-reported URI, tool input, env var). `path.resolve` does not follow symlinks; on macOS `/tmp` → `/private/tmp`, causing silent key mismatches and broken eviction/refcount guards. The obligation does NOT propagate — re-verify at every new path-comparison site.
