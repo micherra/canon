@@ -87,12 +87,18 @@ function computeAndPersistCacheMetrics(
     getExecutionStore(workspace).updateStateMetrics(stepId, {
       cache_creation_tokens: cacheMetrics.cache_creation_tokens,
       cache_read_tokens: cacheMetrics.cache_read_tokens,
+      input_tokens: cacheMetrics.input_tokens,
       ...(cacheMetrics.cache_hit_ratio !== undefined
         ? { cache_hit_ratio: cacheMetrics.cache_hit_ratio }
         : {}),
     });
-  } catch {
+  } catch (err) {
     // best-effort — the transcript was written; never fail capture on a metrics-write error.
+    // Fail-open, but observable: surface the failure so a persist error isn't silent.
+    console.warn(
+      "[canon] capture-transcript: could not persist cache metrics:",
+      err instanceof Error ? err.message : err,
+    );
   }
   return cacheMetrics;
 }

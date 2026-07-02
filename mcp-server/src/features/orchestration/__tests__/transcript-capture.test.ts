@@ -474,7 +474,7 @@ describe("captureTranscript — cache usage telemetry write (dc-03)", () => {
     ];
   }
 
-  it("writes cache_read_tokens, cache_creation_tokens, and cache_hit_ratio into the state's metrics JSON", async () => {
+  it("writes cache_read_tokens, cache_creation_tokens, input_tokens, and cache_hit_ratio into the state's metrics JSON", async () => {
     const workspace = makeTmpDir();
     setupWorkspace(workspace, makeMinimalFlow());
 
@@ -499,6 +499,7 @@ describe("captureTranscript — cache usage telemetry write (dc-03)", () => {
       const state = store.getState("build");
       expect(state?.metrics?.cache_read_tokens).toBe(100);
       expect(state?.metrics?.cache_creation_tokens).toBe(20);
+      expect(state?.metrics?.input_tokens).toBe(30);
       // ratio = 100 / (100 + 20 + 30) = 0.6667
       expect(state?.metrics?.cache_hit_ratio).toBeCloseTo(100 / 150, 10);
     } finally {
@@ -506,7 +507,7 @@ describe("captureTranscript — cache usage telemetry write (dc-03)", () => {
     }
   });
 
-  it("a forced updateStateMetrics failure does not change captureTranscript's returned status (fail-open)", async () => {
+  it("a forced updateStateMetrics failure does not change captureTranscript's returned status (fail-open), but is logged (observable)", async () => {
     const workspace = makeTmpDir();
     setupWorkspace(workspace, makeMinimalFlow());
 
@@ -519,6 +520,9 @@ describe("captureTranscript — cache usage telemetry write (dc-03)", () => {
     const store = getExecutionStore(workspace);
     const spy = vi.spyOn(store, "updateStateMetrics").mockImplementation(() => {
       throw new Error("simulated metrics-write failure");
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {
+      // silence the expected warning in test output
     });
 
     try {
@@ -533,7 +537,14 @@ describe("captureTranscript — cache usage telemetry write (dc-03)", () => {
       assertOk(result);
       expect(result.entry_count).toBe(2);
       expect(result.transcript_path).not.toBe("");
+
+      // Fail-open must still be observable — the silent catch is required to log.
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("could not persist cache metrics"),
+        expect.anything(),
+      );
     } finally {
+      warnSpy.mockRestore();
       spy.mockRestore();
       process.env.HOME = originalHome;
     }

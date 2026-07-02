@@ -61,7 +61,6 @@ export const StateMetricsSchema = z.object({
   cache_creation_tokens: z.number().optional(),
   cache_hit_ratio: z.number().optional(),
   cache_read_tokens: z.number().optional(),
-  cache_write_tokens: z.number().optional(),
   duration_ms: z.number().optional(),
   files_changed: z.number().optional(),
   gate_results: z.array(GateResultSchema).optional(),
@@ -83,7 +82,6 @@ export const StateMetricsSchema = z.object({
 /** Focused schema for agent-reported performance metrics (ADR-003a input validation). */
 export const AgentMetricsSchema = z.object({
   cache_read_tokens: z.number().optional(),
-  cache_write_tokens: z.number().optional(),
   duration_ms: z.number().optional(),
   input_tokens: z.number().optional(),
   orientation_calls: z.number().optional(),
