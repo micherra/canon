@@ -63,7 +63,9 @@ describe("recordAppliedEvolution — happy path", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.proposal_id).toBe("evolve-20260702-01");
 
-    const row = getDriftDb(tmpProjectDir).getAppliedEvolutions().getByProposalId("evolve-20260702-01");
+    const row = getDriftDb(tmpProjectDir)
+      .getAppliedEvolutions()
+      .getByProposalId("evolve-20260702-01");
     expect(row).not.toBeNull();
     expect(row?.target_path).toBe("rules/agent-tdd-required.md");
     expect(row?.holdout_candidate).toBe(12);
@@ -73,7 +75,12 @@ describe("recordAppliedEvolution — happy path", () => {
 
   it("stores a null principle_id for an agent-def target", async () => {
     const result = await recordAppliedEvolution(
-      baseInput({ artifact_class: "agent", principle_id: null, proposal_id: "evolve-agent-01", target_path: "agents/engineer.md" }),
+      baseInput({
+        artifact_class: "agent",
+        principle_id: null,
+        proposal_id: "evolve-agent-01",
+        target_path: "agents/engineer.md",
+      }),
     );
     expect(result.ok).toBe(true);
     const row = getDriftDb(tmpProjectDir).getAppliedEvolutions().getByProposalId("evolve-agent-01");

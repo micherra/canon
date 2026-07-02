@@ -15,11 +15,10 @@
  *   - fail-open reads with typed insufficient/ambiguous buckets.
  */
 
-import { readFileSync } from "node:fs";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ReviewEntry } from "@shared/schema.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DriftDb } from "../../../platform/storage/drift/drift-db.ts";
@@ -99,10 +98,30 @@ afterEach(() => {
 describe("(a) principle signal — pre/post cohort split", () => {
   it("splits reviews⋈violations on applied_at and computes a delta", async () => {
     recordProposal({ proposalId: "evolve-a" });
-    seedReview({ principleId: PRINCIPLE, reviewId: "r1", timestamp: "2026-06-30T00:00:00.000Z", violationCount: 1 });
-    seedReview({ principleId: PRINCIPLE, reviewId: "r2", timestamp: "2026-07-01T00:00:00.000Z", violationCount: 1 });
-    seedReview({ principleId: PRINCIPLE, reviewId: "r3", timestamp: "2026-07-03T00:00:00.000Z", violationCount: 3 });
-    seedReview({ principleId: PRINCIPLE, reviewId: "r4", timestamp: "2026-07-04T00:00:00.000Z", violationCount: 3 });
+    seedReview({
+      principleId: PRINCIPLE,
+      reviewId: "r1",
+      timestamp: "2026-06-30T00:00:00.000Z",
+      violationCount: 1,
+    });
+    seedReview({
+      principleId: PRINCIPLE,
+      reviewId: "r2",
+      timestamp: "2026-07-01T00:00:00.000Z",
+      violationCount: 1,
+    });
+    seedReview({
+      principleId: PRINCIPLE,
+      reviewId: "r3",
+      timestamp: "2026-07-03T00:00:00.000Z",
+      violationCount: 3,
+    });
+    seedReview({
+      principleId: PRINCIPLE,
+      reviewId: "r4",
+      timestamp: "2026-07-04T00:00:00.000Z",
+      violationCount: 3,
+    });
 
     const res = await getEvolutionOutcomes({ project_dir: tmpProjectDir, proposal_id: "evolve-a" });
     expect(res.ok).toBe(true);
@@ -126,11 +145,41 @@ describe("(b) agent-def cliff signal", () => {
       targetPath: "agents/engineer.md",
     });
     const cliffs = db.getCliffEvents();
-    cliffs.upsert({ agent_type: "engineer", detected_at: "2026-07-01T00:00:00.000Z", source: "resume", step_id: "s1", workspace_slug: "w1" });
-    cliffs.upsert({ agent_type: "reviewer", detected_at: "2026-07-01T00:00:00.000Z", source: "resume", step_id: "s2", workspace_slug: "w2" });
-    cliffs.upsert({ agent_type: "canon:engineer", detected_at: "2026-07-03T00:00:00.000Z", source: "resume", step_id: "s3", workspace_slug: "w3" });
-    cliffs.upsert({ agent_type: "engineer", detected_at: "2026-07-04T00:00:00.000Z", source: "resume", step_id: "s4", workspace_slug: "w4" });
-    cliffs.upsert({ agent_type: "reviewer", detected_at: "2026-07-03T00:00:00.000Z", source: "resume", step_id: "s5", workspace_slug: "w5" });
+    cliffs.upsert({
+      agent_type: "engineer",
+      detected_at: "2026-07-01T00:00:00.000Z",
+      source: "resume",
+      step_id: "s1",
+      workspace_slug: "w1",
+    });
+    cliffs.upsert({
+      agent_type: "reviewer",
+      detected_at: "2026-07-01T00:00:00.000Z",
+      source: "resume",
+      step_id: "s2",
+      workspace_slug: "w2",
+    });
+    cliffs.upsert({
+      agent_type: "canon:engineer",
+      detected_at: "2026-07-03T00:00:00.000Z",
+      source: "resume",
+      step_id: "s3",
+      workspace_slug: "w3",
+    });
+    cliffs.upsert({
+      agent_type: "engineer",
+      detected_at: "2026-07-04T00:00:00.000Z",
+      source: "resume",
+      step_id: "s4",
+      workspace_slug: "w4",
+    });
+    cliffs.upsert({
+      agent_type: "reviewer",
+      detected_at: "2026-07-03T00:00:00.000Z",
+      source: "resume",
+      step_id: "s5",
+      workspace_slug: "w5",
+    });
 
     const res = await getEvolutionOutcomes({ project_dir: tmpProjectDir, proposal_id: "evolve-b" });
     expect(res.ok).toBe(true);
@@ -145,8 +194,18 @@ describe("(b) agent-def cliff signal", () => {
 describe("(c) insufficient on sparse cohort", () => {
   it("floors to insufficient when either side has < 5 events", async () => {
     recordProposal({ proposalId: "evolve-c" });
-    seedReview({ principleId: PRINCIPLE, reviewId: "r1", timestamp: "2026-07-01T00:00:00.000Z", violationCount: 1 });
-    seedReview({ principleId: PRINCIPLE, reviewId: "r2", timestamp: "2026-07-03T00:00:00.000Z", violationCount: 2 });
+    seedReview({
+      principleId: PRINCIPLE,
+      reviewId: "r1",
+      timestamp: "2026-07-01T00:00:00.000Z",
+      violationCount: 1,
+    });
+    seedReview({
+      principleId: PRINCIPLE,
+      reviewId: "r2",
+      timestamp: "2026-07-03T00:00:00.000Z",
+      violationCount: 2,
+    });
 
     const res = await getEvolutionOutcomes({ project_dir: tmpProjectDir, proposal_id: "evolve-c" });
     expect(res.ok).toBe(true);
@@ -161,7 +220,10 @@ describe("(d) ambiguous on overlapping confounds", () => {
     recordProposal({ appliedAt: ANCHOR, proposalId: "evolve-d1" });
     recordProposal({ appliedAt: "2026-07-03T00:00:00.000Z", proposalId: "evolve-d2" });
 
-    const res = await getEvolutionOutcomes({ project_dir: tmpProjectDir, proposal_id: "evolve-d1" });
+    const res = await getEvolutionOutcomes({
+      project_dir: tmpProjectDir,
+      proposal_id: "evolve-d1",
+    });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.ambiguous).toBe(true);
@@ -171,9 +233,16 @@ describe("(d) ambiguous on overlapping confounds", () => {
 
   it("does not flag a concurrent apply on a DIFFERENT signal as a confound", async () => {
     recordProposal({ appliedAt: ANCHOR, proposalId: "evolve-d1", principleId: PRINCIPLE });
-    recordProposal({ appliedAt: "2026-07-03T00:00:00.000Z", principleId: "other-principle", proposalId: "evolve-other" });
+    recordProposal({
+      appliedAt: "2026-07-03T00:00:00.000Z",
+      principleId: "other-principle",
+      proposalId: "evolve-other",
+    });
 
-    const res = await getEvolutionOutcomes({ project_dir: tmpProjectDir, proposal_id: "evolve-d1" });
+    const res = await getEvolutionOutcomes({
+      project_dir: tmpProjectDir,
+      proposal_id: "evolve-d1",
+    });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.ambiguous).toBe(false);
@@ -188,7 +257,10 @@ describe("(e) error paths", () => {
   });
 
   it("returns PROPOSAL_NOT_RECORDED for an unknown proposal_id", async () => {
-    const res = await getEvolutionOutcomes({ project_dir: tmpProjectDir, proposal_id: "never-applied" });
+    const res = await getEvolutionOutcomes({
+      project_dir: tmpProjectDir,
+      proposal_id: "never-applied",
+    });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error_code).toBe("PROPOSAL_NOT_RECORDED");
   });

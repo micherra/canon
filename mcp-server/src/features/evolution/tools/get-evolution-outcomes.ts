@@ -29,8 +29,8 @@ import type {
   AppliedEvolutionRow,
   AppliedEvolutionsDao,
 } from "@platform/storage/drift/applied-evolutions-dao.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import type { DriftDb } from "@platform/storage/drift/drift-db.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import { deriveTier } from "@shared/lib/confidence.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
@@ -314,8 +314,8 @@ function finalizeOutcome(args: {
 
   return {
     ambiguous,
-    apply_base_commit: row.apply_base_commit,
     applied_at: row.applied_at,
+    apply_base_commit: row.apply_base_commit,
     artifact_class: row.artifact_class,
     cohort: { post, pre },
     confidence,
@@ -365,8 +365,7 @@ function buildHypothesis(ctx: {
   ambiguous: boolean;
   confoundingIds: string[];
 }): string {
-  const direction =
-    ctx.delta > 0 ? "rose" : ctx.delta < 0 ? "fell" : "held steady";
+  const direction = ctx.delta > 0 ? "rose" : ctx.delta < 0 ? "fell" : "held steady";
   const base =
     `Observed after apply: the ${ctx.signal} rate for ${ctx.scopeLabel} ${direction} ` +
     `from ${ctx.pre.rate.toFixed(3)} (pre) to ${ctx.post.rate.toFixed(3)} (post), ` +

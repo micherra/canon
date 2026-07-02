@@ -34,14 +34,20 @@ export const RecordAppliedEvolutionInputSchema = z.object({
     .describe("sha256 hex of the applied candidate body (post-edit on-disk content)."),
   applied_at: z
     .string()
-    .describe("ISO-8601 timestamp of the apply. THE cohort-split anchor for get_evolution_outcomes."),
+    .describe(
+      "ISO-8601 timestamp of the apply. THE cohort-split anchor for get_evolution_outcomes.",
+    ),
   apply_base_commit: z
     .string()
     .optional()
-    .describe("git rev-parse HEAD at apply time (audit anchor). Optional — the apply does not commit."),
+    .describe(
+      "git rev-parse HEAD at apply time (audit anchor). Optional — the apply does not commit.",
+    ),
   artifact_class: z
     .string()
-    .describe("Artifact class of the mutated target: principle | rule | primer | agent | template."),
+    .describe(
+      "Artifact class of the mutated target: principle | rule | primer | agent | template.",
+    ),
   before_hash: z
     .string()
     .describe("sha256 hex of the on-disk target content BEFORE the apply edited it."),
@@ -63,7 +69,9 @@ export const RecordAppliedEvolutionInputSchema = z.object({
     .describe("Absolute path to the project root (contains .canon/). Drift.db lives under it."),
   proposal_id: z
     .string()
-    .describe("MutationProposal.id — the UNIQUE key. Re-recording the same id is an idempotent upsert."),
+    .describe(
+      "MutationProposal.id — the UNIQUE key. Re-recording the same id is an idempotent upsert.",
+    ),
   target_path: z.string().describe("Repo-relative path of the mutated artifact."),
 });
 
@@ -93,18 +101,20 @@ export async function recordAppliedEvolution(
   }
 
   try {
-    getDriftDb(project_dir).getAppliedEvolutions().record({
-      after_hash: input.after_hash,
-      applied_at: input.applied_at,
-      apply_base_commit: input.apply_base_commit ?? null,
-      artifact_class: input.artifact_class,
-      before_hash: input.before_hash,
-      holdout_baseline: input.holdout_baseline,
-      holdout_candidate: input.holdout_candidate,
-      principle_id: input.principle_id ?? null,
-      proposal_id,
-      target_path: input.target_path,
-    });
+    getDriftDb(project_dir)
+      .getAppliedEvolutions()
+      .record({
+        after_hash: input.after_hash,
+        applied_at: input.applied_at,
+        apply_base_commit: input.apply_base_commit ?? null,
+        artifact_class: input.artifact_class,
+        before_hash: input.before_hash,
+        holdout_baseline: input.holdout_baseline,
+        holdout_candidate: input.holdout_candidate,
+        principle_id: input.principle_id ?? null,
+        proposal_id,
+        target_path: input.target_path,
+      });
     return toolOk({ proposal_id });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

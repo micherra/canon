@@ -13,7 +13,7 @@
  * - runDriftMigrations idempotent on a v12 DB
  */
 
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   type AppliedEvolutionRow,
@@ -26,7 +26,9 @@ function makeDb() {
   return initDriftDb(":memory:");
 }
 
-function baseInput(overrides: Partial<RecordAppliedEvolutionInput> = {}): RecordAppliedEvolutionInput {
+function baseInput(
+  overrides: Partial<RecordAppliedEvolutionInput> = {},
+): RecordAppliedEvolutionInput {
   return {
     after_hash: "sha-after",
     applied_at: "2026-07-02T12:00:00.000Z",
@@ -63,9 +65,7 @@ describe("AppliedEvolutionsDao", () => {
   describe("migration", () => {
     it("fresh DB has applied_evolutions table after initDriftDb", () => {
       const rows = db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='applied_evolutions'",
-        )
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='applied_evolutions'")
         .all() as Array<{ name: string }>;
       expect(rows).toHaveLength(1);
       expect(rows[0].name).toBe("applied_evolutions");
@@ -111,9 +111,7 @@ describe("AppliedEvolutionsDao", () => {
     it("runDriftMigrations is idempotent on a v12 DB", () => {
       expect(() => runDriftMigrations(db)).not.toThrow();
       const rows = db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='applied_evolutions'",
-        )
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='applied_evolutions'")
         .all() as Array<{ name: string }>;
       expect(rows).toHaveLength(1);
     });
@@ -177,7 +175,9 @@ describe("AppliedEvolutionsDao", () => {
 
     it("re-recording the same proposal_id upserts (one row, updated values)", () => {
       dao.record(baseInput());
-      dao.record(baseInput({ after_hash: "sha-after-v2", holdout_candidate: 15, applying_commit: "def456" }));
+      dao.record(
+        baseInput({ after_hash: "sha-after-v2", holdout_candidate: 15, applying_commit: "def456" }),
+      );
 
       const count = db
         .prepare("SELECT COUNT(*) as c FROM applied_evolutions WHERE proposal_id = ?")
