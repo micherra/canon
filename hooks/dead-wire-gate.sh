@@ -2,8 +2,13 @@
 # dead-wire-gate.sh — Standing dead-wire reachability gate.
 #
 # Invoked by the verify contract (not as a hooks.json PreToolUse hook).
-# Signature: bash hooks/dead-wire-gate.sh <base_commit>
-# Run from the worktree root.
+# Signature: bash hooks/dead-wire-gate.sh <base_commit> [worktree_path]
+# Run from the worktree root, OR pass the worktree as the optional trailing
+# worktree_path arg — every internal git call resolves via `git -C
+# "$worktree_path"`, and diff-relative file reads (reachability grep,
+# same-file helper, canon:allow-unwired check) resolve under it too, making
+# CWD irrelevant (watch_CCCCCCCCCCCC2). Absent → current CWD-relative
+# behavior (backward-compatible).
 #
 # Exit 0: all new exports are wired (or suppressed)
 # Exit 2: one or more newly-exported symbols/tools are DEAD (no real references)
@@ -32,16 +37,36 @@
 set -euo pipefail
 
 BASE_COMMIT="${1:-}"
+WORKTREE_PATH="${2:-}"
 
 if [[ -z "$BASE_COMMIT" ]]; then
   echo "CANON: dead-wire-gate failed-closed — missing required argument: <base_commit>" >&2
   exit 1
 fi
 
+if [[ -n "$WORKTREE_PATH" ]] && [[ ! -d "$WORKTREE_PATH" ]]; then
+  echo "CANON: dead-wire-gate failed-closed — worktree_path not a directory: $WORKTREE_PATH" >&2
+  exit 1
+fi
+
+# GIT_C prefixes every internal git call with -C "$WORKTREE_PATH" when set,
+# making CWD irrelevant; empty (CWD-relative) when unset. Bash 3.2-safe empty
+# array expansion (house idiom — see push-to-main-guard.sh contract).
+# WORKTREE_PREFIX resolves diff-relative file paths (reachability grep,
+# same-file helper, suppression check) under the same worktree — `git -C`
+# only changes git's own repo root, not filesystem reads elsewhere in this
+# script.
+GIT_C=()
+WORKTREE_PREFIX=""
+if [[ -n "$WORKTREE_PATH" ]]; then
+  GIT_C=(-C "$WORKTREE_PATH")
+  WORKTREE_PREFIX="${WORKTREE_PATH%/}/"
+fi
+
 # ---------------------------------------------------------------------------
 # Validate base commit exists
 # ---------------------------------------------------------------------------
-if ! git rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
+if ! git "${GIT_C[@]+"${GIT_C[@]}"}" rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
   echo "CANON: dead-wire-gate failed-closed — invalid base commit: $BASE_COMMIT" >&2
   exit 1
 fi
@@ -58,12 +83,12 @@ fi
 # recent of the two so we never scope earlier than the caller intended.
 # ---------------------------------------------------------------------------
 EFFECTIVE_BASE="$BASE_COMMIT"
-if git rev-parse --verify "origin/main" >/dev/null 2>&1; then
+if git "${GIT_C[@]+"${GIT_C[@]}"}" rev-parse --verify "origin/main" >/dev/null 2>&1; then
   MERGE_BASE=""
-  if MERGE_BASE=$(git merge-base "origin/main" HEAD 2>/dev/null); then
+  if MERGE_BASE=$(git "${GIT_C[@]+"${GIT_C[@]}"}" merge-base "origin/main" HEAD 2>/dev/null); then
     # Guard: effective_base must be at least as recent as BASE_COMMIT.
     # If merge-base is an ancestor of BASE_COMMIT, BASE_COMMIT is more recent — keep it.
-    if git merge-base --is-ancestor "$MERGE_BASE" "$BASE_COMMIT" 2>/dev/null; then
+    if git "${GIT_C[@]+"${GIT_C[@]}"}" merge-base --is-ancestor "$MERGE_BASE" "$BASE_COMMIT" 2>/dev/null; then
       # merge-base ≤ BASE_COMMIT; use BASE_COMMIT (more restrictive diff)
       EFFECTIVE_BASE="$BASE_COMMIT"
     else
@@ -80,7 +105,7 @@ fi
 # Exclude: export { ... } from (re-exports are wiring, not candidates)
 # ---------------------------------------------------------------------------
 TS_DIFF=""
-if ! TS_DIFF=$(git diff "${EFFECTIVE_BASE}..HEAD" -- 'mcp-server/src/**/*.ts' 'mcp-server/src/*.ts' 2>&1); then
+if ! TS_DIFF=$(git "${GIT_C[@]+"${GIT_C[@]}"}" diff "${EFFECTIVE_BASE}..HEAD" -- 'mcp-server/src/**/*.ts' 'mcp-server/src/*.ts' 2>&1); then
   echo "CANON: dead-wire-gate failed-closed — git diff failed for TS files: $TS_DIFF" >&2
   exit 1
 fi
@@ -89,7 +114,7 @@ fi
 # Collect new MCP tool registrations from register-*.ts diff
 # ---------------------------------------------------------------------------
 REG_DIFF=""
-if ! REG_DIFF=$(git diff "${EFFECTIVE_BASE}..HEAD" -- 'mcp-server/src/app/register-*.ts' 2>&1); then
+if ! REG_DIFF=$(git "${GIT_C[@]+"${GIT_C[@]}"}" diff "${EFFECTIVE_BASE}..HEAD" -- 'mcp-server/src/app/register-*.ts' 2>&1); then
   echo "CANON: dead-wire-gate failed-closed — git diff failed for register files: $REG_DIFF" >&2
   exit 1
 fi
@@ -196,6 +221,8 @@ extract_mcp_tools() {
 # This is correct under the intended usage where the gate runs against <base_commit>..HEAD
 # on the currently checked-out worktree (HEAD == worktree). If the worktree were checked
 # out to a different commit than HEAD, reported line numbers could drift from file content.
+# Callers pass an already-WORKTREE_PREFIX-resolved file path (see main gate logic) so this
+# function itself stays CWD-agnostic — it never re-derives the worktree location.
 # ---------------------------------------------------------------------------
 check_suppression() {
   local file="$1"
@@ -260,8 +287,12 @@ while IFS= read -r entry; do
   # exclude the symbol's own def file and *.test.ts files
   # ≥1 remaining reference ⇒ WIRED, zero ⇒ DEAD
 
+  # Reachability grep targets resolve under WORKTREE_PREFIX (git -C only
+  # repoints git's own commands; this grep is a plain filesystem read).
+  resolved_local_file="${WORKTREE_PREFIX}${local_file}"
+
   local_refs=""
-  if ! local_refs=$(grep -rln "\b${local_symbol}\b" mcp-server/src mcp-server/scripts --include='*.ts' 2>/dev/null || true); then
+  if ! local_refs=$(grep -rln "\b${local_symbol}\b" "${WORKTREE_PREFIX}mcp-server/src" "${WORKTREE_PREFIX}mcp-server/scripts" --include='*.ts' 2>/dev/null || true); then
     echo "CANON: dead-wire-gate failed-closed — grep failed for symbol: $local_symbol" >&2
     exit 1
   fi
@@ -271,7 +302,7 @@ while IFS= read -r entry; do
   while IFS= read -r ref_file; do
     [[ -z "$ref_file" ]] && continue
     # Exclude own definition file
-    if [[ "$ref_file" == "$local_file" ]]; then
+    if [[ "$ref_file" == "$resolved_local_file" ]]; then
       continue
     fi
     # Exclude test files
@@ -306,7 +337,7 @@ while IFS= read -r entry; do
     # failure — $() swallows the exit code; we use a temp variable instead.
     _helper_exit=0
     _code_refs=""
-    _code_refs=$(timeout 20 node "$_helper_path" "$local_file" "$local_symbol" \
+    _code_refs=$(timeout 20 node "$_helper_path" "$resolved_local_file" "$local_symbol" \
       2>/dev/null) || _helper_exit=$?
 
     if [[ "$_helper_exit" -ne 0 ]]; then
@@ -329,7 +360,7 @@ while IFS= read -r entry; do
 
   # Symbol appears DEAD — check suppression before flagging
   suppression_reason=""
-  if suppression_reason=$(check_suppression "$local_file" "$local_line" 2>/dev/null); then
+  if suppression_reason=$(check_suppression "$resolved_local_file" "$local_line" 2>/dev/null); then
     echo "SUPPRESSED: ${local_symbol} @ ${local_file}:${local_line} — ${suppression_reason}"
     SUPPRESSED_COUNT=$((SUPPRESSED_COUNT + 1))
   else
@@ -348,7 +379,7 @@ while IFS= read -r tool_name; do
   # Reachability: grep -rn '"<name>"' mcp-server/src/app/register-*.ts
   # ≥1 match ⇒ WIRED, zero ⇒ DEAD
   mcp_refs=""
-  if ! mcp_refs=$(grep -rn "\"${tool_name}\"" mcp-server/src/app/register-*.ts 2>/dev/null || true); then
+  if ! mcp_refs=$(grep -rn "\"${tool_name}\"" "${WORKTREE_PREFIX}"mcp-server/src/app/register-*.ts 2>/dev/null || true); then
     echo "CANON: dead-wire-gate failed-closed — grep failed for MCP tool: $tool_name" >&2
     exit 1
   fi
