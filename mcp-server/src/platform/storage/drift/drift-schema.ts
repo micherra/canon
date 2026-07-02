@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "11";
+export const DRIFT_SCHEMA_VERSION = "12";
 
 // DDL statements — v1 base tables
 //
@@ -396,6 +396,41 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '11' WHERE key = 'schema_version'`);
     },
     version: "11",
+  },
+  {
+    up: (db) => {
+      // applied_evolutions — durable apply-provenance for evolution-candidates.
+      // One row per applied proposal; UNIQUE(proposal_id) gives idempotent upsert.
+      // principle_id is nullable (null for agent-def cliff targets); apply_base_commit
+      // and applying_commit are nullable — the apply command does not commit, so
+      // applying_commit is back-filled later from the Canon-Evolution: trailer (ADR-0034).
+      // applied_at is the cohort-split anchor for get_evolution_outcomes.
+      // No quarantine column now — Inc-4 adds it in its own v13 migration
+      // (no-dead-abstractions: only fields written this build).
+      db.exec(`CREATE TABLE IF NOT EXISTS applied_evolutions (
+        id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+        proposal_id        TEXT NOT NULL,
+        target_path        TEXT NOT NULL,
+        artifact_class     TEXT NOT NULL,
+        principle_id       TEXT,
+        before_hash        TEXT NOT NULL,
+        after_hash         TEXT NOT NULL,
+        holdout_baseline   INTEGER NOT NULL,
+        holdout_candidate  INTEGER NOT NULL,
+        apply_base_commit  TEXT,
+        applying_commit    TEXT,
+        applied_at         TEXT NOT NULL,
+        UNIQUE(proposal_id)
+      )`);
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_applied_evolutions_applied ON applied_evolutions(applied_at)`,
+      );
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_applied_evolutions_principle ON applied_evolutions(principle_id)`,
+      );
+      db.exec(`UPDATE meta SET value = '12' WHERE key = 'schema_version'`);
+    },
+    version: "12",
   },
 ];
 
