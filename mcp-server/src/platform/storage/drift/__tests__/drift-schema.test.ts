@@ -267,6 +267,8 @@ describe("runDriftMigrations — v1 to v2 upgrade", () => {
       value: string;
     };
     expect(row.value).toBe("12");
+    // Terminal schema_version is driven by the exported constant (single source of truth).
+    expect(row.value).toBe(DRIFT_SCHEMA_VERSION);
     db.close();
   });
 

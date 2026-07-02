@@ -428,9 +428,12 @@ const MIGRATIONS: Migration[] = [
       db.exec(
         `CREATE INDEX IF NOT EXISTS idx_applied_evolutions_principle ON applied_evolutions(principle_id)`,
       );
-      db.exec(`UPDATE meta SET value = '12' WHERE key = 'schema_version'`);
+      // Terminal-version stamp is driven by the exported constant — DRIFT_SCHEMA_VERSION
+      // is the single source of truth for the current schema version. Intermediate
+      // historical stamps ('2'…'11') remain frozen literals.
+      db.exec(`UPDATE meta SET value = '${DRIFT_SCHEMA_VERSION}' WHERE key = 'schema_version'`);
     },
-    version: "12",
+    version: DRIFT_SCHEMA_VERSION,
   },
 ];
 
