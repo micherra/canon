@@ -51,10 +51,11 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 | `analyzer.ts` | `analyzeDrift`, `DocFreshness` | `DocFreshness: { doc_path, commits_since_sync, confidence, warning? }`; `DriftReport.doc_freshness: DocFreshness[]` defaults to `[]` |
 
 ## Contracts
-<!-- last-updated: 2026-06-08 -->
+<!-- last-updated: 2026-07-01 -->
 
 - `getDriftDb(projectDir)` — module-level cache keyed by resolved `projectDir`; returns existing `DriftDb` or creates + migrates; `evictDriftDbForScope(projectDir)` removes entry (lifecycle hook, currently unwired at HTTP transport layer)
 - `DriftDb` — lazy accessors: `.getSignals()` returns `DriftDbSignals`, `.getOutcomes()` returns `OutcomeStore`, `.getAreaMemory()` returns `AreaMemoryDao`, `.getCraftProfiles()` returns `CraftProfileDao`, `.getCliffEvents()` returns `CliffEventsDao`, `.getClosures()` returns `ViolationClosureDao`
+- `DriftDb.getReviews(options?)` / `DriftStore.getReviews(options?)` — two-views invariant: default (`includeResolvedViolations` absent) reconstitutes **open-only** violations — the view used by `get_compliance`, `getComplianceTrend`, re-review paths, and every other caller (preserves the closure-02 / Codex P2 compliance fix); `includeResolvedViolations: true` reconstitutes **open + resolved** violations — used ONLY by `get-drift-report.ts` so `most_violated` / historical drift analytics reflect the true historical record. These two views must not be unified — unifying would re-depress compliance.
 - `cliff_events` schema (v10): UNIQUE(workspace_slug, step_id); upsert with COALESCE for nullable enrichment columns; `recovery_outcome` CASE-guarded against downgrade; 11 columns including `agent_type`, `missing_count`, `partial_count`, `source`, `detected_at`, `recorded_at`
 - violations lifecycle schema (v11): `status TEXT NOT NULL DEFAULT 'open'`, `resolved_at TEXT`, `resolved_by_review_id TEXT`, `resolution_reason TEXT`; partial index `idx_violations_open` on `status='open'`; `DriftDb.appendReview()` calls `ViolationClosureDao.supersedeOpenViolations()` inside the review transaction
 - `craft_profiles` schema (v9): columns `subsystem_key`, `source` ("review"|"audit"), `flow` (nullable, review-only), `run_id` (nullable, review-only), `ratings` (JSON), `rollup` (REAL)
@@ -62,8 +63,8 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 - `ReviewEntry` (unified type) lives in `@shared/schema.ts` — import from there, not from this layer
 
 ## Invariants
-<!-- last-updated: 2026-06-05 -->
+<!-- last-updated: 2026-07-01 -->
 - Import `getDriftDb` from `drift-db-cache.ts` directly — no barrel; `drift-db-rows.ts` is private (row types only)
 - All DAOs are synchronous; never return Promises (better-sqlite3 is sync)
-- `DriftStore.getReviews()` AND-filters: principleId AND branch AND prNumber — each filter is optional
+- `DriftStore.getReviews()` AND-filters: principleId AND branch AND prNumber — each filter is optional; `includeResolvedViolations` is a separate switch (default `false`, open-only) controlling violation reconstitution, not part of the AND-filter chain — see Contracts two-views invariant
 - Confidence adapters live in `platform/` to avoid circular imports with features that use both drift DB and confidence scoring

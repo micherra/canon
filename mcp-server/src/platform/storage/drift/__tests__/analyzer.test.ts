@@ -265,6 +265,50 @@ describe("correctness-scan exclusion from analytics", () => {
   });
 });
 
+describe("historical drift-report view — resolved violations feed most_violated (sug_KKKKKK1)", () => {
+  it("most_violated is non-empty and keyed by principle_id when fed open+resolved violations", () => {
+    // Simulates the shape getReviews({ includeResolvedViolations: true }) returns:
+    // violations that are historically resolved still appear in the ReviewEntry.
+    const reviews = [
+      makeReview({
+        review_id: "rev_1",
+        violations: [{ principle_id: "fail-closed-by-default", severity: "rule" }],
+      }),
+    ];
+    const report = analyzeDrift(reviews, ["fail-closed-by-default"]);
+    expect(report.most_violated).not.toHaveLength(0);
+    const stats = report.most_violated.find((s) => s.principle_id === "fail-closed-by-default");
+    expect(stats).toBeDefined();
+    expect(stats!.total_violations).toBe(1);
+  });
+
+  it("never_triggered excludes a principle that was violated-then-resolved", () => {
+    const reviews = [
+      makeReview({
+        review_id: "rev_1",
+        violations: [{ principle_id: "hooks-fail-closed", severity: "rule" }],
+      }),
+    ];
+    const report = analyzeDrift(reviews, ["hooks-fail-closed", "never-touched-principle"]);
+    expect(report.never_triggered).toEqual(["never-touched-principle"]);
+  });
+
+  it("a principle with 1 resolved + 0 open rows counts exactly once (no double-count)", () => {
+    // Open and resolved violation rows are disjoint at the DB level — the
+    // ReviewEntry the analyzer receives carries each violation exactly once
+    // regardless of its resolution status.
+    const reviews = [
+      makeReview({
+        review_id: "rev_1",
+        violations: [{ principle_id: "observable-best-effort", severity: "strong-opinion" }],
+      }),
+    ];
+    const report = analyzeDrift(reviews, ["observable-best-effort"]);
+    const stats = report.most_violated.find((s) => s.principle_id === "observable-best-effort");
+    expect(stats!.total_violations).toBe(1);
+  });
+});
+
 describe("v1 craft field removed", () => {
   it("analyzeDrift returns a DriftReport without a craft field", () => {
     const report = analyzeDrift([], []);
