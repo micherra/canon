@@ -39,6 +39,11 @@ surface:
       orchestrator_action: auto-triage-fix
       message: "CI failed — surfacing failing job + log. ship-watch terminating."
       terminate: true
+    - field: ci_conclusion
+      from: pending
+      to: success
+      orchestrator_action: auto-enable-merge
+      message: "CI is green on the open PR — surfacing auto-enable-merge (orchestrator arms squash auto-merge)."
     - field: release_tag
       orchestrator_action: auto-plugin-update
       message: "Release tag cut — reminder: run plugin-update so the new version goes live."
@@ -122,12 +127,21 @@ Apply `surface.on_transition` rules (transition-only — silent on no-op ticks):
    reads the failing CI job logs and dispatches a fix flow (or asks first if ambiguous).
    The runner only surfaces the signal; it does NOT act on it.
 
-2. **`release_tag` transitions** (null→tag, or tag changes) — emit the plugin-update
+2. **`ci_conclusion`: `pending` → `success`** — emit the auto-enable-merge message. Carries
+   `orchestrator_action: auto-enable-merge` — the ORCHESTRATOR read-only-prechecks the PR
+   (`gh pr view --json state,autoMergeRequest`) and, if OPEN and not already armed, runs
+   `gh pr merge <pr> --auto --squash` (unattended on autonomous/light-touch, ask-first on
+   supervised). No `terminate` on this rule — the loop keeps watching until `resolved` fires
+   naturally when GitHub completes the merge. This rule and the `pending → failure` rule above
+   are mutually exclusive (AND from/to matching) and never cross-fire. The runner only surfaces
+   the signal; it does NOT run `gh pr merge`.
+
+3. **`release_tag` transitions** (null→tag, or tag changes) — emit the plugin-update
    reminder message. Carries `orchestrator_action: auto-plugin-update` — the ORCHESTRATOR
    asks the user to confirm, then runs plugin-update and confirms the new version is active.
    The runner only surfaces the signal; it does NOT run plugin-update.
 
-3. **`external_review_comment_ids` gains new IDs** — emit the new-comment message (append
+4. **`external_review_comment_ids` gains new IDs** — emit the new-comment message (append
    mode: prior surfaces remain visible; only new IDs trigger). Carries
    `orchestrator_action: auto-triage-fix` — the ORCHESTRATOR reads the new PR comment(s)
    and dispatches a fix flow (or asks first if ambiguous). The runner only surfaces the
