@@ -478,7 +478,7 @@ canon/
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── workflows/            # Managed workflow-script library — Canon's 6th managed-artifact class; plain-JS scripts invoked on-demand via Workflow `scriptPath`; lint enforced by `hooks/workflows-lint.sh`
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
-├── principles/           # Built-in principles (64 total: 6 rules, 36 strong-opinions, 22 conventions); 36 Canon-internal principles in .canon/principles/ (portable: false)
+├── principles/           # Built-in principles (67 total: 6 rules, 36 strong-opinions, 25 conventions — `ls principles/rules/*.md principles/strong-opinions/*.md principles/conventions/*.md | wc -l`); 38 Canon-internal principles in .canon/principles/ (portable: false — `ls .canon/principles/rules/*.md .canon/principles/conventions/*.md | wc -l`)
 │   ├── rules/
 │   ├── strong-opinions/
 │   └── conventions/
