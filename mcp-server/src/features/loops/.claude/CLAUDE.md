@@ -59,7 +59,7 @@ Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-upda
 - **Orchestrator-consumed signal** — the loop/runner NEVER executes the action; the runner
   surfaces a structured `ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>` line in Step 6
   when the transition fires; the orchestrator reads and acts on it
-- See CLAUDE.md § Loop Framework, "Consuming `orchestrator_action`" for the four consumption contracts
+- See CLAUDE.md § Loop Framework, "Consuming `orchestrator_action`" for the five consumption contracts
 
 ## Phase Boundary
 
