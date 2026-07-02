@@ -133,6 +133,11 @@ const FIXTURE_SUMMARY_WITH_DECISIONS = `### Decisions
 | d1 | Used a pure extractor | Keeps the digest field never-throw and easy to test |
 `;
 
+const FIXTURE_SUMMARY_NO_RESOLUTION = `### Files Changed
+
+- src/foo.ts
+`;
+
 // ---- resolveAutoMemoryDir ----
 
 describe("resolveAutoMemoryDir", () => {
@@ -312,6 +317,21 @@ describe("extractDigestData", () => {
 
     expect(data.notableResolution).toBe("");
   });
+
+  test("scans all *-SUMMARY.md files in deterministic order, using the first non-empty extraction", async () => {
+    await writeFile(join(workspace, "journal.json"), FIXTURE_JOURNAL, "utf-8");
+
+    const plansDir = join(workspace, "plans", "my-slug");
+    await mkdir(plansDir, { recursive: true });
+    // Alphabetically first — has no Decisions/Deviations section.
+    await writeFile(join(plansDir, "task-01-SUMMARY.md"), FIXTURE_SUMMARY_NO_RESOLUTION, "utf-8");
+    // Alphabetically second — has a Decisions table.
+    await writeFile(join(plansDir, "task-02-SUMMARY.md"), FIXTURE_SUMMARY_WITH_DECISIONS, "utf-8");
+
+    const data = extractDigestData(workspace);
+
+    expect(data.notableResolution).toBe("Keeps the digest field never-throw and easy to test");
+  });
 });
 
 // ---- formatDigestMarkdown ----
@@ -396,6 +416,20 @@ describe("formatDigestMarkdown", () => {
 
     expect(md).not.toContain("### Notable Resolution");
     expect(md).not.toContain("**Notable resolution**:");
+    // No stray whitespace-only trailing line, and exactly one trailing newline.
+    expect(md.split("\n").some((line) => line.length > 0 && line.trim() === "")).toBe(false);
+    expect(md.endsWith("\n")).toBe(true);
+    expect(md.endsWith("\n\n")).toBe(false);
+  });
+
+  test("file ending is consistent (single trailing newline) whether or not the section is present", () => {
+    const withoutSection = formatDigestMarkdown({ ...baseData, notableResolution: "" });
+    const withSection = formatDigestMarkdown({ ...baseData, notableResolution: "Some resolution" });
+
+    expect(withoutSection.endsWith("\n")).toBe(true);
+    expect(withoutSection.endsWith("\n\n")).toBe(false);
+    expect(withSection.endsWith("\n")).toBe(true);
+    expect(withSection.endsWith("\n\n")).toBe(false);
   });
 });
 

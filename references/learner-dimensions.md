@@ -232,7 +232,7 @@ Action: {no write needed | annotated with reinforcement | annotated with decay m
 
 **Surface-only** (guardrail c): output is a proposal file only; acceptance routes PM → writer (`references/content-flow.md`). The learner has no edit capability over CONVENTIONS.md/principles.
 
-**Enrichment-only** (guardrail d): NEVER promote from a single digest's `notable_resolution` line; the ≥3-build recurrence + cross-check + cooling-off are prerequisites.
+**Enrichment-only** (guardrail d): NEVER promote from a single digest's `**Notable resolution**:` line; the ≥3-build recurrence + cross-check + cooling-off are prerequisites.
 
 **Minimum threshold**: below 3 distinct clean builds carrying a matching resolution → note "Skipped: success-pattern — {N} < 3 distinct clean builds."
 
@@ -253,7 +253,7 @@ origin_builds: [{slug-1}, {slug-2}, {slug-3}]   # the ≥3 distinct clean builds
 ---
 
 ## Observation
-{grouped notable_resolution, with the ≥3 distinct clean build slugs and weighted count}
+{grouped notableResolution, with the ≥3 distinct clean build slugs and weighted count}
 
 ## Proposed Change
 Add to CONVENTIONS.md — "{convention text}"

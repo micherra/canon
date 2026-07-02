@@ -129,21 +129,30 @@ function readPlanningBriefFields(
   };
 }
 
-/** Read the notable-resolution digest field from the engineer SUMMARY (fallback: DESIGN.md). */
+/**
+ * Read the notable-resolution digest field. Scans ALL `*-SUMMARY.md` files in a
+ * deterministic (lexicographic) order, using the first non-empty extraction.
+ * Falls back to DESIGN.md only when no summary yields a value.
+ */
 function readNotableResolutionFields(
   workspace: string,
   slug: string,
 ): { notableResolution: string } {
   const plansDir = join(workspace, "plans", slug);
-  const summaryMatches = existsSync(plansDir) ? globSync("*-SUMMARY.md", { cwd: plansDir }) : [];
-  const summaryContent = summaryMatches[0]
-    ? readFileSync(join(plansDir, summaryMatches[0]), "utf-8")
-    : "";
+  const summaryMatches = existsSync(plansDir)
+    ? globSync("*-SUMMARY.md", { cwd: plansDir }).sort()
+    : [];
+
+  for (const summaryMatch of summaryMatches) {
+    const summaryContent = readFileSync(join(plansDir, summaryMatch), "utf-8");
+    const resolution = extractNotableResolution(summaryContent);
+    if (resolution) return { notableResolution: resolution };
+  }
 
   const designPath = join(plansDir, "DESIGN.md");
   const designContent = existsSync(designPath) ? readFileSync(designPath, "utf-8") : undefined;
 
-  return { notableResolution: extractNotableResolution(summaryContent, designContent) };
+  return { notableResolution: extractNotableResolution("", designContent) };
 }
 
 /** Count violations across all review files in the workspace reviews directory. */

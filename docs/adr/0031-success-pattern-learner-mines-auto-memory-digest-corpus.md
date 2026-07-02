@@ -1,18 +1,18 @@
 ---
-adr: "0030"
+adr: "0031"
 title: "Success-pattern learner mines the auto-memory digest corpus"
 status: accepted
 date: "2026-07-01"
 build: "m1-success-pattern-learner (AgentKB R4) — design"
 ---
 
-# ADR-0030: Success-pattern learner mines the auto-memory digest corpus
+# ADR-0031: Success-pattern learner mines the auto-memory digest corpus
 
 ## Context
 
 M1 (AgentKB R4) gives Canon's learner its first positive-signal source: a `success-pattern`
 sub-analysis that mines *clean* builds for recurring elegant resolutions and proposes them as
-conventions. It needs one qualitative line per clean build (`notable_resolution`) and a place for
+conventions. It needs one qualitative line per clean build (`notableResolution`) and a place for
 the learner to read it. Exploration `docs/explore/positive-signal-distillation.md` §3 scopes M1 as
 "a tiny producer change" — no new MCP tool, no new attribution primitive. Two transports are viable;
 the choice determines how much surface M1 touches and whether the learner reads outside `.canon/`.
@@ -25,7 +25,7 @@ transport cleanliness for scope; Option B the reverse) — so it passes the 3-co
 
 ## Options Considered
 
-### Option A: Emit `notable_resolution` into the auto-memory build-digest files; learner reads that corpus directly
+### Option A: Emit `notableResolution` into the auto-memory build-digest files; learner reads that corpus directly
 
 **Pros:**
 - Single producer change (`digest-writer.ts` + one pure extractor in `run-summary-extractors.ts`).
@@ -38,7 +38,7 @@ transport cleanliness for scope; Option B the reverse) — so it passes the 3-co
 
 **Canon-principle alignment:** honors `simplicity-first` — smallest change matching M1's stated scope.
 
-### Option B: Thread `notable_resolution` through `RunSummary` → `get_historical_artifacts` / `get_cross_run_analysis`; learner reads via MCP
+### Option B: Thread `notableResolution` through `RunSummary` → `get_historical_artifacts` / `get_cross_run_analysis`; learner reads via MCP
 
 **Pros:**
 - In-repo, MCP-native transport; no outside-repo read path.
@@ -76,12 +76,12 @@ producer↔consumer coupling reduces to one frozen string contract: the digest l
 **Negative / trade-offs:**
 - The learner gains a read dependency on the auto-memory directory layout and the dashed-path
   resolution — a coupling that must survive environment differences.
-- A second consumer wanting `notable_resolution` via MCP would need Option B added later (additive,
+- A second consumer wanting `notableResolution` via MCP would need Option B added later (additive,
   not blocked).
 
 ## Revisit-If
 
 - The learner's read of the auto-memory corpus proves unreliable across environments (dashed-path
   resolution fails on some platform), OR
-- Another consumer needs `notable_resolution` through MCP — at which point promote to Option B
+- Another consumer needs `notableResolution` through MCP — at which point promote to Option B
   (thread the field through `RunSummary`) as an additive change.

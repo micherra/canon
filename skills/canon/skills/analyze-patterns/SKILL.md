@@ -66,7 +66,7 @@ Data sufficiency thresholds:
 
 - **principle-health** requires >= 10 reviews (from `get_drift_report`)
 - **codebase-patterns** requires >= 5 files with >= 70% consistency per pattern
-- **convention-lifecycle** requires >= 3 builds for promotion sub-analysis; graduation and staleness run regardless. Success-pattern mining (Sub-analysis E) requires >= 3 distinct clean builds carrying a `notable_resolution` line; below threshold → skip with "Skipped: success-pattern — {N} < 3 distinct clean builds."
+- **convention-lifecycle** requires >= 3 builds for promotion sub-analysis; graduation and staleness run regardless. Success-pattern mining (Sub-analysis E) requires >= 3 distinct clean builds carrying a `**Notable resolution**:` line; below threshold → skip with "Skipped: success-pattern — {N} < 3 distinct clean builds."
 - **process-health** requires >= 5 flow runs (from `get_history` MCP tool; supplement with `get_build_history` for trend analysis across many builds)
 - **agent-effectiveness** requires >= 3 completed flows with transcript data (read from workspace journals)
 - **artifact-retirement** (principle path) requires >= 10 reviews (inherits principle-health minimum); below threshold → emit "Skipped: artifact-retirement (principles) — requires 10 reviews, have {current}". The convention/agent-rule adherence path has no review-count floor but still requires the 2-run cooling-off (`watch_threshold: 2`).
