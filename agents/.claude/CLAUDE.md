@@ -11,14 +11,13 @@ Agent definitions for Canon's multi-agent build pipeline. Each markdown file def
 
 Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, `maxTurns`, `permissionMode`, `memory`, `skills`, `tools`) followed by markdown instructions. Agents are spawned by the orchestrator during flow execution.
 
-**Agent roster (11):**
+**Agent roster (10):**
 
 | Agent | Role | Model |
 |-------|------|-------|
 | `architect` | Technical planning for non-trivial builds: researches codebase, designs solutions, produces runbooks and task plans | opus |
 | `engineer` | Executes code-writing work in implementation mode (per a plan) or fix mode (targeted bug or violation fixes) | sonnet |
 | `evaluator` | Lightweight quality gate — interprets structural signals against acceptance criteria; returns PASS/FAIL verdict | haiku |
-| `janitor` | Background housekeeping — prunes stale worktrees and orphaned workspaces; spawned when `invoke_janitor` returns `needs_prune: true` | sonnet |
 | `learner` | Analyzes patterns; suggests principle improvements | sonnet |
 | `reviewer` | Reviews code for principle compliance | opus |
 | `scribe` | Updates CLAUDE.md, context.md, CONVENTIONS.md post-implementation; checks touched directories for missing CLAUDE.md (Step 2b, doc-gap detection) and reports gaps informational-only in CONTEXT-SYNC.md | sonnet |
@@ -34,9 +33,7 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 | architect.md | Technical planning for non-trivial builds. Performs codebase research, designs technical approach, produces a runbook, and breaks the design into atomic task plans. Does NOT write code. |
 | engineer.md | Executes code-writing work. Operates in two modes: implementation (new code per a task plan) or fix (targeted bug or violation fixes). Mode is selected by spawn prompt context. Spawned by the lead orchestrator. |
 | evaluator.md | Lightweight quality gate agent that interprets structural signals (pattern findings, scope overlap, diff stats) against acceptance criteria and implementation summary. Returns a structured PASS/FAIL verdict. Runs on Haiku for cost and speed. |
-| janitor.md | Background housekeeping agent. Prunes stale git worktrees under .canon/worktrees/ and cleans up workspaces under .canon/workspaces/ — including orphaned workspaces whose worktree/ subdirectory is no longer registered with git, and workspaces for branches that have been merged to main. Spawned conditionally after invoke_janitor signals needs_prune: true. Never modifies source code or spawns sub-agents. |
 | learner.md | Analyzes codebase patterns, review history, build execution data, and conventions to suggest improvements to Canon principles. Produces a structured learning report. Spawned by the lead orchestrator. |
-| planner.md | DEPRECATED (2026-05-17). Responsibilities split between orchestrator (PM) and architect. Requirements conversation → orchestrator. Codebase research → architect. Runbook production → architect. Triviality assessment → architect. See agents/architect.md for the current technical pre-build agent. |
 | reviewer.md | Reviews code changes against Canon engineering principles. Six-stage evaluation: principle compliance, code quality, compliance cross-check, drift-from-plan, acceptance criteria verification, and cross-requirement consistency. Spawned by the build orchestrator, Canon intake, pr-review command, or other agents. |
 | scribe.md | Post-implementation context sync agent. Reads git diffs and engineer summaries to update CLAUDE.md, context.md, and CONVENTIONS.md when contract-level changes occur. Strictly a documenter — never proposes new principles. |
 | security.md | Reviews code for security vulnerabilities, unsafe patterns, and compliance issues. Produces a security assessment with findings ranked by severity. |
@@ -50,7 +47,7 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 
 - **Harness tool grants (as of 2026-06-09):** `LSP` (navigation-only — `findReferences`/`goToDefinition`/etc., no `getDiagnostics`) granted to `reviewer`, `engineer`, `architect`. `WebSearch` granted to `security`, `architect`. `WebFetch` granted to `writer` (others already had it or intentionally omitted). `PushNotification` is an orchestrator-side call (NOT an agent grant) fired at plan-approval, review-verdict, and build-complete gates. Requires `typescript-language-server` installed globally for LSP to return results.
 - Each agent has a declarative `permissionMode` enforced by Claude Code:
-  - **`plan`** — truly read-only. No `Write` / `Edit` / `Bash`-to-modify AND no MCP `write_*` / `update_*` tools. Currently unused (the legacy planner was the only agent on this mode).
+  - **`plan`** — truly read-only. No `Write` / `Edit` / `Bash`-to-modify AND no MCP `write_*` / `update_*` tools. Currently unused (a now-removed legacy planner was the only agent on this mode).
   - **`acceptEdits`** — auto-approves file edits and common filesystem commands scoped to the working directory. For agents that produce artifacts via MCP write tools (`architect` → `write_plan_index`; `reviewer` → `write_review`; `tester` → `write_test_report`; `learner` → writes to `.canon/learning.jsonl` and `.canon/proposed-learnings/`; `shipper` → PR description; `writer` → principle files) or that write file artifacts directly (`engineer`, `scribe`, `security`).
   - **Why not all `plan` for read-only roles?** Claude Code's `plan` mode blocks ALL write tools including MCP `write_*` — per [permission-modes](https://code.claude.com/docs/en/permission-modes.md). So the subset that genuinely can't write anything (no MCP write tools) stays on `plan`; everyone else is `acceptEdits`. Each agent's `tools:` list is the real allowlist.
 - Each agent has a `maxTurns` budget appropriate to its role. A turn is one assistant message with tool calls; text-only responses don't consume a turn. Parallel tool calls in one message = 1 turn.
