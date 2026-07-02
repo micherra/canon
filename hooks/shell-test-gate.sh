@@ -134,6 +134,13 @@ fi
 # prevents the loop-stdin hang where a suite reading stdin blocks on the pipe
 # (PROBE-FINDINGS.md §3a — hang disappears entirely with </dev/null).
 #
+# When WORKTREE_PATH is set, each suite runs with CWD = WORKTREE_PATH (not the
+# caller's CWD). $t is already WORKTREE_PREFIX-prefixed, so it still resolves
+# correctly after the cd; but a suite that reads repo-root-relative paths
+# (e.g. `bash hooks/foo.sh`) needs CWD anchored at the target worktree to
+# match CI, which always runs suites from the checkout root (Codex P2 fix —
+# WORKTREE_PREFIX alone only fixed suite *discovery*, not suite *execution*).
+#
 # timeout (coreutils) is applied when available; not guaranteed on stock macOS.
 # CAP=180s is generous (slowest passing suite is ~31s; PROBE §3b); a timeout-
 # kill (rc 124/137) counts as a failure — fail-closed.
@@ -144,10 +151,18 @@ for t in "${SUITES[@]}"; do
   echo "=== $t ==="
   SUITE_RC=0
 
-  if command -v timeout >/dev/null 2>&1; then
-    timeout -k 5 180 bash "$t" </dev/null || SUITE_RC=$?
+  if [[ -n "$WORKTREE_PATH" ]]; then
+    if command -v timeout >/dev/null 2>&1; then
+      ( cd "$WORKTREE_PATH" && timeout -k 5 180 bash "$t" </dev/null ) || SUITE_RC=$?
+    else
+      ( cd "$WORKTREE_PATH" && bash "$t" </dev/null ) || SUITE_RC=$?
+    fi
   else
-    bash "$t" </dev/null || SUITE_RC=$?
+    if command -v timeout >/dev/null 2>&1; then
+      timeout -k 5 180 bash "$t" </dev/null || SUITE_RC=$?
+    else
+      bash "$t" </dev/null || SUITE_RC=$?
+    fi
   fi
 
   if [[ "$SUITE_RC" -ne 0 ]]; then

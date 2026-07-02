@@ -511,6 +511,57 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Case p: worktree_path suites run WITH CWD = worktree_path (Codex P2 / CI parity)
+#
+# Regression test for the CWD fix: a suite that reads a repo-root-relative
+# path (e.g. `[[ -f hooks/canary.sh ]]`) must resolve against WORKTREE_PATH,
+# not the caller's CWD — matching CI, which always runs suites from the
+# checkout root. Before the fix, WORKTREE_PREFIX only fixed suite
+# *discovery* (find), not suite *execution* (`bash "$t"` ran with the
+# caller's CWD unchanged) — so this suite would see no hooks/canary.sh from
+# the caller's CWD and fail.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case p: worktree_path suite reads repo-root-relative path → resolves against worktree (CWD fix) --"
+
+CASEP_MAIN="$MASTER_TMP/casep-main"
+init_fixture_repo "$CASEP_MAIN"
+CASEP_BASE=$(git -C "$CASEP_MAIN" rev-parse HEAD)
+
+CASEP_LINKED="$MASTER_TMP/casep-linked"
+git -C "$CASEP_MAIN" worktree add -q -b casep-branch "$CASEP_LINKED" HEAD
+
+mkdir -p "$CASEP_LINKED/hooks"
+# Marker file the suite below checks for via a repo-root-relative path.
+printf '#!/bin/bash\n# canary\n' > "$CASEP_LINKED/hooks/canary.sh"
+# Suite fails unless hooks/canary.sh is visible relative to CWD.
+printf '#!/bin/bash\n[[ -f hooks/canary.sh ]] || exit 1\nexit 0\n' > "$CASEP_LINKED/hooks/cwd-check.test.sh"
+git -C "$CASEP_LINKED" add hooks/canary.sh hooks/cwd-check.test.sh
+git -C "$CASEP_LINKED" commit -q -m "add canary.sh + cwd-check suite"
+
+printf '#!/bin/bash\n# no-op\n' > "$CASEP_LINKED/hooks/trigger.sh"
+git -C "$CASEP_LINKED" add hooks/trigger.sh
+git -C "$CASEP_LINKED" commit -q -m "add trigger.sh (in-scope change)"
+
+# Invoke from a CWD that does NOT contain hooks/canary.sh — an unrelated temp
+# dir, distinct from both the main repo and the linked worktree.
+CASEP_CALLER_CWD="$MASTER_TMP/casep-caller-cwd"
+mkdir -p "$CASEP_CALLER_CWD"
+
+actual_exit=0
+output=$(cd "$CASEP_CALLER_CWD" && bash "$GATE" "$CASEP_BASE" "$CASEP_LINKED" </dev/null 2>&1) || actual_exit=$?
+if [[ "$actual_exit" -eq 0 ]] && echo "$output" | grep -qF "1 hook test suite(s) passed."; then
+  echo "  PASS: suite with repo-root-relative path resolves against worktree_path, not caller CWD"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: suite with repo-root-relative path did not resolve against worktree_path"
+  echo "        exit=$actual_exit output=$output"
+  FAIL=$((FAIL + 1))
+fi
+
+git -C "$CASEP_MAIN" worktree remove --force "$CASEP_LINKED" >/dev/null 2>&1 || true
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
