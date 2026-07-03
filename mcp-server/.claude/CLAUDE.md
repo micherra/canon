@@ -59,7 +59,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; file-pattern matching uses `matchGlob` from `lib/glob-matcher.ts` (linear-time DP, `globToRegex`+RegExp removed, ADR-0026 §Amendment-3)
 
 ## Contracts
-<!-- last-updated: 2026-06-24 -->
+<!-- last-updated: 2026-07-02 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -153,6 +153,7 @@ src/
 | `log_decision` | Append a timestamped orchestrator decision to the durable event log (`orchestrator_decision` event type). **Authoritative write** — returns a `ToolResult` error on store failure (NOT fail-open). Call at each consequential decision: plan-approval outcome, review-verdict acceptance/override, scope cuts, AC changes, tier overrides, merge-conflict resolutions, manual-verification confirmations. |
 | `get_decisions` | Read the orchestrator decisions ledger (`getEventsByType("orchestrator_decision")`); returns `{ decisions: DecisionRecord[], rendered: string }` — structured array + rendered markdown table. Use before HITL gates and on resume to rehydrate decided state. |
 | `write_orchestrator_checkpoint` | Write a derived compact resume-state snapshot to `${workspace}/checkpoint.md` (current/completed/pending steps + recent decisions + next action). **Best-effort-observable** — write failure returns a `ToolResult` error (never silent success). Refresh per completed step (alongside `log_step(...completed)`) and at each HITL gate. |
+| `evaluate_step` | Extract structural signals from a git diff for the evaluator step-transition gate — pattern findings (lazy/hacky code markers), file-scope overlap against `declared_files`, and diff statistics; no LLM calls, pure structural analysis; returns `EvaluateStepOutput`. Called by the orchestrator directly (not pre-spawn context) after implement/fix steps, before verify; consumed by `canon:evaluator`. Registered via `registerEvaluateStepTool(server)` inside `registerOrchestrationTools()` (`register-orchestration.ts`) — not a new top-level `create-server.ts` group. |
 
 **Text-only principle/review tools:**
 
