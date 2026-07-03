@@ -23,8 +23,10 @@ import type { Journal } from "../orchestration-journal.ts";
 import { finalizeWorkspace, logStep } from "../orchestration-journal.ts";
 
 // Plant a fake agent JSONL where captureTranscript will find it.
-function plantAgentJsonl(fakeHome: string, agentId: string): void {
-  const pid = process.cwd().replace(/\//g, "-");
+// `projectDir` must match the same value passed to logStep's projectDir arg —
+// captureTranscript derives the "project id" path segment from that value.
+function plantAgentJsonl(fakeHome: string, agentId: string, projectDir: string): void {
+  const pid = projectDir.replace(/\//g, "-");
   const subagentsDir = join(fakeHome, ".claude", "projects", pid, "session-test", "subagents");
   mkdirSync(subagentsDir, { recursive: true });
   const entry = JSON.stringify({
@@ -39,13 +41,16 @@ function plantAgentJsonl(fakeHome: string, agentId: string): void {
 }
 
 let workspace: string;
+let projectDir: string;
 
 beforeEach(async () => {
   workspace = await mkdtemp(join(tmpdir(), "canon-journal-"));
+  projectDir = await mkdtemp(join(tmpdir(), "canon-journal-proj-"));
 });
 
 afterEach(async () => {
   await rm(workspace, { force: true, recursive: true });
+  await rm(projectDir, { force: true, recursive: true });
 });
 
 async function readJournalFile(ws: string): Promise<Journal> {
@@ -62,7 +67,7 @@ describe("logStep", () => {
       step_id: "step-a",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
     assertOk(result);
     expect(result.step_id).toBe("step-a");
@@ -82,11 +87,11 @@ describe("logStep", () => {
       step_id: "step-a",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
-    await logStep({ projectDir: process.cwd(), status: "started", step_id: "step-a", workspace });
+    await logStep({ projectDir, status: "started", step_id: "step-a", workspace });
     await logStep({
-      projectDir: process.cwd(),
+      projectDir,
       agent_id: "test-agent-01",
       status: "completed",
       step_id: "step-a",
@@ -100,13 +105,13 @@ describe("logStep", () => {
   });
 
   test("adds started_at on started and completed_at on completed", async () => {
-    await logStep({ projectDir: process.cwd(), status: "started", step_id: "s1", workspace });
+    await logStep({ projectDir, status: "started", step_id: "s1", workspace });
     let journal = await readJournalFile(workspace);
     expect(journal.steps[0]?.started_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(journal.steps[0]?.completed_at).toBeUndefined();
 
     await logStep({
-      projectDir: process.cwd(),
+      projectDir,
       agent_id: "test-agent-ts",
       status: "completed",
       step_id: "s1",
@@ -123,7 +128,7 @@ describe("logStep", () => {
       step_id: "step-a",
       workspace: ghost,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
@@ -137,7 +142,7 @@ describe("logStep", () => {
       step_id: "",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
@@ -157,7 +162,7 @@ describe("logStep", () => {
       step_id: "s1",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
     const journal = await readJournalFile(workspace);
     expect(journal.steps[0]?.domain_skills_loaded).toEqual([
@@ -184,10 +189,10 @@ describe("finalizeWorkspace", () => {
       step_id: "design",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
 
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
     expect(result.steps_completed).toBe(1);
@@ -196,16 +201,16 @@ describe("finalizeWorkspace", () => {
   });
 
   test("detects steps_missing (started but not completed)", async () => {
-    await logStep({ projectDir: process.cwd(), status: "started", step_id: "s1", workspace });
+    await logStep({ projectDir, status: "started", step_id: "s1", workspace });
     await logStep({
-      projectDir: process.cwd(),
+      projectDir,
       agent_id: "test-agent-vc1",
       status: "completed",
       step_id: "s2",
       workspace,
     });
 
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.steps_missing).toEqual([{ status: "started", step_id: "s1" }]);
@@ -213,16 +218,16 @@ describe("finalizeWorkspace", () => {
   });
 
   test("counts planned steps as missing (PR #119 P1 fix)", async () => {
-    await logStep({ projectDir: process.cwd(), status: "planned", step_id: "s1", workspace });
+    await logStep({ projectDir, status: "planned", step_id: "s1", workspace });
     await logStep({
-      projectDir: process.cwd(),
+      projectDir,
       agent_id: "test-agent-vc2",
       status: "completed",
       step_id: "s2",
       workspace,
     });
 
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.steps_missing).toEqual([{ status: "planned", step_id: "s1" }]);
@@ -230,17 +235,17 @@ describe("finalizeWorkspace", () => {
   });
 
   test("mixed planned + started are both reported as missing", async () => {
-    await logStep({ projectDir: process.cwd(), status: "planned", step_id: "s1", workspace });
-    await logStep({ projectDir: process.cwd(), status: "started", step_id: "s2", workspace });
+    await logStep({ projectDir, status: "planned", step_id: "s1", workspace });
+    await logStep({ projectDir, status: "started", step_id: "s2", workspace });
     await logStep({
-      projectDir: process.cwd(),
+      projectDir,
       agent_id: "test-agent-vc3",
       status: "completed",
       step_id: "s3",
       workspace,
     });
 
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.steps_missing).toHaveLength(2);
@@ -264,7 +269,7 @@ describe("finalizeWorkspace", () => {
     };
     writeFileSync(join(workspace, "journal.json"), JSON.stringify(journal, null, 2));
 
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.complete).toBe(false);
     expect(result.artifacts_missing).toEqual(["nope.md"]);
@@ -272,7 +277,7 @@ describe("finalizeWorkspace", () => {
 
   test("returns WORKSPACE_NOT_FOUND when no journal exists", async () => {
     const ghost = await mkdtemp(join(tmpdir(), "canon-journal-no-file-"));
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace: ghost });
+    const result = await finalizeWorkspace({ projectDir, workspace: ghost });
     expect(isToolError(result)).toBe(true);
     if (isToolError(result)) {
       expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
@@ -287,17 +292,17 @@ describe("finalizeWorkspace", () => {
       step_id: "s1",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
     await logStep({
-      projectDir: process.cwd(),
+      projectDir,
       agent_id: "test-agent-skip",
       status: "completed",
       step_id: "s2",
       workspace,
     });
 
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.steps_skipped).toEqual(["s1"]);
     expect(result.steps_missing).toEqual([]);
@@ -313,7 +318,7 @@ describe("finalizeWorkspace", () => {
       step_id: "s1",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
     await logStep({
       agent_id: "test-agent-fo2",
@@ -323,10 +328,10 @@ describe("finalizeWorkspace", () => {
       step_id: "s2",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
 
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.flow_outcome.domain_skills_used).toEqual(["backend-api", "testing"]);
     expect(result.flow_outcome.review_verdict).toBe("approve");
@@ -346,7 +351,7 @@ describe("finalizeWorkspace", () => {
       step_id: "review-1",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
     await logStep({
       agent_id: "test-agent-rv2",
@@ -355,7 +360,7 @@ describe("finalizeWorkspace", () => {
       step_id: "fix",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
     await logStep({
       agent_id: "test-agent-rv3",
@@ -364,10 +369,10 @@ describe("finalizeWorkspace", () => {
       step_id: "review-2",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
 
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.flow_outcome.review_verdict).toBe("approve");
   });
@@ -384,10 +389,10 @@ describe("finalizeWorkspace", () => {
       step_id: "plan",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
 
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
     expect(result.artifacts_missing).toEqual([]);
@@ -401,10 +406,10 @@ describe("finalizeWorkspace", () => {
       step_id: "plan",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
 
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     // Not a false-negative: we don't claim the file is missing.
     expect(result.artifacts_missing).toEqual([]);
@@ -420,7 +425,7 @@ describe("logStep — transcript capture via agent_id", () => {
 
   test("agent_id triggers capture and records transcript_path in result", async () => {
     const fakeHome = await mkdtemp(join(tmpdir(), "canon-home-"));
-    plantAgentJsonl(fakeHome, AGENT_ID);
+    plantAgentJsonl(fakeHome, AGENT_ID, projectDir);
     const originalHome = process.env.HOME;
     process.env.HOME = fakeHome;
 
@@ -431,7 +436,7 @@ describe("logStep — transcript capture via agent_id", () => {
         step_id: "implement",
         workspace,
 
-        projectDir: process.cwd(),
+        projectDir,
       });
 
       const result = await logStep({
@@ -440,7 +445,7 @@ describe("logStep — transcript capture via agent_id", () => {
         step_id: "implement",
         workspace,
 
-        projectDir: process.cwd(),
+        projectDir,
       });
 
       assertOk(result);
@@ -462,7 +467,7 @@ describe("logStep — transcript capture via agent_id", () => {
       step_id: "implement-no-capture",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
 
     expect(isToolError(result)).toBe(true);
@@ -483,7 +488,7 @@ describe("logStep — transcript capture via agent_id", () => {
         step_id: "implement-no-source",
         workspace,
 
-        projectDir: process.cwd(),
+        projectDir,
       });
 
       const result = await logStep({
@@ -492,7 +497,7 @@ describe("logStep — transcript capture via agent_id", () => {
         step_id: "implement-no-source",
         workspace,
 
-        projectDir: process.cwd(),
+        projectDir,
       });
 
       assertOk(result);
@@ -506,7 +511,7 @@ describe("logStep — transcript capture via agent_id", () => {
 
   test("transcript_path is persisted to journal.json after successful capture", async () => {
     const fakeHome = await mkdtemp(join(tmpdir(), "canon-home-"));
-    plantAgentJsonl(fakeHome, AGENT_ID);
+    plantAgentJsonl(fakeHome, AGENT_ID, projectDir);
     const originalHome = process.env.HOME;
     process.env.HOME = fakeHome;
 
@@ -517,7 +522,7 @@ describe("logStep — transcript capture via agent_id", () => {
         step_id: "test-step",
         workspace,
 
-        projectDir: process.cwd(),
+        projectDir,
       });
 
       const result = await logStep({
@@ -526,7 +531,7 @@ describe("logStep — transcript capture via agent_id", () => {
         step_id: "test-step",
         workspace,
 
-        projectDir: process.cwd(),
+        projectDir,
       });
 
       assertOk(result);

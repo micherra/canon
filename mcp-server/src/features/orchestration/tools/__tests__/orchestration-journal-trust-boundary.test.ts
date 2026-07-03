@@ -27,13 +27,16 @@ vi.mock("@platform/adapters/git-adapter.ts", async (importOriginal) => {
 import { finalizeWorkspace, logStep } from "../orchestration-journal.ts";
 
 let workspace: string;
+let projectDir: string;
 
 beforeEach(async () => {
   workspace = await mkdtemp(join(tmpdir(), "canon-journal-tb-"));
+  projectDir = await mkdtemp(join(tmpdir(), "canon-journal-tb-proj-"));
 });
 
 afterEach(async () => {
   await rm(workspace, { force: true, recursive: true });
+  await rm(projectDir, { force: true, recursive: true });
 });
 
 /** Write raw bytes to journal.json, bypassing the normal write path. */
@@ -52,7 +55,7 @@ describe("readJournal — invalid JSON (trust-boundary fix 1)", () => {
       step_id: "new-step",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
 
     expect(result.ok).toBe(true);
@@ -69,7 +72,7 @@ describe("readJournal — invalid JSON (trust-boundary fix 1)", () => {
       step_id: "step-after-corrupt",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
 
     expect(result.ok).toBe(true);
@@ -85,7 +88,7 @@ describe("readJournal — invalid JSON (trust-boundary fix 1)", () => {
     // The key assertion is that finalizeWorkspace handles a corrupt file gracefully
     // (no uncaught exception). With the safe-default producing steps:[], there are
     // no completed steps and no missing artifacts — complete evaluates to true.
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
 
     // Should not throw — either ok or a tool error, never an uncaught exception
     expect(result).toBeDefined();
@@ -109,7 +112,7 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       version: 1,
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
     writeRawJournal(workspace, corrupt);
 
@@ -119,7 +122,7 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       step_id: "another-step",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
 
     expect(result.ok).toBe(true);
@@ -136,7 +139,7 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       version: 1,
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
     writeRawJournal(workspace, corrupt);
 
@@ -145,7 +148,7 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       step_id: "valid-step",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
 
     expect(result.ok).toBe(true);
@@ -162,7 +165,7 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       version: 1,
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
     writeRawJournal(workspace, corrupt);
 
@@ -171,7 +174,7 @@ describe("readJournal — corrupted step elements (trust-boundary fix 2)", () =>
       step_id: "fresh-step",
       workspace,
 
-      projectDir: process.cwd(),
+      projectDir,
     });
 
     expect(result.ok).toBe(true);
