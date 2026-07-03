@@ -59,7 +59,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; file-pattern matching uses `matchGlob` from `lib/glob-matcher.ts` (linear-time DP, `globToRegex`+RegExp removed, ADR-0026 §Amendment-3)
 
 ## Contracts
-<!-- last-updated: 2026-06-24 -->
+<!-- last-updated: 2026-07-02 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -70,7 +70,7 @@ src/
 > - History services (judge-weight, consolidate-policy, cross-run analysis, craft drift) → `src/features/history/services/.claude/CLAUDE.md`
 > - PR review tools + PR Review Data service → `src/features/pr-review/.claude/CLAUDE.md`
 
-**Tool error types** (`src/shared/lib/tool-result.ts`) — ADR-002: `ToolResult<T>` is a discriminated union `({ ok: true } & T) | CanonToolError`; all tools return this (never throw for expected errors). `CanonErrorCode` has 9 values; unexpected throws caught as `UNEXPECTED` by `gatedWrapHandler` or `wrapHandler<T>`.
+**Tool error types** (`src/shared/lib/tool-result.ts`) — ADR-002: `ToolResult<T>` is a discriminated union `({ ok: true } & T) | CanonToolError`; all tools return this (never throw for expected errors). `CanonErrorCode` has 11 values (incl. `PROPOSAL_NOT_RECORDED`, added by ADR-0034); unexpected throws caught as `UNEXPECTED` by `gatedWrapHandler` or `wrapHandler<T>`.
 
 **`wrapHandler` extra forwarding** (`src/shared/lib/wrap-handler.ts`) — inner handler optionally receives `extra: RequestHandlerExtra` as second arg; backward compatible. Updated 2026-06-01.
 
@@ -146,13 +146,14 @@ src/
 | `record_agent_metrics` | Record performance counters into execution state; `INVALID_INPUT` if no fields; `WORKSPACE_NOT_FOUND` if state absent — ADR-003a 2026-04-01 |
 | `post_event` | Structured activity logging via `appendEvent`; returns `{ ok: true }` or error codes — added 2026-04-07 |
 | `batch_log_steps` | Log multiple steps in one journal read-modify-write; fail-closed (batch rejected if any `step_id` empty); parallel transcript capture for completed entries with `agent_id` — added 2026-04-30 |
-| `capture_transcript` | Best-effort transcript capture; reads CC agent JSONL, writes `TranscriptEntry[]` to `{workspace}/transcripts/`; warning (never error) when source not found; `source_path` primary, `agent_id` glob fallback; `persist_path: true` records path for `get_transcript` (fail-open) — added 2026-04-26, updated 2026-05-30 |
+| `capture_transcript` | Best-effort transcript capture; reads CC agent JSONL, writes `TranscriptEntry[]` to `{workspace}/transcripts/`; warning (never error) when source not found; `source_path` primary, `agent_id` glob fallback; `persist_path: true` records path for `get_transcript` (fail-open); also aggregates cache-read/cache-creation/input tokens across assistant turns and best-effort persists them (plus derived `cache_hit_ratio`) into `execution_states.metrics`, returned as `cache_metrics` — fail-open, logged on failure, separate from `record_agent_metrics` (agents lack API-level cache-token visibility) — added 2026-04-26, updated 2026-05-30, 2026-07-02 |
 | `compute_autonomy_tier` | autonomous/light-touch/supervised from build history + blast radius + compliance; fail-safe: defaults to supervised on error; logs `auto_decision`; returns `{ tier, score, reasoning, signals_used }` |
 | `get_next_escalation_strategy` | Next fallback strategy on agent failure; cascade: add_primer → increase_budget → escalate_model → narrow_scope → hitl; 2-minute cumulative timeout; `skip_strategies` per-flow config; logs `auto_decision`; returns `EscalationResult` with `strategy`, `is_terminal` |
 | `reconcile_workspace` | Cliff detection; `{ workspace, emit_telemetry?, source?, projectDir? }`; `source` accepts `"resume" \| "post_subagent" \| "loop"` (pass `"loop"` when called from loop runner); returns `{ incomplete_steps[], needs_recovery }`; flags `started`/`planned` steps with missing or partial-skeleton artifacts; `completed` and empty-`artifacts_expected` planned steps never flagged; `emit_telemetry: true` appends fail-open `cliff_detected` event to orchestration.db AND upserts rows to drift.db `cliff_events` table via `CliffEventsDao` (dual fail-open write-through; `projectDir` required for drift.db write, injected by `register-journal.ts` via `resolveScope`); `WORKSPACE_NOT_FOUND` when journal absent — added 2026-05-29, dual-write 2026-06-08, `source:"loop"` 2026-06-11 |
 | `log_decision` | Append a timestamped orchestrator decision to the durable event log (`orchestrator_decision` event type). **Authoritative write** — returns a `ToolResult` error on store failure (NOT fail-open). Call at each consequential decision: plan-approval outcome, review-verdict acceptance/override, scope cuts, AC changes, tier overrides, merge-conflict resolutions, manual-verification confirmations. |
 | `get_decisions` | Read the orchestrator decisions ledger (`getEventsByType("orchestrator_decision")`); returns `{ decisions: DecisionRecord[], rendered: string }` — structured array + rendered markdown table. Use before HITL gates and on resume to rehydrate decided state. |
 | `write_orchestrator_checkpoint` | Write a derived compact resume-state snapshot to `${workspace}/checkpoint.md` (current/completed/pending steps + recent decisions + next action). **Best-effort-observable** — write failure returns a `ToolResult` error (never silent success). Refresh per completed step (alongside `log_step(...completed)`) and at each HITL gate. |
+| `evaluate_step` | Extract structural signals from a git diff for the evaluator step-transition gate — pattern findings (lazy/hacky code markers), file-scope overlap against `declared_files`, and diff statistics; no LLM calls, pure structural analysis; returns `EvaluateStepOutput`. Called by the orchestrator directly (not pre-spawn context) after implement/fix steps, before verify; consumed by `canon:evaluator`. Registered via `registerEvaluateStepTool(server)` inside `registerOrchestrationTools()` (`register-orchestration.ts`) — not a new top-level `create-server.ts` group. |
 
 **Text-only principle/review tools:**
 
@@ -196,13 +197,15 @@ src/
 | `get_routine` | Retrieve a single routine by name; returns frontmatter + body; `INVALID_INPUT` when not found |
 | `sync_routines` | Sync routine state to `.canon/routines/`; returns drift summary |
 
-**Evolution tools** (`src/features/evolution/`): <!-- last-updated: 2026-07-01 -->
+**Evolution tools** (`src/features/evolution/`): <!-- last-updated: 2026-07-02 -->
 
 | Tool | Purpose |
 |------|---------|
 | `evaluate_candidate` | Inject candidate text into a temp-dir copy of the eval surface or a full-plugin sandbox (ADR-0025 dual injection mode; see below), run `run-evals.sh` per split, apply §7 strict-holdout gate; returns `EvaluateCandidateResult` (`baseline_score`, `candidate_score`, `per_split`, `accepted`, `regressed`, `size_delta`, `judge_votes_holdout`); fail-closed on subprocess error or timeout; public `EvaluateCandidateInputSchema`/`EvaluateCandidateResult` contract UNCHANGED (additive-optional `guard_rejection?: { reason, fields? }` — see frontmatter-reject guard below); registered via `register-evolution.ts` |
 | `attribute_failure` | Join recorded `context_provenance` events with review violations + cliff events to localize each failure to the in-context artifact; accepts `workspace` OR `archive_id` + `project_dir`; returns `AttributeFailureResult` with `attributions[]`, `unattributed[]`, `flagged[]`, `ambiguous[]`; content_hash byte-identity re-check (fail-closed); fail-open on absent provenance/reviews → partial result; `FailureKind = "review_violation" \| "cliff_event"` (ADR-0024); `join_basis` now has 3 values — `"cliff_step_id"`, `"principle_id==artifact_id"`, and `"code_author_agent_def"` (ADR-0032, a `review_violation` may attribute to BOTH the rule edge AND the code-author agent-def edge); artifact re-read (hash verify) resolves project_dir-first, pluginDir-fallback for trusted plugin-tier paths via `resolveArtifactReadPath` (Codex P2 #1; `pluginDir` is a handler-internal param, not a schema field) |
 | `select_mutation_targets` | Deterministic (no model calls): composes `attribute_failure` pipeline, applies selection policy (`hash_verified` + `confidence:high` + `gate_eligible`) + budget (`max_targets_per_pass`, default 3), reads baseline bodies, returns bounded `MutationTarget[]` with `gate_eligible` + `baseline_body`; ineligible/skipped paths land in typed `gate_ineligible[]` / `skipped[]` buckets; accepts `workspace` OR `archive_id` + `project_dir`; registered via `register-evolution.ts`; the `agent-def` artifact class already resolves to `artifact_class: "agent"` + `gate_eligible: true` (ADR-0025 admits `agents/`) — no code change needed for ADR-0031's new kind; baseline-body read shares the same project_dir-first/pluginDir-fallback resolver as `attribute_failure` (Codex P2 #1); `MutationTarget.principle_id` for an `agent-def` target is the VIOLATED principle from the attribution, not the agent name (`derivePrincipleId`, Codex P2 #2) |
+| `record_applied_evolution` | AUTHORITATIVE/FAIL-CLOSED apply-provenance write (ADR-0034): persists a row to drift.db `applied_evolutions` via `getDriftDb(project_dir).getAppliedEvolutions().record(...)`; input carries pre-computed `before_hash`/`after_hash` (tool never reads files), nullable `principle_id`, `holdout_baseline`/`holdout_candidate`, optional `apply_base_commit` (`applying_commit` stays null, back-filled later from the `Canon-Evolution:` trailer), normalized `applied_at`; idempotent on `proposal_id`; storage failure → `ToolResult` `UNEXPECTED` (never fail-open), `INVALID_INPUT` on empty/unparseable input; registered via `register-evolution.ts` |
+| `get_evolution_outcomes` | FAIL-OPEN, target-scoped, apply-anchored regression HYPOTHESIS reader (ADR-0034): input `{ proposal_id, project_dir }`; loads the `applied_evolutions` row (`PROPOSAL_NOT_RECORDED` if absent, `INVALID_INPUT` if empty), splits the target signal into pre/post cohorts anchored on `applied_at` (principle target → `reviews`⋈`violations` by `principle_id`; agent-def cliff target → `cliff_events` by agent); confidence via `deriveTier` keyed on OBSERVATION count (`reviews_or_runs`, not event count); same-signal concurrent applies (`listAppliedSince`) → typed `ambiguous`; verdict ∈ `regression_candidate \| no_signal_change \| improvement_candidate \| ambiguous \| insufficient`; candidate-cause vocabulary (grep-clean of `caus(e\|ed\|es)`) |
 
 **`evaluate_candidate` dual injection mode (ADR-0025):** mode auto-selected from `target_path` — no caller change needed.
 - **Eval-surface mode** (ADR-0022, unchanged): `target_path` under `skills/canon/evals/` → copies only `skills/canon/evals/` into a temp dir.
@@ -256,15 +259,18 @@ src/
 - **SQLITE_BUSY is transparent to callers** (2026-04-09): `store.transaction()` internally retries via `withRetry`; callers do not handle `SQLITE_BUSY`; `withRetry` does not retry other error codes
 
 ## Conventions
-<!-- last-updated: 2026-05-26 -->
+<!-- last-updated: 2026-07-02 -->
 
 **Recursive filesystem scanners — root threading**: Scanners that exclude paths by relative prefix must thread the original scan root through all recursive calls. Never update the root to the current directory. Pattern: `scanFn(currentDir, rootDir)` where `rootDir` never changes. The bug class (root-drift) is silent — exclusion logic passes at depth 0 and silently fails at depth 1+. See `tools/wiki-lint.ts` (`FindFilesCtx.originalRoot`) and `services/doc-gap-detect.ts` as reference implementations.
 
+**Integration tests must use an isolated `projectDir`, never `process.cwd()`**: any test that drives the real `finalizeWorkspace` path (directly or via helpers that call it) must pass an isolated `mkdtemp` temp dir as `projectDir`. Passing `process.cwd()` reaches `appendFlowRun` -> `getDriftDb(projectDir)`, which opens `.canon/drift.db` at that literal path and writes a real `flow_runs` row into the repo's live drift DB. Enforced by the global `drift-db-leak-guard` (see Scripts / `src/tests/drift-db-leak-guard.ts`), which fails the suite on any growth in either protected `.canon/drift.db` (repo root or `mcp-server/`). Added 2026-07-02.
+
 ## Scripts
-<!-- last-updated: 2026-06-25 -->
+<!-- last-updated: 2026-07-02 -->
 
 - `scripts/dead-wire-internal-use.mjs` — TS compiler-API same-file use resolver; invoked by `hooks/dead-wire-gate.sh` as `node dead-wire-internal-use.mjs <file> <symbol>`; returns integer code-ref count on stdout + exit 0 on success, non-zero on any error (fail-closed); counts an identifier as a use ONLY when `ts.TypeChecker.getSymbolAtLocation` resolves it to the top-level exported binding — member-property names, shadowing locals, declaration sites, strings, and comments are all correctly excluded by construction; bails fail-closed on non-empty `sourceFile.parseDiagnostics` (syntactic parse errors) before building the Program; no tsconfig dependency (`noResolve/noLib/types:[]` in-memory Program). <!-- last-updated: 2026-06-24 -->
 - `scripts/regen-context-manifest.ts` — regenerates `context-manifest.json` at repo root; invoked as `npm run regen:context-manifest`; calls `buildContextManifest` from `features/diagnostics/services/context-manifest.ts`; committed output is the source-of-truth for `check_context_staleness`. Added 2026-06-25.
+- `scripts/purge-synthetic-flow-runs.mjs` — safely deletes synthetic test-fixture rows from a `.canon/drift.db` `flow_runs` table; `node purge-synthetic-flow-runs.mjs [dbPath] [--flow=<name>]` (defaults: repo-root `.canon/drift.db`, `--flow=test-flow`); hard guard asserts zero target rows look like real activity (`total_spawns > 0 OR total_duration_ms > 1000`) before deleting anything — exits non-zero without deleting if any offending row is found; idempotent (second run against an already-purged target deletes 0 rows, exits 0). Added 2026-07-02.
 
 ## Development
 <!-- last-updated: 2026-06-09 -->
@@ -278,6 +284,6 @@ npm test             # Run vitest unit tests
 
 Node.js 24+ required. Enforced at runtime by `boot.sh` Step 12.5 (fail-closed, actionable error) and declared in `package.json` `engines.node`. No `.tool-versions` pin is shipped — `boot.sh` validates the floor against the user's ambient Node.
 
-**Vitest policy** — `vitest.config.ts` sets `testTimeout: 20000` (20s) and `maxWorkers: 4` project-wide; do not add per-test `timeout` overrides — the config-level policy covers subprocess-heavy suites (git, depcruise, embeddings).
+**Vitest policy** — `vitest.config.ts` sets `testTimeout: 20000` (20s) and `maxWorkers: 4` project-wide; do not add per-test `timeout` overrides — the config-level policy covers subprocess-heavy suites (git, depcruise, embeddings). `setupFiles: ["./src/tests/vitest-setup-drift-guard.ts"]` registers a global per-file `beforeAll`/`afterAll` fixture-leak guard (`installDriftDbLeakGuard`, `src/tests/drift-db-leak-guard.ts`) that fails the suite if either protected `.canon/drift.db` (repo root or `mcp-server/`) grows a `flow_runs` row during the run — see Conventions. Added 2026-07-02.
 
 **CI supply-chain gate** — `.github/workflows/ci.yml` runs `npm audit --omit=dev --audit-level=high` after `npm ci`; high+ production-dependency vulnerabilities fail CI.

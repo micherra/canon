@@ -2,11 +2,11 @@
  * active-workspaces-dao.test.ts
  *
  * Tests for ActiveWorkspacesDao — project-level active-build discovery registry
- * (drift.db v12, table `active_workspaces`).
+ * (drift.db v13, table `active_workspaces`).
  * Uses an in-memory SQLite DB (initDriftDb(':memory:')) to avoid file system side effects.
  *
  * Test plan (Inc 0 plan, sub-part A):
- * - migration 11->12 adds active_workspaces table; fresh :memory: db reaches version 12
+ * - migration 12->13 adds active_workspaces table; fresh :memory: db reaches version 13
  * - register: insert -> status=live, started_at==last_seen
  * - register: re-register (UPSERT) -> status back to live, last_seen advances, started_at preserved
  * - markFinalized: status->finalized_on_disk, finalized_at set
@@ -47,15 +47,15 @@ describe("ActiveWorkspacesDao", () => {
       expect(rows[0].name).toBe("active_workspaces");
     });
 
-    it("fresh :memory: db reaches schema version 12", () => {
+    it("fresh :memory: db reaches schema version 13", () => {
       const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(row.value).toBe("12");
-      expect(DRIFT_SCHEMA_VERSION).toBe("12");
+      expect(row.value).toBe("13");
+      expect(DRIFT_SCHEMA_VERSION).toBe("13");
     });
 
-    it("v11->v12 migration is idempotent (run runDriftMigrations twice)", () => {
+    it("v12->v13 migration is idempotent (run runDriftMigrations twice)", () => {
       expect(() => {
         runDriftMigrations(db);
       }).not.toThrow();

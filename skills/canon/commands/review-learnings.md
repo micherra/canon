@@ -1,7 +1,7 @@
 ---
 description: Review and act on proposed learnings from auto-triggered analysis
 argument-hint: [--all] [--pending]
-allowed-tools: [Bash, Read, Write, Edit, Glob, Grep, Agent]
+allowed-tools: [Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__canon__record_applied_evolution]
 model: sonnet
 ---
 
@@ -106,10 +106,12 @@ elif channel == "engineer-build-flow":
 Spawn the **writer agent** in `apply-proposal` mode for each accepted proposal. The writer handles conflict detection, format validation, and the actual edit — this command does not modify principle files directly.
 
 For each accepted proposal:
-1. Spawn the writer agent with: `"Mode: apply-proposal. PROPOSAL=${proposal_file_path}"`. If a workspace is active, include `WORKSPACE=<path>` and `SLUG=<slug>`.
-2. The writer reads the proposal, maps the type to the appropriate action (create, edit severity, revise, graduate, archive, **retire** for `prune-candidate`), runs its quality pipeline, and saves. For `prune-candidate` proposals, the writer follows Mode: retire in the `canon:write-principle` skill.
-3. After the writer completes, move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` (create subdirectory if needed).
-4. Append an entry to `.canon/learning.jsonl`:
+1. **Apply-provenance — capture before-hash (evolution-candidate only).** If and only if `frontmatter.type == "evolution-candidate"`: BEFORE spawning the writer (i.e. before the target file is edited), read the CURRENT on-disk content of `frontmatter.target_path` and compute its sha256 hex — `before_hash = $(shasum -a 256 "{target_path}" | cut -d' ' -f1)`. This ordering is load-bearing: if you hash after the writer edits, `before_hash == after_hash` and the record is useless. Also capture `apply_base_commit = $(git rev-parse HEAD)` now. For every other `type` (new-convention, severity-change, prune-candidate, prune-watch, etc.) do NOT capture hashes and do NOT record — those legacy proposals carry no holdout scores.
+2. Spawn the writer agent with: `"Mode: apply-proposal. PROPOSAL=${proposal_file_path}"`. If a workspace is active, include `WORKSPACE=<path>` and `SLUG=<slug>`.
+3. The writer reads the proposal, maps the type to the appropriate action (create, edit severity, revise, graduate, archive, **retire** for `prune-candidate`), runs its quality pipeline, and saves. For `prune-candidate` proposals, the writer follows Mode: retire in the `canon:write-principle` skill.
+4. **Apply-provenance — record (evolution-candidate only).** If and only if `frontmatter.type == "evolution-candidate"`: after the writer completes and BEFORE moving the proposal to `applied/`, compute `after_hash = $(shasum -a 256 "{target_path}" | cut -d' ' -f1)` from the post-edit on-disk content, then call the `record_applied_evolution` MCP tool with `proposal_id` (the resolved id), `target_path`, `artifact_class`, `principle_id` (all from frontmatter), `before_hash` and `after_hash` (captured above), `holdout_baseline` and `holdout_candidate` (from frontmatter), `apply_base_commit` (captured in step 1), `applied_at` (current millisecond-precision ISO-8601 timestamp, e.g. `date -u +%Y-%m-%dT%H:%M:%S.000Z` — a seconds-only stamp is normalized by the recorder but ms precision is preferred), and `project_dir` (the project root). This call is BEST-EFFORT-VISIBLE at the command layer: the tool is authoritative/fail-closed and returns an error on failure — if it errors, surface a warning to the user (`"apply-provenance record failed: {error}"`) but do NOT block or undo the apply that already happened.
+5. After the writer completes, move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` (create subdirectory if needed).
+6. Append an entry to `.canon/learning.jsonl`:
    ```json
    {"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"..."}
    ```
@@ -128,7 +130,9 @@ For each accepted proposal:
 
 4. Ask: **"Accept / Reject / Skip this {artifact_class} change to {target_path}?"**
 
-   - **Accept**: Write the candidate body to `target_path` (full-file replace). Then call the `sync_indexes` MCP tool to refresh the index inventory row for this artifact class. Advise: `"Change applied to {target_path}. Run /canon:check to verify."` Then move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl` with `artifact_class` and `apply_channel` included:
+   - **Accept**: Write the candidate body to `target_path` (full-file replace). Then call the `sync_indexes` MCP tool to refresh the index inventory row for this artifact class. Advise: `"Change applied to {target_path}. Run /canon:check to verify."`
+     - **Apply-provenance — record (evolution-candidate only).** If and only if `frontmatter.type == "evolution-candidate"`: after the write above and BEFORE moving the proposal to `applied/`, call the `record_applied_evolution` MCP tool with `proposal_id`, `target_path`, `artifact_class`, `principle_id` (from frontmatter; `principle_id` may be null for an agent-def target), `before_hash` = sha256 hex of the CURRENT on-disk content you already read in step 3 for the diff (do not re-read — that pre-write content is the before-state), `after_hash` = sha256 hex of the candidate body you just wrote, `holdout_baseline` and `holdout_candidate` (from frontmatter), `apply_base_commit = $(git rev-parse HEAD)`, `applied_at` (current millisecond-precision ISO-8601 timestamp, e.g. `date -u +%Y-%m-%dT%H:%M:%S.000Z` — a seconds-only stamp is normalized by the recorder but ms precision is preferred), and `project_dir` (the project root). Compute each sha256 hex as `printf '%s' "<content>" | shasum -a 256 | cut -d' ' -f1`. BEST-EFFORT-VISIBLE: the tool is authoritative/fail-closed; on error surface `"apply-provenance record failed: {error}"` to the user but do NOT undo the apply. For any other `type`, do NOT record.
+     - Then move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl` with `artifact_class` and `apply_channel` included:
      ```json
      {"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"...","artifact_class":"...","apply_channel":"engineer-build-flow"}
      ```
@@ -153,6 +157,8 @@ a compilation step and Canon build-flow review. To apply manually:
 
 Do NOT write any file. Do NOT spawn the writer. Then ask: **"Note this for manual apply (Skip), or Dismiss?"** — leave in place on Skip (no `learning.jsonl` mutation), move to `.canon/proposed-learnings/{timestamp}/dismissed/` on Dismiss.
 
+Arm T never writes the target and never applies, so it never records apply-provenance (no `record_applied_evolution` call).
+
 **Arm F — manual-apply fail-safe:**
 
 Surface:
@@ -162,6 +168,8 @@ in-command apply path — manual-apply required. Surfacing for manual review; no
 ```
 
 Do NOT write any file. Do NOT spawn the writer. Leave the proposal in place (treat as Skip for audit: no `learning.jsonl` mutation unless the user explicitly Rejects or Dismisses afterward).
+
+Arm F never writes the target and never applies, so it never records apply-provenance (no `record_applied_evolution` call).
 
 **Reject / Dismiss / Skip mechanics (all channels):**
 
@@ -199,3 +207,4 @@ If any proposals were accepted, suggest the user run `/canon:check` to verify th
 - Never demote security-tagged rules; show extra confirmation for any rule demotion
 - Never retire security-tagged or never-pruneable artifacts (`fail-closed-by-default`, `hooks-fail-closed`, `least-privilege-access`, `secrets-never-in-code`, `validate-at-trust-boundaries`, `agent-artifact-write-before-return`, `agent-template-required`); show a rule-tier CAUTION confirmation for any rule-tier `prune-candidate`; rule-tier retirement requires a non-null `superseded_by`
 - If a target principle or convention no longer exists, inform the user and skip rather than failing silently
+- Apply-provenance is recorded (via `record_applied_evolution`) ONLY for accepted `type: evolution-candidate` proposals, and ONLY from the two write arms (Writer arm + Arm M) after the target file is actually edited; legacy proposal types (new-convention, severity-change, prune-candidate, prune-watch) carry no holdout scores and never record. Arm T and Arm F never write and never record. The record only writes a drift.db row — it never reverts, quarantines, or merges anything.

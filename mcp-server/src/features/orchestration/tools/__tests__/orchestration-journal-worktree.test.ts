@@ -23,13 +23,16 @@ import { finalizeWorkspace, logStep } from "../orchestration-journal.ts";
 const mockGitExec = gitExec as ReturnType<typeof vi.fn>;
 
 let workspace: string;
+let projectDir: string;
 
 beforeEach(async () => {
   workspace = await mkdtemp(join(tmpdir(), "canon-journal-wt-"));
+  projectDir = await mkdtemp(join(tmpdir(), "canon-journal-wt-proj-"));
 });
 
 afterEach(async () => {
   await rm(workspace, { force: true, recursive: true });
+  await rm(projectDir, { force: true, recursive: true });
 });
 
 // ─── finalize archives but does not tear down ────────────────────────────────
@@ -60,11 +63,11 @@ describe("finalize archives but does not tear down", () => {
       status: "completed",
       step_id: "design",
       workspace,
-      projectDir: process.cwd(),
+      projectDir,
     });
 
     // Act: finalizeWorkspace with complete: true must NOT call git worktree remove
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
 
@@ -110,11 +113,11 @@ describe("finalize archives but does not tear down", () => {
       status: "completed",
       step_id: "design",
       workspace,
-      projectDir: process.cwd(),
+      projectDir,
     });
 
     // Act
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
 
@@ -145,11 +148,11 @@ describe("finalize archives but does not tear down", () => {
       status: "completed",
       step_id: "design",
       workspace,
-      projectDir: process.cwd(),
+      projectDir,
     });
 
     // Act
-    const result = await finalizeWorkspace({ projectDir: process.cwd(), workspace });
+    const result = await finalizeWorkspace({ projectDir, workspace });
     assertOk(result);
     expect(result.complete).toBe(true);
 

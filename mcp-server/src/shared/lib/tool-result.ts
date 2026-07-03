@@ -8,6 +8,7 @@ export type CanonErrorCode =
   | "INVALID_INPUT"
   | "TRANSCRIPT_NOT_FOUND"
   | "PREFLIGHT_FAILED"
+  | "PROPOSAL_NOT_RECORDED"
   | "UNEXPECTED";
 
 export type CanonToolError = {

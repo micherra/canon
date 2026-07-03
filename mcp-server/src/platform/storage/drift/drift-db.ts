@@ -12,6 +12,7 @@
 import type { ReviewEntry } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
 import { ActiveWorkspacesDao } from "./active-workspaces-dao.ts";
+import { AppliedEvolutionsDao } from "./applied-evolutions-dao.ts";
 import { AreaMemoryDao } from "./area-memory-dao.ts";
 import { CliffEventsDao } from "./cliff-events-dao.ts";
 import { CraftProfileDao } from "./craft-profile-dao.ts";
@@ -87,6 +88,7 @@ export class DriftDb {
   private _closures: ViolationClosureDao | null = null;
   private _cliffEvents: CliffEventsDao | null = null;
   private _activeWorkspaces: ActiveWorkspacesDao | null = null;
+  private _appliedEvolutions: AppliedEvolutionsDao | null = null;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -616,6 +618,16 @@ export class DriftDb {
   getActiveWorkspaces(): ActiveWorkspacesDao {
     this._activeWorkspaces ??= new ActiveWorkspacesDao(this.db);
     return this._activeWorkspaces;
+  }
+
+  /**
+   * Lazy accessor for applied-evolution (apply-provenance) DAO methods.
+   * The AppliedEvolutionsDao class operates on the same Database.Database handle.
+   * Returns the same instance on repeated calls (lazy singleton).
+   */
+  getAppliedEvolutions(): AppliedEvolutionsDao {
+    this._appliedEvolutions ??= new AppliedEvolutionsDao(this.db);
+    return this._appliedEvolutions;
   }
 
   // Lifecycle

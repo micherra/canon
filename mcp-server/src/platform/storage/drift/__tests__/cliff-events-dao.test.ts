@@ -94,11 +94,11 @@ describe("CliffEventsDao", () => {
       dbV9.close();
     });
 
-    it("fresh DB initializes straight to v11", () => {
+    it("fresh DB initializes straight to v13", () => {
       const version = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(version.value).toBe("12");
+      expect(version.value).toBe("13");
     });
   });
 

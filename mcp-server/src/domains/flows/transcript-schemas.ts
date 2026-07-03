@@ -13,6 +13,8 @@ import { z } from "zod";
 // Transcript types (ADR-015)
 
 export const TranscriptEntrySchema = z.object({
+  cache_creation_tokens: z.number().optional(),
+  cache_read_tokens: z.number().optional(),
   content: z.string(),
   cumulative_tokens: z.number().optional(),
   role: z.enum(["system", "user", "assistant", "tool_use", "tool_result"]),

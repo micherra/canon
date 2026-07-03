@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock git-adapter to prevent actual git calls during workspace archive steps.
 vi.mock("@platform/adapters/git-adapter.ts", async (importOriginal) => {
@@ -40,6 +40,11 @@ import { finalizeWorkspace, logStep } from "../tools/orchestration-journal.ts";
 // ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
+let projectDir: string;
+
+beforeEach(() => {
+  projectDir = mkdtempSync(join(tmpdir(), "finalize-lock-proj-"));
+});
 
 function makeTmpWorkspace(): string {
   const dir = mkdtempSync(join(tmpdir(), "finalize-lock-test-"));
@@ -54,6 +59,7 @@ afterEach(() => {
     rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
+  rmSync(projectDir, { force: true, recursive: true });
   vi.clearAllMocks();
 });
 
@@ -70,7 +76,7 @@ async function seedCompletedJournal(workspace: string): Promise<void> {
     status: "completed",
     step_id: "design",
     workspace,
-    projectDir: process.cwd(),
+    projectDir,
   });
 }
 
@@ -90,7 +96,7 @@ describe("finalize_workspace lock release (S3)", () => {
 
     // Finalize with the same session_id — should release the lock
     const result = await finalizeWorkspace({
-      projectDir: process.cwd(),
+      projectDir,
       session_id: "session-001",
       workspace,
     });
@@ -110,7 +116,7 @@ describe("finalize_workspace lock release (S3)", () => {
 
     // No lock acquired — finalize should succeed with released:false
     const result = await finalizeWorkspace({
-      projectDir: process.cwd(),
+      projectDir,
       session_id: "session-001",
       workspace,
     });
@@ -137,7 +143,7 @@ describe("finalize_workspace lock release (S3)", () => {
 
     // Finalize from a different session — should NOT delete the lock
     const result = await finalizeWorkspace({
-      projectDir: process.cwd(),
+      projectDir,
       session_id: "session-other",
       workspace,
     });

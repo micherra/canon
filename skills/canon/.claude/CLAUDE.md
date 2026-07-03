@@ -32,7 +32,7 @@ SKILL.md intent routing (authoritative; aligned to root CLAUDE.md as of 2026-05-
 | Resume | Read journal → resume |
 | Greeting | Respond directly |
 
-**Removed agents (no longer referenced in SKILL.md):** `canon:chat`, `canon:guide`, `canon:fixer`, `canon:planner`. **Removed escape hatch:** "Inline Mode" (Principle Loading outside a pipeline) was deleted.
+**Removed agents (no longer referenced in SKILL.md):** `canon:chat`, `canon:guide`, `canon:fixer`, `canon:planner`, `canon:janitor`. **Removed escape hatch:** "Inline Mode" (Principle Loading outside a pipeline) was deleted.
 
 ## Conventions
 <!-- last-updated: 2026-06-11 -->

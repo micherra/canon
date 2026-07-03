@@ -38,13 +38,13 @@ function coerceList(value: unknown): string[] {
 describe("resolve_agent_skills against shipped agents", () => {
   const agents = listAgents();
 
-  it("discovers at least the 10 active agents (researcher retired)", () => {
+  it("discovers at least the 10 active agents (researcher, planner, janitor retired)", () => {
     expect(agents.length).toBeGreaterThanOrEqual(10);
     for (const expected of [
       "architect",
       "engineer",
+      "evaluator",
       "learner",
-      "planner",
       "reviewer",
       "scribe",
       "security",

@@ -175,6 +175,30 @@ check_workflows_lint() {
   bash "$SCRIPT_DIR/workflows-lint.sh"
 }
 
+# Check 5 — evaluator gate recurrence guard
+# The evaluator gate protocol (Post-Step Effects → evaluate_step → canon:evaluator)
+# was silently clobbered by a concurrent CLAUDE.md rewrite in #175 and went
+# undetected for 7 weeks because the wiring lived only as prose with no gate
+# able to see its loss. Root CLAUDE.md must retain both tokens so this class
+# of loss cannot recur silently.
+check_evaluator_gate_wiring() {
+  local claude_md="$REPO_ROOT/CLAUDE.md"
+  if [[ ! -f "$claude_md" ]]; then
+    echo "NOTICE: hooks/lint.sh: $claude_md not found — skipping evaluator gate wiring check (Check 5, nothing to validate)." >&2
+    return 0
+  fi
+  local missing=0
+  if ! grep -q 'evaluate_step' "$claude_md"; then
+    echo "ERROR: CLAUDE.md is missing 'evaluate_step' — the evaluator gate protocol was lost once to a concurrent merge (#175/#176) and this token is the only signal that the orchestrator still calls the gate tool after implement/fix steps. Restore the evaluator gate bullet in CLAUDE.md's Post-Step Effects section." >&2
+    missing=$(( missing + 1 ))
+  fi
+  if ! grep -q 'canon:evaluator' "$claude_md"; then
+    echo "ERROR: CLAUDE.md is missing 'canon:evaluator' — the evaluator gate protocol was lost once to a concurrent merge (#175/#176) and this token is the only signal that the orchestrator still spawns the evaluator agent after implement/fix steps. Restore the evaluator gate bullet in CLAUDE.md's Post-Step Effects section." >&2
+    missing=$(( missing + 1 ))
+  fi
+  return "$missing"
+}
+
 if ! check_toolchain_pins; then
   FAILED=$(( FAILED + 1 ))
 fi
@@ -188,6 +212,10 @@ if ! check_mcp_json_payload_shellcheck; then
 fi
 
 if ! check_workflows_lint; then
+  FAILED=$(( FAILED + 1 ))
+fi
+
+if ! check_evaluator_gate_wiring; then
   FAILED=$(( FAILED + 1 ))
 fi
 
