@@ -59,7 +59,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; file-pattern matching uses `matchGlob` from `lib/glob-matcher.ts` (linear-time DP, `globToRegex`+RegExp removed, ADR-0026 §Amendment-3)
 
 ## Contracts
-<!-- last-updated: 2026-07-02 -->
+<!-- last-updated: 2026-07-03 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -145,6 +145,9 @@ src/
 | `log_step` | Record a single step execution (status, artifacts, agent ID) in `journal.json` |
 | `record_agent_metrics` | Record performance counters into execution state; `INVALID_INPUT` if no fields; `WORKSPACE_NOT_FOUND` if state absent — ADR-003a 2026-04-01 |
 | `post_event` | Structured activity logging via `appendEvent`; returns `{ ok: true }` or error codes — added 2026-04-07 |
+| `post_message` | Post a cross-session chat message to a build's workspace — the workspace path IS the channel; reuses the pre-existing `messages` DAO on that workspace's `orchestration.db` (zero schema change); registry-gated via `active_workspaces` — `live`/`finalized_on_disk` accept posts, unknown/reaped rejected; best-effort ordered poll, no push/subscribe — added 2026-07-02 |
+| `tail_messages` | Poll a workspace for messages posted via `post_message`, plus a `peer_lock` liveness field populated from `readLock` (null-safe); same registry gate as `post_message`; best-effort ordered poll, no push/subscribe — added 2026-07-02 |
+| `list_active_workspaces` | Discovery index of active builds (`live`/`finalized_on_disk`/`reaped`) resolved from the project-level `active_workspaces` registry (drift.db v13); optional `status_filter`; lets a session find another session's build without a pasted path, then pair with `post_message`/`tail_messages` on the returned `workspace_path` — added 2026-07-02 |
 | `batch_log_steps` | Log multiple steps in one journal read-modify-write; fail-closed (batch rejected if any `step_id` empty); parallel transcript capture for completed entries with `agent_id` — added 2026-04-30 |
 | `capture_transcript` | Best-effort transcript capture; reads CC agent JSONL, writes `TranscriptEntry[]` to `{workspace}/transcripts/`; warning (never error) when source not found; `source_path` primary, `agent_id` glob fallback; `persist_path: true` records path for `get_transcript` (fail-open); also aggregates cache-read/cache-creation/input tokens across assistant turns and best-effort persists them (plus derived `cache_hit_ratio`) into `execution_states.metrics`, returned as `cache_metrics` — fail-open, logged on failure, separate from `record_agent_metrics` (agents lack API-level cache-token visibility) — added 2026-04-26, updated 2026-05-30, 2026-07-02 |
 | `compute_autonomy_tier` | autonomous/light-touch/supervised from build history + blast radius + compliance; fail-safe: defaults to supervised on error; logs `auto_decision`; returns `{ tier, score, reasoning, signals_used }` |
