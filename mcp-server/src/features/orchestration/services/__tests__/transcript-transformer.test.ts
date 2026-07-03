@@ -68,7 +68,11 @@ describe("transformClaudeCodeTranscript — cache field propagation (dc-01)", ()
         message: {
           content: [{ input: { file_path: "/foo.ts" }, name: "Read", type: "tool_use" }],
           role: "assistant",
-          usage: { cache_creation_input_tokens: 15, cache_read_input_tokens: 300, output_tokens: 8 },
+          usage: {
+            cache_creation_input_tokens: 15,
+            cache_read_input_tokens: 300,
+            output_tokens: 8,
+          },
         },
         timestamp: "2026-07-02T00:00:00.000Z",
         type: "assistant",
