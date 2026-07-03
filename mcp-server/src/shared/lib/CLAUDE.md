@@ -11,7 +11,7 @@ Pure utility modules used by feature tools. No MCP dependencies — these are pl
 Formats git trailer blocks for Canon-managed commits.
 
 **Exports:**
-- `TrailerOpts` — `{ workflow: string; agent: string; state: string; taskId?: string }`
+- `TrailerOpts` — `{ workflow: string; agent: string; state: string; taskId?: string; evolutionId?: string }`
 - `formatCommitTrailers(opts: TrailerOpts): string` — returns a ready-to-embed trailer block; returns empty string when any required field is missing
 - `buildCommitMessage(subject, body, trailerOpts): string` — assembles a full commit message with subject, optional body, trailer block, and `Co-Authored-By` line
 
@@ -21,6 +21,7 @@ Canon-Workflow: {slug}
 Canon-Agent: {agent-type}
 Canon-State: {state-id}
 Canon-Task: {task-id}          # wave tasks only (omitted when taskId not provided)
+Canon-Evolution: {id}          # apply-provenance only (omitted when evolutionId absent); after Canon-Task, or after Canon-State when no task (ADR-0034)
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ```
 

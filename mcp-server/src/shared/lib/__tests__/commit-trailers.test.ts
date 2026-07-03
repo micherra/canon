@@ -112,6 +112,52 @@ describe("formatCommitTrailers — without taskId", () => {
   });
 });
 
+describe("formatCommitTrailers — evolutionId", () => {
+  it("appends Canon-Evolution after Canon-Task when both present", () => {
+    const result = formatCommitTrailers({
+      agent: "engineer",
+      evolutionId: "evolve-20260702-01",
+      state: "implement",
+      taskId: "task-01",
+      workflow: "my-slug",
+    });
+    expect(result).toBe(
+      "Canon-Workflow: my-slug\nCanon-Agent: engineer\nCanon-State: implement\nCanon-Task: task-01\nCanon-Evolution: evolve-20260702-01",
+    );
+  });
+
+  it("appends Canon-Evolution after Canon-State when no taskId", () => {
+    const result = formatCommitTrailers({
+      agent: "engineer",
+      evolutionId: "evolve-20260702-01",
+      state: "implement",
+      workflow: "my-slug",
+    });
+    expect(result).toBe(
+      "Canon-Workflow: my-slug\nCanon-Agent: engineer\nCanon-State: implement\nCanon-Evolution: evolve-20260702-01",
+    );
+  });
+
+  it("omits Canon-Evolution when evolutionId absent (backward compatible)", () => {
+    const result = formatCommitTrailers({
+      agent: "engineer",
+      state: "implement",
+      workflow: "my-slug",
+    });
+    expect(result).not.toContain("Canon-Evolution");
+  });
+
+  it("omits Canon-Evolution when evolutionId is empty string", () => {
+    const result = formatCommitTrailers({
+      agent: "engineer",
+      evolutionId: "",
+      state: "implement",
+      workflow: "my-slug",
+    });
+    expect(result).not.toContain("Canon-Evolution");
+  });
+});
+
 describe("formatCommitTrailers — empty required fields", () => {
   it("returns empty string when workflow is empty", () => {
     const result = formatCommitTrailers({
