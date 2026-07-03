@@ -143,6 +143,32 @@ echo "-- fresh (real repo worktree) --"
   fi
 }
 
+echo "-- uncommitted context-manifest.json -> fail-closed exit 2 with message --"
+{
+  MANIFEST="$REPO_ROOT/context-manifest.json"
+  BACKUP=$(mktemp)
+  cp "$MANIFEST" "$BACKUP"
+  trap 'cp "$BACKUP" "$MANIFEST"; rm -f "$BACKUP"' EXIT
+  printf '\n' >> "$MANIFEST"
+
+  actual_exit=0
+  output=$(cd "$REPO_ROOT" && bash "$GATE" "$REPO_ROOT" 2>&1 </dev/null) || actual_exit=$?
+
+  cp "$BACKUP" "$MANIFEST"
+  rm -f "$BACKUP"
+  trap - EXIT
+
+  if [[ "$actual_exit" -eq 2 ]] && echo "$output" | grep -qF "uncommitted changes"; then
+    echo "  PASS: uncommitted context-manifest.json -> fail-closed exit 2 with message"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: uncommitted context-manifest.json handling"
+    echo "        expected exit=2 with uncommitted-changes message, got exit=$actual_exit"
+    echo "        output: $output"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 echo "-- arg handling: non-directory worktree_path -> fail-closed exit 2 --"
 {
   actual_exit=0

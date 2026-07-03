@@ -45,6 +45,19 @@ if [[ ! -d "$ROOT/mcp-server" ]]; then
   exit 2
 fi
 
+# Git-state guard: --check validates the working-tree context-manifest.json,
+# but the gate must validate what will actually ship — the COMMITTED
+# manifest. A regenerated-but-uncommitted manifest would pass --check while
+# HEAD still carries the stale one. Fail closed on divergence before running
+# --check at all. No-op when $ROOT isn't a git work tree (e.g. a fixture dir)
+# so the --root fixture path used by the drift matrix above is unaffected.
+if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if ! git -C "$ROOT" diff --quiet HEAD -- context-manifest.json; then
+    echo "CANON: context-manifest-gate: context-manifest.json has uncommitted changes — the regenerated manifest is not committed. Commit it (git add context-manifest.json && commit) so the gate verifies what will actually ship." >&2
+    exit 2
+  fi
+fi
+
 OUT=""
 RC=0
 OUT=$( cd "$ROOT/mcp-server" && npm run --silent regen:context-manifest -- --check 2>&1 ) || RC=$?
