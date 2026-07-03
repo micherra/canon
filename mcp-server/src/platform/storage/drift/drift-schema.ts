@@ -17,11 +17,9 @@
 
 import Database from "better-sqlite3";
 
-// Schema version — increment when DDL changes require a migration
-// canon:allow-unwired: pre-existing test-only export (asserted in schema-version tests across
-// platform/storage/drift/__tests__); its VALUE changes on every migration bump, which re-triggers
-// the dead-wire diff heuristic (line-level, not symbol-identity-aware) even though the export
-// itself is not new. No production code imports this constant.
+// Schema version — increment when DDL changes require a migration. Pre-existing test-only
+// export (asserted across platform/storage/drift/__tests__); no production code imports it.
+// canon:allow-unwired: value bumps on every migration re-trigger the dead-wire line-diff heuristic even though the export itself is not new
 export const DRIFT_SCHEMA_VERSION = "12";
 
 // DDL statements — v1 base tables
