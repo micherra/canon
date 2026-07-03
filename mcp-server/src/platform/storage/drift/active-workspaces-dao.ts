@@ -98,7 +98,9 @@ export class ActiveWorkspacesDao {
   constructor(db: Database.Database) {
     // Upsert on workspace_path (the identity):
     // - insert -> status='live', started_at=last_seen=@now
-    // - conflict -> status='live', last_seen=@now (resume/re-register touch);
+    // - conflict -> status='live', last_seen=@now, finalized_at=NULL (resume/re-register touch,
+    //   clears any stale finalized_at from a prior finalize/reap so a reactivated row never
+    //   carries contradictory lifecycle data — Codex P2, PR #450);
     //   started_at is preserved (never overwritten on conflict)
     this.stmtRegister = db.prepare(`
       INSERT INTO active_workspaces (
@@ -114,7 +116,8 @@ export class ActiveWorkspacesDao {
         job_id       = excluded.job_id,
         base_commit  = excluded.base_commit,
         status       = 'live',
-        last_seen    = excluded.last_seen
+        last_seen    = excluded.last_seen,
+        finalized_at = NULL
     `);
 
     this.stmtMarkFinalized = db.prepare(`

@@ -125,6 +125,17 @@ describe("ActiveWorkspacesDao", () => {
       dao.register({ slug: "s", workspace_path: "/ws/s" });
       expect(dao.getByPath("/ws/s")?.status).toBe("live");
     });
+
+    it("re-register after markFinalized clears the stale finalized_at (Codex P2, PR #450)", () => {
+      dao.register({ slug: "s", workspace_path: "/ws/s" });
+      dao.markFinalized("/ws/s");
+      expect(dao.getByPath("/ws/s")?.finalized_at).not.toBeNull();
+
+      dao.register({ slug: "s", workspace_path: "/ws/s" });
+      const row = dao.getByPath("/ws/s");
+      expect(row?.status).toBe("live");
+      expect(row?.finalized_at).toBeNull();
+    });
   });
 
   // ---------------------------------------------------------------------------
