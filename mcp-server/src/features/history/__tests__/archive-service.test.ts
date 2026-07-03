@@ -40,6 +40,7 @@ vi.mock("better-sqlite3", () => {
 
 // Import after mocks so mocks are in place
 import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
+import Database from "better-sqlite3";
 import { getDriftDb } from "../../../platform/storage/drift/drift-db-cache.ts";
 
 // ---- Helpers ----
@@ -180,6 +181,33 @@ describe("archiveWorkspace — happy path", () => {
       expect(existsSync(join(result.archive_path, ".lock"))).toBe(false);
       expect(existsSync(join(result.archive_path, "board.json"))).toBe(false);
     }
+  });
+
+  test("reads orchestration.db metadata via the mocked better-sqlite3 constructor, never real I/O", async () => {
+    // Regression guard for Codex P2 (PR #446): vitest's global setupFiles used to
+    // import the REAL better-sqlite3 (via drift-db-leak-guard.ts) before this
+    // file's vi.mock("better-sqlite3", ...) took effect, silently defeating the
+    // mock. This test proves the mocked constructor is what actually gets
+    // invoked for orchestration.db reads — not a passing-either-way assertion
+    // like the copy-exclusion test above (a real open of this non-sqlite text
+    // fixture would throw and be silently swallowed by extractWorkspaceMetadata's
+    // catch, so "the test passes" alone proves nothing about which path ran).
+    const dbPath = join(workspacePath, "orchestration.db");
+    writeText(dbPath, "not a real sqlite file");
+
+    const result = await archiveWorkspace({
+      branch: "main",
+      projectDir,
+      slug: "my-feature",
+      workspacePath,
+    });
+
+    expect(result.archived).toBe(true);
+    // Proof the mock is genuinely in effect: the vi.fn() identity imported from
+    // "better-sqlite3" above was invoked (a real better-sqlite3 constructor call
+    // is a different function reference and would never satisfy this matcher).
+    const MockedDatabase = vi.mocked(Database);
+    expect(MockedDatabase).toHaveBeenCalledWith(dbPath, { readonly: true });
   });
 
   test("generates run-summary.json in the archive directory", async () => {

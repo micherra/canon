@@ -11,7 +11,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   checkNoDriftDbGrowth,
@@ -80,14 +80,14 @@ describe("snapshotFlowRunsCount (temp DB only — never touches real repo DBs)",
   it("returns the real flow_runs count for an existing temp DB, and trips on growth", () => {
     tmpDir = mkdtempSync(join(tmpdir(), "drift-guard-snapshot-"));
     const dbPath = join(tmpDir, "temp-drift.db");
-    const db = new Database(dbPath);
+    const db = new DatabaseSync(dbPath);
     db.exec(`CREATE TABLE flow_runs (id INTEGER PRIMARY KEY, flow TEXT)`);
     db.close();
 
     const baseline = snapshotFlowRunsCount(dbPath);
     expect(baseline).toBe(0);
 
-    const writer = new Database(dbPath);
+    const writer = new DatabaseSync(dbPath);
     writer.prepare(`INSERT INTO flow_runs (flow) VALUES (?)`).run("synthetic-test-row");
     writer.close();
 
@@ -97,5 +97,23 @@ describe("snapshotFlowRunsCount (temp DB only — never touches real repo DBs)",
     expect(() =>
       checkNoDriftDbGrowth(new Map([[dbPath, baseline]]), new Map([[dbPath, current]])),
     ).toThrow(DriftDbLeakError);
+  });
+
+  it("checkNoDriftDbGrowth does NOT throw for an unrelated temp DB whose count is stable", () => {
+    // Guards that a legitimate, unchanged temp fixture DB (created and read via
+    // node:sqlite, never better-sqlite3) never trips the guard.
+    tmpDir = mkdtempSync(join(tmpdir(), "drift-guard-snapshot-"));
+    const dbPath = join(tmpDir, "stable-temp.db");
+    const db = new DatabaseSync(dbPath);
+    db.exec(`CREATE TABLE flow_runs (id INTEGER PRIMARY KEY, flow TEXT)`);
+    db.prepare(`INSERT INTO flow_runs (flow) VALUES (?)`).run("pre-existing-row");
+    db.close();
+
+    const baseline = snapshotFlowRunsCount(dbPath);
+    const current = snapshotFlowRunsCount(dbPath);
+    expect(baseline).toBe(current);
+    expect(() =>
+      checkNoDriftDbGrowth(new Map([[dbPath, baseline]]), new Map([[dbPath, current]])),
+    ).not.toThrow();
   });
 });

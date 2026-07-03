@@ -36,8 +36,8 @@
 
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
-import Database from "better-sqlite3";
 import { afterAll, beforeAll } from "vitest";
 
 /** Sentinel value snapshotted when a protected DB file does not exist. */
@@ -87,10 +87,24 @@ export function checkNoDriftDbGrowth(
  * path. Returns the sentinel `ABSENT` (-1) when the file does not exist, and
  * `0` when the file exists but the `flow_runs` table has not been created yet
  * (fresh/empty schema — never treated as an error).
+ *
+ * Uses Node's built-in `node:sqlite` (`DatabaseSync`) rather than
+ * `better-sqlite3`. This module is imported by every test file via
+ * `setupFiles` (`vitest-setup-drift-guard.ts`), and vitest resolves
+ * `setupFiles` module graphs into its module cache before each test file
+ * runs. A top-level `import Database from "better-sqlite3"` here would
+ * therefore resolve `better-sqlite3` into the cache ahead of any
+ * `vi.mock("better-sqlite3", ...)` a test declares, silently defeating that
+ * mock (Codex P2 finding, PR #446) — e.g.
+ * `features/history/__tests__/archive-service.test.ts` mocks `better-sqlite3`
+ * to avoid real orchestration.db I/O, but the guard's early import made that
+ * mock a no-op and the test quietly exercised real SQLite I/O instead.
+ * `node:sqlite` is a Node builtin — nothing mocks it, so it can never poison
+ * another test's mock of a third-party module.
  */
 export function snapshotFlowRunsCount(dbPath: string): number {
   if (!existsSync(dbPath)) return ABSENT;
-  const db = new Database(dbPath, { fileMustExist: true, readonly: true });
+  const db = new DatabaseSync(dbPath, { readOnly: true });
   try {
     const row = db.prepare("SELECT COUNT(*) as count FROM flow_runs").get() as
       | { count: number }
