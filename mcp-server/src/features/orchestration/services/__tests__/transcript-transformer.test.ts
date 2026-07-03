@@ -62,6 +62,53 @@ describe("transformClaudeCodeTranscript — cache field propagation (dc-01)", ()
     expect(entry.cache_creation_tokens).toBe(5);
   });
 
+  it("propagates cache fields onto the first emitted entry when array content is tool_use-only (Codex P2)", () => {
+    const entries: ClaudeCodeEntry[] = [
+      {
+        message: {
+          content: [{ input: { file_path: "/foo.ts" }, name: "Read", type: "tool_use" }],
+          role: "assistant",
+          usage: { cache_creation_input_tokens: 15, cache_read_input_tokens: 300, output_tokens: 8 },
+        },
+        timestamp: "2026-07-02T00:00:00.000Z",
+        type: "assistant",
+      },
+    ];
+
+    const [entry] = transformClaudeCodeTranscript(entries);
+
+    expect(entry.role).toBe("tool_use");
+    expect(entry.cache_read_tokens).toBe(300);
+    expect(entry.cache_creation_tokens).toBe(15);
+  });
+
+  it("propagates cache fields onto the first block only when array content is [tool_use, text] — no double-counting", () => {
+    const entries: ClaudeCodeEntry[] = [
+      {
+        message: {
+          content: [
+            { input: { file_path: "/foo.ts" }, name: "Read", type: "tool_use" },
+            { text: "Let me check.", type: "text" },
+          ],
+          role: "assistant",
+          usage: { cache_creation_input_tokens: 7, cache_read_input_tokens: 400, output_tokens: 8 },
+        },
+        timestamp: "2026-07-02T00:00:00.000Z",
+        type: "assistant",
+      },
+    ];
+
+    const [firstEntry, secondEntry] = transformClaudeCodeTranscript(entries);
+
+    expect(firstEntry.role).toBe("tool_use");
+    expect(firstEntry.cache_read_tokens).toBe(400);
+    expect(firstEntry.cache_creation_tokens).toBe(7);
+
+    expect(secondEntry.role).toBe("assistant");
+    expect(secondEntry.cache_read_tokens).toBeUndefined();
+    expect(secondEntry.cache_creation_tokens).toBeUndefined();
+  });
+
   it("does not attach cache fields to user entries", () => {
     const entries: ClaudeCodeEntry[] = [
       {

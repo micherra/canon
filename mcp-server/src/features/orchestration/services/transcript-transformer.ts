@@ -105,7 +105,14 @@ type CacheUsage = {
   cache_read_input_tokens?: number;
 };
 
-/** Shared cache-token spread fields, attached only to assistant TranscriptEntry objects. */
+/**
+ * Shared cache-token spread fields for an assistant turn. For string content
+ * these land on the single assistant entry. For array content, the
+ * message-level usage is only non-undefined for the FIRST emitted block
+ * (mirroring how output_tokens/cumulative_tokens are threaded) — so cache
+ * fields ride on whichever entry is first, regardless of block type
+ * (text/tool_use/tool_result), not only on a leading text block.
+ */
 type CacheFields = {
   cache_read_tokens?: number;
   cache_creation_tokens?: number;
@@ -182,6 +189,7 @@ function processContentBlock(
       tool_name: block.name,
       turn_number: state.turnNumber,
       ...tokenFields(blockTokens, state.cumulativeTokens),
+      ...cacheFields(blockUsage),
     };
   }
   if (block.type === "tool_result") {
@@ -191,6 +199,7 @@ function processContentBlock(
       timestamp,
       turn_number: state.turnNumber,
       ...tokenFields(blockTokens, state.cumulativeTokens),
+      ...cacheFields(blockUsage),
     };
   }
   // Unknown block types are skipped (future-proof)
