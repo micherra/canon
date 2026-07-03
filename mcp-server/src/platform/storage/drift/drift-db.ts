@@ -11,6 +11,7 @@
 
 import type { ReviewEntry } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
+import { ActiveWorkspacesDao } from "./active-workspaces-dao.ts";
 import { AppliedEvolutionsDao } from "./applied-evolutions-dao.ts";
 import { AreaMemoryDao } from "./area-memory-dao.ts";
 import { CliffEventsDao } from "./cliff-events-dao.ts";
@@ -86,6 +87,7 @@ export class DriftDb {
   private _craftProfiles: CraftProfileDao | null = null;
   private _closures: ViolationClosureDao | null = null;
   private _cliffEvents: CliffEventsDao | null = null;
+  private _activeWorkspaces: ActiveWorkspacesDao | null = null;
   private _appliedEvolutions: AppliedEvolutionsDao | null = null;
 
   constructor(db: Database.Database) {
@@ -606,6 +608,16 @@ export class DriftDb {
   getCliffEvents(): CliffEventsDao {
     this._cliffEvents ??= new CliffEventsDao(this.db);
     return this._cliffEvents;
+  }
+
+  /**
+   * Lazy accessor for active-workspaces registry DAO methods.
+   * The ActiveWorkspacesDao class operates on the same Database.Database handle.
+   * Returns the same instance on repeated calls (lazy singleton).
+   */
+  getActiveWorkspaces(): ActiveWorkspacesDao {
+    this._activeWorkspaces ??= new ActiveWorkspacesDao(this.db);
+    return this._activeWorkspaces;
   }
 
   /**

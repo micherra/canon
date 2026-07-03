@@ -169,16 +169,16 @@ describe("columnExists", () => {
 // Fresh DB — schema version 11
 
 describe("initDriftDb — fresh database", () => {
-  test("DRIFT_SCHEMA_VERSION is '12'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("12");
+  test("DRIFT_SCHEMA_VERSION is '13'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("13");
   });
 
-  test("meta table has schema_version = '12' after init", () => {
+  test("meta table has schema_version = '13' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("12");
+    expect(row.value).toBe("13");
     db.close();
   });
 
@@ -260,13 +260,13 @@ describe("runDriftMigrations — v1 to v2 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v1 DB to current version: updates schema_version to '12'", () => {
+  test("migrates a v1 DB to current version: updates schema_version to '13'", () => {
     const db = createV1Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("12");
+    expect(row.value).toBe("13");
     // Terminal schema_version is driven by the exported constant (single source of truth).
     expect(row.value).toBe(DRIFT_SCHEMA_VERSION);
     db.close();
@@ -346,16 +346,16 @@ describe("runDriftMigrations — idempotency", () => {
 // v4 migration — file_violation_history and path_effects tables
 
 describe("initDriftDb — fresh database v4 tables", () => {
-  test("DRIFT_SCHEMA_VERSION is '12'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("12");
+  test("DRIFT_SCHEMA_VERSION is '13'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("13");
   });
 
-  test("fresh DB has schema_version = '12' after init", () => {
+  test("fresh DB has schema_version = '13' after init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("12");
+    expect(row.value).toBe("13");
     db.close();
   });
 
@@ -438,13 +438,13 @@ describe("runDriftMigrations — v3 to v4 upgrade", () => {
     db.close();
   });
 
-  test("migrates a v3 DB to current version: updates schema_version to '12'", () => {
+  test("migrates a v3 DB to current version: updates schema_version to '13'", () => {
     const db = createV3Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("12");
+    expect(row.value).toBe("13");
     db.close();
   });
 });

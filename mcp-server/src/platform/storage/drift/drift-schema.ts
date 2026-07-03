@@ -17,9 +17,10 @@
 
 import Database from "better-sqlite3";
 
-// Schema version — increment when DDL changes require a migration
-
-export const DRIFT_SCHEMA_VERSION = "12";
+// Schema version — increment when DDL changes require a migration. Pre-existing test-only
+// export (asserted across platform/storage/drift/__tests__); no production code imports it.
+// canon:allow-unwired: value bumps on every migration re-trigger the dead-wire line-diff heuristic even though the export itself is not new
+export const DRIFT_SCHEMA_VERSION = "13";
 
 // DDL statements — v1 base tables
 //
@@ -405,7 +406,7 @@ const MIGRATIONS: Migration[] = [
       // and applying_commit are nullable — the apply command does not commit, so
       // applying_commit is back-filled later from the Canon-Evolution: trailer (ADR-0034).
       // applied_at is the cohort-split anchor for get_evolution_outcomes.
-      // No quarantine column now — Inc-4 adds it in its own v13 migration
+      // No quarantine column now — Inc-4 adds it in its own v13+ migration
       // (no-dead-abstractions: only fields written this build).
       db.exec(`CREATE TABLE IF NOT EXISTS applied_evolutions (
         id                 INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -428,9 +429,37 @@ const MIGRATIONS: Migration[] = [
       db.exec(
         `CREATE INDEX IF NOT EXISTS idx_applied_evolutions_principle ON applied_evolutions(principle_id)`,
       );
+      // v12 is no longer terminal (active_workspaces below adds v13) — stamp the
+      // literal historical version, not the exported constant.
+      db.exec(`UPDATE meta SET value = '12' WHERE key = 'schema_version'`);
+    },
+    version: "12",
+  },
+  {
+    up: (db) => {
+      // active_workspaces — project-level active-build discovery registry (Inc 0).
+      // One row per workspace_path (the identity); status transitions live ->
+      // finalized_on_disk -> reaped as the workspace moves through its lifecycle.
+      // The allowed-status set ('live' | 'finalized_on_disk' | 'reaped') is enforced
+      // in the DAO write layer — SQLite CHECK on migrations is unreliable for
+      // existing rows (mirrors the v11 violations.status note).
+      db.exec(`CREATE TABLE IF NOT EXISTS active_workspaces (
+        workspace_path  TEXT PRIMARY KEY,
+        slug            TEXT NOT NULL,
+        session_id      TEXT,
+        job_id          TEXT,
+        base_commit     TEXT,
+        status          TEXT NOT NULL DEFAULT 'live',
+        started_at      TEXT NOT NULL,
+        last_seen       TEXT NOT NULL,
+        finalized_at    TEXT
+      )`);
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_active_workspaces_status ON active_workspaces(status)`,
+      );
       // Terminal-version stamp is driven by the exported constant — DRIFT_SCHEMA_VERSION
       // is the single source of truth for the current schema version. Intermediate
-      // historical stamps ('2'…'11') remain frozen literals.
+      // historical stamps ('2'…'12') remain frozen literals.
       db.exec(`UPDATE meta SET value = '${DRIFT_SCHEMA_VERSION}' WHERE key = 'schema_version'`);
     },
     version: DRIFT_SCHEMA_VERSION,

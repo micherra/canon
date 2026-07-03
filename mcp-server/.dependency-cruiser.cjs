@@ -52,6 +52,15 @@ module.exports = {
           // reconcile-workspace writes cliff events to drift.db (fail-open write-through, decision cliff-d2) —
           // deferred DI exception until a DI container is wired
           "^src/features/orchestration/tools/reconcile-workspace\\.ts$",
+          // active-workspaces registry (drift.db, Inc 0 event-backbone-explore): active-workspace-registration
+          // registers on behalf of init-workspace (fail-open), janitor tombstones on reap (fail-open),
+          // post_message/tail_messages/list_active_workspaces read/gate on the registry —
+          // deferred DI exception until a DI container is wired
+          "^src/features/orchestration/services/active-workspace-registration\\.ts$",
+          "^src/features/orchestration/services/janitor\\.ts$",
+          "^src/features/orchestration/tools/post-message\\.ts$",
+          "^src/features/orchestration/tools/tail-messages\\.ts$",
+          "^src/features/orchestration/tools/list-active-workspaces\\.ts$",
           // Relocated from diagnostics (ADR-0006): pitfall-enrichment, hot-file-detection, area-memory-enrichment
           // query drift.db directly — deferred DI exception until a DI container is wired
           "^src/features/orchestration/services/pitfall-enrichment\\.ts$",

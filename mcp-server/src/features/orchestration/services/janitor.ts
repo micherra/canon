@@ -33,6 +33,7 @@ import {
 import { join } from "node:path";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import { type JanitorConfig, loadJanitorConfig } from "@shared/lib/config.ts";
 import {
@@ -503,11 +504,32 @@ async function archiveAndRemoveSlug(candidate: PruneCandidate, errors: string[])
 
   try {
     rmSync(slugPath, { force: true, recursive: true });
+    // The workspace dir + its orchestration.db are now gone — tombstone the
+    // registry row (status='reaped') rather than deleting it, so post_message/
+    // tail_messages can return a truthful "reaped" rejection (decision
+    // registry-store-location-02.md decision 3). Fail-open: never blocks reap.
+    tryMarkWorkspaceReaped(candidate.projectDir, slugPath);
     return true;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     errors.push(`${branchEntry}/${slug}: ${message}`);
     return false;
+  }
+}
+
+/**
+ * Transition a workspace to `reaped` in the project-level active-workspaces
+ * registry (drift.db). Fail-open — janitor is best-effort housekeeping and a
+ * registry write must NEVER throw or block the reap.
+ */
+function tryMarkWorkspaceReaped(projectDir: string, slugPath: string): void {
+  try {
+    getDriftDb(projectDir).getActiveWorkspaces().markReaped(slugPath);
+  } catch (err: unknown) {
+    console.warn(
+      `[canon] janitor: active-workspaces registry markReaped failed for ${slugPath}:`,
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 
