@@ -347,6 +347,67 @@ skip_stderr=$(PATH="$_JQ_TMPBIN" bash "$REPO_C2_SKIP/hooks/lint.sh" 2>&1 >/dev/n
 assert_exit "Check 2 skip: jq absent → no hard-fail (exit 0)" 0 "$actual"
 assert_stderr_contains "Check 2 skip: stderr contains skip notice" "jq" "$skip_stderr"
 
+# ── Check 5 positive: CLAUDE.md with both tokens → lint PASSES ───────────────
+
+REPO_C5_POS="$IF_TMPDIR/c5_pos"
+mkdir -p "$REPO_C5_POS"
+make_clean_git_repo "$REPO_C5_POS"
+cat > "$REPO_C5_POS/CLAUDE.md" <<'MDEOF'
+Call `evaluate_step` after implement/fix, then spawn `canon:evaluator`.
+MDEOF
+git -C "$REPO_C5_POS" add CLAUDE.md
+git -C "$REPO_C5_POS" commit -q -m "add CLAUDE.md with evaluator gate wiring"
+
+actual=0
+bash "$REPO_C5_POS/hooks/lint.sh" > /dev/null 2>&1 || actual=$?
+assert_exit "Check 5 positive: CLAUDE.md with both tokens passes" 0 "$actual"
+
+# ── Check 5 negative: CLAUDE.md missing evaluate_step → lint FAILS ───────────
+
+REPO_C5_NEG_TOOL="$IF_TMPDIR/c5_neg_tool"
+mkdir -p "$REPO_C5_NEG_TOOL"
+make_clean_git_repo "$REPO_C5_NEG_TOOL"
+cat > "$REPO_C5_NEG_TOOL/CLAUDE.md" <<'MDEOF'
+Spawn `canon:evaluator` after implement/fix steps.
+MDEOF
+git -C "$REPO_C5_NEG_TOOL" add CLAUDE.md
+git -C "$REPO_C5_NEG_TOOL" commit -q -m "add CLAUDE.md missing evaluate_step"
+
+actual=0
+bash "$REPO_C5_NEG_TOOL/hooks/lint.sh" > /dev/null 2>&1 || actual=$?
+assert_exit "Check 5 negative: CLAUDE.md missing evaluate_step is caught (exit≠0)" 1 "$actual"
+
+result_str=""
+result_str=$(bash "$REPO_C5_NEG_TOOL/hooks/lint.sh" 2>&1) || true
+assert_stderr_contains "Check 5 negative: error names the missing evaluate_step token" "evaluate_step" "$result_str"
+
+# ── Check 5 negative: CLAUDE.md missing canon:evaluator → lint FAILS ─────────
+
+REPO_C5_NEG_AGENT="$IF_TMPDIR/c5_neg_agent"
+mkdir -p "$REPO_C5_NEG_AGENT"
+make_clean_git_repo "$REPO_C5_NEG_AGENT"
+cat > "$REPO_C5_NEG_AGENT/CLAUDE.md" <<'MDEOF'
+Call `evaluate_step` after implement/fix steps.
+MDEOF
+git -C "$REPO_C5_NEG_AGENT" add CLAUDE.md
+git -C "$REPO_C5_NEG_AGENT" commit -q -m "add CLAUDE.md missing canon:evaluator"
+
+actual=0
+bash "$REPO_C5_NEG_AGENT/hooks/lint.sh" > /dev/null 2>&1 || actual=$?
+assert_exit "Check 5 negative: CLAUDE.md missing canon:evaluator is caught (exit≠0)" 1 "$actual"
+
+result_str=""
+result_str=$(bash "$REPO_C5_NEG_AGENT/hooks/lint.sh" 2>&1) || true
+assert_stderr_contains "Check 5 negative: error names the missing canon:evaluator token" "canon:evaluator" "$result_str"
+
+# ── Check 5 skip: no CLAUDE.md → no hard-fail (fixture repos without one) ────
+# make_clean_git_repo doesn't create a CLAUDE.md; REPO_C1_NEG from Check 1
+# above is one such fixture — reuse it to confirm Check 5 no-ops silently.
+
+actual=0
+bash "$REPO_C1_NEG/hooks/lint.sh" > /dev/null 2>&1 || actual=$?
+assert_exit "Check 5 skip: no CLAUDE.md → passes (nothing to validate)" 0 "$actual"
+
 # ── Summary ─────────────────────────────────────────────────────────────────
 
 echo ""

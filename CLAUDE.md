@@ -136,7 +136,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 #### Trivial path (PM → engineer) <!-- last-updated: 2026-05-25 -->
 
 1. `init_workspace({ flow_name, task, branch, base_commit, tier: "small", original_input, preflight: true })` → save `worktree_path`, `workspace`.
-2. Infer runbook: implement → verify → review → context-sync → ship → learn. Call `batch_log_steps`.
+2. Infer runbook: implement → verify → review → context-sync → ship → learn. Call `batch_log_steps`. The evaluator gate fires as a post-step effect after implement/fix (before verify) — it is not a runbook step (see Post-Step Effects).
 3. **Pre-spawn check**: `test -d "${worktree_path}"`. If missing, report BLOCKED.
 4. Spawn `canon:engineer` with request, `worktree_path`, `turn_budget: {maxTurns}`.
 5. **Verify journaling**: After engineer returns, check the SUMMARY `### Status` field. If the engineer's SUMMARY reports `DONE` or `DONE_WITH_CONCERNS` AND the build is fix-type (no new contracts, no new exports), log the verify step as skipped: `batch_log_steps([{ step_id: "verify", status: "skipped", skip_reason: "fix-type build, no contract-level changes" }])`. Otherwise, dispatch a separate verify agent (or run `npm run build && npm run lint && npm test && bash hooks/lint.sh` inline) before proceeding to review.
@@ -160,7 +160,7 @@ Append the matching enrichment text from `references/engineer-spawn-enrichment.m
 5. Present runbook for user approval. Architect decides execution strategy — orchestrator follows it.
 6. `batch_log_steps` with all approved runbook steps.
 7. **Pre-spawn check**: `test -d "${worktree_path}"` before any code-writing agent spawn. If missing, report BLOCKED.
-8. Execute steps in order. Pass `turn_budget: {maxTurns}` to all agents. Pass `worktree_path` to code-writing agents (engineer, scribe, tester, shipper).
+8. Execute steps in order. Pass `turn_budget: {maxTurns}` to all agents. Pass `worktree_path` to code-writing agents (engineer, scribe, tester, shipper). The evaluator gate fires as a post-step effect after implement/fix (before verify) — it is not a runbook step (see Post-Step Effects).
 
 ### DAG Execution Protocol
 
@@ -196,6 +196,9 @@ Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include r
 | Security | `get_context({ file_paths, include: ["principles", "file_context"] })` |
 
 `get_context` batches multiple lookups in one MCP round-trip. Include results in the spawn prompt. Agents self-serve missing context via `agent-context-check` skill.
+
+**Direct orchestrator tools** (called by the orchestrator directly, not as pre-spawn context):
+- `evaluate_step` — called after implement/fix steps to extract structural signals for the evaluator gate (see Post-Step Effects).
 
 ### Dispatch Framework
 
@@ -288,6 +291,16 @@ checkpoint, Incomplete-step surfacing (cliff detected), merge conflict, gate fai
 
 - **After reviewer**: call `store_pr_review` or `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) — renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` → `${WORKSPACE}/artifacts/review.html`. Open in browser before HITL verdict. **Dogfood-render obligation (watch_OOOOO2)**: when `git diff {base_commit}..HEAD --name-only` includes `templates/renderer-*.md` or renderer-consumed snippets (`mcp-server/src/ui/snippets/*.html` or `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`), the mandatory renderer spawn MUST use the changed template/snippet files from the build worktree (not the installed plugin copies) so the build's own review.html is rendered through its own renderer changes before the review step closes; record `dogfood_render: true` in the review step's `log_step` outcome. Builds changing only renderer data inputs (REVIEW.md, DESIGN.md) are exempt.
 - **After engineer (implement)**: Run `bash hooks/summary-diff-check.sh {summary_path} {base_commit} [worktree_path]` per `*-SUMMARY.md` (pass `worktree_path` when not invoked with the worktree as CWD — see CWD for diff hooks in Step Enforcement Contracts). **Phantom claims BLOCK** (non-zero exit) — surface the named phantom claim to the user and do NOT proceed to review until resolved. **Unreported changes are advisory** — surface the `ADVISORY:` lines but proceed. Log the result in `log_step` outcome as `summary_diff_check: { phantom: N, advisory: M }`. For multi-task DAG builds, run per summary; any phantom in any summary blocks.
+- **After engineer (implement/fix), before verify — evaluator gate (post-step effect, NOT a runbook step):**
+  1. Call `evaluate_step({ workspace, slug, base_commit, worktree_path, declared_files })`. `declared_files` = the task plan's `files:` frontmatter; for trivial/inferred runbooks with no task plan, pass the engineer's summary-declared files (fall back to `[]`, which makes file-scope drift advisory-only).
+  2. If `evaluate_step` is not available/not found (dispatch or registration failure) → log `evaluator_gate: { skipped: "tool_unavailable" }` and SKIP the gate. If the tool runs but returns `ok: false` or throws at runtime (transient/data failure) → log `evaluator_gate: { skipped: "tool_error" }` and SKIP the gate. **Fail-open** in both cases: never block a build on the gate's own infra failure. (This is the deliberate opposite of the fail-CLOSED posture of *safety* gates — `fail-closed-by-default` governs safety gates; an advisory quality gate must not hard-block on its own failure.) A `tool_unavailable` skip — or a *repeated* `tool_error` skip across builds — means the gate is silently disabled and MUST be investigated as a wiring regression (see `canon:evaluator`), not treated as normal resilience.
+  3. Spawn `canon:evaluator` (`model: "haiku"`, session-unique `name: evaluator-eval-{job_suffix}`) with: the `EvaluateStepOutput` JSON from step 1, the runbook/PRD Acceptance Criteria, and the implementation summary (`${WORKSPACE}/plans/${slug}/*-SUMMARY.md`) if present.
+  4. Parse the verdict between the `---VERDICT---` / `---END_VERDICT---` delimiters.
+  5. **PASS** → proceed to verify. Log `evaluator_gate: { verdict: "PASS", advisory: N }`.
+  6. **FAIL** → bounded eval-fix loop (mirrors the review-fix loop): `log_step({ workspace, step_id: "eval-fix-{N}", agent_type: "engineer", status: "started" })`; re-spawn the engineer in fix mode with each finding's dimension/severity/description/file_path/line; on return, re-run the gate from step 1. **After 3 eval-fix iterations still FAIL → HITL** (`log_decision({ decision_type: "gate_escalation", ... })`, then surface via the gate-failure HITL pattern). Do NOT route FAIL through the Auto-Escalation Protocol — a FAIL verdict is a successful evaluation with a negative result (like a reviewer BLOCKING verdict), not an agent failure.
+  7. **Parse failure** (no delimiters) → treat as PASS with `evaluator_gate: { verdict: "PASS_parse_fallback" }` (fail-open on malformed agent output).
+  8. **Tier**: runs in **all tiers** (autonomous, light-touch, supervised). It is an automated, fail-open, pre-review quality gate — NOT a HITL build-step checkpoint — so the Autonomy Tier Protocol's skip-rules do not apply to it. The deterministic-gate invariant trades away only HITL supervision at higher tiers; this gate is not HITL and is strictly weaker than the always-mandatory review that backstops every tier.
+  9. Fires only after `implement`/`fix` steps — NOT after verify, review, test, context-sync, ship, or learn. Effect ordering: **implement → evaluate → verify → review**.
 - **After architect**: spawn renderer (mandatory) → `${WORKSPACE}/artifacts/design.html`. Open in browser before plan approval HITL.
 - **After scribe**: verify the scribe committed its worktree edits before proceeding to ship. Run `git log --oneline -3` in the worktree and confirm a `docs(context-sync):` commit is present. If absent, recover: `git add -A && git commit -m "docs(context-sync): update CLAUDE.md, context.md, and CONVENTIONS.md" -m "Canon-Workflow: {slug}" -m "Canon-Agent: scribe" -m "Canon-State: context-sync"` in the worktree before proceeding.
   **Post-scribe scope guard**: run `bash hooks/scribe-scope-guard.sh {base_commit} [threshold] [worktree_path]` in the worktree, or pass `worktree_path` when not invoked with the worktree as CWD (see CWD for diff hooks in Step Enforcement Contracts). Non-zero exit ⇒ surface the deletion count to the user and require confirmation before proceeding (existing HITL). A scribe may only delete lines added by this build or demonstrably-stale references to artifacts this build deleted.
@@ -377,8 +390,7 @@ Read `references/multi-session-concurrency.md` BEFORE handling a lock-gated init
 | Shipper | `canon:shipper` | Ship states |
 | Writer | `canon:writer` | Principle authoring and artifact retirement (HITL-gated) |
 | Learner | `canon:learner` | Pattern analysis |
-| Evaluator | `canon:evaluator` | Lightweight quality gate — structural signal verdict (PASS/FAIL) on engineer diffs; runs on Haiku |
-| Janitor | `canon:janitor` | Background housekeeping — dispatched when `invoke_janitor` returns `needs_prune: true`, a post-run outcome signal that routine pruning already ran (not a trigger to prune) |
+| Evaluator | `canon:evaluator` | Post-implement/fix quality gate (automated, fail-open, pre-review; Haiku) |
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
 
