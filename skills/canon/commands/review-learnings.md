@@ -1,7 +1,7 @@
 ---
 description: Review and act on proposed learnings from auto-triggered analysis
 argument-hint: [--all] [--pending]
-allowed-tools: [Bash, Read, Write, Edit, Glob, Grep, Agent, record_applied_evolution]
+allowed-tools: [Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__canon__record_applied_evolution]
 model: sonnet
 ---
 
