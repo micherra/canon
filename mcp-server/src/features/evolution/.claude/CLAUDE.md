@@ -212,8 +212,10 @@ Input `{ proposal_id, project_dir }`. Loads the `applied_evolutions` row
 the TARGET-SCOPED signal into a pre/post cohort anchored on `applied_at`:
 principle-carrying targets → `reviews`⋈`violations` filtered by `principle_id`; agent-def
 cliff targets (`principle_id` null) → `cliff_events` filtered by the agent derived from
-`target_path` (`canon:` prefix stripped). Confidence reuses `deriveTier(score, min(preEvents,
-postEvents))` — `insufficient` when either side < 5. Concurrent applies touching the same
+`target_path` (`canon:` prefix stripped). Confidence reuses `deriveTier(score,
+min(pre.reviews_or_runs, post.reviews_or_runs))` keyed on the cohort OBSERVATION count
+(reviews/runs), NOT the event count — `insufficient` when either side < 5 observations (a
+rise-from-zero on an adequately-observed target still reaches a candidate verdict). Concurrent applies touching the same
 signal (via `listAppliedSince`) set `ambiguous:true` + `confounding_proposal_ids[]`, verdict
 `ambiguous`. Verdict ∈ `regression_candidate | no_signal_change | improvement_candidate |
 ambiguous | insufficient`. Absent signal rows → cohort zeros + `insufficient` (never an error).
