@@ -5,6 +5,7 @@ import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts"
 import { gitDiff, gitExec } from "@platform/adapters/git-adapter.ts";
 import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
 import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
+import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { releaseClaims } from "@shared/lib/file-claims.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
@@ -260,6 +261,24 @@ export async function tryRemoveCliffLedger(workspace: string): Promise<void> {
 }
 
 /**
+ * Transition a workspace to `finalized_on_disk` in the project-level
+ * active-workspaces registry (drift.db). Fail-open (decision
+ * registry-store-location-02.md): a registry write must NEVER block finalize.
+ * Co-located with the archive step it corresponds to (DQ2: finalized-but-on-disk
+ * stays reachable — transition, do NOT delete).
+ */
+function tryMarkWorkspaceFinalized(workspace: string, projectDir: string): void {
+  try {
+    getDriftDb(projectDir).getActiveWorkspaces().markFinalized(workspace);
+  } catch (err: unknown) {
+    console.warn(
+      "[canon] finalizeWorkspace: active-workspaces registry markFinalized failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
  * Run the janitor for background housekeeping. Best-effort — never throws.
  */
 export async function tryRunJanitor(projectDir: string): Promise<void> {
@@ -287,6 +306,7 @@ export async function runCompletionSideEffects(
   const analytics_recorded = await tryAppendAnalytics(workspace, steps, projectDir);
   const trend_summary_written = await tryWriteBuildTrendSummary(workspace, projectDir);
   const claims_released = await tryReleaseClaims(workspace, projectDir);
+  tryMarkWorkspaceFinalized(workspace, projectDir); // registry transition (fail-open)
   await tryRemoveCliffLedger(workspace); // best-effort cleanup (loops-phase-c-03)
   await tryRunJanitor(projectDir);
   return { analytics_recorded, claims_released, digest_written, trend_summary_written };

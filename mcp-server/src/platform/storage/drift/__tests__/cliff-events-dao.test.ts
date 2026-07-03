@@ -98,7 +98,7 @@ describe("CliffEventsDao", () => {
       const version = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(version.value).toBe("11");
+      expect(version.value).toBe("12");
     });
   });
 

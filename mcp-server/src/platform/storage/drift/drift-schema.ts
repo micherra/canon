@@ -19,7 +19,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const DRIFT_SCHEMA_VERSION = "11";
+export const DRIFT_SCHEMA_VERSION = "12";
 
 // DDL statements — v1 base tables
 //
@@ -396,6 +396,32 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '11' WHERE key = 'schema_version'`);
     },
     version: "11",
+  },
+  {
+    up: (db) => {
+      // active_workspaces — project-level active-build discovery registry (Inc 0).
+      // One row per workspace_path (the identity); status transitions live ->
+      // finalized_on_disk -> reaped as the workspace moves through its lifecycle.
+      // The allowed-status set ('live' | 'finalized_on_disk' | 'reaped') is enforced
+      // in the DAO write layer — SQLite CHECK on migrations is unreliable for
+      // existing rows (mirrors the v11 violations.status note).
+      db.exec(`CREATE TABLE IF NOT EXISTS active_workspaces (
+        workspace_path  TEXT PRIMARY KEY,
+        slug            TEXT NOT NULL,
+        session_id      TEXT,
+        job_id          TEXT,
+        base_commit     TEXT,
+        status          TEXT NOT NULL DEFAULT 'live',
+        started_at      TEXT NOT NULL,
+        last_seen       TEXT NOT NULL,
+        finalized_at    TEXT
+      )`);
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_active_workspaces_status ON active_workspaces(status)`,
+      );
+      db.exec(`UPDATE meta SET value = '12' WHERE key = 'schema_version'`);
+    },
+    version: "12",
   },
 ];
 

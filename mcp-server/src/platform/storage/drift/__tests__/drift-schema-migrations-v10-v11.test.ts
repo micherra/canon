@@ -195,7 +195,7 @@ describe("runDriftMigrations — v9 to v10 upgrade (cliff_events)", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("11");
+    expect(row.value).toBe("12");
     db.close();
   });
 });
@@ -300,7 +300,7 @@ describe("runDriftMigrations — v10 to v11 upgrade (lifecycle columns)", () => 
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("11");
+    expect(row.value).toBe("12");
     db.close();
   });
 });
@@ -326,7 +326,7 @@ describe("runDriftMigrations — v9 to v11 full upgrade", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("11");
+    expect(row.value).toBe("12");
     db.close();
   });
 });
