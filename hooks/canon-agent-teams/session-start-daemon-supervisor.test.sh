@@ -938,6 +938,49 @@ fi
 rm -rf "$TMPDATA" "$TMPROOT"
 
 # ---------------------------------------------------------------------------
+# T-C2: lsof-absent (orc=2) MUST also emit the down-daemon recovery block —
+# on an lsof-less host, orc is ALWAYS 2, so the orc=1 down-block branch is
+# unreachable and a genuine boot failure would show only the owner-unknown
+# warning, losing the actionable recovery guidance. Same fixture as T-C
+# (port-owner override forced to fail → orc=2), but this test asserts BOTH
+# the owner-unknown warning AND the down-block guidance appear together.
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"22.1.0-target"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORTC2=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+OUTPUT_C2=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORTC2" \
+  CANON_SUPERVISOR_BOOT_CMD=":" \
+  CANON_SUPERVISOR_PORT_OWNER_CMD="false" \
+  CANON_SUPERVISOR_START_TIMEOUT=1 \
+  bash "$HOOK" 2>&1)
+EXIT_CODE_C2=$?
+
+CONTAINS_UNKNOWN_C2=no
+echo "$OUTPUT_C2" | grep -q "could not be identified" && CONTAINS_UNKNOWN_C2=yes
+CONTAINS_DOWN_BLOCK_C2=no
+echo "$OUTPUT_C2" | grep -q "tools will FAIL" && CONTAINS_DOWN_BLOCK_C2=yes
+
+if [[ $EXIT_CODE_C2 -eq 0 ]] && [[ "$CONTAINS_UNKNOWN_C2" == "yes" ]] && [[ "$CONTAINS_DOWN_BLOCK_C2" == "yes" ]]; then
+  pass "T-C2: lsof-absent (orc=2) still emits down-daemon recovery block alongside owner-unknown warning"
+else
+  fail "T-C2: exit=$EXIT_CODE_C2, unknown_warn=${CONTAINS_UNKNOWN_C2}, down_block=${CONTAINS_DOWN_BLOCK_C2}, output=$(echo "$OUTPUT_C2" | head -10)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT"
+
+# ---------------------------------------------------------------------------
 # T-D: retry-exhausted after a successful kill → fail-closed loud block
 # (dc-03) — owner identity-confirms as a Canon daemon, escalate_kill clears
 # it, but the retried start still fails; the existing loud recovery block

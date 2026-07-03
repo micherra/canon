@@ -378,6 +378,7 @@ orc=$?
 case $orc in
   2)
     echo "CANON WARNING: daemon start did not reach target version and the port owner could not be identified (lsof unavailable) — cannot auto-recover; run bash mcp-server/boot.sh --daemon manually."
+    _supervisor_emit_down_block
     exit 0
     ;;
   1)
