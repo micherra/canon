@@ -282,15 +282,21 @@ function finalizeOutcome(args: {
 }): GetEvolutionOutcomesResult {
   const { applied, row, signal, scopeLabel, pre, post } = args;
 
-  // Delta + confidence (reused deriveTier, keyed on target-scoped event count).
+  // Delta + confidence (reused deriveTier, keyed on target-scoped OBSERVATION count,
+  // not event count). Keying on events would floor a previously-clean target
+  // (pre.events == 0) to `insufficient`, making `regression_candidate` — the headline
+  // verdict (dc-01: a fresh regression on a previously-clean target) — structurally
+  // unreachable. Symmetric for drop-to-zero improvements. The honest sample size is
+  // how many times the target was OBSERVED (reviews for a principle, total cliffs for
+  // an agent), which is already carried on the cohort as `reviews_or_runs`.
   const delta = post.rate - pre.rate;
-  const sampleSize = Math.min(pre.events, post.events);
+  const sampleSize = Math.min(pre.reviews_or_runs, post.reviews_or_runs);
   const score = Math.min(1, Math.abs(delta));
   const tier = deriveTier(score, sampleSize);
   const confidence: ConfidenceAnnotation = {
     basis: [
       {
-        detail: `${pre.events} pre / ${post.events} post ${signal} events for ${scopeLabel}`,
+        detail: `${pre.reviews_or_runs} pre / ${post.reviews_or_runs} post ${signal} observations for ${scopeLabel}`,
         signal,
         weight: 1,
       },

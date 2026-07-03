@@ -122,4 +122,26 @@ describe("recordAppliedEvolution — validation", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error_code).toBe("INVALID_INPUT");
   });
+
+  it("returns INVALID_INPUT for an unparseable applied_at", async () => {
+    const result = await recordAppliedEvolution(baseInput({ applied_at: "not-a-date" }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("applied_at");
+    }
+  });
+});
+
+describe("recordAppliedEvolution — applied_at ms-precision normalization", () => {
+  it("normalizes a seconds-only stamp to full millisecond ISO before storing", async () => {
+    // Seconds-only 'Z' stamp sorts BEFORE a same-second ms stamp ('Z' > '.'),
+    // which would mis-bucket a boundary event. The recorder must canonicalize.
+    const result = await recordAppliedEvolution(
+      baseInput({ applied_at: "2026-07-02T12:00:00Z", proposal_id: "evolve-secs-01" }),
+    );
+    expect(result.ok).toBe(true);
+    const row = getDriftDb(tmpProjectDir).getAppliedEvolutions().getByProposalId("evolve-secs-01");
+    expect(row?.applied_at).toBe("2026-07-02T12:00:00.000Z");
+  });
 });

@@ -35,7 +35,8 @@ export const RecordAppliedEvolutionInputSchema = z.object({
   applied_at: z
     .string()
     .describe(
-      "ISO-8601 timestamp of the apply. THE cohort-split anchor for get_evolution_outcomes.",
+      "ISO-8601 timestamp of the apply. THE cohort-split anchor for get_evolution_outcomes. " +
+        "Normalized to full millisecond ISO before storage; an unparseable value is INVALID_INPUT.",
     ),
   apply_base_commit: z
     .string()
@@ -78,6 +79,28 @@ export const RecordAppliedEvolutionInputSchema = z.object({
 type RecordAppliedEvolutionInput = z.input<typeof RecordAppliedEvolutionInputSchema>;
 
 // ---------------------------------------------------------------------------
+// Anchor normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize `applied_at` to full millisecond ISO-8601 (`toISOString()` form).
+ *
+ * The stored value is THE cohort-split anchor and is compared lexicographically
+ * against `review.timestamp` / `cliff.detected_at` (both ms-precision `toISOString()`
+ * in-system). A seconds-only stamp (`...T00:00:00Z`) sorts BEFORE a same-second
+ * ms stamp (`'Z'` > `'.'`), so a boundary event mis-buckets. Re-emitting through
+ * `Date.toISOString()` guarantees ms precision and a canonical `Z` suffix.
+ *
+ * @returns the normalized ISO string, or `null` when `applied_at` is not a
+ *   parseable timestamp (caller rejects with `INVALID_INPUT`).
+ */
+function normalizeAppliedAt(appliedAt: string): string | null {
+  const ms = Date.parse(appliedAt);
+  if (Number.isNaN(ms)) return null;
+  return new Date(ms).toISOString();
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -100,12 +123,21 @@ export async function recordAppliedEvolution(
     return toolError("INVALID_INPUT", "project_dir must be a non-empty string.", false);
   }
 
+  const applied_at = normalizeAppliedAt(input.applied_at);
+  if (applied_at === null) {
+    return toolError(
+      "INVALID_INPUT",
+      `applied_at must be a parseable ISO-8601 timestamp; got "${input.applied_at}".`,
+      false,
+    );
+  }
+
   try {
     getDriftDb(project_dir)
       .getAppliedEvolutions()
       .record({
         after_hash: input.after_hash,
-        applied_at: input.applied_at,
+        applied_at,
         apply_base_commit: input.apply_base_commit ?? null,
         artifact_class: input.artifact_class,
         before_hash: input.before_hash,

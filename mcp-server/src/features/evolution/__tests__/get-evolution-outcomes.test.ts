@@ -46,7 +46,9 @@ function seedReview(opts: {
   }));
   const entry: ReviewEntry = {
     files: ["src/x.ts"],
-    honored: [],
+    // A clean review still OBSERVES the principle — it was checked and honored.
+    // This is what makes a previously-clean target an adequately-observed cohort.
+    honored: opts.violationCount === 0 ? [opts.principleId] : [],
     review_id: opts.reviewId,
     score: {
       conventions: { passed: 0, total: 0 },
@@ -212,6 +214,75 @@ describe("(c) insufficient on sparse cohort", () => {
     if (!res.ok) return;
     expect(res.confidence.tier).toBe("insufficient");
     expect(res.verdict).toBe("insufficient");
+  });
+});
+
+describe("(c2) reachable candidate verdict on a previously-clean, well-observed target", () => {
+  it("yields regression_candidate (NOT insufficient) when pre violations == 0 but the post cohort is adequately observed", async () => {
+    recordProposal({ proposalId: "evolve-c2r" });
+    // Pre: 5 CLEAN reviews (0 violations) → pre.events == 0, the previously-clean case.
+    for (let i = 0; i < 5; i++) {
+      seedReview({
+        principleId: PRINCIPLE,
+        reviewId: `pre-${i}`,
+        timestamp: `2026-06-2${i}T00:00:00.000Z`,
+        violationCount: 0,
+      });
+    }
+    // Post: 5 reviews, ONE carrying a fresh violation → post.rate == 0.2, an honest low delta.
+    for (let i = 0; i < 5; i++) {
+      seedReview({
+        principleId: PRINCIPLE,
+        reviewId: `post-${i}`,
+        timestamp: `2026-07-0${i + 3}T00:00:00.000Z`,
+        violationCount: i === 0 ? 1 : 0,
+      });
+    }
+
+    const res = await getEvolutionOutcomes({
+      project_dir: tmpProjectDir,
+      proposal_id: "evolve-c2r",
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.cohort.pre.events).toBe(0);
+    expect(res.cohort.pre.reviews_or_runs).toBe(5);
+    expect(res.cohort.post.reviews_or_runs).toBe(5);
+    // Sample size now keys on OBSERVATION count (5/5), not event count (0/1) → reachable.
+    expect(res.confidence.tier).not.toBe("insufficient");
+    expect(res.verdict).toBe("regression_candidate");
+  });
+
+  it("yields improvement_candidate (NOT insufficient) on a drop-to-zero when both cohorts are adequately observed", async () => {
+    recordProposal({ proposalId: "evolve-c2i" });
+    // Pre: 5 reviews each with a violation → pre.rate == 1.
+    for (let i = 0; i < 5; i++) {
+      seedReview({
+        principleId: PRINCIPLE,
+        reviewId: `pre-${i}`,
+        timestamp: `2026-06-2${i}T00:00:00.000Z`,
+        violationCount: 1,
+      });
+    }
+    // Post: 5 CLEAN reviews → post.events == 0, the drop-to-zero case.
+    for (let i = 0; i < 5; i++) {
+      seedReview({
+        principleId: PRINCIPLE,
+        reviewId: `post-${i}`,
+        timestamp: `2026-07-0${i + 3}T00:00:00.000Z`,
+        violationCount: 0,
+      });
+    }
+
+    const res = await getEvolutionOutcomes({
+      project_dir: tmpProjectDir,
+      proposal_id: "evolve-c2i",
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.cohort.post.events).toBe(0);
+    expect(res.confidence.tier).not.toBe("insufficient");
+    expect(res.verdict).toBe("improvement_candidate");
   });
 });
 
