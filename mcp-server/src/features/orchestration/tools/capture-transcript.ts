@@ -6,7 +6,11 @@ import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts"
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolOk } from "@shared/lib/tool-result.ts";
 import { isPathContained } from "@shared/lib/worktree-guard.ts";
-import { transformClaudeCodeTranscript } from "../services/transcript-transformer.ts";
+import type { CacheUsageAggregate } from "../services/transcript-transformer.ts";
+import {
+  aggregateCacheUsage,
+  transformClaudeCodeTranscript,
+} from "../services/transcript-transformer.ts";
 
 export type CaptureTranscriptInput = {
   workspace: string;
@@ -35,6 +39,8 @@ export type CaptureTranscriptResult = {
   transcript_path: string;
   entry_count: number;
   warning?: string;
+  /** Best-effort cache-usage rollup for this capture; additive/optional for observability. */
+  cache_metrics?: CacheUsageAggregate;
 };
 
 async function findAgentTranscript(agentId: string, projectDir: string): Promise<string | null> {
@@ -64,6 +70,37 @@ async function findAgentTranscript(agentId: string, projectDir: string): Promise
     ),
   );
   return checks.find((c) => c !== null) ?? null;
+}
+
+/**
+ * Aggregate cache usage from the raw CC entries and best-effort persist it
+ * into the state's metrics JSON. Fail-open: a write error never propagates —
+ * transcript capture is the load-bearing behavior, telemetry is a side effect.
+ */
+function computeAndPersistCacheMetrics(
+  workspace: string,
+  stepId: string,
+  rawEntries: unknown[],
+): CacheUsageAggregate {
+  const cacheMetrics = aggregateCacheUsage(rawEntries as Parameters<typeof aggregateCacheUsage>[0]);
+  try {
+    getExecutionStore(workspace).updateStateMetrics(stepId, {
+      cache_creation_tokens: cacheMetrics.cache_creation_tokens,
+      cache_read_tokens: cacheMetrics.cache_read_tokens,
+      input_tokens: cacheMetrics.input_tokens,
+      ...(cacheMetrics.cache_hit_ratio !== undefined
+        ? { cache_hit_ratio: cacheMetrics.cache_hit_ratio }
+        : {}),
+    });
+  } catch (err) {
+    // best-effort — the transcript was written; never fail capture on a metrics-write error.
+    // Fail-open, but observable: surface the failure so a persist error isn't silent.
+    console.warn(
+      "[canon] capture-transcript: could not persist cache metrics:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+  return cacheMetrics;
 }
 
 async function readJsonlFile(filePath: string): Promise<unknown[]> {
@@ -151,7 +188,10 @@ export async function captureTranscript(
     }
   }
 
+  const cacheMetrics = computeAndPersistCacheMetrics(workspace, step_id, rawEntries);
+
   return toolOk({
+    cache_metrics: cacheMetrics,
     entry_count: canonEntries.length,
     transcript_path: outputPath,
   });

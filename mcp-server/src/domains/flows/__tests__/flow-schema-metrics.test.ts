@@ -28,10 +28,9 @@ describe("StateMetricsSchema — backward-compatible optional fields", () => {
     expect(result.turns).toBe(3);
   });
 
-  it("parses all 7 new ADR-003a fields together", () => {
+  it("parses all 6 new ADR-003a fields together", () => {
     const input = {
       cache_read_tokens: 2000,
-      cache_write_tokens: 800,
       input_tokens: 5000,
       orientation_calls: 2,
       output_tokens: 1500,
@@ -44,7 +43,6 @@ describe("StateMetricsSchema — backward-compatible optional fields", () => {
     expect(result.input_tokens).toBe(5000);
     expect(result.output_tokens).toBe(1500);
     expect(result.cache_read_tokens).toBe(2000);
-    expect(result.cache_write_tokens).toBe(800);
     expect(result.turns).toBe(7);
   });
 
@@ -59,7 +57,6 @@ describe("StateMetricsSchema — backward-compatible optional fields", () => {
   it("parses combined existing and new fields", () => {
     const input = {
       cache_read_tokens: 500,
-      cache_write_tokens: 200,
       duration_ms: 2500,
       input_tokens: 3000,
       model: "sonnet",
@@ -82,10 +79,9 @@ describe("AgentMetricsSchema — focused ADR-003a input validation schema", () =
     expect(result).toEqual({});
   });
 
-  it("validates all 8 ADR-003a fields", () => {
+  it("validates all 7 ADR-003a fields", () => {
     const input = {
       cache_read_tokens: 2000,
-      cache_write_tokens: 800,
       duration_ms: 3000,
       input_tokens: 5000,
       orientation_calls: 2,
@@ -99,7 +95,6 @@ describe("AgentMetricsSchema — focused ADR-003a input validation schema", () =
     expect(result.input_tokens).toBe(5000);
     expect(result.output_tokens).toBe(1500);
     expect(result.cache_read_tokens).toBe(2000);
-    expect(result.cache_write_tokens).toBe(800);
     expect(result.duration_ms).toBe(3000);
     expect(result.turns).toBe(7);
   });
@@ -122,14 +117,13 @@ describe("AgentMetricsSchema — focused ADR-003a input validation schema", () =
 });
 
 describe("AgentMetrics type — structural type check", () => {
-  it("AgentMetrics type has all 8 fields as optional", () => {
+  it("AgentMetrics type has all 7 fields as optional", () => {
     // This is a compile-time check via assignment; if the type is wrong, TS will fail tsc --noEmit
     const metrics: AgentMetrics = {};
     expect(metrics).toBeDefined();
 
     const full: AgentMetrics = {
       cache_read_tokens: 5,
-      cache_write_tokens: 6,
       duration_ms: 7,
       input_tokens: 3,
       orientation_calls: 2,

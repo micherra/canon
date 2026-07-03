@@ -645,6 +645,10 @@ Assemble the full `<style>` block in this order:
     .empty-note { font-size: 12px; color: var(--text-muted); padding: 8px 0; }
     ```
 
+## Composition Protocol
+
+**Write incrementally (watch_KKKKKK1)**: after completing MCP tool calls, write each major section to the output file before beginning the next — write the `<head>` block first, then each file-card / content section, then the graph section, then close the document. Do NOT compose the full HTML string in context and Write once: if the session times out before the Write call, the artifact is lost. A partial artifact on disk is recoverable; one that never reached Write is not.
+
 ## Step 5 — Write output
 
 NEVER echo the HTML or large content into your response — compose it and write directly to the output path; if large, write then Edit-append. Echoing the artifact will exceed the output-token limit and fail the render.

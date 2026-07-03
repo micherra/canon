@@ -338,6 +338,91 @@ commit_scribe "$CASE6_REPO"
 run_guard "triple-dash-undercount: scribe deletes 6 '---' lines, threshold 5 → exit 2" 2 "$CASE6_REPO" "$CASE6_BASE" "5"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Case 7: worktree_path arg honored from wrong CWD (watch_CCCCCCCCCCCC2)
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 7: worktree_path arg honored from wrong CWD --"
+
+CASE7_MAIN="$MASTER_TMP/case7-main"
+init_repo "$CASE7_MAIN"
+write_claude_md "$CASE7_MAIN" 20
+commit_engineer "$CASE7_MAIN" "docs: initial CLAUDE.md"
+CASE7_BASE=$(git -C "$CASE7_MAIN" rev-parse HEAD)
+
+CASE7_LINKED="$MASTER_TMP/case7-linked"
+git -C "$CASE7_MAIN" worktree add -q -b case7-branch "$CASE7_LINKED" HEAD
+
+# Scribe commit on the linked worktree: delete 10 lines (20 → 10); threshold 5 → exit 2
+trim_claude_md "$CASE7_LINKED" 10
+commit_scribe "$CASE7_LINKED"
+
+actual_exit=0
+(cd "$CASE7_MAIN" && bash "$GUARD" "$CASE7_BASE" "5" "$CASE7_LINKED" >/dev/null 2>&1) || actual_exit=$?
+if [[ "$actual_exit" -eq 2 ]]; then
+  echo "  PASS: worktree_path arg from wrong CWD detects the over-trim (exit 2)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: worktree_path arg honored — expected exit 2, got $actual_exit"
+  FAIL=$((FAIL + 1))
+fi
+
+# Sanity baseline: WITHOUT worktree_path, running from the wrong CWD (main
+# tree has no scribe commit at all in this range) fails closed for a
+# DIFFERENT reason (no scribe-trailer commit found) — proving the arg made
+# the real difference, not incidental exit-code overlap.
+baseline_exit=0
+baseline_output=$(cd "$CASE7_MAIN" && bash "$GUARD" "$CASE7_BASE" "5" 2>&1) || baseline_exit=$?
+if [[ "$baseline_exit" -eq 2 ]] && echo "$baseline_output" | grep -qF "no scribe commit"; then
+  echo "  PASS: without worktree_path, wrong-CWD run fails closed for the expected reason (no scribe commit found)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: baseline behavior unexpected"
+  echo "        exit=$baseline_exit output=$baseline_output"
+  FAIL=$((FAIL + 1))
+fi
+
+git -C "$CASE7_MAIN" worktree remove --force "$CASE7_LINKED" >/dev/null 2>&1 || true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 8: backward-compat — worktree_path absent, correct CWD → unchanged
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 8: backward-compat, worktree_path absent --"
+
+CASE8_REPO="$MASTER_TMP/case8"
+init_repo "$CASE8_REPO"
+write_claude_md "$CASE8_REPO" 20
+commit_engineer "$CASE8_REPO" "docs: initial CLAUDE.md"
+CASE8_BASE=$(git -C "$CASE8_REPO" rev-parse HEAD)
+
+trim_claude_md "$CASE8_REPO" 17
+commit_scribe "$CASE8_REPO"
+
+run_guard "backward-compat: no worktree_path, scribe deletes 3, threshold 5 → exit 0" 0 "$CASE8_REPO" "$CASE8_BASE" "5"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 9: invalid worktree_path (non-directory) → fail-closed exit 2
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 9: invalid worktree_path → fail-closed exit 2 --"
+
+CASE9_REPO="$MASTER_TMP/case9"
+init_repo "$CASE9_REPO"
+CASE9_BASE=$(git -C "$CASE9_REPO" rev-parse HEAD)
+
+actual_exit=0
+output=$(cd "$CASE9_REPO" && bash "$GUARD" "$CASE9_BASE" "5" "/nonexistent/worktree/path" 2>&1) || actual_exit=$?
+if [[ "$actual_exit" -eq 2 ]] && echo "$output" | grep -qF "CANON: scribe-scope-guard failed-closed — worktree_path not a directory"; then
+  echo "  PASS: invalid worktree_path → fail-closed exit 2 with message"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: invalid worktree_path handling"
+  echo "        expected exit=2 with failed-closed message, got exit=$actual_exit"
+  echo "        output: $output"
+  FAIL=$((FAIL + 1))
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""

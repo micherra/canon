@@ -2073,6 +2073,141 @@ function caller(): void { deadFn(); }'
   rm -rf "$REPO"
 }
 
+# ===========================================================================
+# T46-T48: worktree_path arg (watch_CCCCCCCCCCCC2 — durable CWD/worktree fix)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# T46: worktree_path ARG HONORED — gate invoked from the WRONG CWD (a
+# separate main-tree repo where HEAD hasn't advanced) but given the real
+# worktree via the trailing worktree_path arg → produces the CORRECT result,
+# proving -C (plus worktree-relative resolution of the reachability grep, the
+# same-file helper, and check_suppression) makes CWD irrelevant. Mirrors
+# PROBE-FINDINGS.md Probe 1 + Assumption #4 (dead-wire-gate sibling).
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T46: worktree_path arg honored from wrong CWD (watch_CCCCCCCCCCCC2) --"
+{
+  WT46_MAIN=$(mktemp -d)
+  git -C "$WT46_MAIN" init -q
+  git -C "$WT46_MAIN" config user.email "test@example.com"
+  git -C "$WT46_MAIN" config user.name "Test"
+  git -C "$WT46_MAIN" config commit.gpgsign false
+  mkdir -p "$WT46_MAIN/mcp-server/src/features"
+  printf '// placeholder\n' > "$WT46_MAIN/mcp-server/src/features/placeholder.ts"
+  git -C "$WT46_MAIN" add .
+  git -C "$WT46_MAIN" commit -q -m "init"
+  BASE46=$(git -C "$WT46_MAIN" rev-parse HEAD)
+
+  WT46_LINKED=$(mktemp -d)
+  rmdir "$WT46_LINKED"
+  git -C "$WT46_MAIN" worktree add -q -b t46-branch "$WT46_LINKED" HEAD
+
+  # A WIRED export and a DEAD export, both added on the linked worktree branch.
+  printf 'export function t46WiredFn(): void { return; }\n' \
+    > "$WT46_LINKED/mcp-server/src/features/wired.ts"
+  printf 'import { t46WiredFn } from "./wired"; t46WiredFn();\n' \
+    > "$WT46_LINKED/mcp-server/src/features/consumer.ts"
+  git -C "$WT46_LINKED" add .
+  git -C "$WT46_LINKED" commit -q -m "add wired export"
+
+  printf 'export function t46DeadFn(): void { return; }\n' \
+    > "$WT46_LINKED/mcp-server/src/features/dead.ts"
+  git -C "$WT46_LINKED" add .
+  git -C "$WT46_LINKED" commit -q -m "add dead export"
+
+  # Run FROM the main tree (wrong CWD: still at BASE46, no mcp-server changes)
+  # WITH the linked worktree passed as worktree_path.
+  actual_exit=0
+  output=$(cd "$WT46_MAIN" && bash "$GATE" "$BASE46" "$WT46_LINKED" 2>&1) || actual_exit=$?
+
+  if [[ "$actual_exit" -eq 2 ]]; then
+    echo "  PASS: worktree_path arg from wrong CWD still detects the dead export (exit 2)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: worktree_path arg honored — expected exit 2, got $actual_exit"
+    echo "        output: $output"
+    FAIL=$((FAIL + 1))
+  fi
+
+  if echo "$output" | grep -q "t46DeadFn"; then
+    echo "  PASS: t46DeadFn named in output (reachability grep resolved under worktree_path)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: t46DeadFn not named in output"
+    echo "        output: $output"
+    FAIL=$((FAIL + 1))
+  fi
+
+  if ! echo "$output" | grep -q "t46WiredFn"; then
+    echo "  PASS: t46WiredFn (wired) NOT flagged"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: t46WiredFn was incorrectly flagged"
+    echo "        output: $output"
+    FAIL=$((FAIL + 1))
+  fi
+
+  # Sanity baseline: WITHOUT worktree_path, running from the wrong CWD (main
+  # tree's own diff is empty — it never advanced) must NOT reproduce the
+  # exit-2 result above, proving the arg made the difference.
+  baseline_exit=0
+  (cd "$WT46_MAIN" && bash "$GATE" "$BASE46") >/dev/null 2>&1 || baseline_exit=$?
+  if [[ "$baseline_exit" -ne 2 ]]; then
+    echo "  PASS: without worktree_path, wrong-CWD run does not detect the dead export (baseline differs)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: baseline unexpectedly matched arg-honored result — test may not isolate the fix"
+    FAIL=$((FAIL + 1))
+  fi
+
+  git -C "$WT46_MAIN" worktree remove --force "$WT46_LINKED" >/dev/null 2>&1 || true
+  rm -rf "$WT46_MAIN" "$WT46_LINKED"
+}
+
+# ---------------------------------------------------------------------------
+# T47: BACKWARD-COMPAT — worktree_path absent, invoked from the correct
+# worktree CWD → identical behavior to before (unwired export still flagged).
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T47: backward-compat, worktree_path absent, correct CWD --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  commit_file "$REPO" "mcp-server/src/features/t47orphan.ts" \
+    "export function t47OrphanFn(): void { return; }"
+
+  run_gate_with_output 2 "t47OrphanFn" "$REPO" "$BASE" "T47: backward-compat unwired export still flagged (no worktree_path)"
+  rm -rf "$REPO"
+}
+
+# ---------------------------------------------------------------------------
+# T48: INVALID worktree_path — non-existent directory → fail-closed exit 1
+# (dead-wire-gate's existing internal-error exit convention).
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- T48: invalid worktree_path (non-directory) → fail-closed exit 1 --"
+{
+  REPO=$(mktemp -d)
+  make_ts_repo "$REPO"
+  BASE=$(git -C "$REPO" rev-parse HEAD)
+
+  actual_exit=0
+  output=$(cd "$REPO" && bash "$GATE" "$BASE" "/nonexistent/worktree/path" 2>&1) || actual_exit=$?
+  if [[ "$actual_exit" -eq 1 ]] && echo "$output" | grep -qF "CANON: dead-wire-gate failed-closed — worktree_path not a directory"; then
+    echo "  PASS: invalid worktree_path → fail-closed exit 1 with message"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: invalid worktree_path handling"
+    echo "        expected exit=1 with failed-closed message, got exit=$actual_exit"
+    echo "        output: $output"
+    FAIL=$((FAIL + 1))
+  fi
+  rm -rf "$REPO"
+}
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

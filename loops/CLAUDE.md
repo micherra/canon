@@ -76,15 +76,16 @@ Loops may attach to these named lifecycle moments:
 | **B** | Ship-watch definition (`loops/ship-watch.md`) — first real loop; dispatched via post-ship tap; command registration fix (`"commands": ["./skills/canon/commands/"]` in plugin.json) enabling `/canon:loop-tick` to resolve as a real harness slash command |
 | **C** | Self-paced mode + ScheduleWakeup + session-watch + de-dupe ledger; session-start tap wired in CLAUDE.md |
 | **D** | `loops/harness-watch.md` added — third real loop (post-ship, self-paced); `run-learner` added to `ORCHESTRATOR_ACTIONS` as the third vocabulary member |
-| **E (current)** | `loops/evolve.md` added — fourth real loop (session-start, self-paced, attribution-signal observer); `run-evolve` added to `ORCHESTRATOR_ACTIONS` as the fourth vocabulary member |
+| **E (current)** | `loops/evolve.md` added — fourth real loop (session-start, self-paced, attribution-signal observer); `run-evolve` added to `ORCHESTRATOR_ACTIONS` as the fourth vocabulary member; `auto-enable-merge` added as the fifth vocabulary member (a second `ci_conclusion` rule on `ship-watch`, `pending → success`) — arms squash auto-merge on CI-green, no new loop |
 
 **`orchestrator_action` on a transition rule (Phase B+):** A transition rule may declare an
 optional `orchestrator_action` field (derive-from-const `z.enum(ORCHESTRATOR_ACTIONS)` with
-members `auto-triage-fix`, `auto-plugin-update`, `run-learner`, and `run-evolve`). This is an
+members `auto-triage-fix`, `auto-plugin-update`, `run-learner`, `run-evolve`, and
+`auto-enable-merge`). This is an
 orchestrator-consumed signal — the loop/runner NEVER executes it. The runner surfaces a
 structured `ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>` line when the transition
 fires; the orchestrator reads and acts on it. See CLAUDE.md § Loop Framework, "Consuming
-`orchestrator_action`" for the four consumption contracts. dc-06 is preserved — the loop's
+`orchestrator_action`" for the five consumption contracts. dc-06 is preserved — the loop's
 `guardrails.mutates_build` stays `false`.
 
 **First tick is baseline-only — transition rules never fire against an empty prior (ADR-0002).**

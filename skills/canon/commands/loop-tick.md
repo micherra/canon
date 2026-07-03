@@ -98,10 +98,14 @@ the tick still writes the baseline snapshot (Step 7) and reports a non-surfacing
 Compare each field in the updated snapshot against the last-seen values from Step 3.
 
 For each changed field, check `definition.surface.on_transition` rules:
-- Match when: `rule.field` matches the field name, AND
-  - `rule.from` is set → last value matched `rule.from`, OR
-  - `rule.to` is set → new value equals `rule.to`, OR
-  - neither from nor to set → any change from a *present* prior fires the rule.
+- Match when `rule.field` matches the field name AND every set condition holds:
+  - If `rule.from` is set, the last value must equal `rule.from` — else the rule does not fire.
+  - If `rule.to` is set, the new value must equal `rule.to` — else the rule does not fire.
+  - If BOTH `rule.from` and `rule.to` are set, both must hold simultaneously (AND, not OR) —
+    the rule fires only on that exact transition. Two rules on the same field with disjoint
+    `from`/`to` pairs (e.g. `ci_conclusion` `pending→failure` and `pending→success`) are
+    mutually exclusive and never cross-fire.
+  - If neither `rule.from` nor `rule.to` is set, any change from a *present* prior fires the rule.
 
 Collect all fired rules. If a rule has `terminate: true`, mark the loop for termination.
 

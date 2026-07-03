@@ -2,8 +2,11 @@
 # summary-diff-check.sh — Deterministic summary-vs-diff phantom-claim checker.
 #
 # Invoked by the orchestrator post-engineer (not as a hooks.json hook).
-# Signature: bash hooks/summary-diff-check.sh <summary_path> <base_commit>
-# Run from the worktree root.
+# Signature: bash hooks/summary-diff-check.sh <summary_path> <base_commit> [worktree_path]
+# Run from the worktree root, OR pass the worktree as the optional trailing
+# worktree_path arg — every internal git call then resolves via `git -C
+# "$worktree_path"`, making CWD irrelevant (watch_CCCCCCCCCCCC2). Absent →
+# current CWD-relative behavior (backward-compatible).
 #
 # CLAIMED FILES: parsed from the SUMMARY's "### Files" table — rows of the form:
 #   | `path` | action | purpose |
@@ -30,12 +33,13 @@ set -euo pipefail
 
 SUMMARY_PATH="${1:-}"
 BASE_COMMIT="${2:-}"
+WORKTREE_PATH="${3:-}"
 
 # ---------------------------------------------------------------------------
 # Argument validation
 # ---------------------------------------------------------------------------
 if [[ -z "$SUMMARY_PATH" ]] || [[ -z "$BASE_COMMIT" ]]; then
-  echo "CANON: summary-diff-check failed-closed — usage: summary-diff-check.sh <summary_path> <base_commit>" >&2
+  echo "CANON: summary-diff-check failed-closed — usage: summary-diff-check.sh <summary_path> <base_commit> [worktree_path]" >&2
   exit 2
 fi
 
@@ -44,7 +48,20 @@ if [[ ! -f "$SUMMARY_PATH" ]]; then
   exit 2
 fi
 
-if ! git rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
+if [[ -n "$WORKTREE_PATH" ]] && [[ ! -d "$WORKTREE_PATH" ]]; then
+  echo "CANON: summary-diff-check failed-closed — worktree_path not a directory: $WORKTREE_PATH" >&2
+  exit 2
+fi
+
+# GIT_C prefixes every internal git call with -C "$WORKTREE_PATH" when set,
+# making CWD irrelevant; empty (CWD-relative) when unset. Bash 3.2-safe empty
+# array expansion (house idiom — see push-to-main-guard.sh contract).
+GIT_C=()
+if [[ -n "$WORKTREE_PATH" ]]; then
+  GIT_C=(-C "$WORKTREE_PATH")
+fi
+
+if ! git "${GIT_C[@]+"${GIT_C[@]}"}" rev-parse --verify "$BASE_COMMIT" >/dev/null 2>&1; then
   echo "CANON: summary-diff-check failed-closed — invalid base commit: $BASE_COMMIT" >&2
   exit 2
 fi
@@ -53,7 +70,7 @@ fi
 # Collect the actual changed file set
 # ---------------------------------------------------------------------------
 CHANGED_FILES=""
-if ! CHANGED_FILES=$(git diff --name-only "${BASE_COMMIT}..HEAD" 2>&1); then
+if ! CHANGED_FILES=$(git "${GIT_C[@]+"${GIT_C[@]}"}" diff --name-only "${BASE_COMMIT}..HEAD" 2>&1); then
   echo "CANON: summary-diff-check failed-closed — git diff failed: $CHANGED_FILES" >&2
   exit 2
 fi
@@ -67,7 +84,7 @@ fi
 # pipe entirely.
 # ---------------------------------------------------------------------------
 DIFF_FILE=$(mktemp)
-if ! git diff "${BASE_COMMIT}..HEAD" >"$DIFF_FILE" 2>&1; then
+if ! git "${GIT_C[@]+"${GIT_C[@]}"}" diff "${BASE_COMMIT}..HEAD" >"$DIFF_FILE" 2>&1; then
   rm -f "$DIFF_FILE"
   echo "CANON: summary-diff-check failed-closed — git diff (body) failed" >&2
   exit 2
