@@ -23,5 +23,7 @@ export default defineConfig({
     // Cap parallelism to reduce I/O contention in subprocess-heavy suites
     // (git/depcruise/embeddings) that trip timeouts under full parallel load.
     maxWorkers: 4,
+    // Global drift.db fixture-leak recurrence guard — see drift-db-leak-guard.ts.
+    setupFiles: ["./src/tests/vitest-setup-drift-guard.ts"],
   },
 });
