@@ -41,7 +41,7 @@ Shared kernel — cross-cutting utilities, constants, parsers, and low-level hel
 | `safe-project-dir.ts` | `isSafeProjectDirInput(dir: string): boolean` — allow-list validation barrier for untrusted project-dir strings before any fs access; rejects empty, >4096 chars, NUL/control chars, relative paths, and raw `..` segments; no fixed safe root (projects may live at any absolute path). Applied in `session-manager.ts` `validateAndNormalizeDir`. Added 2026-06-30 (ADR-0030) |
 | `learn-lock.ts` | Auto-learn lock file management |
 | `janitor-lock.ts` | `acquireJanitorLock`, `commitJanitorLock`, `releaseJanitorLock`, `getLastJanitorTimestamp` — `.canon/janitor.lock` PID+mtime lock for janitor concurrency control; added 2026-04-23 |
-| `commit-trailers.ts` | `TrailerOpts`, `formatCommitTrailers`, `buildCommitMessage` — formats Canon-Workflow/Agent/State/Task git trailer blocks; added 2026-04-09 |
+| `commit-trailers.ts` | `TrailerOpts`, `formatCommitTrailers`, `buildCommitMessage` — formats Canon-Workflow/Agent/State/Task git trailer blocks; optional `evolutionId?` appends a `Canon-Evolution: {id}` line after Canon-Task (or after Canon-State when no task), additive/backward-compatible (ADR-0034); added 2026-04-09 |
 | `file-claims.ts` | `readClaims`, `writeClaims`, `registerClaims`, `releaseClaims`, `checkClaimOverlaps` — `.canon/claims.json` concurrent workflow conflict detection; added 2026-04-09 |
 
 ## Invariants

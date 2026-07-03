@@ -59,7 +59,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; file-pattern matching uses `matchGlob` from `lib/glob-matcher.ts` (linear-time DP, `globToRegex`+RegExp removed, ADR-0026 §Amendment-3)
 
 ## Contracts
-<!-- last-updated: 2026-06-24 -->
+<!-- last-updated: 2026-07-02 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -70,7 +70,7 @@ src/
 > - History services (judge-weight, consolidate-policy, cross-run analysis, craft drift) → `src/features/history/services/.claude/CLAUDE.md`
 > - PR review tools + PR Review Data service → `src/features/pr-review/.claude/CLAUDE.md`
 
-**Tool error types** (`src/shared/lib/tool-result.ts`) — ADR-002: `ToolResult<T>` is a discriminated union `({ ok: true } & T) | CanonToolError`; all tools return this (never throw for expected errors). `CanonErrorCode` has 9 values; unexpected throws caught as `UNEXPECTED` by `gatedWrapHandler` or `wrapHandler<T>`.
+**Tool error types** (`src/shared/lib/tool-result.ts`) — ADR-002: `ToolResult<T>` is a discriminated union `({ ok: true } & T) | CanonToolError`; all tools return this (never throw for expected errors). `CanonErrorCode` has 11 values (incl. `PROPOSAL_NOT_RECORDED`, added by ADR-0034); unexpected throws caught as `UNEXPECTED` by `gatedWrapHandler` or `wrapHandler<T>`.
 
 **`wrapHandler` extra forwarding** (`src/shared/lib/wrap-handler.ts`) — inner handler optionally receives `extra: RequestHandlerExtra` as second arg; backward compatible. Updated 2026-06-01.
 
@@ -153,6 +153,7 @@ src/
 | `log_decision` | Append a timestamped orchestrator decision to the durable event log (`orchestrator_decision` event type). **Authoritative write** — returns a `ToolResult` error on store failure (NOT fail-open). Call at each consequential decision: plan-approval outcome, review-verdict acceptance/override, scope cuts, AC changes, tier overrides, merge-conflict resolutions, manual-verification confirmations. |
 | `get_decisions` | Read the orchestrator decisions ledger (`getEventsByType("orchestrator_decision")`); returns `{ decisions: DecisionRecord[], rendered: string }` — structured array + rendered markdown table. Use before HITL gates and on resume to rehydrate decided state. |
 | `write_orchestrator_checkpoint` | Write a derived compact resume-state snapshot to `${workspace}/checkpoint.md` (current/completed/pending steps + recent decisions + next action). **Best-effort-observable** — write failure returns a `ToolResult` error (never silent success). Refresh per completed step (alongside `log_step(...completed)`) and at each HITL gate. |
+| `evaluate_step` | Extract structural signals from a git diff for the evaluator step-transition gate — pattern findings (lazy/hacky code markers), file-scope overlap against `declared_files`, and diff statistics; no LLM calls, pure structural analysis; returns `EvaluateStepOutput`. Called by the orchestrator directly (not pre-spawn context) after implement/fix steps, before verify; consumed by `canon:evaluator`. Registered via `registerEvaluateStepTool(server)` inside `registerOrchestrationTools()` (`register-orchestration.ts`) — not a new top-level `create-server.ts` group. |
 
 **Text-only principle/review tools:**
 
@@ -196,13 +197,15 @@ src/
 | `get_routine` | Retrieve a single routine by name; returns frontmatter + body; `INVALID_INPUT` when not found |
 | `sync_routines` | Sync routine state to `.canon/routines/`; returns drift summary |
 
-**Evolution tools** (`src/features/evolution/`): <!-- last-updated: 2026-07-01 -->
+**Evolution tools** (`src/features/evolution/`): <!-- last-updated: 2026-07-02 -->
 
 | Tool | Purpose |
 |------|---------|
 | `evaluate_candidate` | Inject candidate text into a temp-dir copy of the eval surface or a full-plugin sandbox (ADR-0025 dual injection mode; see below), run `run-evals.sh` per split, apply §7 strict-holdout gate; returns `EvaluateCandidateResult` (`baseline_score`, `candidate_score`, `per_split`, `accepted`, `regressed`, `size_delta`, `judge_votes_holdout`); fail-closed on subprocess error or timeout; public `EvaluateCandidateInputSchema`/`EvaluateCandidateResult` contract UNCHANGED (additive-optional `guard_rejection?: { reason, fields? }` — see frontmatter-reject guard below); registered via `register-evolution.ts` |
 | `attribute_failure` | Join recorded `context_provenance` events with review violations + cliff events to localize each failure to the in-context artifact; accepts `workspace` OR `archive_id` + `project_dir`; returns `AttributeFailureResult` with `attributions[]`, `unattributed[]`, `flagged[]`, `ambiguous[]`; content_hash byte-identity re-check (fail-closed); fail-open on absent provenance/reviews → partial result; `FailureKind = "review_violation" \| "cliff_event"` (ADR-0024); `join_basis` now has 3 values — `"cliff_step_id"`, `"principle_id==artifact_id"`, and `"code_author_agent_def"` (ADR-0032, a `review_violation` may attribute to BOTH the rule edge AND the code-author agent-def edge); artifact re-read (hash verify) resolves project_dir-first, pluginDir-fallback for trusted plugin-tier paths via `resolveArtifactReadPath` (Codex P2 #1; `pluginDir` is a handler-internal param, not a schema field) |
 | `select_mutation_targets` | Deterministic (no model calls): composes `attribute_failure` pipeline, applies selection policy (`hash_verified` + `confidence:high` + `gate_eligible`) + budget (`max_targets_per_pass`, default 3), reads baseline bodies, returns bounded `MutationTarget[]` with `gate_eligible` + `baseline_body`; ineligible/skipped paths land in typed `gate_ineligible[]` / `skipped[]` buckets; accepts `workspace` OR `archive_id` + `project_dir`; registered via `register-evolution.ts`; the `agent-def` artifact class already resolves to `artifact_class: "agent"` + `gate_eligible: true` (ADR-0025 admits `agents/`) — no code change needed for ADR-0031's new kind; baseline-body read shares the same project_dir-first/pluginDir-fallback resolver as `attribute_failure` (Codex P2 #1); `MutationTarget.principle_id` for an `agent-def` target is the VIOLATED principle from the attribution, not the agent name (`derivePrincipleId`, Codex P2 #2) |
+| `record_applied_evolution` | AUTHORITATIVE/FAIL-CLOSED apply-provenance write (ADR-0034): persists a row to drift.db `applied_evolutions` via `getDriftDb(project_dir).getAppliedEvolutions().record(...)`; input carries pre-computed `before_hash`/`after_hash` (tool never reads files), nullable `principle_id`, `holdout_baseline`/`holdout_candidate`, optional `apply_base_commit` (`applying_commit` stays null, back-filled later from the `Canon-Evolution:` trailer), normalized `applied_at`; idempotent on `proposal_id`; storage failure → `ToolResult` `UNEXPECTED` (never fail-open), `INVALID_INPUT` on empty/unparseable input; registered via `register-evolution.ts` |
+| `get_evolution_outcomes` | FAIL-OPEN, target-scoped, apply-anchored regression HYPOTHESIS reader (ADR-0034): input `{ proposal_id, project_dir }`; loads the `applied_evolutions` row (`PROPOSAL_NOT_RECORDED` if absent, `INVALID_INPUT` if empty), splits the target signal into pre/post cohorts anchored on `applied_at` (principle target → `reviews`⋈`violations` by `principle_id`; agent-def cliff target → `cliff_events` by agent); confidence via `deriveTier` keyed on OBSERVATION count (`reviews_or_runs`, not event count); same-signal concurrent applies (`listAppliedSince`) → typed `ambiguous`; verdict ∈ `regression_candidate \| no_signal_change \| improvement_candidate \| ambiguous \| insufficient`; candidate-cause vocabulary (grep-clean of `caus(e\|ed\|es)`) |
 
 **`evaluate_candidate` dual injection mode (ADR-0025):** mode auto-selected from `target_path` — no caller change needed.
 - **Eval-surface mode** (ADR-0022, unchanged): `target_path` under `skills/canon/evals/` → copies only `skills/canon/evals/` into a temp dir.

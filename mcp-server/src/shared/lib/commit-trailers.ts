@@ -12,6 +12,13 @@ export type TrailerOpts = {
   agent: string;
   state: string;
   taskId?: string;
+  /**
+   * Optional apply-provenance breadcrumb. When present, a `Canon-Evolution: {id}`
+   * line is appended after `Canon-Task` (or after `Canon-State` when no task).
+   * Enables later back-fill of `applied_evolutions.applying_commit` from git
+   * history (ADR-0034). Additive and backward-compatible — omitted when absent.
+   */
+  evolutionId?: string;
 };
 
 const CO_AUTHORED_BY = "Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>";
@@ -43,6 +50,10 @@ export const formatCommitTrailers = (opts: TrailerOpts): string => {
 
   if (opts.taskId) {
     lines.push(`Canon-Task: ${opts.taskId}`);
+  }
+
+  if (opts.evolutionId) {
+    lines.push(`Canon-Evolution: ${opts.evolutionId}`);
   }
 
   return lines.join("\n");

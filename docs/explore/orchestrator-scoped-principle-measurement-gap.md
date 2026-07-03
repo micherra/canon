@@ -1,6 +1,6 @@
 # Orchestrator-scoped principle measurement gap
 
-**Status: Open** — decision recorded in [ADR-0034](../adr/0034-orchestrator-scoped-principles-are-a-distinct-measurement-surface.md); this document parks the deferred long-term fix (Option B) so it is not lost.
+**Status: Open** — decision recorded in [ADR-0035](../adr/0035-orchestrator-scoped-principles-are-a-distinct-measurement-surface.md); this document parks the deferred long-term fix (Option B) so it is not lost.
 
 ## Finding
 
@@ -32,7 +32,7 @@ surface Canon runs is code review over the worktree diff.** There is no review p
 over the orchestration trace/artifacts (DESIGN.md, plans, orchestrator decisions) that
 these principles actually govern.
 
-## Decision (see ADR-0034)
+## Decision (see ADR-0035)
 
 Documented as by-design (Option C): the zero-citation signal is recorded as a known,
 intentional measurement-surface gap — not principle deadness. The 23 affected
@@ -78,4 +78,4 @@ measurement surface without the scrutiny it deserves.
 
 ## See also
 
-- [ADR-0034](../adr/0034-orchestrator-scoped-principles-are-a-distinct-measurement-surface.md) — the durable decision record for this finding.
+- [ADR-0035](../adr/0035-orchestrator-scoped-principles-are-a-distinct-measurement-surface.md) — the durable decision record for this finding.

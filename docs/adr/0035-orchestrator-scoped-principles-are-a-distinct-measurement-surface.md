@@ -1,12 +1,12 @@
 ---
-adr: "0034"
+adr: "0035"
 title: "Orchestrator-scoped principles are a distinct measurement surface, not code-review-citable"
 status: accepted
 date: "2026-07-02"
 build: "fix-driftdb-test-fixture-leak-isolate-test-flow-writes-to-temp-db-purge"
 ---
 
-# ADR-0034: Orchestrator-scoped principles are a distinct measurement surface
+# ADR-0035: Orchestrator-scoped principles are a distinct measurement surface
 
 ## Context
 
