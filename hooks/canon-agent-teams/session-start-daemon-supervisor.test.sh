@@ -1036,6 +1036,76 @@ fi
 rm -rf "$TMPDATA" "$TMPROOT"
 
 # ---------------------------------------------------------------------------
+# T-F: SIGKILL escalation actually fires (dc-01/dc-02 regression guard) — T-A
+# and T-D's survivors are plain `sleep` processes, which die on the initial
+# SIGTERM and never force `_supervisor_escalate_kill` past the grace window.
+# This test's survivor traps and ignores SIGTERM, so the only way it clears
+# is the SIGKILL branch — proving that escalation path actually executes
+# (not just that the surrounding orchestration is wired).
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"25.0.0-target"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORTF=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+# Survivor: a real process that installs SIG_IGN for SIGTERM, so plain
+# SIGTERM cannot clear it — only SIGKILL can.
+bash -c 'trap "" TERM; while true; do sleep 1; done' &
+SIGIGN_PID_F=$!
+disown "$SIGIGN_PID_F" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown prevents bash job-tracking; cleanup via explicit kill below
+
+FAKE_BIN_F=$(mktemp -d)
+cat > "$FAKE_BIN_F/ps" <<'PSSTUB'
+#!/usr/bin/env bash
+echo "node tsx src/app/daemon.ts"
+PSSTUB
+chmod +x "$FAKE_BIN_F/ps"
+
+OUTPUT_F=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORTF" \
+  CANON_SUPERVISOR_BOOT_CMD=":" \
+  CANON_SUPERVISOR_PORT_OWNER_CMD="echo $SIGIGN_PID_F" \
+  CANON_SUPERVISOR_START_TIMEOUT=1 \
+  CANON_SUPERVISOR_TERM_GRACE=1 \
+  CANON_SUPERVISOR_KILL_WAIT=2 \
+  PATH="$FAKE_BIN_F:$PATH" \
+  bash "$HOOK" 2>&1)
+EXIT_CODE_F=$?
+
+SIGIGN_DEAD_F=no
+if ! kill -0 "$SIGIGN_PID_F" 2>/dev/null; then
+  SIGIGN_DEAD_F=yes
+fi
+kill -9 "$SIGIGN_PID_F" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- cleanup only; process should already be dead (expected outcome)
+
+# The script only prints "survived SIGTERM" after re-confirming (via kill -0)
+# that the process is STILL ALIVE at the end of the TERM_GRACE window — this
+# is the proof that plain SIGTERM did not clear it.
+SURVIVED_TERM_F=no
+echo "$OUTPUT_F" | grep -q "survived SIGTERM after ${CANON_SUPERVISOR_TERM_GRACE:-1}s; escalating to SIGKILL" && SURVIVED_TERM_F=yes
+
+CLEARED_BY_KILL_F=no
+echo "$OUTPUT_F" | grep -q "cleared by SIGKILL" && CLEARED_BY_KILL_F=yes
+
+if [[ $EXIT_CODE_F -eq 0 ]] && [[ "$SIGIGN_DEAD_F" == "yes" ]] \
+   && [[ "$SURVIVED_TERM_F" == "yes" ]] && [[ "$CLEARED_BY_KILL_F" == "yes" ]]; then
+  pass "T-F: SIGTERM-immune survivor cleared only via SIGKILL escalation"
+else
+  fail "T-F: exit=$EXIT_CODE_F, sigign_dead=${SIGIGN_DEAD_F}, survived_term=${SURVIVED_TERM_F}, cleared_by_kill=${CLEARED_BY_KILL_F}, output=$(echo "$OUTPUT_F" | head -10)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT" "$FAKE_BIN_F"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
