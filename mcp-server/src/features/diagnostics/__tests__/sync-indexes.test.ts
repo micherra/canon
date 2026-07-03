@@ -382,4 +382,100 @@ describe("syncIndexes", () => {
       expect(result.skipped.map((s) => s.class)).not.toContain("agents");
     }
   });
+
+  // ---- watch_XXXXXX2: project_dir target-root regression (R2) ----
+
+  describe("project_dir target-root resolution", () => {
+    let worktreeDir: string;
+
+    beforeEach(() => {
+      worktreeDir = createTempDir();
+    });
+
+    afterEach(() => {
+      rmSync(worktreeDir, { recursive: true, force: true });
+    });
+
+    it("AC3 regression: project_dir writes to that root, main root left byte-unchanged", async () => {
+      const mainIndex = makeIndexWithMarkers("rules");
+      const worktreeIndex = makeIndexWithMarkers("rules");
+
+      setupClass(
+        projectDir,
+        "rules",
+        [{ name: "main-rule.md", content: "---\ntitle: Main Rule\n---\nBody." }],
+        mainIndex,
+      );
+      setupClass(
+        worktreeDir,
+        "rules",
+        [{ name: "worktree-rule.md", content: "---\ntitle: Worktree Rule\n---\nBody." }],
+        worktreeIndex,
+      );
+
+      const { readFileSync } = await import("node:fs");
+      const mainIndexPath = join(projectDir, "rules", ".claude", "CLAUDE.md");
+      const worktreeIndexPath = join(worktreeDir, "rules", ".claude", "CLAUDE.md");
+      const mainBefore = readFileSync(mainIndexPath, "utf8");
+
+      const result = await syncIndexes({ class: "rules", project_dir: worktreeDir }, projectDir);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.synced).toContain("rules");
+      }
+
+      // The worktree index was regenerated with the worktree's own artifact.
+      const worktreeAfter = readFileSync(worktreeIndexPath, "utf8");
+      expect(worktreeAfter).toContain("worktree-rule.md");
+      expect(worktreeAfter).not.toBe(worktreeIndex);
+
+      // The main-repo index must be byte-identical to what was there before the call.
+      const mainAfter = readFileSync(mainIndexPath, "utf8");
+      expect(mainAfter).toBe(mainBefore);
+      expect(mainAfter).not.toContain("worktree-rule.md");
+    });
+
+    it("backward-compat: absent project_dir writes to the default (mainDir) root, unchanged behavior", async () => {
+      setupClass(
+        projectDir,
+        "rules",
+        [{ name: "main-rule.md", content: "---\ntitle: Main Rule\n---\nBody." }],
+        makeIndexWithMarkers("rules"),
+      );
+
+      const result = await syncIndexes({ class: "rules" }, projectDir);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.synced).toContain("rules");
+      }
+
+      const { readFileSync } = await import("node:fs");
+      const written = readFileSync(join(projectDir, "rules", ".claude", "CLAUDE.md"), "utf8");
+      expect(written).toContain("main-rule.md");
+    });
+
+    it("project_dir with no class processes all classes under the target root", async () => {
+      setupClass(
+        worktreeDir,
+        "rules",
+        [{ name: "worktree-rule.md", content: "---\ntitle: Worktree Rule\n---\nBody." }],
+        makeIndexWithMarkers("rules"),
+      );
+
+      const result = await syncIndexes({ project_dir: worktreeDir }, projectDir);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const all = [...result.synced, ...result.skipped.map((s) => s.class)];
+        expect(all).toContain("rules");
+        expect(result.synced).toContain("rules");
+      }
+
+      const { readFileSync } = await import("node:fs");
+      const written = readFileSync(join(worktreeDir, "rules", ".claude", "CLAUDE.md"), "utf8");
+      expect(written).toContain("worktree-rule.md");
+    });
+  });
 });

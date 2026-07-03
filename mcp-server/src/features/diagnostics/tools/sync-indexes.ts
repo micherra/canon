@@ -24,7 +24,7 @@ import {
 
 // ---- Types ----
 
-export type SyncIndexesInput = { class?: ArtifactClass };
+export type SyncIndexesInput = { class?: ArtifactClass; project_dir?: string };
 
 export type SyncIndexesOutput = {
   synced: ArtifactClass[];
@@ -167,8 +167,9 @@ export const ALL_CLASSES = [
  */
 export async function syncIndexes(
   input: SyncIndexesInput,
-  projectDir: string,
+  defaultProjectDir: string,
 ): Promise<ToolResult<SyncIndexesOutput>> {
+  const projectDir = input.project_dir ?? defaultProjectDir;
   const targets = input.class ? [input.class] : ALL_CLASSES;
   const synced: ArtifactClass[] = [];
   const skipped: Array<{ class: ArtifactClass; reason: string }> = [];

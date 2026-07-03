@@ -216,6 +216,12 @@ function registerSyncIndexesTool(server: McpServer): void {
           .describe(
             "Artifact class to sync (default: all 6). Options: rules, principles, agents, templates, references, primers",
           ),
+        project_dir: z
+          .string()
+          .optional()
+          .describe(
+            "Target project root to write indexes under (default: the session-bound project root). Supply the build worktree path to sync indexes inside a worktree instead of the main repo.",
+          ),
       },
     },
     gatedWrapHandler(async (input: SyncIndexesInput, extra) =>
