@@ -7,7 +7,7 @@
 Pre/post tool-use interceptors that enforce policy and prevent mistakes without requiring agent compliance. Hooks run automatically on matched tool invocations.
 
 ## Architecture
-<!-- last-updated: 2026-07-02 -->
+<!-- last-updated: 2026-07-03 -->
 
 `hooks.json` is the single registry defining when each hook script runs. Hooks are shell scripts triggered by `PreToolUse` (before Bash/Write/Edit/EnterPlanMode/Agent), `PostToolUse` (after Bash), `SessionStart`, `SubagentStop`, or `PostCompact`. The separate `canon-agent-teams/hooks.json` was merged into this file (2026-04-26); `canon-agent-teams/hooks.json` no longer exists.
 
@@ -48,6 +48,7 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `canon-agent-teams/tool-loop-detector.sh` | PostToolUse (*) | Detect 3 consecutive identical tool calls (loop) and exit 2 to surface HITL |
 | `canon-agent-teams/postcompact-narrative-capture.sh` | PostCompact | Append compaction summary to active workspace journal for agent continuity |
 | `canon-agent-teams/session-start-daemon-supervisor.sh` | SessionStart | Start/verify HTTP daemon (`boot.sh --daemon`); on timeout emits loud `CANON ERROR` block with recovery options (manual boot + kill-switch revert); honors `CANON_DAEMON_PORT`; exits 0 always |
+| `tail-enforcement-gate.sh` | Stop | Fail-closed tail-completion gate — blocks a Canon build session from ending when its tail steps (`context-sync`, `learn`) didn't run and weren't legitimately skipped; reads the accepted `skip_reason` allowlist from `lib/accepted-skip-reasons.txt` (single-source, parity-tested against root `CLAUDE.md`) |
 
 ## Contracts
 <!-- last-updated: 2026-06-29 -->
