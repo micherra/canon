@@ -5,7 +5,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, realpathSync, symlinkSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
 import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
@@ -17,7 +17,8 @@ import {
   sanitizeBranch,
 } from "@domains/workspaces/workspace.ts";
 import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
-import { CANON_DIR } from "@shared/constants.ts";
+import { registerFromInit } from "../services/active-workspace-registration.ts";
+import { buildCachePrefix } from "../services/cache-prefix-builder.ts";
 import { acquireLock } from "../services/workspace-lock.ts";
 import { validateSeedPath } from "./seed-workspace.ts";
 
@@ -33,16 +34,10 @@ type InitWorkspaceInput = {
   seed_from?: string;
   runbook_content?: string;
   brief_content?: string;
-  /**
-   * Calling session's identity — read from CLAUDE_CODE_SESSION_ID in the
-   * orchestrator's env and passed explicitly (the shared HTTP daemon cannot
-   * derive per-session identity from process.env; see PROBE-FINDINGS.md Probe 1).
-   */
+  /** Calling session's identity (CLAUDE_CODE_SESSION_ID) — passed explicitly since the
+   * shared HTTP daemon cannot derive per-session identity from process.env (see PROBE-FINDINGS.md Probe 1). */
   session_id?: string;
-  /**
-   * Job identifier — first 8 chars of basename(CLAUDE_JOB_DIR) in the
-   * orchestrator's env. Stored in the workspace lock for audit.
-   */
+  /** Job identifier — first 8 chars of basename(CLAUDE_JOB_DIR); stored in the workspace lock for audit. */
   job_id?: string;
 };
 
@@ -322,46 +317,6 @@ function tryResumeWorkspace(
     if (!isExpectedNoDbError(err)) throw err;
   }
   return null;
-}
-
-async function tryReadFileContent(path: string, label: string): Promise<string | null> {
-  if (!existsSync(path)) return null;
-  try {
-    return await readFile(path, "utf-8");
-  } catch (err) {
-    console.warn(`[canon] ${label} read failed:`, err instanceof Error ? err.message : err);
-    return null;
-  }
-}
-
-/** Build the shared prompt cache prefix. */
-async function buildCachePrefix(
-  input: InitWorkspaceInput,
-  options: {
-    slug: string;
-    flowName?: string;
-    projectDir: string;
-    pluginDir: string;
-  },
-): Promise<string> {
-  const { slug, flowName, projectDir, pluginDir } = options;
-  const prefixParts: string[] = [];
-  prefixParts.push(`## Flow: ${flowName ?? input.flow_name}`);
-
-  const claudeMd = await tryReadFileContent(join(pluginDir, "CLAUDE.md"), "cache prefix CLAUDE.md");
-  if (claudeMd) prefixParts.push(claudeMd);
-
-  prefixParts.push(
-    `## Workspace\n\n- Task: ${input.task}\n- Branch: ${input.branch}\n- Slug: ${slug}\n- Base commit: ${input.base_commit}`,
-  );
-
-  const conventions = await tryReadFileContent(
-    join(projectDir, CANON_DIR, "CONVENTIONS.md"),
-    "conventions",
-  );
-  if (conventions) prefixParts.push(`## Conventions\n\n${conventions}`);
-
-  return prefixParts.join("\n\n---\n\n");
 }
 
 /**
@@ -644,7 +599,10 @@ export async function initWorkspaceFlow(
     job_id: input.job_id,
     session_id: input.session_id,
   });
-  if (resumeResult) return resumeResult;
+  if (resumeResult) {
+    registerFromInit(projectDir, input, resumeResult, resumeResult.session);
+    return resumeResult;
+  }
 
   const result = await createNewWorkspace({
     baseSlug,
@@ -655,5 +613,6 @@ export async function initWorkspaceFlow(
     sanitized,
   });
   await applyPostCreateSteps(input, result.workspace, result);
+  registerFromInit(projectDir, input, result, result.session);
   return result;
 }
