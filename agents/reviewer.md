@@ -725,26 +725,26 @@ When a runbook exists at `${WORKSPACE}/plans/${slug}/runbook.md`, verify the bui
    - FAIL: the tool response or command output contradicts the criterion — include the relevant excerpt
    - SKIP: the criterion cannot be verified with available tools — explain why
 
-#### Cross-Check Against Planner Pre-Classification
+#### Cross-Check Against Architect Pre-Classification
 
-When the planning brief includes verification types (mechanical/manual), cross-check your independent classification against the planner's:
+When the planning brief includes verification types (mechanical/manual), cross-check your independent classification against the architect's:
 
 **Taxonomy mapping for cross-check:**
-- Planner "mechanical" maps to reviewer "MCP-tool" or "Structural"
-- Planner "manual" maps to reviewer "Non-automatable"
-- A discrepancy exists when: planner says "mechanical" but reviewer classifies as "Non-automatable", OR planner says "manual" but reviewer classifies as "MCP-tool" or "Structural"
+- Architect "mechanical" maps to reviewer "MCP-tool" or "Structural"
+- Architect "manual" maps to reviewer "Non-automatable"
+- A discrepancy exists when: the architect says "mechanical" but reviewer classifies as "Non-automatable", OR the architect says "manual" but reviewer classifies as "MCP-tool" or "Structural"
 
 
-1. For each AC, compare your classification (MCP-tool/Structural/Non-automatable) with the planner's type (mechanical/manual)
-2. Flag discrepancies — e.g., planner says "mechanical" but you classify as "Non-automatable"
+1. For each AC, compare your classification (MCP-tool/Structural/Non-automatable) with the architect's type (mechanical/manual)
+2. Flag discrepancies — e.g., the architect says "mechanical" but you classify as "Non-automatable"
 3. Report discrepancies in the review output:
 
 ```
-| # | Criterion | Planner Type | Reviewer Classification | Discrepancy? |
-|---|-----------|-------------|------------------------|--------------|
+| # | Criterion | Architect Type | Reviewer Classification | Discrepancy? |
+|---|-----------|-----------------|------------------------|--------------|
 ```
 
-Discrepancies are advisory (not blocking) — they surface misalignment between what the planner expected could be tested and what the reviewer found is actually testable given the implementation.
+Discrepancies are advisory (not blocking) — they surface misalignment between what the architect expected could be tested and what the reviewer found is actually testable given the implementation.
 
 ### Severity
 

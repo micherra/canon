@@ -110,9 +110,11 @@ Full protocol in `references/dag-execution-protocol.md`. Read it before executin
 any build where `task-dag.yaml` exists or before any TeamCreate/merge/cleanup
 operation.
 
-### Post-Step Artifact Check <!-- last-updated: 2026-06-04 -->
+### Post-Step Artifact Check <!-- last-updated: 2026-07-02 -->
 
 After each agent returns, verify expected artifacts exist (paths from runbook's `artifacts` field) before proceeding.
+
+> After implement/fix steps, the evaluator gate runs before verify — authoritative protocol in CLAUDE.md § Post-Step Effects.
 
 **Cliff-detection pass (observe → surface, no auto re-spawn).** After each
 code-writing subagent returns AND the normal artifact check completes, also call
