@@ -1,12 +1,12 @@
 ---
-adr: "0036"
+adr: "0037"
 title: "The SessionStart supervisor recovers a stale handoff by clearing the real port owner, not just the recorded PID"
 status: accepted
 date: "2026-07-03"
 build: "harden-the-sessionstart-daemon-version-handoff-to-recover-when-the-new"
 ---
 
-# ADR-0036: Port-owner recovery on the daemon version-handoff
+# ADR-0037: Port-owner recovery on the daemon version-handoff
 
 ## Context
 
