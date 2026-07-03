@@ -101,11 +101,11 @@ describe("AppliedEvolutionsDao", () => {
       expect(names).toContain("idx_applied_evolutions_principle");
     });
 
-    it("schema_version is '12' on a fresh DB", () => {
+    it("schema_version is '13' on a fresh DB", () => {
       const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(row.value).toBe("12");
+      expect(row.value).toBe("13");
     });
 
     it("runDriftMigrations is idempotent on a v12 DB", () => {
@@ -139,7 +139,7 @@ describe("AppliedEvolutionsDao", () => {
       const ver = v11.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(ver.value).toBe("12");
+      expect(ver.value).toBe("13");
       v11.close();
     });
   });

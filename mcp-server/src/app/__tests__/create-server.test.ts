@@ -53,7 +53,10 @@ function getToolNames(server: McpServer): Set<string> {
 //   +1 evaluate_step             (PR #443 — re-wire registerEvaluateStepTool into registerOrchestrationTools,
 //                                  clobbered by PR #175 the same day PR #176 added it)
 //   +2 record_applied_evolution + get_evolution_outcomes (apply-provenance, registerEvolutionTools — ADR-0034)
-//   New total: 60 tools
+//   +1 post_message               (this build, registerMessagingTools — event-backbone Inc 0)
+//   +1 tail_messages              (this build, registerMessagingTools — event-backbone Inc 0)
+//   +1 list_active_workspaces     (this build, registerMessagingTools — event-backbone Inc 0)
+//   New total: 63 tools (computed from a live run, not hand-counted)
 //
 // To recount: run this test — the received value in the failure message is authoritative.
 //
@@ -75,9 +78,9 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
     resetForTesting();
   });
 
-  it("factory produces a server with exactly 60 registered tools", () => {
+  it("factory produces a server with exactly 63 registered tools", () => {
     const server = createCanonServer();
-    expect(getToolCount(server)).toBe(60);
+    expect(getToolCount(server)).toBe(63);
   });
 
   it("tool names include a stable known subset", () => {
@@ -172,8 +175,8 @@ describe("createCanonServer(): factory independence", () => {
   it("each instance has the full tool count independently", () => {
     const s1 = createCanonServer();
     const s2 = createCanonServer();
-    expect(getToolCount(s1)).toBe(60);
-    expect(getToolCount(s2)).toBe(60);
+    expect(getToolCount(s1)).toBe(63);
+    expect(getToolCount(s2)).toBe(63);
   });
 });
 
