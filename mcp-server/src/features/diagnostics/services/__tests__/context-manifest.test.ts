@@ -1,7 +1,9 @@
 /**
  * context-manifest.test.ts
  *
- * TDD tests for buildContextManifest and checkContextStaleness.
+ * TDD tests for buildContextManifest, checkContextStaleness, and the
+ * freshness-gate comparison primitives (serializeManifest, diffManifests,
+ * renderManifestDrift — sug_MANIFESTGAP1).
  *
  * Strategy: use a temp dir as fixture tree; write markdown files to represent
  * the context corpus. Tests verify determinism, tamper detection (drifted),
@@ -16,6 +18,9 @@ import {
   buildContextManifest,
   type ContextManifest,
   checkContextStaleness,
+  diffManifests,
+  renderManifestDrift,
+  serializeManifest,
 } from "../context-manifest.ts";
 
 // ---------------------------------------------------------------------------
@@ -213,5 +218,177 @@ describe("checkContextStaleness", () => {
     expect(report.drifted).not.toContain("principles/rules/secret.md");
     expect(report.missing).toContain("principles/rules/secret.md");
     expect(report.clean).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// serializeManifest
+// ---------------------------------------------------------------------------
+
+describe("serializeManifest", () => {
+  it("matches the exact write-path byte format (2-space indent, trailing newline, version before artifacts)", async () => {
+    await writePluginJson("1.0.0");
+    await setupFixtureTree({
+      "rules/b.md": "# Rule B",
+      "agents/agent.md": "# Agent",
+    });
+
+    const manifest = await buildContextManifest(tmpDir);
+    const serialized = serializeManifest(manifest);
+
+    const expected = `${JSON.stringify({ version: manifest.version, artifacts: manifest.artifacts }, null, 2)}\n`;
+    expect(serialized).toBe(expected);
+    expect(serialized.endsWith("\n")).toBe(true);
+    expect(serialized.endsWith("\n\n")).toBe(false);
+  });
+
+  it("round-trips: parsing the serialized output reproduces the same manifest", async () => {
+    await writePluginJson("2.3.1");
+    await setupFixtureTree({ "templates/t.md": "template body" });
+
+    const manifest = await buildContextManifest(tmpDir);
+    const serialized = serializeManifest(manifest);
+    const parsed = JSON.parse(serialized) as ContextManifest;
+
+    expect(parsed).toEqual(manifest);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// diffManifests
+// ---------------------------------------------------------------------------
+
+describe("diffManifests", () => {
+  const base: ContextManifest = {
+    version: "1.0.0",
+    artifacts: {
+      "agents/a.md": sha256("a"),
+      "rules/b.md": sha256("b"),
+    },
+  };
+
+  it("reports clean when committed and fresh are identical", () => {
+    const diff = diffManifests(base, { ...base, artifacts: { ...base.artifacts } });
+    expect(diff).toEqual({
+      added: [],
+      removed: [],
+      changed: [],
+      versionChanged: null,
+      clean: true,
+    });
+  });
+
+  it("reports added when fresh has a key not in committed (new corpus file)", () => {
+    const fresh: ContextManifest = {
+      version: "1.0.0",
+      artifacts: { ...base.artifacts, "templates/new.md": sha256("new") },
+    };
+    const diff = diffManifests(base, fresh);
+    expect(diff.added).toEqual(["templates/new.md"]);
+    expect(diff.removed).toEqual([]);
+    expect(diff.changed).toEqual([]);
+    expect(diff.clean).toBe(false);
+  });
+
+  it("reports removed when committed has a key not in fresh (deleted corpus file)", () => {
+    const fresh: ContextManifest = {
+      version: "1.0.0",
+      artifacts: { "agents/a.md": base.artifacts["agents/a.md"] },
+    };
+    const diff = diffManifests(base, fresh);
+    expect(diff.removed).toEqual(["rules/b.md"]);
+    expect(diff.added).toEqual([]);
+    expect(diff.changed).toEqual([]);
+    expect(diff.clean).toBe(false);
+  });
+
+  it("reports changed when a shared key has a differing hash (edited content)", () => {
+    const fresh: ContextManifest = {
+      version: "1.0.0",
+      artifacts: { ...base.artifacts, "rules/b.md": sha256("edited b") },
+    };
+    const diff = diffManifests(base, fresh);
+    expect(diff.changed).toEqual(["rules/b.md"]);
+    expect(diff.added).toEqual([]);
+    expect(diff.removed).toEqual([]);
+    expect(diff.clean).toBe(false);
+  });
+
+  it("reports versionChanged when the plugin version differs, and is not clean", () => {
+    const fresh: ContextManifest = { version: "1.1.0", artifacts: { ...base.artifacts } };
+    const diff = diffManifests(base, fresh);
+    expect(diff.versionChanged).toEqual({ from: "1.0.0", to: "1.1.0" });
+    expect(diff.added).toEqual([]);
+    expect(diff.removed).toEqual([]);
+    expect(diff.changed).toEqual([]);
+    expect(diff.clean).toBe(false);
+  });
+
+  it("sorts added/removed/changed lexicographically", () => {
+    const fresh: ContextManifest = {
+      version: "1.0.0",
+      artifacts: {
+        "templates/z.md": sha256("z"),
+        "agents/y.md": sha256("y"),
+      },
+    };
+    const diff = diffManifests(base, fresh);
+    expect(diff.removed).toEqual(["agents/a.md", "rules/b.md"]);
+    expect(diff.added).toEqual(["agents/y.md", "templates/z.md"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renderManifestDrift
+// ---------------------------------------------------------------------------
+
+describe("renderManifestDrift", () => {
+  const FIX_COMMAND = "cd mcp-server && npm run regen:context-manifest";
+
+  it("names added/removed/changed paths and includes the exact fix command", () => {
+    const diff = diffManifests(
+      {
+        version: "1.0.0",
+        artifacts: {
+          "rules/b.md": sha256("b"),
+          "agents/a.md": sha256("a"),
+        },
+      },
+      {
+        version: "1.0.0",
+        artifacts: {
+          "rules/b.md": sha256("edited b"),
+          "templates/new.md": sha256("new"),
+        },
+      },
+    );
+
+    const message = renderManifestDrift(diff);
+    expect(message).toContain("STALE");
+    expect(message).toContain("templates/new.md"); // added
+    expect(message).toContain("agents/a.md"); // removed
+    expect(message).toContain("rules/b.md"); // changed
+    expect(message).toContain(FIX_COMMAND);
+  });
+
+  it("includes the version delta line when versionChanged is set", () => {
+    const diff = diffManifests(
+      { version: "1.0.0", artifacts: {} },
+      { version: "1.1.0", artifacts: {} },
+    );
+    const message = renderManifestDrift(diff);
+    expect(message).toContain("1.0.0");
+    expect(message).toContain("1.1.0");
+    expect(message).toContain(FIX_COMMAND);
+  });
+
+  it("omits empty categories and stays pure (no throw) for a clean diff", () => {
+    const diff = diffManifests(
+      { version: "1.0.0", artifacts: {} },
+      { version: "1.0.0", artifacts: {} },
+    );
+    expect(() => renderManifestDrift(diff)).not.toThrow();
+    const message = renderManifestDrift(diff);
+    expect(message).toContain(FIX_COMMAND);
   });
 });
