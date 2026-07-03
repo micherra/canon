@@ -96,7 +96,6 @@ describe("board-state-schemas.ts — AgentMetricsSchema", () => {
   it("accepts a full metrics object", () => {
     const result = AgentMetricsSchema.parse({
       cache_read_tokens: 100,
-      cache_write_tokens: 200,
       duration_ms: 5000,
       input_tokens: 300,
       orientation_calls: 3,
