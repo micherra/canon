@@ -16,6 +16,11 @@
 #      - Stale lock (>60s) → reclaim + retry.
 #   5. Start: run CANON_SUPERVISOR_BOOT_CMD (default: real boot.sh --daemon) via
 #      nohup ... & disown, then poll health for CANON_SUPERVISOR_START_TIMEOUT seconds.
+#   6. Survivor recovery: if the start did not reach the target version, resolve
+#      who actually holds the port (lsof, not just the PID file) and, if it
+#      identity-confirms as a Canon daemon, escalate SIGTERM→SIGKILL and retry
+#      the start exactly once. A non-Canon port owner is never killed. Every
+#      ambiguous/failed branch surfaces a loud CANON WARNING/ERROR.
 #
 # Always exits 0 — advisory hook; never blocks session startup.
 # Every branch prints a CANON NOTE/WARNING/ERROR prefix for observability.
@@ -27,6 +32,9 @@
 #   CLAUDE_PLUGIN_ROOT                  — root to find mcp-server/package.json
 #   CANON_SUPERVISOR_START_TIMEOUT      — seconds to poll for daemon start (default: 10)
 #   CANON_SUPERVISOR_BOOT_CMD           — command to launch daemon (default: real boot.sh --daemon)
+#   CANON_SUPERVISOR_TERM_GRACE         — seconds to wait after SIGTERM before SIGKILL (default: 3)
+#   CANON_SUPERVISOR_KILL_WAIT          — seconds to wait after SIGKILL for death (default: 2)
+#   CANON_SUPERVISOR_PORT_OWNER_CMD     — command that echoes the port-owner PID (test seam)
 set -uo pipefail
 
 # ---------------------------------------------------------------------------
@@ -46,6 +54,155 @@ PID_FILE="$DATA/canon-daemon.pid"
 LOCK_DIR="$DATA/canon-daemon.lock"
 LOG_FILE="$DATA/daemon.log"
 TIMEOUT="${CANON_SUPERVISOR_START_TIMEOUT:-10}"
+TERM_GRACE="${CANON_SUPERVISOR_TERM_GRACE:-3}"
+KILL_WAIT="${CANON_SUPERVISOR_KILL_WAIT:-2}"
+
+# ---------------------------------------------------------------------------
+# Helpers — port-owner survivor recovery (identity → escalate → resolve)
+# ---------------------------------------------------------------------------
+
+# _supervisor_is_canon_daemon_pid <pid>
+# Returns 0 iff the process's cmdline matches tsx + daemon.ts (Canon daemon
+# identity). Fail-open on ps failure = "not a match" (return 1) — same
+# never-blind-kill posture as every caller of this helper.
+_supervisor_is_canon_daemon_pid() {
+  local pid="$1"
+  local cmdline
+  cmdline=$(ps -p "$pid" -o command= 2>/dev/null) || cmdline="" # DOCUMENTED FAIL-OPEN -- ps may fail; treat as no identity match (never-blind-kill)
+  if echo "$cmdline" | grep -q "tsx" && echo "$cmdline" | grep -q "daemon\.ts"; then
+    return 0
+  fi
+  return 1
+}
+
+# _supervisor_resolve_port_owner_pid
+# Echoes the numeric PID listening on $PORT. Resolution order:
+# CANON_SUPERVISOR_PORT_OWNER_CMD override (test seam, mirrors
+# CANON_SUPERVISOR_BOOT_CMD) → else real lsof. Keyed on output shape, not
+# exit code (lsof exits 1 on no-match).
+# Returns: 0 = owner found (PID on stdout); 1 = port free (no owner);
+#          2 = UNKNOWN — fail-closed (lsof absent and no override, or an
+#          override command that exits non-zero).
+_supervisor_resolve_port_owner_pid() {
+  local out rc
+  if [[ -n "${CANON_SUPERVISOR_PORT_OWNER_CMD:-}" ]]; then
+    out=$(eval "$CANON_SUPERVISOR_PORT_OWNER_CMD" 2>/dev/null); rc=$?
+    if (( rc != 0 )); then
+      return 2
+    fi
+  elif command -v lsof >/dev/null 2>&1; then
+    out=$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | head -n1)
+  else
+    return 2 # lsof absent, no override -- fail-closed UNKNOWN (portability guard)
+  fi
+  out=$(echo "$out" | tr -d '[:space:]')
+  if [[ "$out" =~ ^[0-9]+$ ]]; then
+    echo "$out"
+    return 0
+  fi
+  return 1
+}
+
+# _supervisor_escalate_kill <pid>
+# SIGTERM → bounded grace (TERM_GRACE) → SIGKILL → bounded death-wait
+# (KILL_WAIT). Returns 0 iff the pid is dead at the end, else 1.
+_supervisor_escalate_kill() {
+  local pid="$1"
+  kill -TERM "$pid" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- kill may fail if the process already exited; the poll loop below confirms actual state
+  local waited=0
+  while kill -0 "$pid" 2>/dev/null && (( waited < TERM_GRACE )); do
+    sleep 1
+    (( waited++ )) || true
+  done
+  if ! kill -0 "$pid" 2>/dev/null; then
+    echo "CANON NOTE: PID $pid cleared by SIGTERM"
+    return 0
+  fi
+  echo "CANON NOTE: PID $pid survived SIGTERM after ${TERM_GRACE}s; escalating to SIGKILL"
+  kill -KILL "$pid" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- kill may fail if the process already exited; the poll loop below confirms actual state
+  local kwaited=0
+  while kill -0 "$pid" 2>/dev/null && (( kwaited < KILL_WAIT )); do
+    sleep 1
+    (( kwaited++ )) || true
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    return 1
+  fi
+  echo "CANON NOTE: PID $pid cleared by SIGKILL"
+  return 0
+}
+
+# _supervisor_emit_down_block
+# Loud CANON ERROR recovery-options block for when the daemon could not be
+# brought up at the target version and could not be auto-recovered. Reused
+# by both the port-free and retry-exhausted cases.
+_supervisor_emit_down_block() {
+  echo "CANON ERROR: HTTP daemon is NOT reachable on 127.0.0.1:${PORT} — mcp__canon__* tools will FAIL this session."
+  echo "  Recovery options:"
+  echo "    1) Start it manually:   bash mcp-server/boot.sh --daemon"
+  echo "    2) Kill-switch to stdio: unset CANON_HTTP_DAEMON  and revert .mcp.json 'canon' to the stdio command form"
+  echo "  Details: mcp-server/src/app/mcp-http/MANUAL-VERIFICATION.md (down-daemon recovery)"
+  echo "  (start log: ${LOG_FILE})"
+}
+
+# _supervisor_boot_and_poll
+# Runs the boot command, then polls /health for up to TIMEOUT seconds.
+# Callable more than once (recovery retries exactly once). Does NOT print the
+# loud CANON ERROR block or the "old daemon may have survived" WARNING itself
+# — the caller decides what a non-target-version or unreachable result means.
+# Returns: 0 = polled version == plugin version (or plugin version unknown);
+#          prints "daemon started successfully (vX)".
+#          1 = polled a version that does not match the plugin version.
+#          2 = timed out with no /health response.
+_supervisor_boot_and_poll() {
+  # Resolve boot command: default to real boot.sh --daemon in nohup/disown mode
+  if [[ -n "${CANON_SUPERVISOR_BOOT_CMD:-}" ]]; then
+    # Test override: run directly (tests may not want nohup/disown)
+    eval "${CANON_SUPERVISOR_BOOT_CMD}" &
+    disown 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown may not be available in all shell variants; process still launched
+  else
+    # Production path: nohup boot.sh --daemon → daemon.log, background + disown
+    if [[ -z "$ROOT" ]]; then
+      echo "CANON WARNING: cannot resolve plugin root; daemon not started"
+      return 2
+    fi
+    local boot_sh="$ROOT/mcp-server/boot.sh"
+    if [[ ! -f "$boot_sh" ]]; then
+      echo "CANON WARNING: boot.sh not found at $boot_sh; daemon not started"
+      return 2
+    fi
+    mkdir -p "$DATA"
+    # shellcheck disable=SC2094
+    nohup bash "$boot_sh" --daemon >> "$LOG_FILE" 2>&1 &
+    disown 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown may not be available in all shell variants; process still launched
+  fi
+
+  echo "CANON NOTE: daemon start command issued; polling for health..."
+
+  local elapsed=0
+  while (( elapsed < TIMEOUT )); do
+    sleep 1
+    (( elapsed++ )) || true
+    local probe
+    probe=$(curl -s -m 2 "http://127.0.0.1:${PORT}/health" 2>/dev/null) || true # DOCUMENTED FAIL-OPEN -- daemon may still be starting; retry on next tick
+    if [[ -n "$probe" ]]; then
+      local started_version
+      started_version=$(echo "$probe" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+      if [[ -n "$started_version" ]]; then
+        # When the expected plugin version is known, require the polled version to
+        # match exactly. A mismatch means a surviving daemon is answering — this
+        # is NOT a successful start of the target version.
+        if [[ -n "$PLUGIN_VERSION" ]] && [[ "$started_version" != "$PLUGIN_VERSION" ]]; then
+          return 1
+        fi
+        echo "CANON NOTE: daemon started successfully (v${started_version})"
+        return 0
+      fi
+    fi
+  done
+
+  return 2
+}
 
 # ---------------------------------------------------------------------------
 # Step 1: Resolve plugin root and plugin version from mcp-server/package.json
@@ -131,18 +288,9 @@ if [[ $DAEMON_HEALTHY -eq 1 ]]; then
     STORED_PID=$(head -n 1 "$PID_FILE" 2>/dev/null | tr -d '[:space:]') || true # DOCUMENTED FAIL-OPEN -- PID file may be unreadable; fall through to start
     if [[ -n "$STORED_PID" ]] && [[ "$STORED_PID" =~ ^[0-9]+$ ]]; then
       if kill -0 "$STORED_PID" 2>/dev/null; then
-        CMDLINE=$(ps -p "$STORED_PID" -o command= 2>/dev/null) || CMDLINE="" # DOCUMENTED FAIL-OPEN -- ps may fail on some systems; treat as no-match
-        if echo "$CMDLINE" | grep -q "tsx" && echo "$CMDLINE" | grep -q "daemon\.ts"; then
-          # Identity confirmed — safe to TERM
-          if kill -TERM "$STORED_PID" 2>/dev/null; then
-            echo "CANON NOTE: sent SIGTERM to stale daemon PID $STORED_PID (version handoff)"
-            # Wait up to 5s for daemon to exit
-            _waited=0
-            while kill -0 "$STORED_PID" 2>/dev/null && (( _waited < 5 )); do
-              sleep 1
-              (( _waited++ )) || true
-            done
-          fi
+        if _supervisor_is_canon_daemon_pid "$STORED_PID"; then
+          echo "CANON NOTE: clearing stale daemon PID $STORED_PID (version handoff)"
+          _supervisor_escalate_kill "$STORED_PID" || true # DOCUMENTED FAIL-OPEN -- pre-start kill failure falls through to start attempt; post-start recovery catches a surviving owner
           rm -f "$PID_FILE"
         else
           echo "CANON NOTE: PID $STORED_PID cmdline does not match Canon daemon; skipping kill (identity guard)"
@@ -161,10 +309,9 @@ else
     if [[ -n "$STORED_PID" ]] && [[ "$STORED_PID" =~ ^[0-9]+$ ]]; then
       if kill -0 "$STORED_PID" 2>/dev/null; then
         # Process alive but unresponsive — check identity before killing
-        CMDLINE=$(ps -p "$STORED_PID" -o command= 2>/dev/null) || CMDLINE="" # DOCUMENTED FAIL-OPEN -- ps may fail; treat as no-match
-        if echo "$CMDLINE" | grep -q "tsx" && echo "$CMDLINE" | grep -q "daemon\.ts"; then
-          echo "CANON NOTE: daemon PID $STORED_PID is alive but unresponsive; sending SIGTERM"
-          kill -TERM "$STORED_PID" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- kill may fail if process exits first; fall through to start
+        if _supervisor_is_canon_daemon_pid "$STORED_PID"; then
+          echo "CANON NOTE: daemon PID $STORED_PID is alive but unresponsive; clearing"
+          _supervisor_escalate_kill "$STORED_PID" || true # DOCUMENTED FAIL-OPEN -- pre-start kill failure falls through to start attempt; post-start recovery catches a surviving owner
           rm -f "$PID_FILE"
         else
           echo "CANON NOTE: PID $STORED_PID is alive but cmdline does not match Canon daemon; skipping kill"
@@ -216,60 +363,46 @@ fi
 trap "rmdir '$LOCK_DIR' 2>/dev/null" EXIT
 
 # ---------------------------------------------------------------------------
-# Step 5: Start the daemon
+# Step 5+6: Start the daemon, poll for health, and — if the start did not
+# reach the target version — recover from a surviving port-owner keyed on
+# who actually holds the port (not just the PID file).
 # ---------------------------------------------------------------------------
-# Resolve boot command: default to real boot.sh --daemon in nohup/disown mode
-if [[ -n "${CANON_SUPERVISOR_BOOT_CMD:-}" ]]; then
-  # Test override: run directly (tests may not want nohup/disown)
-  eval "${CANON_SUPERVISOR_BOOT_CMD}" &
-  disown 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown may not be available in all shell variants; process still launched
-else
-  # Production path: nohup boot.sh --daemon → daemon.log, background + disown
-  if [[ -z "$ROOT" ]]; then
-    echo "CANON WARNING: cannot resolve plugin root; daemon not started"
-    exit 0
-  fi
-  BOOT_SH="$ROOT/mcp-server/boot.sh"
-  if [[ ! -f "$BOOT_SH" ]]; then
-    echo "CANON WARNING: boot.sh not found at $BOOT_SH; daemon not started"
-    exit 0
-  fi
-  mkdir -p "$DATA"
-  # shellcheck disable=SC2094
-  nohup bash "$BOOT_SH" --daemon >> "$LOG_FILE" 2>&1 &
-  disown 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown may not be available in all shell variants; process still launched
+_supervisor_boot_and_poll
+rc=$?
+if (( rc == 0 )); then
+  exit 0
 fi
 
-echo "CANON NOTE: daemon start command issued; polling for health..."
-
-# ---------------------------------------------------------------------------
-# Step 6: Poll health for up to TIMEOUT seconds
-# ---------------------------------------------------------------------------
-_elapsed=0
-while (( _elapsed < TIMEOUT )); do
-  sleep 1
-  (( _elapsed++ )) || true
-  _probe=$(curl -s -m 2 "http://127.0.0.1:${PORT}/health" 2>/dev/null) || true # DOCUMENTED FAIL-OPEN -- daemon may still be starting; retry on next tick
-  if [[ -n "$_probe" ]]; then
-    _started_version=$(echo "$_probe" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
-    if [[ -n "$_started_version" ]]; then
-      # When the expected plugin version is known, require the polled version to
-      # match exactly. A mismatch means the old daemon survived the kill attempt
-      # and is reporting as healthy — this is NOT a successful start.
-      if [[ -n "$PLUGIN_VERSION" ]] && [[ "$_started_version" != "$PLUGIN_VERSION" ]]; then
-        echo "CANON WARNING: polled daemon reports v${_started_version} but expected v${PLUGIN_VERSION}; old daemon may have survived — start did not succeed"
+owner=$(_supervisor_resolve_port_owner_pid)
+orc=$?
+case $orc in
+  2)
+    echo "CANON WARNING: daemon start did not reach target version and the port owner could not be identified (lsof unavailable) — cannot auto-recover; run bash mcp-server/boot.sh --daemon manually."
+    _supervisor_emit_down_block
+    exit 0
+    ;;
+  1)
+    # Port genuinely free — boot failed to start, nothing to kill.
+    _supervisor_emit_down_block
+    exit 0
+    ;;
+  0)
+    if _supervisor_is_canon_daemon_pid "$owner"; then
+      echo "CANON NOTE: surviving Canon daemon (PID $owner) still holds :${PORT} after start; clearing and retrying once"
+      if ! _supervisor_escalate_kill "$owner"; then
+        echo "CANON WARNING: could not clear surviving Canon daemon PID $owner (kill failed); daemon NOT started at target version — run bash mcp-server/boot.sh --daemon manually."
         exit 0
       fi
-      echo "CANON NOTE: daemon started successfully (v${_started_version})"
+      _supervisor_boot_and_poll
+      rc2=$?
+      if (( rc2 == 0 )); then
+        exit 0
+      fi
+      _supervisor_emit_down_block
+      exit 0
+    else
+      echo "CANON WARNING: :${PORT} is held by non-Canon PID $owner (cmdline did not match tsx+daemon.ts); old daemon may have survived — refusing to kill (identity guard). Daemon NOT started at target version."
       exit 0
     fi
-  fi
-done
-
-echo "CANON ERROR: HTTP daemon is NOT reachable on 127.0.0.1:${PORT} — mcp__canon__* tools will FAIL this session."
-echo "  Recovery options:"
-echo "    1) Start it manually:   bash mcp-server/boot.sh --daemon"
-echo "    2) Kill-switch to stdio: unset CANON_HTTP_DAEMON  and revert .mcp.json 'canon' to the stdio command form"
-echo "  Details: mcp-server/src/app/mcp-http/MANUAL-VERIFICATION.md (down-daemon recovery)"
-echo "  (start log: ${LOG_FILE})"
-exit 0
+    ;;
+esac
