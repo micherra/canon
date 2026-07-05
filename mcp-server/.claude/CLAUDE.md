@@ -59,7 +59,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; file-pattern matching uses `matchGlob` from `lib/glob-matcher.ts` (linear-time DP, `globToRegex`+RegExp removed, ADR-0026 §Amendment-3)
 
 ## Contracts
-<!-- last-updated: 2026-07-03 -->
+<!-- last-updated: 2026-07-05 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -170,8 +170,8 @@ src/
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews, doc freshness |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
 | `wiki_lint` | Lint Canon's own meta-layer artifacts — contradictions, orphan principles, stale file refs, missing examples, cited-path accuracy in `references/**/*.md` and DDD doc set, invalid `scope.layers` values, invalid `scope.tags` values, CONTEXT.md glossary self-consistency, index inventory drift, misrouted principles (`portable:false` in shipped tree), duplicate titles across both principle tiers; optional `checks` array selects subset (default: 10 checks, `index_drift` excluded — pass explicitly to run it); returns `WikiLintOutput` |
-| `sync_indexes` | Regenerate sentinel-delimited `## Artifact Inventory` blocks in the 6 sibling artifact-class indexes (`rules/`, `principles/`, `agents/`, `templates/`, `references/`, `primers/`); skips indexes without sentinels; returns `{ synced[], skipped[] }` |
-| `check_context_staleness` | Compare installed artifact corpus against committed `context-manifest.json`; returns `StalenessReport` with `drifted[]`, `missing[]`, `extra[]` entries; `INVALID_INPUT/MANIFEST_NOT_FOUND` when manifest unreadable |
+| `sync_indexes` | Regenerate sentinel-delimited `## Artifact Inventory` blocks in the 6 sibling artifact-class indexes (`rules/`, `principles/`, `agents/`, `templates/`, `references/`, `primers/`); skips indexes without sentinels; returns `{ synced[], skipped[] }`; a supplied `project_dir` outside the resolved session scope is rejected fail-closed (`INVALID_INPUT`, zero writes) — see `src/features/diagnostics/.claude/CLAUDE.md` |
+| `check_context_staleness` | Compare installed artifact corpus against committed `context-manifest.json`; returns `StalenessReport` with `drifted[]`, `missing[]`, `extra[]` entries; `INVALID_INPUT/MANIFEST_NOT_FOUND` when manifest unreadable; handler wraps the unchanged read-only tool with `checkContextStalenessGuarded`, rejecting a `project_dir` or `manifest_path` outside the resolved session scope fail-closed (`INVALID_INPUT`) — see `src/features/diagnostics/.claude/CLAUDE.md` |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `search_knowledge` | Top-K relevance retrieval over the markdown knowledge corpus (principles, references, `.canon/principles`, `.canon/proposed-learnings`, build digests); calls `ensureDocCorpusFresh` on first call; `corpus` + `trust` filters (default `internal`); returns `content`, `corpus`, `doc_path`, `heading_path`, `distance`; distinct `DOC_CORPUS_NOT_INDEXED` error when DB absent |
 | `store_pr_review` | Store a PR review result; accepts optional `craft_profile` (persists one row per distinct subsystem area to `craft_profiles` with `source:"review"`) |
