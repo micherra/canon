@@ -211,6 +211,9 @@ function gatherAndCompute(input: ForecastBaseAdvanceInput): ForecastBaseAdvanceR
   if (existsSync(dbPath)) {
     const db = initDatabase(dbPath);
     try {
+      // "Read-only at compute time" (see file header) means no writes to the repo or build
+      // state — this is the same lazy read-through refresh of the local KG DB (co_change_edges/
+      // hotspot_scores) that graph_query and get_file_context already perform before querying it.
       ensureGitIntelFresh(db, projectDir);
       coPartners = queryCoChangePartners(db, mainChangedFiles);
     } finally {
