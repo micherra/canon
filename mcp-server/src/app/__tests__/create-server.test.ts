@@ -56,7 +56,8 @@ function getToolNames(server: McpServer): Set<string> {
 //   +1 post_message               (this build, registerMessagingTools — event-backbone Inc 0)
 //   +1 tail_messages              (this build, registerMessagingTools — event-backbone Inc 0)
 //   +1 list_active_workspaces     (this build, registerMessagingTools — event-backbone Inc 0)
-//   New total: 63 tools (computed from a live run, not hand-counted)
+//   +1 forecast_base_advance     (this build, registerConfidenceTools — anticipatory-canon Inc-0)
+//   New total: 64 tools (computed from a live run, not hand-counted)
 //
 // To recount: run this test — the received value in the failure message is authoritative.
 //

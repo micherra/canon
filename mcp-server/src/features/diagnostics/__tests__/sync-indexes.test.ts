@@ -13,7 +13,7 @@
  * - Unreadable artifact dir → surfaces in skipped[] with discovery error reason
  */
 
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -381,5 +381,186 @@ describe("syncIndexes", () => {
       expect(result.synced).toContain("agents");
       expect(result.skipped.map((s) => s.class)).not.toContain("agents");
     }
+  });
+
+  // ---- watch_XXXXXX2: project_dir target-root regression (R2) ----
+
+  describe("project_dir target-root resolution", () => {
+    let worktreeDir: string;
+
+    beforeEach(() => {
+      // Model the real worktree topology: a genuine subpath of projectDir,
+      // not a sibling temp dir. A sibling is the exact shape the scope-
+      // containment guard (below) now correctly rejects, so a sibling
+      // fixture here would mask the escape rather than exercise R2.
+      worktreeDir = join(projectDir, ".canon", "workspaces", "test-slug", "worktree");
+      mkdirSync(worktreeDir, { recursive: true });
+    });
+
+    it("AC3 regression: project_dir writes to that root, main root left byte-unchanged", async () => {
+      const mainIndex = makeIndexWithMarkers("rules");
+      const worktreeIndex = makeIndexWithMarkers("rules");
+
+      setupClass(
+        projectDir,
+        "rules",
+        [{ name: "main-rule.md", content: "---\ntitle: Main Rule\n---\nBody." }],
+        mainIndex,
+      );
+      setupClass(
+        worktreeDir,
+        "rules",
+        [{ name: "worktree-rule.md", content: "---\ntitle: Worktree Rule\n---\nBody." }],
+        worktreeIndex,
+      );
+
+      const { readFileSync } = await import("node:fs");
+      const mainIndexPath = join(projectDir, "rules", ".claude", "CLAUDE.md");
+      const worktreeIndexPath = join(worktreeDir, "rules", ".claude", "CLAUDE.md");
+      const mainBefore = readFileSync(mainIndexPath, "utf8");
+
+      const result = await syncIndexes({ class: "rules", project_dir: worktreeDir }, projectDir);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.synced).toContain("rules");
+      }
+
+      // The worktree index was regenerated with the worktree's own artifact.
+      const worktreeAfter = readFileSync(worktreeIndexPath, "utf8");
+      expect(worktreeAfter).toContain("worktree-rule.md");
+      expect(worktreeAfter).not.toBe(worktreeIndex);
+
+      // The main-repo index must be byte-identical to what was there before the call.
+      const mainAfter = readFileSync(mainIndexPath, "utf8");
+      expect(mainAfter).toBe(mainBefore);
+      expect(mainAfter).not.toContain("worktree-rule.md");
+    });
+
+    it("backward-compat: absent project_dir writes to the default (mainDir) root, unchanged behavior", async () => {
+      setupClass(
+        projectDir,
+        "rules",
+        [{ name: "main-rule.md", content: "---\ntitle: Main Rule\n---\nBody." }],
+        makeIndexWithMarkers("rules"),
+      );
+
+      const result = await syncIndexes({ class: "rules" }, projectDir);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.synced).toContain("rules");
+      }
+
+      const { readFileSync } = await import("node:fs");
+      const written = readFileSync(join(projectDir, "rules", ".claude", "CLAUDE.md"), "utf8");
+      expect(written).toContain("main-rule.md");
+    });
+
+    it("project_dir with no class processes all classes under the target root", async () => {
+      setupClass(
+        worktreeDir,
+        "rules",
+        [{ name: "worktree-rule.md", content: "---\ntitle: Worktree Rule\n---\nBody." }],
+        makeIndexWithMarkers("rules"),
+      );
+
+      const result = await syncIndexes({ project_dir: worktreeDir }, projectDir);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const all = [...result.synced, ...result.skipped.map((s) => s.class)];
+        expect(all).toContain("rules");
+        expect(result.synced).toContain("rules");
+      }
+
+      const { readFileSync } = await import("node:fs");
+      const written = readFileSync(join(worktreeDir, "rules", ".claude", "CLAUDE.md"), "utf8");
+      expect(written).toContain("worktree-rule.md");
+    });
+  });
+
+  // ---- Codex P2 fix: project_dir scope containment guard ----
+
+  describe("project_dir scope containment guard", () => {
+    let sibling: string;
+
+    beforeEach(() => {
+      sibling = createTempDir();
+    });
+
+    afterEach(() => {
+      rmSync(sibling, { recursive: true, force: true });
+    });
+
+    it("AC1: out-of-scope project_dir is rejected fail-closed, zero writes", async () => {
+      setupClass(
+        sibling,
+        "rules",
+        [{ name: "sibling-rule.md", content: "---\ntitle: Sibling Rule\n---\nBody." }],
+        makeIndexWithMarkers("rules"),
+      );
+      const { readFileSync } = await import("node:fs");
+      const siblingIndexPath = join(sibling, "rules", ".claude", "CLAUDE.md");
+      const before = readFileSync(siblingIndexPath);
+
+      const result = await syncIndexes({ class: "rules", project_dir: sibling }, projectDir);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error_code).toBe("INVALID_INPUT");
+        expect(result.message).toContain(sibling);
+      }
+
+      const after = readFileSync(siblingIndexPath);
+      expect(after.equals(before)).toBe(true);
+    });
+
+    it("AC3: `..` traversal outside scope is rejected, no write", async () => {
+      const escaped = join(projectDir, "foo", "..", "..", "escape");
+
+      const result = await syncIndexes({ class: "rules", project_dir: escaped }, projectDir);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error_code).toBe("INVALID_INPUT");
+      }
+    });
+
+    it("AC2 edge: scope root itself as project_dir succeeds", async () => {
+      setupClass(
+        projectDir,
+        "rules",
+        [{ name: "root-rule.md", content: "---\ntitle: Root Rule\n---\nBody." }],
+        makeIndexWithMarkers("rules"),
+      );
+
+      const result = await syncIndexes({ class: "rules", project_dir: projectDir }, projectDir);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.synced).toContain("rules");
+      }
+    });
+
+    it("symlink escape is rejected (realpath layer)", async () => {
+      if (process.platform === "win32") return;
+
+      const outside = createTempDir();
+      const linkPath = join(projectDir, "escape-link");
+      symlinkSync(outside, linkPath, "dir");
+
+      try {
+        const result = await syncIndexes({ class: "rules", project_dir: linkPath }, projectDir);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error_code).toBe("INVALID_INPUT");
+        }
+      } finally {
+        rmSync(linkPath, { force: true });
+        rmSync(outside, { recursive: true, force: true });
+      }
+    });
   });
 });

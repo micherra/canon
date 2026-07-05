@@ -13,6 +13,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { isPathInWorktree } from "@shared/lib/worktree-guard.ts";
 import {
   type ContextManifest,
   checkContextStaleness as checkStaleness,
@@ -60,4 +61,39 @@ export async function checkContextStaleness(
 
   const report = await checkStaleness(input.project_dir, manifest);
   return toolOk(report);
+}
+
+/**
+ * Scope-containment wrapper for `check_context_staleness` (R6, Codex P2 fix).
+ *
+ * Rejects a `project_dir` outside the resolved session scope fail-closed
+ * before any read; delegates to the unchanged `checkContextStaleness` when
+ * the override is the scope root or a subpath of it. `manifest_path`, when
+ * supplied, is guarded the same way — omitted `manifest_path` skips this
+ * check entirely (the default `<project_dir>/context-manifest.json` is
+ * already covered by the `project_dir` guard above it).
+ */
+export async function checkContextStalenessGuarded(
+  input: CheckContextStalenessInput,
+  scope: string,
+): Promise<ToolResult<StalenessReport>> {
+  const containedProjectDir = await isPathInWorktree(input.project_dir, scope);
+  if (!containedProjectDir.ok) {
+    return toolError(
+      "INVALID_INPUT",
+      `check_context_staleness: project_dir "${input.project_dir}" is outside the resolved project scope "${scope}"`,
+      false,
+    );
+  }
+  if (input.manifest_path !== undefined) {
+    const containedManifestPath = await isPathInWorktree(input.manifest_path, scope);
+    if (!containedManifestPath.ok) {
+      return toolError(
+        "INVALID_INPUT",
+        `check_context_staleness: manifest_path "${input.manifest_path}" is outside the resolved project scope "${scope}"`,
+        false,
+      );
+    }
+  }
+  return checkContextStaleness(input);
 }
