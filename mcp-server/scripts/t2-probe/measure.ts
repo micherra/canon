@@ -83,18 +83,29 @@ function resolveProjectDir(argRoot: string | undefined): string {
 }
 
 /**
- * Split all reviews into the positive set (reviews with a recorded
- * `leave-touched-files-better` violation) and the conservative negative set
- * (every other review — DESIGN ASSUMPTION 3: this over-counts FP, biasing
- * against the checker, so a PASS verdict is trustworthy).
+ * Classify all reviews into the positive set (reviews with an actual recorded
+ * `leave-touched-files-better` violation, per `violationReviewIds`) and the
+ * conservative negative set (every other review — DESIGN ASSUMPTION 3: a
+ * review where the principle was merely assessed-and-honored is NOT a
+ * positive; `honored` status is explicitly not used for classification, only
+ * a recorded violation is. This over-counts FP, biasing against the checker,
+ * so a PASS verdict is trustworthy). Pure function — no I/O — so it's
+ * directly unit-testable with synthetic rows.
  */
-function splitPositiveNegative(
+export function classifyReviews(
   allReviews: ReviewEntry[],
-  positiveReviews: ReviewEntry[],
+  violationReviewIds: ReadonlySet<string>,
 ): { positives: ReviewEntry[]; negatives: ReviewEntry[] } {
-  const positiveIds = new Set(positiveReviews.map((r) => r.review_id));
-  const negatives = allReviews.filter((r) => !positiveIds.has(r.review_id));
-  return { positives: positiveReviews, negatives };
+  const positives: ReviewEntry[] = [];
+  const negatives: ReviewEntry[] = [];
+  for (const review of allReviews) {
+    if (violationReviewIds.has(review.review_id)) {
+      positives.push(review);
+    } else {
+      negatives.push(review);
+    }
+  }
+  return { positives, negatives };
 }
 
 /** Diff resolution result — a review's reviewed diff, or why it's unavailable. */
@@ -161,12 +172,38 @@ function findBaseShaFromArchives(
   return null;
 }
 
+/**
+ * Minimal DriftDb surface `findViolationReviewIds` needs — narrowed to one
+ * method so tests can fake it with a plain object instead of a real DB.
+ */
+export type ReviewsSource = {
+  getReviews(options?: { includeResolvedViolations?: boolean }): ReviewEntry[];
+};
+
+/**
+ * Ground-truth violation-review-id lookup. Deliberately does NOT use
+ * `getReviews({ principleId })` — that accessor has violation-OR-honored
+ * semantics (shared with `get_compliance`, which legitimately wants both), which
+ * would fold "assessed and honored, never violated" reviews into the positive
+ * set. `includeResolvedViolations: true` gives the full historical record (open
+ * + resolved) so a violation that has since been fixed still counts as a
+ * positive instance for this backward-looking measurement. Exported + testable
+ * via the narrow `ReviewsSource` interface — no real DB required in tests.
+ */
+export function findViolationReviewIds(driftDb: ReviewsSource, principleId: string): Set<string> {
+  const reviewsWithResolvedViolations = driftDb.getReviews({ includeResolvedViolations: true });
+  const ids = reviewsWithResolvedViolations
+    .filter((r) => r.violations.some((v) => v.principle_id === principleId))
+    .map((r) => r.review_id);
+  return new Set(ids);
+}
+
 /** Run the full measurement pass. Never mutates build state — read + report only. */
 export async function runMeasurement(projectDir: string): Promise<MeasureResult> {
   const driftDb = getDriftDb(projectDir);
   const allReviews = driftDb.getReviews();
-  const positiveReviews = driftDb.getReviews({ principleId: TARGET_PRINCIPLE });
-  const { positives, negatives } = splitPositiveNegative(allReviews, positiveReviews);
+  const violationReviewIds = findViolationReviewIds(driftDb, TARGET_PRINCIPLE);
+  const { positives, negatives } = classifyReviews(allReviews, violationReviewIds);
 
   const rows: JoinRow[] = [];
   let excludedDiffUnavailable = 0;
