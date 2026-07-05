@@ -9,11 +9,12 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 <!-- last-updated: 2026-05-15 -->
 
 **`tools/`** — MCP tool handlers. All handlers are thin wrappers calling services.
-<!-- last-updated: 2026-07-01 (resolve-agent-skills + resolve-agent-skills-provenance: agent-def provenance emit, ADR-0031) -->
+<!-- last-updated: 2026-07-02 (evaluate-step.ts: re-wired into registerOrchestrationTools after #175 dropped it, #443) -->
 
 | Tool file | MCP tool name |
 |-----------|--------------|
 | `capture-transcript.ts` | `capture_transcript` |
+| `evaluate-step.ts` | `evaluate_step` — pure structural signal extraction (no LLM calls) for the evaluator step-transition gate: pattern findings (lazy/hacky code markers), file-scope overlap against `declared_files`, and diff statistics; returns `EvaluateStepOutput`; called by the orchestrator directly (not pre-spawn context) after implement/fix steps, before verify; consumed by `canon:evaluator`. Registered via `registerEvaluateStepTool(server)` inside `registerOrchestrationTools()` — re-wired 2026-07-02 (#443) after being silently dropped from registration by #175. |
 | `get-transcript.ts` | `get_transcript` |
 | `init-workspace.ts` | `init_workspace` |
 | `invoke-janitor.ts` | `invoke_janitor` |

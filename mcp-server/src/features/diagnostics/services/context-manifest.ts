@@ -18,6 +18,16 @@
  * Note: To regenerate `context-manifest.json` after updating corpus files, run
  * `cd mcp-server && npm run regen:context-manifest` from the repo root.
  *
+ * Freshness-gate primitives (sug_MANIFESTGAP1) — used by
+ * `scripts/regen-context-manifest.ts --check` and `hooks/context-manifest-gate.sh`:
+ * - `serializeManifest(manifest)` — the ONE serializer; the write path and the
+ *   `--check` path both call this so their output is byte-identical by
+ *   construction (no serializer divergence).
+ * - `diffManifests(committed, fresh)` — pure set/string comparison only, no
+ *   hashing (hashing stays in `buildContextManifest`, single source of truth).
+ * - `renderManifestDrift(diff)` — human message naming what drifted + the
+ *   exact fix command.
+ *
  * Canon principles:
  * - errors-are-values: all error conditions surface as result union; no throws
  * - deep-modules: two pure functions + thin I/O; callers see a simple contract
@@ -47,6 +57,20 @@ export type StalenessReport = {
   /** Paths in installed tree but absent from manifest. */
   extra: string[];
   /** true iff drifted, missing, and extra are all empty. */
+  clean: boolean;
+};
+
+/** Result of comparing a committed manifest against a freshly-built one (context-manifest-gate). */
+export type ManifestDiff = {
+  /** Keys in fresh.artifacts not in committed.artifacts (a new corpus file). */
+  added: string[];
+  /** Keys in committed.artifacts not in fresh.artifacts (a deleted corpus file). */
+  removed: string[];
+  /** Keys in both with differing hash (edited content). */
+  changed: string[];
+  /** Non-null when committed.version !== fresh.version. */
+  versionChanged: { from: string; to: string } | null;
+  /** true iff added, removed, changed are all empty AND versionChanged is null. */
   clean: boolean;
 };
 
@@ -252,4 +276,86 @@ function classifyStaleness(
     extra,
     missing,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Freshness-gate primitives (sug_MANIFESTGAP1)
+// ---------------------------------------------------------------------------
+
+/** The fix command surfaced by renderManifestDrift and printed on every stale verdict. */
+const REGEN_COMMAND = "cd mcp-server && npm run regen:context-manifest";
+
+/**
+ * Serialize a ContextManifest to the canonical committed byte format:
+ * 2-space-indented JSON with `version` before `artifacts`, trailing newline.
+ *
+ * This is the ONE serializer — both the write path (`regen-context-manifest.ts`)
+ * and the `--check` comparison path call this function, so their output is
+ * byte-identical by construction (no serializer divergence).
+ */
+export function serializeManifest(manifest: ContextManifest): string {
+  // biome-ignore assist/source/useSortedKeys: key order is the committed byte format — version MUST precede artifacts (see committed context-manifest.json + PROBE-FINDINGS §1); reordering breaks the byte-identity verdict (D4)
+  return `${JSON.stringify({ version: manifest.version, artifacts: manifest.artifacts }, null, 2)}\n`;
+}
+
+/**
+ * Compare a committed manifest against a freshly-built one. Pure set/string
+ * comparison only — no hashing (hashing stays in `buildContextManifest`,
+ * single source of truth, dc-06).
+ *
+ * - `added`: keys in `fresh.artifacts` not in `committed.artifacts` (new corpus file).
+ * - `removed`: keys in `committed.artifacts` not in `fresh.artifacts` (deleted corpus file).
+ * - `changed`: keys in both with differing hash (edited content).
+ * - `versionChanged`: non-null when `committed.version !== fresh.version`.
+ * - `clean`: true iff added/removed/changed are all empty AND versionChanged is null.
+ */
+export function diffManifests(committed: ContextManifest, fresh: ContextManifest): ManifestDiff {
+  const committedPaths = new Set(Object.keys(committed.artifacts));
+  const freshPaths = new Set(Object.keys(fresh.artifacts));
+
+  const added = [...freshPaths].filter((p) => !committedPaths.has(p)).sort();
+  const removed = [...committedPaths].filter((p) => !freshPaths.has(p)).sort();
+  const changed = [...committedPaths]
+    .filter((p) => freshPaths.has(p) && committed.artifacts[p] !== fresh.artifacts[p])
+    .sort();
+
+  const versionChanged =
+    committed.version !== fresh.version ? { from: committed.version, to: fresh.version } : null;
+
+  return {
+    added,
+    changed,
+    clean:
+      added.length === 0 && removed.length === 0 && changed.length === 0 && versionChanged === null,
+    removed,
+    versionChanged,
+  };
+}
+
+/**
+ * Render a human-readable drift message for a non-clean ManifestDiff.
+ * Always includes the exact fix command, even for a (theoretically unreachable)
+ * clean diff passed in error — pure, never throws.
+ */
+export function renderManifestDrift(diff: ManifestDiff): string {
+  const lines: string[] = ["STALE: committed context-manifest.json does not match the corpus."];
+
+  if (diff.added.length > 0) {
+    lines.push("Added (present in corpus, missing from manifest):");
+    lines.push(...diff.added.map((p) => `  + ${p}`));
+  }
+  if (diff.removed.length > 0) {
+    lines.push("Removed (in manifest, absent from corpus):");
+    lines.push(...diff.removed.map((p) => `  - ${p}`));
+  }
+  if (diff.changed.length > 0) {
+    lines.push("Changed (hash differs from committed manifest):");
+    lines.push(...diff.changed.map((p) => `  ~ ${p}`));
+  }
+  if (diff.versionChanged !== null) {
+    lines.push(`Version changed: ${diff.versionChanged.from} -> ${diff.versionChanged.to}`);
+  }
+
+  lines.push(`Fix: ${REGEN_COMMAND}`);
+  return lines.join("\n");
 }

@@ -108,7 +108,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **Plan approval and initial review verdict are always mandatory regardless of tier — these are the highest-value checkpoints where wrong assumptions are caught.**
 
-**Deterministic-gate invariant**: deterministic code gates — the verify step (`npm run build`/`lint`/`test`/`bash hooks/lint.sh`), the dead-wire reachability gate (`hooks/dead-wire-gate.sh`), the summary-vs-diff phantom-claim check (`hooks/summary-diff-check.sh`), the post-scribe scope guard (`hooks/scribe-scope-guard.sh`), the shell-CI-parity gate (`hooks/shell-test-gate.sh`), and contract-checker postconditions — run in **every** tier unconditionally. Only human/model (HITL) supervision may be traded away by higher tiers. No deterministic gate appears among the per-tier skippable items above.
+**Deterministic-gate invariant**: deterministic code gates — the verify step (`npm run build`/`lint`/`test`/`bash hooks/lint.sh`), the dead-wire reachability gate (`hooks/dead-wire-gate.sh`), the summary-vs-diff phantom-claim check (`hooks/summary-diff-check.sh`), the post-scribe scope guard (`hooks/scribe-scope-guard.sh`), the shell-CI-parity gate (`hooks/shell-test-gate.sh`), the context-manifest-freshness gate (`hooks/context-manifest-gate.sh`), and contract-checker postconditions — run in **every** tier unconditionally. Only human/model (HITL) supervision may be traded away by higher tiers. No deterministic gate appears among the per-tier skippable items above.
 
 **Fail-safe**: If `compute_autonomy_tier` returns an error or the tool is unavailable, default to "supervised".
 
@@ -319,17 +319,19 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 
 ### Step Enforcement Contracts <!-- last-updated: 2026-06-12 -->
 
-**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh` → `bash hooks/dead-wire-gate.sh {base_commit} [worktree_path]` → `bash hooks/shell-test-gate.sh {base_commit} [worktree_path]`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL. For builds with user-observable ACs, the verify step also drives the live app (background-launch + readiness-poll + curl/CLI-invocation, never `sleep N`), distinct from `npm test` — see `agents/tester.md` Live App Smoke.
+**Verify step**: Run in order: `npm run build` → `npm run lint` → `npm test` → `bash hooks/lint.sh` → `bash hooks/dead-wire-gate.sh {base_commit} [worktree_path]` → `bash hooks/shell-test-gate.sh {base_commit} [worktree_path]` → `bash hooks/context-manifest-gate.sh [worktree_path]`. All must exit 0. Minor inline fixes (lint warnings, small type errors) are allowed with re-run. Architectural changes or out-of-scope fixes → report BLOCKED with exact output; orchestrator presents to user via HITL. For builds with user-observable ACs, the verify step also drives the live app (background-launch + readiness-poll + curl/CLI-invocation, never `sleep N`), distinct from `npm test` — see `agents/tester.md` Live App Smoke.
 
 **Pre-existing failure proof requirement (sug_UUUU1)**: an engineer SUMMARY claiming gate failures are "pre-existing" or "unrelated to my diff" is an assertion, not proof. Before accepting it, the orchestrator MUST independently re-run the failing gate with the build's changes stashed (`git stash && <gate> && git stash pop`) or verify via `git diff {base_commit}..HEAD --name-only` that the failing files were untouched. Gate exits 0 after stash ⇒ genuinely pre-existing (classify per In-wave baseline). Gate exits non-zero after stash, or the files WERE touched ⇒ build-introduced; fix before review.
 
-**CWD for diff hooks (watch_CCCCCCCCCCCC2)**: `hooks/summary-diff-check.sh`, `hooks/dead-wire-gate.sh`, `hooks/scribe-scope-guard.sh`, and `hooks/shell-test-gate.sh` resolve `git` from CWD. Invoke each with the build worktree as CWD, OR pass the worktree as the trailing `worktree_path` arg (which applies `git -C` internally). Invoking from the WORKSPACE dir (`.canon/workspaces/…`, gitignored) silently resolves to the main working tree and produces 100% false phantom-claim / wrong-count reports. `hooks/adr-number-check.sh` was evaluated and intentionally excluded: it's a hooks.json PreToolUse hook that runs in the same CWD as the actual `git push` Bash call it intercepts — there is no orchestrator-mediated wrong-CWD invocation path for it.
+**CWD for diff hooks (watch_CCCCCCCCCCCC2)**: `hooks/summary-diff-check.sh`, `hooks/dead-wire-gate.sh`, `hooks/scribe-scope-guard.sh`, and `hooks/shell-test-gate.sh` resolve `git` from CWD. Invoke each with the build worktree as CWD, OR pass the worktree as the trailing `worktree_path` arg (which applies `git -C` internally). Invoking from the WORKSPACE dir (`.canon/workspaces/…`, gitignored) silently resolves to the main working tree and produces 100% false phantom-claim / wrong-count reports. `hooks/adr-number-check.sh` was evaluated and intentionally excluded: it's a hooks.json PreToolUse hook that runs in the same CWD as the actual `git push` Bash call it intercepts — there is no orchestrator-mediated wrong-CWD invocation path for it. `hooks/context-manifest-gate.sh` also resolves its source tree + committed manifest from a `[worktree_path]` arg (not `git` — this gate never reads a diff), so it must likewise be invoked with the worktree as CWD or the worktree passed as the arg; invoking from the gitignored WORKSPACE dir fails closed (no `mcp-server/` there).
 
 `→ bash hooks/dead-wire-gate.sh {base_commit} [worktree_path]` — standing dead-wire reachability postcondition. Must exit 0. Fails closed on any newly-exported symbol/tool with zero real references (suppress legitimate not-yet-wired exports with an inline `// canon:allow-unwired: <reason>` marker; audit via `grep -rn 'canon:allow-unwired'`). The doc-only verify-skip (`.md`/`.txt` only diffs) also skips this gate. Pass `worktree_path` (see CWD for diff hooks above) when the gate is not invoked with the worktree as CWD.
 
 `→ bash hooks/shell-test-gate.sh {base_commit} [worktree_path]` — shell-CI-parity gate. When any `hooks/**/*.sh` or `*.mjs` file changed in `base..HEAD`, executes the full `hooks/**/*.test.sh` suite set CI's `shell` job runs (enumerated portably via `find hooks -type f -name '*.test.sh'`, run with `</dev/null`); any suite non-zero → exit 2. Clean no-op (exit 0) when no in-scope hook script changed. The doc-only verify-skip also skips this gate. Pass `worktree_path` (see CWD for diff hooks above) when the gate is not invoked with the worktree as CWD.
 
-**Verify skip**: If `git diff {base_commit}..HEAD --name-only` contains only `.md`/`.txt` files, skip with `skip_reason: "documentation-only diff, verify produces zero signal"`.
+`→ bash hooks/context-manifest-gate.sh [worktree_path]` — context-manifest freshness gate (sug_MANIFESTGAP1). Must exit 0. Fails closed when the committed `context-manifest.json` does not match a freshly-built manifest of the corpus (added/removed/edited artifact or version drift). Takes only `[worktree_path]` — no `base_commit` — because freshness is a whole-tree property, not diff-scoped. **This gate is EXEMPT from the doc-only verify-skip**: corpus artifacts are `.md`, so a doc-only diff is exactly when manifest drift occurs — run it even when the diff is `.md`/`.txt`-only.
+
+**Verify skip**: If `git diff {base_commit}..HEAD --name-only` contains only `.md`/`.txt` files, skip build/lint/test/dead-wire-gate/shell-test-gate with `skip_reason: "documentation-only diff, verify produces zero signal"` — but still run `hooks/context-manifest-gate.sh [worktree_path]` (see the doc-only exemption above).
 
 **In-wave baseline**: After sequential wave execution, use `base_commit` (not `main`) as violation baseline. Only violations absent at `base_commit` are regressions. Pre-existing violations remain pre-existing even if the file was touched.
 
@@ -459,7 +461,7 @@ initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named life
 
 Read `references/loop-framework.md` BEFORE dispatching any loop or consuming an `ORCHESTRATOR_ACTION` line.
 
-## Project Structure <!-- last-updated: 2026-06-25 -->
+## Project Structure <!-- last-updated: 2026-07-03 -->
 
 ```
 canon/
@@ -483,7 +485,7 @@ canon/
 │       │   ├── history/         # get_build_history, get_historical_artifacts, get_cross_run_analysis — cross-run analysis for learner
 │       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase E current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes, check_context_staleness
-│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023)
+│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023); record_applied_evolution + get_evolution_outcomes post-apply regression detection — applied_evolutions v12 (ADR-0034)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs; overlay trust boundary (UntrustedText opaque box, closed-domain validators, linear-time glob matcher — ADR-0026/ADR-0027)
