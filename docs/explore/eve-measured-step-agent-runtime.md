@@ -64,7 +64,7 @@ no code ships here).
 |---|-----------|-----------|--------------------------|
 | A1 | The guardrail eval sandbox (ADR-0025) boots **no MCP server**; cases use only Read/Grep/Glob. | **high** | ADR-0025 §Option A ("no MCP server boots; eval cases use only Read/Grep/Glob") + `run-evals.sh` invokes `claude -p` with no server. Read directly. |
 | A2 | `run-evals.sh` only discovers `$SCRIPT_DIR/eval-set.json` (the single global set); it cannot run a per-agent suite as-is. | **high** | `run-evals.sh:21` `EVAL_FILE="$SCRIPT_DIR/eval-set.json"`. Read directly. |
-| A3 | ADR-0031's `computeBodySections` already splits an agent-def **body** into ATX-heading sections with char-spans, and the reviewer's stages ARE ATX headings (`## Stage 1: …`). | **high** | ADR-0031 + `agents/reviewer.md` (headings `## Stage 1`, `## Stage 1.5`, … `## Stage 6`). Read directly. |
+| A3 | ADR-0031's `computeBodySections` already splits an agent-def **body** into ATX-heading sections with char-spans at *provenance-capture* time, and the reviewer's stages ARE ATX headings (`## Stage 1: …`). | **medium** | The spans ARE computed and stored on the `AssembledArtifact` (`context-provenance.ts:266-277`, `sections` populated). BUT `attribute_failure` **drops them**: `attribution-join.ts`'s `RawArtifact` (364-372) and `AttributedArtifact` (416-425) carry only `char_span`, never `sections`. So `target_section` is **NOT available downstream for free** — see Goal 5 correction (Codex P2 F3). **Build-time implementation requirement**, not a given: the implementing build must either thread `sections`/`target_section` through `attribution-join` (add the field to `RawArtifact`/`AttributedArtifact` and stop discarding it) OR recompute the section span from the hash-verified on-disk file at attribution time. |
 | A4 | Driving the **full** tool-calling reviewer inside the sandbox is not possible today (needs `get_context`/`write_review` → a live MCP server). | **high** | Follows from A1 + reviewer `tools:` frontmatter (MCP tools required). This is ADR-0025's named Revisit-If ("a future target needs the MCP server live in the sandbox"). |
 | A5 | A **reduced-fidelity** reviewer eval (inline diff + inline principles + prose stage instructions, prompt-judged) is a *representative-enough* proxy for stage catch-rate to bootstrap goal 6. | **medium** | Design judgment, not observed. **Build-time probe obligation:** before freezing the eval schema, the implementing build must run ≥3 planted-violation cases through both a reduced-fidelity call and a real reviewer spawn and confirm the reduced harness reproduces the same catch/miss verdicts. |
 | A6 | The reviewer is NOT in `CODE_AUTHORING_AGENTS` (`{"engineer"}`), so its failures do not attribute via ADR-0032's `code_author_agent_def` edge today. | **high** | ADR-0032 (`CODE_AUTHORING_AGENTS = {"engineer"}`) + `attribution-join.ts` contract in `features/evolution/.claude/CLAUDE.md`. |
@@ -198,9 +198,21 @@ Today `evaluate_candidate` always runs the global `run-evals.sh` (A2). The chang
 section of it), the runner runs `agents/{name}/evals/` instead of the global surface.
 Concretely, the guardrail-mode subprocess invocation gains a suite selector
 (`--eval-root agents/{name}/evals`); baseline vs candidate both run that suite; the §7
-holdout comparison is unchanged (`decideGate` still compares holdout pass-counts). The
-public `evaluate_candidate` input/output contract is **unchanged** — suite selection is
-derived from `target_path`, exactly as ADR-0025 derived injection mode from `target_path`.
+holdout comparison is unchanged (`decideGate` still compares holdout pass-counts).
+
+**Contract scope — precise claim (Codex P2 F1).** For the **whole-file** agent-def path
+(this goal), the public `evaluate_candidate` input/output contract is genuinely
+**unchanged** — suite selection is derived from `target_path`, exactly as ADR-0025 derived
+injection mode from `target_path`. The candidate is a whole-file body; today's
+`checkFrontmatterImmutable` (`services/frontmatter-guard.ts`) byte-compares the raw
+frontmatter block and passes body-only edits through. **The section-scoped path (goal 5) is
+the exception and DOES require a contract change** — the current input schema
+(`candidate_text`, `project_dir`, `splits`, `target_path` — `evaluate-candidate.ts:28-43`)
+carries no span, so a stage-only candidate has no frontmatter fence and is *rejected* by
+`checkFrontmatterImmutable`, while a full-file candidate gives a `checkNonTargetImmutable`
+no target span to enforce against. Goal 5 resolves this with an additive-optional
+`target_span` input; see Goal 5 §section-splice. Do not read "contract unchanged" as
+covering the section path.
 
 **The MCP-server constraint (A1/A4).** Per-stage reviewer cases need the reviewer to
 actually *review a diff*. The full reviewer calls `get_context`/`write_review` (MCP) — but
@@ -235,6 +247,7 @@ The two invariants are enforced by the **module contract**, not prose:
 | Module | Reads (state slice) | Writes | Barrier |
 |--------|--------------------|--------|---------|
 | M0 context-load | diff, principles, graph | `ctx` | first |
+| M0.5 review-stub | — | `write_review` IN_PROGRESS stub (empty findings, zeroed score) | first (before M1) |
 | M1 principle-compliance | `ctx` | `stage1.violations[]`, `stage1.honored[]` | cold |
 | M1.5 correctness-scan | `ctx` | `stage15.findings[]` | cold |
 | M2 code-quality | `ctx`, **`stage1.violations[]`** (dedup input) | `stage2.findings[]` | cold |
@@ -262,6 +275,18 @@ directory is **not on the module's readable path set**. A cold module *cannot* r
 The barrier lifts at M3/M4 when the runtime *adds* `*-SUMMARY.md` / plan files to the
 module's inputs. This converts the single most safety-relevant honor-system rule in
 `agents/reviewer.md` into a runtime-enforced invariant.
+
+**Write-cliff fail-safe preserved (Codex P2 F4).** `agents/reviewer.md`'s Early Output
+Protocol (lines 565–587) requires `write_review` as the reviewer's **FIRST tool call** — a
+`verdict:"IN_PROGRESS"` stub with empty `violations`/`honored` and a zeroed `score` — plus
+a **partial write immediately after Stage 1**, so that a run which times out or exhausts
+context still leaves an actionable `REVIEW.md`. The decomposition MUST preserve this: **M0.5
+review-stub** runs before M1 and emits the IN_PROGRESS stub; M1's completion triggers a
+partial `write_review` (Stage 1 findings + Stages 2–6 `[pending]`), and each later module
+re-writes as it finishes. Whichever topology goal 3 selects — per-stage spawn, two-phase, or
+single-agent — the stub-first + partial-after-Stage-1 fail-safe is a hard requirement of the
+runtime, not an optional optimization. A decomposed reviewer that only writes its artifact at
+the terminal verdict would *regress* the current write-cliff guarantee.
 
 ## Goal 3 — Measured-step agent runtime
 
@@ -333,15 +358,26 @@ wrong.
 runs BOTH suites; the accept rule becomes:
 
 ```
-accepted  ⟺  per_stage.holdout improves-or-holds  ∧  holistic.holdout strictly-improves-or-holds
-regressed ⟺  holistic.holdout regresses            (VETO — even if every per-stage suite improved)
+accepted  ⟺  per_stage.holdout strictly-improves (candidate_passed > baseline_passed)
+                                                    ∧  holistic.holdout does-not-regress
+regressed ⟺  holistic.holdout regresses            (VETO — even if per-stage strictly improved)
 ```
 
-A candidate that raises per-stage catch-rate but drops one golden-PR final verdict is
-**rejected**. This is the Goodhart guard in mechanical form: you cannot buy stage-level
-recall at the cost of aggregate-verdict correctness. Implementation-wise this is a second
-`decideGate` term ANDed with the existing one — the §7 strict-`>` posture is preserved on
-the holistic split and the composite is fail-closed.
+**Which split is strict, and why (Codex P2 F2).** The **primary per-stage suite keeps the
+existing §7 STRICT `>`** — `decideGate` (`eval-runner.ts:95-102`) accepts only when
+`candidate_passed > baseline_passed`, and the per-stage suite is exactly the fitness surface
+the mutation is trying to improve, so an equal-holdout tie is a rejection (no fitness change
+≠ accept). The **holistic suite is a NON-REGRESSION VETO**, not a second strict-improvement
+term: it does not need to strictly improve (a mutation targeting one stage will usually leave
+most golden-PR verdicts unchanged) — it only must **not regress**. A candidate that raises
+per-stage catch-rate but drops one golden-PR final verdict is **rejected**. This is the
+Goodhart guard in mechanical form: you cannot buy stage-level recall at the cost of
+aggregate-verdict correctness. Implementation-wise this is the existing `decideGate` strict-`>`
+on the per-stage split, ANDed with a holistic-non-regression predicate
+(`holistic.candidate_passed >= holistic.baseline_passed`); the composite is fail-closed.
+(Earlier drafts inverted this — applying `improves-or-holds` to per-stage and
+`strictly-improves` to holistic — which both weakened the §7 gate on the primary suite and
+over-constrained the veto; corrected here.)
 
 ## Goal 5 — Evolution-surface integration (stage-precise)
 
@@ -352,13 +388,24 @@ edge (A6 — reviewer ∉ `CODE_AUTHORING_AGENTS`), and a reviewer "failure" is 
 spurious verdict*, for which no durable production event exists (Codex catches escapes
 off-Canon). So the pilot's failure source is the **per-agent eval suite outcome**, not a
 production `review_violation`. A failing golden case already **declares its `stage`** (goal
-1). That gives a stage-precise attribution key *for free*:
+1). That gives a stage-precise attribution key — but **NOT for free** (Codex P2 F3):
 
 - New (pilot-scoped) failure kind: `agent_eval_miss` — `{ agent, case_id, stage,
   expected_finding }`. Its natural join is **stage → section span**: the stage id maps to
   the `## Stage N …` ATX heading in `agents/reviewer.md`, whose `char_span` ADR-0031's
-  `computeBodySections` **already computes** (A3). No new provenance plumbing — the section
-  spans exist today.
+  `computeBodySections` **computes at provenance-capture time** and stores on
+  `AssembledArtifact.sections` (`context-provenance.ts:266-277`).
+- **Implementation requirement — the spans are dropped before they reach attribution.**
+  `attribute_failure` today discards `sections` entirely: its `RawArtifact`
+  (`attribution-join.ts:364-372`) and `AttributedArtifact` (416-425) carry only a single
+  `char_span`, never the per-section span array. So `target_section` is **not** available to
+  the attribution consumer as-is. The implementing build MUST do one of two things: (a)
+  thread `sections`/`target_section` through `attribution-join` — add the field to
+  `RawArtifact`/`AttributedArtifact` and stop dropping it in the provenance→attribution
+  mapping; or (b) recompute the target stage's span from the **hash-verified** on-disk
+  `agents/reviewer.md` at attribution time (the whole-file `content_hash` re-check already
+  runs, so the file is proven byte-identical before recompute). This is new provenance
+  plumbing — a required build task, not a free lunch.
 - `join_basis` gains a value: **`agent_eval_stage_section`** (a stage-precise sibling of
   `code_author_agent_def`). The attribution carries an optional
   `target_section: { heading, char_span }`.
@@ -378,12 +425,29 @@ This is the one genuinely new mechanic and the one that **exercises ADR-0031's
 whole-file-hash Revisit-If**. Today a candidate is a whole-file body; the frontmatter guard
 asserts the frontmatter block is byte-identical. With section-scoped mutation:
 
-- The candidate mutates **one stage span**; the runtime splices it into the baseline body.
-- A generalized guard — call it `checkNonTargetImmutable` — asserts that **everything
-  outside the target `char_span` (frontmatter AND every other stage) is byte-identical to
-  baseline.** This is a strict superset of today's `checkFrontmatterImmutable`: frontmatter
-  immutability falls out as the special case where the target span is a body section (so
-  frontmatter is always outside it). Fail-closed, same posture as ADR-0031's amendment.
+- **The contract must change here — an additive span input (Codex P2 F1).** The current
+  `evaluate_candidate` schema (`candidate_text`, `project_dir`, `splits`, `target_path` —
+  `evaluate-candidate.ts:28-43`) has no way to name the target region, and its
+  `checkFrontmatterImmutable` byte-compares the *whole raw frontmatter block*. That breaks
+  both ways for a section candidate: a **stage-only** candidate carries no `---…---` fence,
+  so `checkFrontmatterImmutable` sees a differing block and **rejects it**; a **full-file**
+  candidate passes the frontmatter check but leaves the splice-guard no way to know which
+  region was *intended* to change. **Chosen resolution (the cleaner of the two options in
+  F1): callers perform the splice and pass span metadata through.** The learner splices its
+  stage rewrite into the baseline body and passes the **whole spliced file** as
+  `candidate_text` PLUS a new **additive-optional** `target_span: [start, end]` (byte
+  offsets into the baseline body, sourced from the `MutationTarget.char_span` selection
+  already emits). Whole-file agent-def mutations omit `target_span` and hit today's exact
+  path unchanged — so the field is backward-compatible, but the **section path is explicitly
+  a schema addition**, and the earlier "public contract unchanged" phrasing is corrected to
+  cover only the whole-file path (see Goal 1).
+- A generalized guard — call it `checkNonTargetImmutable` — reads `target_span` and asserts
+  that **everything outside that `char_span` (frontmatter AND every other stage) is
+  byte-identical to baseline.** This is a strict superset of today's
+  `checkFrontmatterImmutable`: frontmatter immutability falls out as the special case where
+  the target span is a body section (so frontmatter is always outside it). When `target_span`
+  is absent (whole-file path), the guard degrades to exactly today's
+  `checkFrontmatterImmutable`. Fail-closed, same posture as ADR-0031's amendment.
 
 ### Frontmatter-immutability preserved (ADR-0031 confirmed)
 
@@ -549,3 +613,34 @@ the PRD supplies strong priors and both resolve by sequencing:
 Neither rises to a HAS_QUESTIONS block: both are resolved by the measure-first structure the
 PRD itself mandates. If the user disagrees with the ~6× per-stage-spawn framing (D2), that
 is the one lever that would reshape the design — surfaced here for the plan-approval gate.
+
+## Review-response amendments (PR #454, Codex P2)
+
+Four P2 findings from the Codex review of this design-only PR were each verified against the
+cited source before editing (not blind-accepted); all four held. Resolutions:
+
+- **F1 — `evaluate_candidate` contract is NOT unchanged for the section path.** Verified:
+  the input schema (`evaluate-candidate.ts:28-43`) carries no span, and
+  `checkFrontmatterImmutable` (`frontmatter-guard.ts`) byte-compares the whole raw
+  frontmatter block — so a stage-only candidate is rejected and a full-file candidate leaves
+  the splice-guard no target. Fixed: the whole-file path keeps the "contract unchanged"
+  claim (Goal 1); the section path adds an **additive-optional `target_span: [start, end]`**
+  input, with callers performing the splice and passing span metadata through (Goal 5
+  §section-splice). "Contract unchanged" no longer covers the section path.
+- **F2 — composite accept rule weakened the §7 strict gate.** Verified: `decideGate`
+  (`eval-runner.ts:95-102`) accepts only on strict `candidate_passed > baseline_passed`; the
+  draft's `per_stage improves-or-holds` accepted a tie. Fixed: the **primary per-stage suite
+  keeps STRICT `>`** (matching `decideGate`); the **holistic suite is a non-regression VETO**
+  (`>= baseline`, must not regress, need not strictly improve). Goal 4 formula + prose
+  corrected.
+- **F3 — `target_section` is not available "for free."** Verified: `context-provenance.ts`
+  computes+stores `sections` (266-277), but `attribution-join.ts` drops them — `RawArtifact`
+  (364-372) and `AttributedArtifact` (416-425) carry only `char_span`. Fixed: A3 downgraded
+  high→**medium**; Goal 5 now names an explicit build task — thread `sections` through
+  `attribution-join`, OR recompute the span from the hash-verified file — instead of "no new
+  provenance plumbing."
+- **F4 — decomposition omitted the reviewer's write-cliff fail-safe.** Verified:
+  `reviewer.md` Early Output Protocol (565-587) requires a `write_review` IN_PROGRESS stub as
+  the FIRST tool call + a partial write after Stage 1. Fixed: added **M0.5 review-stub**
+  module to the Goal 2 table (runs before M1) and a prose paragraph making the
+  stub-first + partial-after-Stage-1 fail-safe a hard requirement of any decomposed topology.
