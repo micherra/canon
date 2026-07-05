@@ -66,6 +66,11 @@ module.exports = {
           "^src/features/orchestration/services/pitfall-enrichment\\.ts$",
           "^src/features/orchestration/services/hot-file-detection\\.ts$",
           "^src/features/orchestration/services/area-memory-enrichment\\.ts$",
+          // ADR-0038: decision-persistence mirrors a reaped workspace's decision events
+          // into drift.db orchestrator_decisions, called by janitor.ts (already excepted
+          // above) at the reap-time destruction boundary — deferred DI exception until a
+          // DI container is wired
+          "^src/features/orchestration/services/decision-persistence\\.ts$",
         ],
       },
       to: { path: "^src/platform/storage/drift/" },
