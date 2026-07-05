@@ -96,7 +96,7 @@ Every build request goes through PM triage: (1) sharpen requirements, (2) assess
 | **Non-trivial** — 2+ files, cross-layer, design questions, high blast radius | → architect; include sharpened-request.md in spawn prompt |
 
 ### Autonomy Tier Protocol
-<!-- last-updated: 2026-06-11 -->
+<!-- last-updated: 2026-07-03 -->
 
 After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_paths, override_tier? })` to assess build risk.
 
@@ -108,7 +108,7 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **Plan approval and initial review verdict are always mandatory regardless of tier — these are the highest-value checkpoints where wrong assumptions are caught.**
 
-**Deterministic-gate invariant**: deterministic code gates — the verify step (`npm run build`/`lint`/`test`/`bash hooks/lint.sh`), the dead-wire reachability gate (`hooks/dead-wire-gate.sh`), the summary-vs-diff phantom-claim check (`hooks/summary-diff-check.sh`), the post-scribe scope guard (`hooks/scribe-scope-guard.sh`), the shell-CI-parity gate (`hooks/shell-test-gate.sh`), the context-manifest-freshness gate (`hooks/context-manifest-gate.sh`), and contract-checker postconditions — run in **every** tier unconditionally. Only human/model (HITL) supervision may be traded away by higher tiers. No deterministic gate appears among the per-tier skippable items above.
+**Deterministic-gate invariant**: deterministic code gates — the verify step (`npm run build`/`lint`/`test`/`bash hooks/lint.sh`), the dead-wire reachability gate (`hooks/dead-wire-gate.sh`), the summary-vs-diff phantom-claim check (`hooks/summary-diff-check.sh`), the post-scribe scope guard (`hooks/scribe-scope-guard.sh`), the shell-CI-parity gate (`hooks/shell-test-gate.sh`), the context-manifest-freshness gate (`hooks/context-manifest-gate.sh`), the stop-hook tail-enforcement gate (`hooks/tail-enforcement-gate.sh` — fail-closed `Stop` hook blocking a build session from ending when its tail steps didn't run and weren't legitimately skipped), and contract-checker postconditions — run in **every** tier unconditionally. Only human/model (HITL) supervision may be traded away by higher tiers. No deterministic gate appears among the per-tier skippable items above.
 
 **Fail-safe**: If `compute_autonomy_tier` returns an error or the tool is unavailable, default to "supervised".
 
@@ -250,6 +250,8 @@ Read `references/team-dispatch-protocol.md` BEFORE spawning a team-dispatched re
 | `"session timeout"` | Session ended before tail steps |
 | `"no new patterns observed"` | Learn step: no novel patterns |
 | `"documentation-only diff, verify produces zero signal"` | All changed files are `.md`/`.txt` |
+
+The machine-authoritative copy of this allowlist lives at `hooks/lib/accepted-skip-reasons.txt` (read by `hooks/tail-enforcement-gate.sh`, the fail-closed `Stop` hook that blocks a build session from ending when a tail step is unaccounted for). A parity test enforces that the file and this prose list stay in sync — update both together.
 
 - Inline WARNING resolution (no fix agent spawned): log synthetic step `step_id: inline-fix`, `status: completed`, resolution in `outcome`.
 
