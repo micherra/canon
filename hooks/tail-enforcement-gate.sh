@@ -19,9 +19,13 @@
 #   1. Loop-guard: stop_hook_active == true → exit 0 (never re-block).
 #   2. Resolve project root via `git -C "$cwd" rev-parse --show-toplevel`.
 #      Not a git repo → exit 0 (fail-open: nothing to guard).
-#   3. Scan .canon/workspaces/*/*/journal.json for a sibling .lock whose
-#      session_id matches the Stop event's session_id. No match → exit 0
-#      (fail-open: non-build / chat / other-session stop).
+#   3. Scan .canon/workspaces/*/*/journal.json for one whose OWN persisted
+#      session_id matches the Stop event's session_id (journal.json survives
+#      finalize_workspace's unconditional .lock release — see DESIGN.md "Why
+#      journal.json is the right carrier" — so it, not .lock, is the durable
+#      signal). No match → exit 0 (fail-open: non-build / chat / other-session
+#      stop, OR a session-matched journal that is itself unparseable — an
+#      accepted identity gap ADR-0038 already documents).
 #   4. Read the matched journal. ship != completed → exit 0 (fail-open:
 #      mid-build, including every plan-approval / review HITL pause).
 #   5. Doc-only diff skip: worktree diff against the default branch is
@@ -42,8 +46,11 @@
 # inspect stdout for a "decision" key.
 #
 # Fail-closed sites (hooks-fail-closed / hooks-observable-failures):
-#   - jq not found            → CANON WARNING + block (cannot parse anything)
-#   - journal.json unparseable → CANON WARNING + block
+#   - jq not found            → CANON WARNING + block, emitted WITHOUT jq
+#     (a hardcoded, JSON-special-char-free literal reason — see step 0 below;
+#     block()'s own jq-based escaping cannot be used here without dying first)
+#   - journal.json unparseable (post-match, TOCTOU race backstop) → CANON
+#     WARNING + block
 #   - allowlist file unreadable → CANON WARNING + block
 #   - worktree missing at doc-only-check time → skip that check, proceed to
 #     enforce (documented in step 5 above)
@@ -77,10 +84,19 @@ block() {
 # Step 0 (prerequisite): jq is required to parse the Stop payload, the
 # journal, and the allowlist. Without it we cannot PROVE the tail ran —
 # fail CLOSED (hooks-fail-closed).
+#
+# block() itself depends on jq (`jq -Rs .` to escape the reason) — calling it
+# here would die at exit 127 under `set -euo pipefail` BEFORE any JSON reaches
+# stdout, silently defeating the documented fail-closed behavior (the one case
+# where the gate cannot verify the tail is exactly the case it would fail to
+# block — see PROBE-FINDINGS.md). Emit the block JSON directly instead, with a
+# hardcoded literal reason containing no JSON-special characters (no `"`, `\`,
+# or control chars) so no escaping is needed.
 # ---------------------------------------------------------------------------
 if ! command -v jq >/dev/null 2>&1; then
   echo "CANON WARNING: [tail-enforcement-gate] jq not found — cannot verify tail; blocking fail-closed." >&2
-  block "jq unavailable: cannot verify context-sync/learn tail ran."
+  printf '%s\n' '{"decision":"block","reason":"jq unavailable: cannot verify context-sync/learn tail ran."}'
+  exit 0
 fi
 
 INPUT=$(cat)
@@ -109,7 +125,11 @@ if [[ -z "$ROOT" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3: find the active build for THIS session via .lock session_id match.
+# Step 3: find the active build for THIS session via journal.session_id
+# match. journal.json (not .lock) is the durable signal — finalize_workspace
+# releases .lock unconditionally BEFORE this gate's ship==completed trigger
+# can ever fire, but never deletes journal.json (only copies it to the
+# archive) — see DESIGN.md "Why journal.json is the right carrier".
 # ---------------------------------------------------------------------------
 shopt -s nullglob
 JOURNALS=("$ROOT"/.canon/workspaces/*/*/journal.json)
@@ -118,20 +138,16 @@ shopt -u nullglob
 MATCHED_WORKSPACE=""
 if [[ -n "$STOP_SESSION_ID" ]]; then
   for j in "${JOURNALS[@]+"${JOURNALS[@]}"}"; do
-    ws_dir="$(dirname "$j")"
-    lock_file="$ws_dir/.lock"
-    if [[ -f "$lock_file" ]]; then
-      lock_session=$(jq -r '.session_id // empty' < "$lock_file" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unparseable/absent lock session_id treated as no-match
-      if [[ -n "$lock_session" ]] && [[ "$lock_session" == "$STOP_SESSION_ID" ]]; then
-        MATCHED_WORKSPACE="$ws_dir"
-        break
-      fi
+    journal_session=$(jq -r '.session_id // empty' < "$j" 2>/dev/null || true) # DOCUMENTED FAIL-OPEN -- unparseable/absent journal session_id treated as no-match
+    if [[ -n "$journal_session" ]] && [[ "$journal_session" == "$STOP_SESSION_ID" ]]; then
+      MATCHED_WORKSPACE="$(dirname "$j")"
+      break
     fi
   done
 fi
 
 if [[ -z "$MATCHED_WORKSPACE" ]]; then
-  exit 0 # AC#3: no session-matched build — non-build / chat / other-session stop, no-op
+  exit 0 # AC#3: no session-matched build — non-build / chat / other-session stop, or an unresolvable (unparseable) journal identity, no-op
 fi
 
 JOURNAL_FILE="$MATCHED_WORKSPACE/journal.json"

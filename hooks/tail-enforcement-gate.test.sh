@@ -2,9 +2,17 @@
 # tail-enforcement-gate.test.sh — Test suite for hooks/tail-enforcement-gate.sh
 #
 # Fixture-driven: each test builds a throwaway temp "project root" (mktemp -d,
-# git init) containing a .canon/workspaces/<branch>/<slug>/ tree with
-# journal.json + .lock (and, for the doc-only case, a real worktree/ git repo),
-# then feeds the gate a Stop-event JSON payload on stdin.
+# git init) containing a .canon/workspaces/<branch>/<slug>/ tree with a
+# journal.json whose top-level `session_id` field matches the Stop event's
+# session_id (and, for the doc-only case, a real worktree/ git repo), then
+# feeds the gate a Stop-event JSON payload on stdin.
+#
+# NO fixture writes a `.lock` file (tail-gate-codex-fix P1): finalize_workspace
+# releases `.lock` unconditionally before the gate's ship==completed trigger
+# can ever fire, so `.lock` is not a viable detection signal for a shipped
+# build — see plans/tail-gate-codex-fix/DESIGN.md "Why journal.json is the
+# right carrier". Detection now reads session_id directly off journal.json,
+# which finalize_workspace copies to the archive but never deletes.
 #
 # The gate signals "block" via {"decision":"block",...} JSON on stdout with
 # exit 0 (not via a non-zero exit code — see PROBE-FINDINGS P1), so assertions
@@ -53,8 +61,9 @@ make_project() {
 
 # ---------------------------------------------------------------------------
 # make_workspace <project_dir> <session_id> <journal_json>
-# Writes .canon/workspaces/br/slug/journal.json + .lock under the project.
-# Prints the workspace dir.
+# Writes .canon/workspaces/br/slug/journal.json under the project, merging
+# top-level session_id into the given journal JSON (no .lock file — detection
+# is journal.session_id-based, see file header). Prints the workspace dir.
 # ---------------------------------------------------------------------------
 make_workspace() {
   local project="$1"
@@ -62,8 +71,7 @@ make_workspace() {
   local journal_json="$3"
   local ws_dir="$project/.canon/workspaces/br/slug"
   mkdir -p "$ws_dir"
-  printf '%s' "$journal_json" > "$ws_dir/journal.json"
-  printf '{"job_id":"j1","pid":123,"session_id":"%s","started_at":"2026-01-01T00:00:00Z"}' "$session_id" > "$ws_dir/.lock"
+  printf '%s' "$journal_json" | jq --arg sid "$session_id" '. + {session_id: $sid}' > "$ws_dir/journal.json"
   printf '%s' "$ws_dir"
 }
 
@@ -139,7 +147,7 @@ assert_pass() {
 echo "=== tail-enforcement-gate.test.sh ==="
 
 # ---------------------------------------------------------------------------
-# Test 1: Happy pass — matched lock, ship=completed, context-sync=completed,
+# Test 1: Happy pass — matched journal, ship=completed, context-sync=completed,
 # learn=completed → no block.
 # ---------------------------------------------------------------------------
 P1=$(make_project)
@@ -180,12 +188,12 @@ make_workspace "$P5" "SESSION-5" "$J5" > /dev/null
 assert_pass "5. pass — learn skipped with accepted reason" "$(stop_input "SESSION-5" "$P5" false)"
 
 # ---------------------------------------------------------------------------
-# Test 6: No-op — no session-matched lock (chat / other session).
+# Test 6: No-op — no session-matched journal (chat / other session).
 # ---------------------------------------------------------------------------
 P6=$(make_project)
 J6='{"steps":[{"step_id":"ship","status":"completed"},{"step_id":"context-sync","status":"completed"}]}'
 make_workspace "$P6" "SESSION-6-OWNER" "$J6" > /dev/null
-assert_pass "6. no-op — no session-matched lock" "$(stop_input "SESSION-6-OTHER" "$P6" false)"
+assert_pass "6. no-op — no session-matched journal" "$(stop_input "SESSION-6-OTHER" "$P6" false)"
 
 # ---------------------------------------------------------------------------
 # Test 7: No-op — ship not completed (mid-build; review done, ship started)
@@ -214,14 +222,20 @@ make_workspace "$P9" "SESSION-9" "$J9" > /dev/null
 assert_pass "9. loop-guard — stop_hook_active true never re-blocks" "$(stop_input "SESSION-9" "$P9" true)"
 
 # ---------------------------------------------------------------------------
-# Test 10: Fail-closed — unparseable journal on a session-matched workspace.
+# Test 10: No-op — a session's OWN journal is unparseable. Detection now
+# extracts session_id directly from journal.json (P1 fix), so an unparseable
+# journal cannot be attributed to any session — this is the accepted
+# fail-open identity gap ADR-0038 already documents (detection is fail-open
+# on no-match; enforcement is fail-closed only once a build IS matched).
+# Before the P1 fix, a separate well-formed .lock carried the session match
+# independently of journal parseability, so this same fixture used to BLOCK;
+# that signal no longer exists (by design — see DESIGN.md).
 # ---------------------------------------------------------------------------
 P10=$(make_project)
 WS10="$P10/.canon/workspaces/br/slug"
 mkdir -p "$WS10"
 printf '{not valid json' > "$WS10/journal.json"
-printf '{"job_id":"j1","pid":123,"session_id":"SESSION-10","started_at":"2026-01-01T00:00:00Z"}' > "$WS10/.lock"
-assert_block "10. fail-closed — unparseable journal blocks" "$(stop_input "SESSION-10" "$P10" false)"
+assert_pass "10. no-op — own journal unparseable, cannot resolve session_id (accepted fail-open gap)" "$(stop_input "SESSION-10" "$P10" false)"
 
 # ---------------------------------------------------------------------------
 # Test 11: Parity assertion — every accepted-skip-reasons.txt line appears
@@ -241,6 +255,47 @@ if [[ "$PARITY_OK" -eq 1 ]]; then
   PASS=$((PASS + 1))
 else
   echo "  FAIL: 11. parity — accepted-skip-reasons.txt diverges from CLAUDE.md"
+  FAIL=$((FAIL + 1))
+fi
+
+# ---------------------------------------------------------------------------
+# Test 12: P1 (dc-02) — lock-absent-but-journal-matches. Explicitly asserts NO
+# .lock file exists anywhere under the workspace and detection still fires via
+# journal.session_id alone. finalize_workspace releases .lock unconditionally
+# BEFORE the ship==completed trigger can ever fire, so a real shipped-but-
+# tail-incomplete build reaches the Stop hook with .lock already gone — this
+# is the exact defeat DESIGN.md documents and the fixture this fix targets.
+# ---------------------------------------------------------------------------
+P12=$(make_project)
+J12='{"steps":[{"step_id":"ship","status":"completed"},{"step_id":"context-sync","status":"completed"}]}'
+WS12=$(make_workspace "$P12" "SESSION-12" "$J12")
+if [[ -f "$WS12/.lock" ]]; then
+  echo "  FAIL: 12. setup invariant violated — .lock file should not exist"
+  FAIL=$((FAIL + 1))
+else
+  assert_block "12. block — session matched via journal.session_id with NO .lock present (dc-02)" "$(stop_input "SESSION-12" "$P12" false)"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 13: P2 (dc-01) — jq-missing fail-closed emit. Runs the gate with a PATH
+# containing the utilities it needs EXCEPT jq (mirrors PROBE-FINDINGS.md);
+# asserts the gate emits the documented decision:block JSON without depending
+# on jq, instead of dying silently at exit 127 with empty stdout.
+# ---------------------------------------------------------------------------
+NOJQ_DIR=$(mktemp -d)
+TMP_ROOTS+=("$NOJQ_DIR")
+for bin in bash cat grep dirname env printf ln mktemp git command; do
+  bin_path=$(command -v "$bin" 2>/dev/null) && ln -sf "$bin_path" "$NOJQ_DIR/$bin"
+done
+P13=$(make_project)
+NOJQ_OUTPUT=$(env PATH="$NOJQ_DIR" bash "$HOOK" <<< '{"session_id":"x","cwd":"'"$P13"'"}' 2>&1)
+NOJQ_EXIT=$?
+if [[ "$NOJQ_EXIT" -eq 0 ]] && printf '%s' "$NOJQ_OUTPUT" | grep -q '"decision"[[:space:]]*:[[:space:]]*"block"'; then
+  echo "  PASS: 13. jq-missing emits decision:block instead of dying at 127 (dc-01)"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: 13. jq-missing emits decision:block instead of dying at 127 (dc-01)"
+  echo "        expected exit=0 with decision:block, got exit=$NOJQ_EXIT output=$NOJQ_OUTPUT"
   FAIL=$((FAIL + 1))
 fi
 

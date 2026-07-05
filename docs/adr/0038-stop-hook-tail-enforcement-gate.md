@@ -1,12 +1,12 @@
 ---
-adr: "0037"
+adr: "0038"
 title: "Tail enforcement is a harness-fired Stop hook triggered by ship-completed"
 status: accepted
 date: "2026-07-03"
 build: "add-a-deterministic-stop-hook-tail-enforcement-gate-delta-d3-from-the"
 ---
 
-# ADR-0037: Tail enforcement is a harness-fired Stop hook triggered by ship-completed
+# ADR-0038: Tail enforcement is a harness-fired Stop hook triggered by ship-completed
 
 ## Context
 
