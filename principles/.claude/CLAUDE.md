@@ -107,13 +107,13 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 - Principles may declare `scope.tags` in frontmatter for tag-based matching; OR semantics with `layers` (added 2026-05-02)
 
 ## Conventions
-<!-- last-updated: 2026-06-12 -->
+<!-- last-updated: 2026-07-02 -->
 
 - Each principle has a unique `id` used for compliance tracking
 - Principles should be specific and actionable — not aspirational
 - Rules (6): `secrets-never-in-code`, `least-privilege-access`, `fail-closed-by-default`, `validate-at-trust-boundaries`, `refactoring-integrity`, `hooks-fail-closed` (added 2026-05-29 — safety/guard hooks must fail closed on extraction failure or missing tooling; scoped to `hooks/**`). Note: `no-llm-calls-in-mcp-tools` relocated to `.canon/principles/rules/` (Canon-internal, portable: false).
 - Strong opinions cover architecture, testing, error handling, data flow
-- Conventions cover naming, file organization, test structure (25 total in `principles/conventions/` — `ls principles/conventions/*.md | wc -l`; 37 Canon-internal conventions in `.canon/principles/conventions/`, portable: false — `ls .canon/principles/conventions/*.md | wc -l`)
+- Conventions cover naming, file organization, test structure (25 total in `principles/conventions/` — `ls principles/conventions/*.md | wc -l`; 38 Canon-internal conventions in `.canon/principles/conventions/`, portable: false — `ls .canon/principles/conventions/*.md | wc -l`)
 - `accumulator-test-coverage` (added 2026-05-16) — accumulator functions in `mcp-server/**` require at least one test case with N>1 input and exact numeric assertion; capped accumulators require below-cap, at-cap, and above-cap cases
 - `source-shared-hook-helpers` (added 2026-05-29) — hooks that parse Claude Code `tool_input` JSON must source `hooks/lib/canon-hook-lib.sh` and use `canon_extract_command`; no inlined extraction expressions; scoped to `hooks/**`
 - `hooks-observable-failures` (added 2026-05-29) — bare silent swallows (`|| true`, `2>/dev/null`) in `hooks/**` must carry a justifying comment, emit `CANON WARNING:` to stderr, or exit non-zero; the `hooks/**`-scoped sibling of `observable-best-effort` at convention severity (see decision quality-coverage-01); scoped to `hooks/**`
@@ -122,6 +122,7 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 - `mechanism-ships-first-instance` (added 2026-06-09) — **Canon-internal** (relocated to `.canon/principles/conventions/`, portable: false); a build that introduces a new artifact class, registry, tracked template system, or workflow gate MUST ship at least one real, minimal, tracked instance in the same PR
 - `scanner-avoids-its-own-pattern` (added 2026-06-09) — **Canon-internal** (relocated to `.canon/principles/conventions/`, portable: false); a hook, script, grep, or verification step designed to detect pattern S must not contain S verbatim in any intercepted position
 - `disk-is-source-of-truth-on-resume` (added 2026-06-11) — **Canon-internal** (relocated to `.canon/principles/conventions/`, portable: false); scoped to `agents/**`, `rules/**`, `principles/**`, `references/**`, `CLAUDE.md`
+- `removal-sweep-includes-prose` (added 2026-07-02) — **Canon-internal** (`.canon/principles/conventions/`, portable: false); a removal PR (or its immediate follow-up) must grep every in-scope prose surface (`agents/*.md`, `rules/*.md`, `skills/**`, `references/*.md`, `docs/**`, `CLAUDE.md`, `CONTEXT.md`, `mcp-server/**/*.md`) for the removed name and correct agent-facing references, not just code
 
 ## Anti-Rationalization
 
