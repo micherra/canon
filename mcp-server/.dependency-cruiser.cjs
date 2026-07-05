@@ -71,6 +71,11 @@ module.exports = {
           // above) at the reap-time destruction boundary — deferred DI exception until a
           // DI container is wired
           "^src/features/orchestration/services/decision-persistence\\.ts$",
+          // ADR-0038: decisions-corpus reads the durable orchestrator_decisions table
+          // (getDriftDb(...).getOrchestratorDecisions().getAll()) for the offline
+          // cross-workspace reader/aggregator — deferred DI exception until a DI
+          // container is wired
+          "^src/features/orchestration/services/decisions-corpus\\.ts$",
         ],
       },
       to: { path: "^src/platform/storage/drift/" },
