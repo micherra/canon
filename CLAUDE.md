@@ -480,7 +480,7 @@ initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named life
 
 Read `references/loop-framework.md` BEFORE dispatching any loop or consuming an `ORCHESTRATOR_ACTION` line.
 
-## Project Structure <!-- last-updated: 2026-07-03 -->
+## Project Structure <!-- last-updated: 2026-07-05 -->
 
 ```
 canon/
@@ -496,7 +496,7 @@ canon/
 │       ├── app/          # Entry point (index.ts), tool registration
 │       ├── domains/      # Shared domain types (flows, workspaces, messages, board)
 │       ├── features/     # Tool implementations grouped by feature
-│       │   ├── orchestration/   # Orchestration runtime: init_workspace, finalize_workspace, log_step, batch_log_steps, record_agent_metrics, etc.
+│       │   ├── orchestration/   # Orchestration runtime: init_workspace, finalize_workspace, log_step, batch_log_steps, record_agent_metrics, etc.; get_decisions_corpus — offline cross-workspace decisions reader/aggregator unioning live workspaces with the durable drift.db `orchestrator_decisions` table (ADR-0040)
 │       │   ├── principles/      # get_principles, list_principles, get_compliance
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
