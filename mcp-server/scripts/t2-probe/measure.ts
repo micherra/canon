@@ -189,7 +189,7 @@ export async function runMeasurement(projectDir: string): Promise<MeasureResult>
           diff_available: false,
           failed_open: false,
           review_id: review.review_id,
-          reviewer_flagged,
+          reviewer_flagged: reviewerFlagged,
         });
         continue;
       }
@@ -211,7 +211,7 @@ export async function runMeasurement(projectDir: string): Promise<MeasureResult>
         diff_available: true,
         failed_open: checkerResult.failed_open,
         review_id: review.review_id,
-        reviewer_flagged,
+        reviewer_flagged: reviewerFlagged,
       });
     }
   }
