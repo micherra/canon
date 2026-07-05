@@ -36,6 +36,17 @@ describe("runCheckerOnDiff — fail-open forced-error path (dc-02)", () => {
     }).not.toThrow();
   });
 
+  it("returns empty findings + failed_open:true when the injected shellRunner itself throws, never propagates", () => {
+    const shellRunner = (): never => {
+      throw new Error("hostile/buggy runner exploded");
+    };
+
+    expect(() => {
+      const result = runCheckerOnDiff(FAKE_DIFF, FAKE_RUBRIC_PATH, { shellRunner });
+      expect(result).toEqual({ failed_open: true, findings: [] });
+    }).not.toThrow();
+  });
+
   it("returns empty findings + failed_open:true on timeout", () => {
     const shellRunner = () => processResult({ exitCode: 1, ok: false, timedOut: true });
 

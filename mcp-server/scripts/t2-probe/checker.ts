@@ -63,9 +63,11 @@ const VERDICT_END = "---END_VERDICT---";
  * (same format as `agents/evaluator.md`).
  *
  * FAILS OPEN, exhaustively: unreadable rubric, subprocess error, non-zero
- * exit, timeout, empty stdout, or missing/unparseable delimiters all return
- * `{ findings: [], failed_open: true }`. Never throws. There is no code path
- * in which this function returns a value that could gate a build.
+ * exit, timeout, empty stdout, missing/unparseable delimiters, OR a throw
+ * from the shell-invocation step itself (the real `runShell` adapter never
+ * throws, but the injectable `shellRunner` seam admits one that could) all
+ * return `{ findings: [], failed_open: true }`. Never throws. There is no
+ * code path in which this function returns a value that could gate a build.
  */
 export function runCheckerOnDiff(
   diff: string,
@@ -97,6 +99,12 @@ export function runCheckerOnDiff(
   try {
     const command = `claude -p --model haiku --output-format text < '${promptFile}'`;
     result = shellRunner(command, cwd, timeout);
+  } catch {
+    // Defensive: the real `runShell` adapter never throws, but the injectable
+    // `ShellRunner` seam admits a hostile/buggy runner that could. Total
+    // fail-open requires this be caught too, not just non-ok/timeout/empty
+    // results — see docstring above.
+    return { failed_open: true, findings: [] };
   } finally {
     try {
       rmSync(tmpDir, { force: true, recursive: true });
