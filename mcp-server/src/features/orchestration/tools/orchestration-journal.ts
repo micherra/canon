@@ -63,6 +63,17 @@ export type Journal = {
   steps: JournalStep[];
   version: 1;
   workspace: string;
+  /**
+   * The session that owns this workspace, refreshed on every init_workspace
+   * create/resume. Durable session-identity carrier for the stop-hook
+   * tail-enforcement gate (hooks/tail-enforcement-gate.sh): journal.json
+   * survives finalize_workspace (which releases the ephemeral `.lock` mutex
+   * unconditionally, before the gate's ship==completed trigger can ever
+   * fire), so it — not `.lock` — is the signal the gate matches a Stop
+   * event's session_id against. Absent when init_workspace was called
+   * without a session_id (never written as the literal "unknown").
+   */
+  session_id?: string;
 };
 
 export type LogStepInput = {
@@ -262,7 +273,12 @@ async function readJournal(workspace: string): Promise<Journal> {
   // Filter to well-formed step objects only — corrupted entries (null, missing fields)
   // would throw later in finalizeWorkspace/scanArtifacts.
   const steps = Array.isArray(obj.steps) ? obj.steps.filter(isWellFormedStep) : [];
-  return { steps, version: 1, workspace };
+  // Preserve session_id from the parsed file — the durable identity carrier the
+  // stop-hook tail-enforcement gate matches a Stop event's session_id against
+  // (see the Journal type doc). Malformed/non-string values are dropped (never
+  // propagate a corrupt session_id downstream).
+  const session_id = typeof obj.session_id === "string" ? obj.session_id : undefined;
+  return { session_id, steps, version: 1, workspace };
 }
 
 async function writeJournal(workspace: string, journal: Journal): Promise<void> {
@@ -642,5 +658,7 @@ export async function finalizeWorkspace(
 }
 
 // Exports for registration layer and reconcile-workspace.ts (same module family, no barrel).
+// writeJournal is also reused by init-workspace.ts to seed/refresh session_id
+// (tail-gate-codex-fix P1) — the single journal writer, not a second one.
 export const journalFilename = "journal.json";
-export { journalPath as _journalPath, readJournal, scanArtifactList };
+export { journalPath as _journalPath, readJournal, scanArtifactList, writeJournal };

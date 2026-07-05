@@ -20,6 +20,7 @@ import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
 import { registerFromInit } from "../services/active-workspace-registration.ts";
 import { buildCachePrefix } from "../services/cache-prefix-builder.ts";
 import { acquireLock } from "../services/workspace-lock.ts";
+import { readJournal, writeJournal } from "./orchestration-journal.ts";
 import { validateSeedPath } from "./seed-workspace.ts";
 
 type InitWorkspaceInput = {
@@ -518,6 +519,36 @@ type CreateNewWorkspaceOptions = {
   pluginDir: string;
 };
 
+/**
+ * Seed plans/{slug}/ artifacts (runbook, planning brief) and journal.json for a
+ * brand-new workspace. journal.json is seeded ONLY when `input.session_id` is
+ * present (tail-gate-codex-fix P1) — the durable signal
+ * hooks/tail-enforcement-gate.sh matches a Stop event's session_id against,
+ * since it survives finalize_workspace's unconditional .lock release. Omitted
+ * entirely otherwise (never write the literal "unknown").
+ */
+async function seedNewWorkspaceArtifacts(
+  workspace: string,
+  slug: string,
+  input: InitWorkspaceInput,
+): Promise<void> {
+  await mkdir(join(workspace, "plans", slug), { recursive: true });
+  if (input.runbook_content) {
+    await writeFile(join(workspace, "plans", slug, "runbook.md"), input.runbook_content);
+  }
+  if (input.brief_content) {
+    await writeFile(join(workspace, "plans", slug, "planning-brief.md"), input.brief_content);
+  }
+  if (input.session_id) {
+    await writeJournal(workspace, {
+      session_id: input.session_id,
+      steps: [],
+      version: 1,
+      workspace,
+    });
+  }
+}
+
 /** Create a brand-new workspace (no collision, no resume). */
 async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<InitWorkspaceResult> {
   const { input, branchDir, sanitized, baseSlug, projectDir, pluginDir } = opts;
@@ -562,13 +593,7 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
     };
   }
 
-  await mkdir(join(workspace, "plans", slug), { recursive: true });
-  if (input.runbook_content) {
-    await writeFile(join(workspace, "plans", slug, "runbook.md"), input.runbook_content);
-  }
-  if (input.brief_content) {
-    await writeFile(join(workspace, "plans", slug, "planning-brief.md"), input.brief_content);
-  }
+  await seedNewWorkspaceArtifacts(workspace, slug, input);
 
   const result = await finalizeNewWorkspace(store, input, {
     board,
@@ -579,6 +604,24 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
     workspace,
   });
   return result;
+}
+
+/**
+ * Refresh journal.json's top-level session_id to the re-entering session
+ * (tail-gate-codex-fix P1). Read-modify-write preserving `steps` — reuses the
+ * existing readJournal/writeJournal pair, not a second journal writer. A
+ * no-op when `sessionId` is absent (leave the existing value untouched) or
+ * already current (skip the write).
+ */
+async function refreshJournalSessionId(
+  workspace: string,
+  sessionId: string | undefined,
+): Promise<void> {
+  if (!sessionId) return;
+  const journal = await readJournal(workspace);
+  if (journal.session_id === sessionId) return;
+  journal.session_id = sessionId;
+  await writeJournal(workspace, journal);
 }
 
 export async function initWorkspaceFlow(
@@ -600,6 +643,11 @@ export async function initWorkspaceFlow(
     session_id: input.session_id,
   });
   if (resumeResult) {
+    // Gated results (lock_gated: true) carry no workspace to write to — a foreign
+    // session owns this build, so we must not attribute it to the current caller.
+    if (!resumeResult.lock_gated) {
+      await refreshJournalSessionId(resumeResult.workspace, input.session_id);
+    }
     registerFromInit(projectDir, input, resumeResult, resumeResult.session);
     return resumeResult;
   }
