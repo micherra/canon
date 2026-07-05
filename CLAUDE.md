@@ -159,12 +159,15 @@ Append the matching enrichment text from `references/engineer-spawn-enrichment.m
 4. **Validate architect output**: Check Requirements Coverage section. Surface any `descoped`/`partial`/missing requirements to user before proceeding. If the section is absent or has no rows, treat all requirements as `descoped` and surface to user. For `covered` rows, verify each names an owning runbook step — rows without an owner are treated as `partial`. Proceed silently if all requirements are `covered` with owners.
 5. Present runbook for user approval. Architect decides execution strategy — orchestrator follows it.
    **Plan-time base-advance advisory (Inc-0):** Before presenting the runbook for approval, run
-   `git fetch origin`, then call `forecast_base_advance({ workspace, declared_files, base_commit })`
+   `git fetch origin` **fail-open** (e.g. `git fetch origin || true`) — a fetch failure (origin
+   missing or temporarily unreachable) must NOT block plan approval; proceed against possibly-stale
+   `origin/main` in that case. Then call `forecast_base_advance({ workspace, declared_files, base_commit })`
    where `declared_files` is the union of the task plans' `files:` frontmatter. If the returned
    `advisory` is non-null, include it verbatim as a one-line note in the plan-approval presentation
    ("Heads-up: {advisory}"). **Advisory-only — it never blocks dispatch and never alters the
-   approval decision.** Silent (no line shown) when `advisory` is null. (Cross-referenced from
-   Post-Step Effects → "After architect", which already spawns the design renderer before this gate.)
+   approval decision.** Silent (no line shown) when `advisory` is null (including when the fetch
+   above failed and the tool ran against stale ref data). (Cross-referenced from Post-Step Effects
+   → "After architect", which already spawns the design renderer before this gate.)
 
    **Kill-criterion (Inc-0 anticipatory thesis):** If, over a handful of real builds, the
    base-advance advisory never fires OR never changes what the user/orchestrator does (they would
