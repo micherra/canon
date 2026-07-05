@@ -3,7 +3,7 @@
  *
  * Tests for DecisionsDao — the legacy per-run decisions table (v2 `decisions`).
  * Relocated out of drift-db-flowruns.test.ts (line-count remediation,
- * decisions-corpus build, ADR-0038) — same coverage, updated call surface
+ * decisions-corpus build, ADR-0040) — same coverage, updated call surface
  * (`store.appendDecision`/`getDecisionsByRun`/`getRecentDecisions` ->
  * `dao.append`/`getByRun`/`getRecent`).
  */

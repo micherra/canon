@@ -191,6 +191,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/tail-enforcement-gate.sh",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

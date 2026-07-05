@@ -564,7 +564,7 @@ export class DriftDb {
   /**
    * Lazy accessor for the legacy per-run decisions DAO (v2 `decisions` table).
    * Dead wire (0 rows, 0 live writers) — relocated here from drift-db.ts for
-   * line-count remediation. See decisions-dao.ts for the ADR-0038 disposition note.
+   * line-count remediation. See decisions-dao.ts for the ADR-0040 disposition note.
    */
   getDecisionsLegacy(): DecisionsDao {
     this._decisionsLegacy ??= new DecisionsDao(this.db);
@@ -573,7 +573,7 @@ export class DriftDb {
 
   /**
    * Lazy accessor for the durable, cross-workspace orchestrator-decisions DAO
-   * (v14 `orchestrator_decisions` table, ADR-0038).
+   * (v14 `orchestrator_decisions` table, ADR-0040).
    * The OrchestratorDecisionsDao class operates on the same Database.Database handle.
    * Returns the same instance on repeated calls (lazy singleton).
    */

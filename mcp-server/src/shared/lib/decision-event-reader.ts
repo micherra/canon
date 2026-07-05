@@ -3,7 +3,7 @@
  *
  * Shared primitive used by BOTH the janitor's reap-time persist path
  * (`decision-persistence.ts`) and, in a later build, the cross-workspace
- * decisions corpus reader (ADR-0038).
+ * decisions corpus reader (ADR-0040).
  *
  * Deliberately raw — does NOT go through getExecutionStore(), which would run
  * idempotent execution-schema migrations that MUTATE a soon-to-die or foreign

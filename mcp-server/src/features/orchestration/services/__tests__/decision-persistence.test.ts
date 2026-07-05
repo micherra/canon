@@ -3,7 +3,7 @@
  *
  * Tests for tryPersistDecisionsBeforeReap — the fail-open mirror of a
  * workspace's decision events into the durable drift.db `orchestrator_decisions`
- * table, called by the janitor immediately before `rmSync` (ADR-0038).
+ * table, called by the janitor immediately before `rmSync` (ADR-0040).
  *
  * Test plan (T-01-PLAN.md, drift-db-leak-guard convention: isolated mkdtemp
  * projectDir/workspace, never process.cwd()):

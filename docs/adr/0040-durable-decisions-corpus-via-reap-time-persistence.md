@@ -1,12 +1,12 @@
 ---
-adr: "0038"
+adr: "0040"
 title: "Durable orchestrator-decisions corpus via reap-time persistence into a dedicated drift.db table"
 status: accepted
 date: "2026-07-05"
 build: "explore-cross-workspace-decisions-ledger-readeraggregator-make-the"
 ---
 
-# ADR-0038: Durable orchestrator-decisions corpus via reap-time persistence
+# ADR-0040: Durable orchestrator-decisions corpus via reap-time persistence
 
 ## Context
 

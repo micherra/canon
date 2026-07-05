@@ -3,7 +3,7 @@
  * into the durable project-level drift.db `orchestrator_decisions` table.
  *
  * Called by the janitor immediately BEFORE `rmSync` deletes a workspace's
- * orchestration.db — the sole destruction boundary (ADR-0038; finalize is
+ * orchestration.db — the sole destruction boundary (ADR-0040; finalize is
  * copy-only, ADR-0016). Deliberately fail-open: a persist failure must never
  * block a reap (janitor is best-effort housekeeping) — but it must be
  * observable (console.warn), never a silent swallow (observable-best-effort;

@@ -2,7 +2,7 @@
  * DecisionsDao — legacy per-run decision notes (ADR-019)
  *
  * Relocated out of drift-db.ts (line-count remediation, decisions-corpus
- * build, ADR-0038) — a pure move, no behavior change. Operates on the v2
+ * build, ADR-0040) — a pure move, no behavior change. Operates on the v2
  * migration table: decisions.
  *
  * This table is a DEAD WIRE: 0 rows, 0 live writers (`append` — formerly
@@ -10,7 +10,7 @@
  * which therefore always reports 0 decisions. Its schema (built for the
  * removed architect `decisions/` docs) predates and is unrelated to the real
  * `log_decision` corpus — do NOT confuse this with `orchestrator-decisions-dao.ts`,
- * which hosts that corpus durably. Left in place per ADR-0038 (filed as a
+ * which hosts that corpus durably. Left in place per ADR-0040 (filed as a
  * learner signal, not resolved here).
  *
  * Wraps a better-sqlite3 Database instance initialized by initDriftDb().

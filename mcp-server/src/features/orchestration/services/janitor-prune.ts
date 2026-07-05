@@ -2,7 +2,7 @@
  * Janitor prune helpers — orphaned agent-worktree pruning + empty husk-dir removal.
  *
  * Relocated out of janitor.ts (line-count remediation, decisions-corpus build,
- * ADR-0038) — a pure move, no behavior change. Covers:
+ * ADR-0040) — a pure move, no behavior change. Covers:
  *   - prune_worktrees: remove orphaned agent isolation worktrees from .claude/worktrees/
  *   - prune_husk_dirs: remove empty top-level branch directories under .canon/workspaces/
  *

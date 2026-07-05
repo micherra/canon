@@ -2,7 +2,7 @@
  * orchestrator-decisions-dao.test.ts
  *
  * Tests for OrchestratorDecisionsDao — the durable, cross-workspace decisions
- * corpus table (drift.db v14, table `orchestrator_decisions`, ADR-0038).
+ * corpus table (drift.db v14, table `orchestrator_decisions`, ADR-0040).
  * Uses an in-memory SQLite DB (initDriftDb(':memory:')) to avoid file system
  * side effects.
  *

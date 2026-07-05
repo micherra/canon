@@ -465,7 +465,7 @@ const MIGRATIONS: Migration[] = [
   },
   {
     up: (db) => {
-      // orchestrator_decisions — durable, cross-workspace decisions corpus (ADR-0038).
+      // orchestrator_decisions — durable, cross-workspace decisions corpus (ADR-0040).
       // Reap-time persistence target: the janitor mirrors a workspace's
       // orchestrator_decision events here immediately before rmSync deletes its
       // orchestration.db (the sole destruction boundary). UNIQUE(source_slug,

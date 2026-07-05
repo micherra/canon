@@ -6,7 +6,7 @@
  *
  * Decision-table coverage (appendDecision/getDecisionsByRun/getRecentDecisions)
  * relocated to decisions-dao.test.ts alongside its DecisionsDao move
- * (line-count remediation, decisions-corpus build, ADR-0038).
+ * (line-count remediation, decisions-corpus build, ADR-0040).
  */
 
 import type { ReviewEntry } from "@shared/schema.ts";

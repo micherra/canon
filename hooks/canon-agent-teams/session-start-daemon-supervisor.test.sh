@@ -732,6 +732,423 @@ fi
 rm -rf "$TMPDATA" "$TMPROOT"
 
 # ---------------------------------------------------------------------------
+# T-A: Survivor recovery happy path (dc-01) — SIGTERM/SIGKILL clears a real
+# Canon-daemon survivor squatting the port after a failed start; retry once
+# brings the target version up.
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"20.0.0-target"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORTA=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+# Survivor: real python /health server at OLD version, bound to FREE_PORTA
+python3 -c "
+import http.server, json
+
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            body = json.dumps({'ok': True, 'port': ${FREE_PORTA}, 'version': '19.9.9-old', 'transport': 'http'}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(body)
+    def log_message(self, *a): pass
+
+http.server.HTTPServer(('127.0.0.1', ${FREE_PORTA}), H).serve_forever()
+" &
+SURVIVOR_PID_A=$!
+disown "$SURVIVOR_PID_A" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown prevents bash job-tracking; cleanup via explicit kill below
+sleep 0.5
+
+# Boot script: tries to bind FREE_PORTA at TARGET version; exits quietly if the
+# port is still held (survivor alive), succeeds once the survivor is cleared.
+BOOT_SCRIPT_A="$TMPDATA/boot_target.py"
+cat > "$BOOT_SCRIPT_A" <<PYEOF
+import http.server, json, sys
+
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            body = json.dumps({'ok': True, 'port': ${FREE_PORTA}, 'version': '20.0.0-target', 'transport': 'http'}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(body)
+    def log_message(self, *a): pass
+
+try:
+    server = http.server.HTTPServer(('127.0.0.1', ${FREE_PORTA}), H)
+except OSError:
+    sys.exit(0)
+server.serve_forever()
+PYEOF
+
+FAKE_BIN_A=$(mktemp -d)
+cat > "$FAKE_BIN_A/ps" <<'PSSTUB'
+#!/usr/bin/env bash
+echo "node tsx src/app/daemon.ts"
+PSSTUB
+chmod +x "$FAKE_BIN_A/ps"
+
+# The boot script's second invocation binds successfully and calls
+# serve_forever() (never exits). The hook backgrounds CANON_SUPERVISOR_BOOT_CMD
+# via `eval "$CMD" &`; if $CMD is a single non-backgrounded command, that eval
+# wrapper synchronously waits on it and keeps holding the wrapper's own
+# inherited stdout fd (the command-substitution pipe below) open for as long
+# as the child lives — even though the child's OWN fds are redirected to a
+# file. Nesting `nohup ... &` inside the injected command makes eval return
+# immediately once the payload is detached, releasing that fd.
+OUTPUT_A=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORTA" \
+  CANON_SUPERVISOR_BOOT_CMD="nohup python3 $BOOT_SCRIPT_A >$TMPDATA/boot-target.log 2>&1 &" \
+  CANON_SUPERVISOR_PORT_OWNER_CMD="echo $SURVIVOR_PID_A" \
+  CANON_SUPERVISOR_START_TIMEOUT=3 \
+  CANON_SUPERVISOR_TERM_GRACE=2 \
+  CANON_SUPERVISOR_KILL_WAIT=2 \
+  PATH="$FAKE_BIN_A:$PATH" \
+  bash "$HOOK" 2>&1)
+EXIT_CODE_A=$?
+
+SURVIVOR_DEAD_A=no
+if ! kill -0 "$SURVIVOR_PID_A" 2>/dev/null; then
+  SURVIVOR_DEAD_A=yes
+fi
+kill "$SURVIVOR_PID_A" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- cleanup only; process should already be dead (expected outcome)
+
+# The successful retry leaves an orphaned python /health server bound to
+# FREE_PORTA (disowned by the hook, reparented to init) — find and kill it
+# so it doesn't linger past this test.
+LEFTOVER_A=$(lsof -nP -iTCP:"$FREE_PORTA" -sTCP:LISTEN -t 2>/dev/null | head -n1)
+[[ -n "$LEFTOVER_A" ]] && kill -9 "$LEFTOVER_A" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- best-effort cleanup of the orphaned test survivor
+
+STARTED_TARGET_A=no
+echo "$OUTPUT_A" | grep -q "started successfully (v20.0.0-target)" && STARTED_TARGET_A=yes
+
+if [[ $EXIT_CODE_A -eq 0 ]] && [[ "$SURVIVOR_DEAD_A" == "yes" ]] && [[ "$STARTED_TARGET_A" == "yes" ]]; then
+  pass "T-A: survivor recovery happy path — killed, retried, started at target version"
+else
+  fail "T-A: exit=$EXIT_CODE_A, survivor_dead=${SURVIVOR_DEAD_A}, started_target=${STARTED_TARGET_A}, output=$(echo "$OUTPUT_A" | head -10)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT" "$FAKE_BIN_A"
+
+# ---------------------------------------------------------------------------
+# T-B: Non-Canon port owner is never killed (dc-02) — identity guard blocks
+# recovery when the real port owner's cmdline does not match tsx+daemon.ts.
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"21.0.0-target"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORTB=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+# Real, killable process standing in as the "port owner" — must survive.
+sleep 999 &
+OWNER_PID_B=$!
+disown "$OWNER_PID_B" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown prevents bash job-tracking
+
+FAKE_BIN_B=$(mktemp -d)
+cat > "$FAKE_BIN_B/ps" <<'PSSTUB'
+#!/usr/bin/env bash
+echo "/usr/bin/python3 some-other-process.py"
+PSSTUB
+chmod +x "$FAKE_BIN_B/ps"
+
+OUTPUT_B=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORTB" \
+  CANON_SUPERVISOR_BOOT_CMD=":" \
+  CANON_SUPERVISOR_PORT_OWNER_CMD="echo $OWNER_PID_B" \
+  CANON_SUPERVISOR_START_TIMEOUT=1 \
+  PATH="$FAKE_BIN_B:$PATH" \
+  bash "$HOOK" 2>&1)
+EXIT_CODE_B=$?
+
+OWNER_SURVIVED_B=no
+if kill -0 "$OWNER_PID_B" 2>/dev/null; then
+  OWNER_SURVIVED_B=yes
+fi
+kill "$OWNER_PID_B" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- cleanup only
+
+WARNED_IDENTITY_B=no
+echo "$OUTPUT_B" | grep -q "refusing to kill (identity guard)" && WARNED_IDENTITY_B=yes
+
+if [[ $EXIT_CODE_B -eq 0 ]] && [[ "$OWNER_SURVIVED_B" == "yes" ]] && [[ "$WARNED_IDENTITY_B" == "yes" ]]; then
+  pass "T-B: non-Canon port owner never killed, identity guard warns, exit 0"
+else
+  fail "T-B: exit=$EXIT_CODE_B, owner_survived=${OWNER_SURVIVED_B}, warned=${WARNED_IDENTITY_B}, output=$(echo "$OUTPUT_B" | head -10)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT" "$FAKE_BIN_B"
+
+# ---------------------------------------------------------------------------
+# T-C: lsof-absent / owner-unknown → fail-closed (dc-03) — the port-owner
+# resolver override fails (rc != 0); recovery cannot proceed, loud WARN.
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"22.0.0-target"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORTC=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+OUTPUT_C=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORTC" \
+  CANON_SUPERVISOR_BOOT_CMD=":" \
+  CANON_SUPERVISOR_PORT_OWNER_CMD="false" \
+  CANON_SUPERVISOR_START_TIMEOUT=1 \
+  bash "$HOOK" 2>&1)
+EXIT_CODE_C=$?
+
+CONTAINS_UNKNOWN_C=no
+echo "$OUTPUT_C" | grep -q "could not be identified" && CONTAINS_UNKNOWN_C=yes
+CONTAINS_CANNOT_RECOVER_C=no
+echo "$OUTPUT_C" | grep -q "cannot auto-recover" && CONTAINS_CANNOT_RECOVER_C=yes
+
+if [[ $EXIT_CODE_C -eq 0 ]] && [[ "$CONTAINS_UNKNOWN_C" == "yes" ]] && [[ "$CONTAINS_CANNOT_RECOVER_C" == "yes" ]]; then
+  pass "T-C: lsof-absent/owner-unknown fails closed, loud WARN, exit 0"
+else
+  fail "T-C: exit=$EXIT_CODE_C, unknown_warn=${CONTAINS_UNKNOWN_C}, cannot_recover_warn=${CONTAINS_CANNOT_RECOVER_C}, output=$(echo "$OUTPUT_C" | head -10)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT"
+
+# ---------------------------------------------------------------------------
+# T-C2: lsof-absent (orc=2) MUST also emit the down-daemon recovery block —
+# on an lsof-less host, orc is ALWAYS 2, so the orc=1 down-block branch is
+# unreachable and a genuine boot failure would show only the owner-unknown
+# warning, losing the actionable recovery guidance. Same fixture as T-C
+# (port-owner override forced to fail → orc=2), but this test asserts BOTH
+# the owner-unknown warning AND the down-block guidance appear together.
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"22.1.0-target"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORTC2=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+OUTPUT_C2=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORTC2" \
+  CANON_SUPERVISOR_BOOT_CMD=":" \
+  CANON_SUPERVISOR_PORT_OWNER_CMD="false" \
+  CANON_SUPERVISOR_START_TIMEOUT=1 \
+  bash "$HOOK" 2>&1)
+EXIT_CODE_C2=$?
+
+CONTAINS_UNKNOWN_C2=no
+echo "$OUTPUT_C2" | grep -q "could not be identified" && CONTAINS_UNKNOWN_C2=yes
+CONTAINS_DOWN_BLOCK_C2=no
+echo "$OUTPUT_C2" | grep -q "tools will FAIL" && CONTAINS_DOWN_BLOCK_C2=yes
+
+if [[ $EXIT_CODE_C2 -eq 0 ]] && [[ "$CONTAINS_UNKNOWN_C2" == "yes" ]] && [[ "$CONTAINS_DOWN_BLOCK_C2" == "yes" ]]; then
+  pass "T-C2: lsof-absent (orc=2) still emits down-daemon recovery block alongside owner-unknown warning"
+else
+  fail "T-C2: exit=$EXIT_CODE_C2, unknown_warn=${CONTAINS_UNKNOWN_C2}, down_block=${CONTAINS_DOWN_BLOCK_C2}, output=$(echo "$OUTPUT_C2" | head -10)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT"
+
+# ---------------------------------------------------------------------------
+# T-D: retry-exhausted after a successful kill → fail-closed loud block
+# (dc-03) — owner identity-confirms as a Canon daemon, escalate_kill clears
+# it, but the retried start still fails; the existing loud recovery block
+# must fire (not a silent pass).
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"23.0.0-target"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORTD=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+# Real, killable process standing in as a Canon-daemon-identified owner.
+sleep 999 &
+OWNER_PID_D=$!
+disown "$OWNER_PID_D" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown prevents bash job-tracking
+
+FAKE_BIN_D=$(mktemp -d)
+cat > "$FAKE_BIN_D/ps" <<'PSSTUB'
+#!/usr/bin/env bash
+echo "node tsx src/app/daemon.ts"
+PSSTUB
+chmod +x "$FAKE_BIN_D/ps"
+
+OUTPUT_D=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORTD" \
+  CANON_SUPERVISOR_BOOT_CMD=":" \
+  CANON_SUPERVISOR_PORT_OWNER_CMD="echo $OWNER_PID_D" \
+  CANON_SUPERVISOR_START_TIMEOUT=1 \
+  CANON_SUPERVISOR_TERM_GRACE=1 \
+  CANON_SUPERVISOR_KILL_WAIT=1 \
+  PATH="$FAKE_BIN_D:$PATH" \
+  bash "$HOOK" 2>&1)
+EXIT_CODE_D=$?
+
+OWNER_DEAD_D=no
+if ! kill -0 "$OWNER_PID_D" 2>/dev/null; then
+  OWNER_DEAD_D=yes
+fi
+kill "$OWNER_PID_D" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- cleanup only; process should already be dead
+
+CONTAINS_FAIL_MSG_D=no
+echo "$OUTPUT_D" | grep -q "tools will FAIL" && CONTAINS_FAIL_MSG_D=yes
+
+if [[ $EXIT_CODE_D -eq 0 ]] && [[ "$OWNER_DEAD_D" == "yes" ]] && [[ "$CONTAINS_FAIL_MSG_D" == "yes" ]]; then
+  pass "T-D: retry-exhausted after successful kill — loud recovery block fires, exit 0"
+else
+  fail "T-D: exit=$EXIT_CODE_D, owner_dead=${OWNER_DEAD_D}, fail_msg=${CONTAINS_FAIL_MSG_D}, output=$(echo "$OUTPUT_D" | head -10)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT" "$FAKE_BIN_D"
+
+# ---------------------------------------------------------------------------
+# T-E: port-free after failed start → existing loud block preserved
+# (dc-03/dc-04) — guards that Test 10's down-daemon behavior still fires
+# when routed through the new recovery orchestration.
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"24.0.0-target"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORTE=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+OUTPUT_E=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORTE" \
+  CANON_SUPERVISOR_BOOT_CMD=":" \
+  CANON_SUPERVISOR_PORT_OWNER_CMD="true" \
+  CANON_SUPERVISOR_START_TIMEOUT=1 \
+  bash "$HOOK" 2>&1)
+EXIT_CODE_E=$?
+
+CONTAINS_FAIL_MSG_E=no
+echo "$OUTPUT_E" | grep -q "tools will FAIL" && CONTAINS_FAIL_MSG_E=yes
+
+if [[ $EXIT_CODE_E -eq 0 ]] && [[ "$CONTAINS_FAIL_MSG_E" == "yes" ]]; then
+  pass "T-E: port-free after failed start — existing loud recovery block preserved, exit 0"
+else
+  fail "T-E: exit=$EXIT_CODE_E, fail_msg=${CONTAINS_FAIL_MSG_E}, output=$(echo "$OUTPUT_E" | head -10)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT"
+
+# ---------------------------------------------------------------------------
+# T-F: SIGKILL escalation actually fires (dc-01/dc-02 regression guard) — T-A
+# and T-D's survivors are plain `sleep` processes, which die on the initial
+# SIGTERM and never force `_supervisor_escalate_kill` past the grace window.
+# This test's survivor traps and ignores SIGTERM, so the only way it clears
+# is the SIGKILL branch — proving that escalation path actually executes
+# (not just that the surrounding orchestration is wired).
+# ---------------------------------------------------------------------------
+TMPDATA=$(mktemp -d)
+TMPROOT=$(mktemp -d)
+mkdir -p "$TMPROOT/mcp-server"
+echo '{"name":"canon-mcp","version":"25.0.0-target"}' > "$TMPROOT/mcp-server/package.json"
+
+FREE_PORTF=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+# Survivor: a real process that installs SIG_IGN for SIGTERM, so plain
+# SIGTERM cannot clear it — only SIGKILL can.
+bash -c 'trap "" TERM; while true; do sleep 1; done' &
+SIGIGN_PID_F=$!
+disown "$SIGIGN_PID_F" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- disown prevents bash job-tracking; cleanup via explicit kill below
+
+FAKE_BIN_F=$(mktemp -d)
+cat > "$FAKE_BIN_F/ps" <<'PSSTUB'
+#!/usr/bin/env bash
+echo "node tsx src/app/daemon.ts"
+PSSTUB
+chmod +x "$FAKE_BIN_F/ps"
+
+OUTPUT_F=$(CANON_HTTP_DAEMON=1 \
+  CLAUDE_PLUGIN_DATA="$TMPDATA" \
+  CLAUDE_PLUGIN_ROOT="$TMPROOT" \
+  CANON_DAEMON_PORT="$FREE_PORTF" \
+  CANON_SUPERVISOR_BOOT_CMD=":" \
+  CANON_SUPERVISOR_PORT_OWNER_CMD="echo $SIGIGN_PID_F" \
+  CANON_SUPERVISOR_START_TIMEOUT=1 \
+  CANON_SUPERVISOR_TERM_GRACE=1 \
+  CANON_SUPERVISOR_KILL_WAIT=2 \
+  PATH="$FAKE_BIN_F:$PATH" \
+  bash "$HOOK" 2>&1)
+EXIT_CODE_F=$?
+
+SIGIGN_DEAD_F=no
+if ! kill -0 "$SIGIGN_PID_F" 2>/dev/null; then
+  SIGIGN_DEAD_F=yes
+fi
+kill -9 "$SIGIGN_PID_F" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- cleanup only; process should already be dead (expected outcome)
+
+# The script only prints "survived SIGTERM" after re-confirming (via kill -0)
+# that the process is STILL ALIVE at the end of the TERM_GRACE window — this
+# is the proof that plain SIGTERM did not clear it.
+SURVIVED_TERM_F=no
+echo "$OUTPUT_F" | grep -q "survived SIGTERM after ${CANON_SUPERVISOR_TERM_GRACE:-1}s; escalating to SIGKILL" && SURVIVED_TERM_F=yes
+
+CLEARED_BY_KILL_F=no
+echo "$OUTPUT_F" | grep -q "cleared by SIGKILL" && CLEARED_BY_KILL_F=yes
+
+if [[ $EXIT_CODE_F -eq 0 ]] && [[ "$SIGIGN_DEAD_F" == "yes" ]] \
+   && [[ "$SURVIVED_TERM_F" == "yes" ]] && [[ "$CLEARED_BY_KILL_F" == "yes" ]]; then
+  pass "T-F: SIGTERM-immune survivor cleared only via SIGKILL escalation"
+else
+  fail "T-F: exit=$EXIT_CODE_F, sigign_dead=${SIGIGN_DEAD_F}, survived_term=${SURVIVED_TERM_F}, cleared_by_kill=${CLEARED_BY_KILL_F}, output=$(echo "$OUTPUT_F" | head -10)"
+fi
+rm -rf "$TMPDATA" "$TMPROOT" "$FAKE_BIN_F"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

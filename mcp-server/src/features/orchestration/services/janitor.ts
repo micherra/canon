@@ -361,7 +361,7 @@ async function archiveAndRemoveSlug(candidate: PruneCandidate, errors: string[])
 
   // Persist this slug's orchestrator_decision events into the durable
   // drift.db orchestrator_decisions table BEFORE rmSync destroys them
-  // (ADR-0038). Order is load-bearing: persist (committed) THEN delete.
+  // (ADR-0040). Order is load-bearing: persist (committed) THEN delete.
   // Fail-open — never blocks the reap.
   tryPersistWorkspaceDecisions(candidate);
 
@@ -398,7 +398,7 @@ function tryMarkWorkspaceReaped(projectDir: string, slugPath: string): void {
 
 /**
  * Mirror a workspace's orchestrator_decision events into the durable
- * project-level orchestrator_decisions table (drift.db, ADR-0038), called
+ * project-level orchestrator_decisions table (drift.db, ADR-0040), called
  * immediately before rmSync destroys its orchestration.db — the sole
  * destruction boundary. Fail-open — janitor is best-effort housekeeping and
  * a persist failure must NEVER throw or block the reap; `getDriftDb` is

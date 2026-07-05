@@ -1,0 +1,6 @@
+fix-type build, no contract-level changes
+markdown-only change, no context drift
+session timeout
+no new patterns observed
+documentation-only diff, verify produces zero signal
+context-sync targets are build artifacts

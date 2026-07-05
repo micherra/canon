@@ -4,7 +4,7 @@
  * Wraps a better-sqlite3 Database instance initialized by initDriftDb().
  * Operates on the v14 migration table: orchestrator_decisions.
  *
- * Hosts the real `log_decision` corpus after a workspace is reaped (ADR-0038).
+ * Hosts the real `log_decision` corpus after a workspace is reaped (ADR-0040).
  * NOT the dead `decisions` table (see decisions-dao.ts) — that table's schema
  * (built for the removed architect docs) has no gate/outcome/rationale/refs
  * columns and cannot host this corpus without losing queryability.

@@ -2,7 +2,7 @@
  * decisions-corpus.test.ts
  *
  * Tests for buildDecisionsCorpus / aggregateDecisions / renderCorpus — the
- * offline cross-workspace decisions reader + aggregator (ADR-0038, T-02).
+ * offline cross-workspace decisions reader + aggregator (ADR-0040, T-02).
  *
  * Test plan (T-02-PLAN.md, drift-db-leak-guard convention: isolated mkdtemp
  * projectDir, never process.cwd()):

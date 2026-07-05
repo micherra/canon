@@ -1,5 +1,5 @@
 /**
- * decisions-corpus — offline cross-workspace decisions reader + aggregator (ADR-0038).
+ * decisions-corpus — offline cross-workspace decisions reader + aggregator (ADR-0040).
  *
  * Composes two partitions into one deterministically-sorted, source-tagged
  * corpus:
@@ -10,7 +10,7 @@
  *     into drift.db's `orchestrator_decisions` table before deletion.
  *
  * A workspace is either live-on-disk OR reaped-and-persisted, never both —
- * persist only fires immediately before the janitor's `rmSync` (ADR-0038) —
+ * persist only fires immediately before the janitor's `rmSync` (ADR-0040) —
  * so the union below is dedup-free by construction.
  *
  * Canon principles:
