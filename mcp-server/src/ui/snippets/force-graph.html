@@ -323,7 +323,7 @@
         if (drawLabels) {
           var label = (nd.id.split('/').pop()) || nd.id;
           if (label.length > 20) label = label.slice(0, 18) + '...';
-          ctx.font = '9px monospace';
+          ctx.font = '13px monospace'; /* fs-floor */
           ctx.fillStyle = /* --text */ '#b4b8c8';
           ctx.textAlign = 'center';
           ctx.fillText(label, nd.x, nd.y + nd.labelDy);
@@ -337,7 +337,7 @@
     var tooltip = document.createElement('div');
     tooltip.style.cssText = 'position:fixed;pointer-events:none;' +
       'background:' + /* --bg */ '#1e2030' + ';border:1px solid ' + /* --border */ '#3a3d52' + ';' +
-      'color:' + /* --text-bright */ '#e8eaf0' + ';padding:4px 8px;border-radius:4px;font-size:11px;' +
+      'color:' + /* --text-bright */ '#e8eaf0' + ';padding:4px 8px;border-radius:4px;font-size:15px;' +
       'font-family:monospace;display:none;z-index:9999;max-width:400px;word-break:break-all;';
     document.body.appendChild(tooltip);
 
