@@ -35,7 +35,7 @@
  *   --debug      Print resolved env and params to stderr before spawning.
  *
  * CI: run by the install-sim job in .github/workflows/ci.yml on Node 24.x
- * (distinct from the repo-pinned 25.8.0) to exercise the #361 ambient-node path.
+ * (distinct from the repo-pinned 26.4.0) to exercise the #361 ambient-node path.
  */
 
 import { execSync } from "node:child_process";
@@ -223,7 +223,7 @@ const REPO_ROOT = join(__dirname, ".."); // scripts/ is one level below repo roo
 // ── Constants ───────────────────────────────────────────────────────────────
 
 /** Repo-pinned Node version that ALL CI jobs except install-sim use. */
-const REPO_PINNED_NODE_VERSION = "v25.8.0";
+const REPO_PINNED_NODE_VERSION = "v26.4.0";
 
 /** MCP handshake timeout (ms). */
 const HANDSHAKE_TIMEOUT_MS = 30_000;

@@ -3,7 +3,7 @@
 > Project-specific patterns and decisions. Auto-detected by init and refined as the project evolves.
 > Engineer agents read this file alongside Canon principles.
 
-- **Language**: TypeScript (ES modules) with Node.js 25.x (pinned to 25.8.0 in .tool-versions)
+- **Language**: TypeScript (ES modules) on Node.js >=24 (ambient; no .tool-versions is shipped — boot.sh enforces the floor, and CI pins 26.4.0 via actions/setup-node)
 - **Naming**: camelCase for functions and variables, PascalCase for types and interfaces
 - **Functions**: Prefer arrow functions (`const foo = () => {}`) over function declarations; exception: exported functions that need hoisting
 - **File naming**: kebab-case for files and directories
