@@ -20,7 +20,7 @@ import Database from "better-sqlite3";
 // Schema version — increment when DDL changes require a migration. Pre-existing test-only
 // export (asserted across platform/storage/drift/__tests__); no production code imports it.
 // canon:allow-unwired: value bumps on every migration re-trigger the dead-wire line-diff heuristic even though the export itself is not new
-export const DRIFT_SCHEMA_VERSION = "13";
+export const DRIFT_SCHEMA_VERSION = "14";
 
 // DDL statements — v1 base tables
 //
@@ -457,9 +457,46 @@ const MIGRATIONS: Migration[] = [
       db.exec(
         `CREATE INDEX IF NOT EXISTS idx_active_workspaces_status ON active_workspaces(status)`,
       );
+      // v13 is no longer terminal (orchestrator_decisions below adds v14) — stamp the
+      // literal historical version, not the exported constant.
+      db.exec(`UPDATE meta SET value = '13' WHERE key = 'schema_version'`);
+    },
+    version: "13",
+  },
+  {
+    up: (db) => {
+      // orchestrator_decisions — durable, cross-workspace decisions corpus (ADR-0040).
+      // Reap-time persistence target: the janitor mirrors a workspace's
+      // orchestrator_decision events here immediately before rmSync deletes its
+      // orchestration.db (the sole destruction boundary). UNIQUE(source_slug,
+      // source_event_id) + INSERT OR IGNORE make persist idempotent — a crash
+      // between persist and rmSync re-persists safely on a later run. `gate`
+      // is its own column (not folded into decision_type) so the effective
+      // category `gate ?? decision_type` keeps plan_approval/review_verdict
+      // first-class instead of collapsing into an undifferentiated hitl_gate.
+      // NOT the dead `decisions` table (decisions-dao.ts) — that table's schema
+      // (built for the removed architect docs) has no gate/outcome/rationale/refs
+      // columns and cannot host this corpus without losing queryability.
+      db.exec(`CREATE TABLE IF NOT EXISTS orchestrator_decisions (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_slug     TEXT NOT NULL,
+        source_event_id INTEGER NOT NULL,
+        decision_type   TEXT NOT NULL,
+        summary         TEXT NOT NULL,
+        rationale       TEXT,
+        outcome         TEXT,
+        gate            TEXT,
+        refs_json       TEXT,
+        decided_at      TEXT NOT NULL,
+        persisted_at    TEXT NOT NULL,
+        UNIQUE(source_slug, source_event_id)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_orch_decisions_gate ON orchestrator_decisions(gate)`);
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_orch_decisions_type ON orchestrator_decisions(decision_type)`,
+      );
       // Terminal-version stamp is driven by the exported constant — DRIFT_SCHEMA_VERSION
-      // is the single source of truth for the current schema version. Intermediate
-      // historical stamps ('2'…'12') remain frozen literals.
+      // is the single source of truth for the current schema version.
       db.exec(`UPDATE meta SET value = '${DRIFT_SCHEMA_VERSION}' WHERE key = 'schema_version'`);
     },
     version: DRIFT_SCHEMA_VERSION,
