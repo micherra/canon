@@ -13,7 +13,7 @@
  * - Unreadable artifact dir → surfaces in skipped[] with discovery error reason
  */
 
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -389,11 +389,12 @@ describe("syncIndexes", () => {
     let worktreeDir: string;
 
     beforeEach(() => {
-      worktreeDir = createTempDir();
-    });
-
-    afterEach(() => {
-      rmSync(worktreeDir, { recursive: true, force: true });
+      // Model the real worktree topology: a genuine subpath of projectDir,
+      // not a sibling temp dir. A sibling is the exact shape the scope-
+      // containment guard (below) now correctly rejects, so a sibling
+      // fixture here would mask the escape rather than exercise R2.
+      worktreeDir = join(projectDir, ".canon", "workspaces", "test-slug", "worktree");
+      mkdirSync(worktreeDir, { recursive: true });
     });
 
     it("AC3 regression: project_dir writes to that root, main root left byte-unchanged", async () => {
@@ -476,6 +477,90 @@ describe("syncIndexes", () => {
       const { readFileSync } = await import("node:fs");
       const written = readFileSync(join(worktreeDir, "rules", ".claude", "CLAUDE.md"), "utf8");
       expect(written).toContain("worktree-rule.md");
+    });
+  });
+
+  // ---- Codex P2 fix: project_dir scope containment guard ----
+
+  describe("project_dir scope containment guard", () => {
+    let sibling: string;
+
+    beforeEach(() => {
+      sibling = createTempDir();
+    });
+
+    afterEach(() => {
+      rmSync(sibling, { recursive: true, force: true });
+    });
+
+    it("AC1: out-of-scope project_dir is rejected fail-closed, zero writes", async () => {
+      setupClass(
+        sibling,
+        "rules",
+        [{ name: "sibling-rule.md", content: "---\ntitle: Sibling Rule\n---\nBody." }],
+        makeIndexWithMarkers("rules"),
+      );
+      const { readFileSync } = await import("node:fs");
+      const siblingIndexPath = join(sibling, "rules", ".claude", "CLAUDE.md");
+      const before = readFileSync(siblingIndexPath);
+
+      const result = await syncIndexes({ class: "rules", project_dir: sibling }, projectDir);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error_code).toBe("INVALID_INPUT");
+        expect(result.message).toContain(sibling);
+      }
+
+      const after = readFileSync(siblingIndexPath);
+      expect(after.equals(before)).toBe(true);
+    });
+
+    it("AC3: `..` traversal outside scope is rejected, no write", async () => {
+      const escaped = join(projectDir, "foo", "..", "..", "escape");
+
+      const result = await syncIndexes({ class: "rules", project_dir: escaped }, projectDir);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error_code).toBe("INVALID_INPUT");
+      }
+    });
+
+    it("AC2 edge: scope root itself as project_dir succeeds", async () => {
+      setupClass(
+        projectDir,
+        "rules",
+        [{ name: "root-rule.md", content: "---\ntitle: Root Rule\n---\nBody." }],
+        makeIndexWithMarkers("rules"),
+      );
+
+      const result = await syncIndexes({ class: "rules", project_dir: projectDir }, projectDir);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.synced).toContain("rules");
+      }
+    });
+
+    it("symlink escape is rejected (realpath layer)", async () => {
+      if (process.platform === "win32") return;
+
+      const outside = createTempDir();
+      const linkPath = join(projectDir, "escape-link");
+      symlinkSync(outside, linkPath, "dir");
+
+      try {
+        const result = await syncIndexes({ class: "rules", project_dir: linkPath }, projectDir);
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error_code).toBe("INVALID_INPUT");
+        }
+      } finally {
+        rmSync(linkPath, { force: true });
+        rmSync(outside, { recursive: true, force: true });
+      }
     });
   });
 });

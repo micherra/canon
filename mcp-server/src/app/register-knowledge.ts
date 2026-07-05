@@ -1,6 +1,6 @@
 import {
   type CheckContextStalenessInput,
-  checkContextStaleness,
+  checkContextStalenessGuarded,
 } from "@features/diagnostics/tools/check-context-staleness.ts";
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
 import { getHistory } from "@features/diagnostics/tools/get-history.ts";
@@ -199,7 +199,9 @@ function registerContextStalenessTool(server: McpServer): void {
         project_dir: z.string().describe("Project root directory path"),
       },
     },
-    gatedWrapHandler(async (input: CheckContextStalenessInput) => checkContextStaleness(input)),
+    gatedWrapHandler(async (input: CheckContextStalenessInput, extra) =>
+      checkContextStalenessGuarded(input, resolveScope(extra)),
+    ),
   );
 }
 

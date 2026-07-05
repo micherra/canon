@@ -14,6 +14,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { isPathInWorktree } from "@shared/lib/worktree-guard.ts";
 import {
   type ArtifactClass,
   CLASS_DIRS,
@@ -169,6 +170,19 @@ export async function syncIndexes(
   input: SyncIndexesInput,
   defaultProjectDir: string,
 ): Promise<ToolResult<SyncIndexesOutput>> {
+  // validate-at-trust-boundaries: the untrusted override must be contained within
+  // the authoritative resolved scope before it is used for any write. Guard only
+  // when an override is supplied — omitted project_dir keeps unchanged behavior.
+  if (input.project_dir !== undefined) {
+    const contained = await isPathInWorktree(input.project_dir, defaultProjectDir);
+    if (!contained.ok) {
+      return toolError(
+        "INVALID_INPUT",
+        `sync_indexes: project_dir "${input.project_dir}" is outside the resolved project scope "${defaultProjectDir}" — override must be the scope root or a subpath of it`,
+        false,
+      );
+    }
+  }
   const projectDir = input.project_dir ?? defaultProjectDir;
   const targets = input.class ? [input.class] : ALL_CLASSES;
   const synced: ArtifactClass[] = [];

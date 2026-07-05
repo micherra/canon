@@ -15,7 +15,10 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ContextManifest } from "../../services/context-manifest.ts";
-import { checkContextStaleness as checkContextStalenessHandler } from "../check-context-staleness.ts";
+import {
+  checkContextStalenessGuarded,
+  checkContextStaleness as checkContextStalenessHandler,
+} from "../check-context-staleness.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -148,6 +151,91 @@ describe("check_context_staleness handler", () => {
     if (!result.ok) {
       expect(result.error_code).toBe("INVALID_INPUT");
       expect(result.message).toContain("MANIFEST_NOT_FOUND");
+    }
+  });
+});
+
+describe("check_context_staleness handler — scope containment guard (R6, Codex P2 fix)", () => {
+  let scopeRoot: string;
+  let sibling: string;
+
+  beforeEach(async () => {
+    scopeRoot = join(
+      "/tmp",
+      `ccs-scope-guard-root-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    sibling = join(
+      "/tmp",
+      `ccs-scope-guard-sibling-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    await mkdir(scopeRoot, { recursive: true });
+    await mkdir(sibling, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(scopeRoot, { recursive: true, force: true });
+    await rm(sibling, { recursive: true, force: true });
+  });
+
+  it("R6 out-of-scope reject: sibling project_dir is rejected fail-closed", async () => {
+    const manifest: ContextManifest = { version: "1.0.0", artifacts: {} };
+    await writeFile(
+      join(sibling, "context-manifest.json"),
+      JSON.stringify(manifest, null, 2),
+      "utf-8",
+    );
+
+    const result = await checkContextStalenessGuarded({ project_dir: sibling }, scopeRoot);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain(sibling);
+    }
+  });
+
+  it("R6 in-scope / same-path allow: delegates to checkContextStaleness", async () => {
+    const manifest: ContextManifest = { version: "1.0.0", artifacts: {} };
+    await writeFile(
+      join(scopeRoot, "context-manifest.json"),
+      JSON.stringify(manifest, null, 2),
+      "utf-8",
+    );
+
+    const result = await checkContextStalenessGuarded({ project_dir: scopeRoot }, scopeRoot);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.clean).toBe(true);
+    }
+  });
+
+  it("R6 subpath allow: worktree-shaped project_dir under scope succeeds", async () => {
+    const worktreeDir = join(scopeRoot, ".canon", "workspaces", "test-slug", "worktree");
+    await mkdir(worktreeDir, { recursive: true });
+    const manifest: ContextManifest = { version: "1.0.0", artifacts: {} };
+    await writeFile(
+      join(worktreeDir, "context-manifest.json"),
+      JSON.stringify(manifest, null, 2),
+      "utf-8",
+    );
+
+    const result = await checkContextStalenessGuarded({ project_dir: worktreeDir }, scopeRoot);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.clean).toBe(true);
+    }
+  });
+
+  it("R6 traversal reject: `..` escape outside scope is rejected", async () => {
+    const escaped = join(scopeRoot, "a", "..", "..", "escape");
+
+    const result = await checkContextStalenessGuarded({ project_dir: escaped }, scopeRoot);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
     }
   });
 });
