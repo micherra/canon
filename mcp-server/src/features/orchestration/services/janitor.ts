@@ -404,13 +404,27 @@ function tryMarkWorkspaceReaped(projectDir: string, slugPath: string): void {
  * a persist failure must NEVER throw or block the reap; `getDriftDb` is
  * guarded here (tryPersistDecisionsBeforeReap only guards the read/persist
  * calls it makes once it already has a DriftDb handle).
+ *
+ * Persists under a branch-qualified identity (`{branchEntry}/{slug}`), not
+ * the bare slug. Slug generation is branch-scoped, so two different branches
+ * running the same task can legitimately produce the same slug — and event
+ * ids restart at 1 in every fresh orchestration.db. A bare-slug identity
+ * would collide on `orchestrator_decisions`' UNIQUE(source_slug,
+ * source_event_id) constraint and the second workspace's decisions would be
+ * silently dropped by INSERT OR IGNORE. `branchEntry` and `slug` are both
+ * filesystem-sanitized to `[a-zA-Z0-9-]`/`[a-z0-9-]` (sanitizeBranch /
+ * generateSlug) — neither can contain `/`, so joining them with `/` is an
+ * unambiguous composite key. The live-partition reader in decisions-corpus.ts
+ * derives the same `{branch}/{slug}` identity from disk so both partitions
+ * of the union stay on one identity scheme.
  */
 function tryPersistWorkspaceDecisions(candidate: PruneCandidate): void {
   try {
     const orchestrationDbPath = join(candidate.slugPath, CANON_FILES.ORCHESTRATION_DB);
+    const qualifiedSlug = `${candidate.branchEntry}/${candidate.slug}`;
     tryPersistDecisionsBeforeReap(
       orchestrationDbPath,
-      candidate.slug,
+      qualifiedSlug,
       getDriftDb(candidate.projectDir),
     );
   } catch (err: unknown) {

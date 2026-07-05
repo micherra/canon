@@ -100,7 +100,10 @@ describe("buildDecisionsCorpus — union", () => {
 
     expect(skipped).toEqual([]);
     expect(decisions).toHaveLength(2);
-    expect(decisions.find((d) => d.source_slug === "live-slug")?.source).toBe("live");
+    // Live source_slug is branch-qualified ({branch}/{slug}) to match the
+    // janitor's reap-time persist identity (see janitor.ts
+    // tryPersistWorkspaceDecisions) — a bare slug can collide across branches.
+    expect(decisions.find((d) => d.source_slug === "main/live-slug")?.source).toBe("live");
     expect(decisions.find((d) => d.source_slug === "durable-slug")?.source).toBe("durable");
   });
 
@@ -125,7 +128,8 @@ describe("buildDecisionsCorpus — union", () => {
 
     const { decisions } = buildDecisionsCorpus(projectDir);
 
-    const liveOnly = decisions.filter((d) => d.source_slug === "live-only-slug");
+    // Live source_slug is branch-qualified ({branch}/{slug}) — see comment above.
+    const liveOnly = decisions.filter((d) => d.source_slug === "main/live-only-slug");
     const durableOnly = decisions.filter((d) => d.source_slug === "durable-only-slug");
     expect(liveOnly).toHaveLength(2);
     expect(liveOnly.every((d) => d.source === "live")).toBe(true);
@@ -142,16 +146,64 @@ describe("buildDecisionsCorpus — deterministic sort", () => {
       { decided_at: "2026-07-01T10:00:00.000Z", decision_type: "other", summary: "b-first" },
       { decided_at: "2026-07-01T09:00:00.000Z", decision_type: "other", summary: "b-second" },
     ]);
-    seedDurable(projectDir, "slug-a", [
+    // Durable identity is also branch-qualified in production (janitor.ts
+    // tryPersistWorkspaceDecisions); use the same "main/" prefix here so the
+    // alphabetical tie-break under test is on "slug-a" vs "slug-b", not on
+    // an artifact of the two partitions using different identity shapes.
+    seedDurable(projectDir, "main/slug-a", [
       { decided_at: "2026-07-01T09:00:00.000Z", decision_type: "other", summary: "a-first" },
     ]);
 
     const { decisions } = buildDecisionsCorpus(projectDir);
 
-    // Both "b-second" (slug-b, 09:00) and "a-first" (slug-a, 09:00) share decided_at;
-    // slug-a sorts before slug-b alphabetically.
+    // Both "b-second" (main/slug-b, 09:00) and "a-first" (main/slug-a, 09:00)
+    // share decided_at; main/slug-a sorts before main/slug-b alphabetically.
     const summaries = decisions.map((d) => d.summary);
     expect(summaries).toEqual(["a-first", "b-second", "b-first"]);
+  });
+});
+
+describe("buildDecisionsCorpus — worktree checkout exclusion", () => {
+  it("does not recurse into a workspace's worktree/ checkout for decoy orchestration.db files", () => {
+    const projectDir = makeTmpDir("decisions-corpus-worktree-decoy-");
+    seedLiveWorkspace(projectDir, "main", "real-slug", [
+      { decision_type: "scope_cut", summary: "The real decision" },
+    ]);
+
+    // Decoy: a full repo checkout under worktree/ that happens to contain a
+    // nested file literally named orchestration.db (e.g. a test fixture
+    // committed to the repo). No leading dot-segment on this path — Node's
+    // ** glob already skips dot-directories, so a decoy under worktree/.canon/
+    // wouldn't reproduce the bug; a plain nested path does.
+    const decoyDir = join(
+      projectDir,
+      CANON_DIR,
+      "workspaces",
+      "main",
+      "real-slug",
+      "worktree",
+      "mcp-server",
+      "src",
+      "features",
+      "orchestration",
+      "services",
+      "__tests__",
+      "fixtures",
+    );
+    mkdirSync(decoyDir, { recursive: true });
+    const decoyStore = getExecutionStore(decoyDir);
+    decoyStore.appendEvent("orchestrator_decision", {
+      decision_type: "other",
+      summary: "Decoy decision — must not be read",
+      timestamp: new Date().toISOString(),
+    });
+
+    const { decisions, skipped } = buildDecisionsCorpus(projectDir);
+
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0].summary).toBe("The real decision");
+    expect(decisions.some((d) => d.summary.includes("Decoy"))).toBe(false);
+    expect(skipped.some((s) => s.path.includes("worktree"))).toBe(false);
   });
 });
 
@@ -169,7 +221,7 @@ describe("buildDecisionsCorpus — schema skew / malformed stores", () => {
     const { decisions, skipped } = buildDecisionsCorpus(projectDir);
 
     expect(decisions).toHaveLength(1);
-    expect(decisions[0].source_slug).toBe("good-slug");
+    expect(decisions[0].source_slug).toBe("main/good-slug");
     expect(skipped).toHaveLength(1);
     expect(skipped[0].path).toContain("malformed-slug");
     expect(skipped[0].reason).toBeTruthy();

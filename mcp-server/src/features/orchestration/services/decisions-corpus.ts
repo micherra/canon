@@ -120,10 +120,19 @@ export function buildDecisionsCorpus(projectDir: string): DecisionsCorpus {
   const skipped: SkippedStore[] = [];
 
   // Live partition: glob every on-disk workspace's orchestration.db.
+  //
+  // Fixed-depth pattern (branch/slug/orchestration.db), NOT `**/orchestration.db`.
+  // Every live workspace contains a full repo checkout at
+  // `<branch>/<slug>/worktree/` — an unbounded `**` glob would both walk that
+  // entire checkout on every call (perf) and could match any nested file
+  // literally named `orchestration.db` inside it (e.g. a test fixture) as a
+  // false live store. The canonical live store is exactly two levels below
+  // `workspacesDir`; constraining the glob to that depth excludes `worktree/`
+  // checkouts entirely rather than reading and filtering them out after the fact.
   const workspacesDir = join(projectDir, CANON_DIR, "workspaces");
   let dbPaths: string[] = [];
   try {
-    dbPaths = globSync(`**/${CANON_FILES.ORCHESTRATION_DB}`, { cwd: workspacesDir });
+    dbPaths = globSync(`*/*/${CANON_FILES.ORCHESTRATION_DB}`, { cwd: workspacesDir });
   } catch (err) {
     skipped.push({ path: workspacesDir, reason: `glob failed: ${errMessage(err)}` });
   }
@@ -135,7 +144,14 @@ export function buildDecisionsCorpus(projectDir: string): DecisionsCorpus {
       skipped.push({ path: dbPath, reason: openError });
       continue;
     }
-    const sourceSlug = basename(dirname(dbPath));
+    // Branch-qualified identity (`{branch}/{slug}`), matching the janitor's
+    // reap-time persist identity (janitor.ts tryPersistWorkspaceDecisions) —
+    // slug generation is branch-scoped, so two different branches can
+    // legitimately share a bare slug; both partitions of this union must key
+    // on the same composite identity for the dedup-free union invariant to hold.
+    const slugDir = dirname(dbPath);
+    const branchDir = dirname(slugDir);
+    const sourceSlug = `${basename(branchDir)}/${basename(slugDir)}`;
     for (const record of readDecisionEvents(dbPath)) {
       decisions.push({ ...record, source: "live", source_slug: sourceSlug });
     }
