@@ -1,4 +1,5 @@
 import { computeAutonomyTier } from "@features/orchestration/tools/compute-autonomy-tier.ts";
+import { forecastBaseAdvance } from "@features/orchestration/tools/forecast-base-advance.ts";
 import { getNextEscalationStrategy } from "@features/orchestration/tools/get-next-escalation-strategy.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -8,6 +9,7 @@ import { gatedWrapHandler, resolveScope } from "./server-state.ts";
  * Confidence and escalation tool registrations.
  *
  * compute_autonomy_tier  — assess build risk and return gate-skip tier.
+ * forecast_base_advance — plan-time exogenous-collision forecast (advisory-only).
  * get_next_escalation_strategy — advance the auto-escalation cascade for a failing step.
  */
 export function registerConfidenceTools(server: McpServer): void {
@@ -27,6 +29,24 @@ export function registerConfidenceTools(server: McpServer): void {
     },
     gatedWrapHandler(async (input, extra) =>
       computeAutonomyTier({ ...input, projectDir: resolveScope(extra) }),
+    ),
+  );
+
+  server.registerTool(
+    "forecast_base_advance",
+    {
+      description:
+        "Plan-time exogenous-collision forecast: intersect the build's declared files with files changed on origin/main since base_commit and their co-change partners. Returns commits_ahead, overlapping_files, and a one-line advisory (null when main has not advanced or there is no overlap). Advisory-only — never blocks. Read-only: does NOT fetch (caller fetches first). Fail-safe: returns a silent result on any git/KG error.",
+      inputSchema: {
+        base_commit: z.string().describe("The build's base commit SHA"),
+        declared_files: z
+          .array(z.string())
+          .describe("The architect's declared files: for this build"),
+        workspace: z.string().describe("Workspace path"),
+      },
+    },
+    gatedWrapHandler(async (input, extra) =>
+      forecastBaseAdvance({ ...input, projectDir: resolveScope(extra) }),
     ),
   );
 
