@@ -4,7 +4,7 @@
 # SAFETY gate. Blocks a Canon build session from ending when its tail steps
 # (context-sync, learn) did not run and were not legitimately skipped — a
 # harness-fired backstop that holds regardless of orchestrator cooperation
-# (see ADR-0036 / decisions/d3-01.md, d3-02.md).
+# (see ADR-0038 / decisions/d3-01.md, d3-02.md).
 #
 # Registered under the "Stop" event in hooks.json — fires at the end of
 # EVERY main-agent turn (not just at build completion). False positives on
