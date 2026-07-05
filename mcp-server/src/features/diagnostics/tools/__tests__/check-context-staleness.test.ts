@@ -238,4 +238,51 @@ describe("check_context_staleness handler — scope containment guard (R6, Codex
       expect(result.error_code).toBe("INVALID_INPUT");
     }
   });
+
+  it("R6 manifest_path out-of-scope reject: sibling manifest_path is rejected fail-closed even with an in-scope project_dir", async () => {
+    // project_dir is in-scope, but manifest_path points at a sibling file —
+    // without a manifest_path guard this reads/parses an arbitrary out-of-scope file.
+    const siblingManifestPath = join(sibling, "context-manifest.json");
+    const manifest: ContextManifest = { version: "1.0.0", artifacts: {} };
+    await writeFile(siblingManifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+
+    const result = await checkContextStalenessGuarded(
+      { manifest_path: siblingManifestPath, project_dir: scopeRoot },
+      scopeRoot,
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain(siblingManifestPath);
+    }
+  });
+
+  it("R6 manifest_path in-scope allow: explicit in-scope manifest_path still returns a StalenessReport", async () => {
+    const inScopeManifestPath = join(scopeRoot, "custom-manifest.json");
+    const manifest: ContextManifest = { version: "1.0.0", artifacts: {} };
+    await writeFile(inScopeManifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+
+    const result = await checkContextStalenessGuarded(
+      { manifest_path: inScopeManifestPath, project_dir: scopeRoot },
+      scopeRoot,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.clean).toBe(true);
+    }
+  });
+
+  it("R6 manifest_path omitted: default-path behavior is unaffected by the manifest_path guard", async () => {
+    // No manifest written — MANIFEST_NOT_FOUND for the default path must still
+    // surface, not the manifest_path scope-guard error (guard is skipped when omitted).
+    const result = await checkContextStalenessGuarded({ project_dir: scopeRoot }, scopeRoot);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("MANIFEST_NOT_FOUND");
+    }
+  });
 });
