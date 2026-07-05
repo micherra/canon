@@ -16,10 +16,10 @@ import { AppliedEvolutionsDao } from "./applied-evolutions-dao.ts";
 import { AreaMemoryDao } from "./area-memory-dao.ts";
 import { CliffEventsDao } from "./cliff-events-dao.ts";
 import { CraftProfileDao } from "./craft-profile-dao.ts";
+import { DecisionsDao } from "./decisions-dao.ts";
 import type {
   ArchiveManifestEntry,
   ArchiveManifestFilter,
-  DecisionEntry,
   FlowAnalytics,
   FlowRunEntry,
 } from "./drift-analytics-types.ts";
@@ -28,20 +28,10 @@ import {
   computeFlowAnalytics,
   rowToFlowRunEntry,
 } from "./drift-db-queries.ts";
-import type {
-  ArchiveRow,
-  DecisionRow,
-  FlowRunRow,
-  ReviewRow,
-  ViolationRow,
-} from "./drift-db-rows.ts";
-import {
-  buildReviewParams,
-  rowToArchiveManifestEntry,
-  rowToDecisionEntry,
-  rowToReviewEntry,
-} from "./drift-db-rows.ts";
+import type { ArchiveRow, FlowRunRow, ReviewRow, ViolationRow } from "./drift-db-rows.ts";
+import { buildReviewParams, rowToArchiveManifestEntry, rowToReviewEntry } from "./drift-db-rows.ts";
 import { DriftDbSignals } from "./drift-db-signals.ts";
+import { OrchestratorDecisionsDao } from "./orchestrator-decisions-dao.ts";
 import { ViolationClosureDao } from "./violation-closure-dao.ts";
 
 // Re-export WeeklyTrendPoint so callers can import from drift-db
@@ -71,11 +61,6 @@ export class DriftDb {
   private readonly stmtCountFlowRunsSince: Database.Statement;
   private readonly stmtGetLastFlowRunCompletedAt: Database.Statement;
 
-  // ---- Decision statements ----
-  private readonly stmtInsertDecision: Database.Statement;
-  private readonly stmtGetDecisionsByRun: Database.Statement;
-  private readonly stmtGetRecentDecisions: Database.Statement;
-
   // ---- Archive manifest statements ----
   private readonly stmtInsertArchive: Database.Statement;
   private readonly stmtGetArchiveById: Database.Statement;
@@ -89,6 +74,8 @@ export class DriftDb {
   private _cliffEvents: CliffEventsDao | null = null;
   private _activeWorkspaces: ActiveWorkspacesDao | null = null;
   private _appliedEvolutions: AppliedEvolutionsDao | null = null;
+  private _decisionsLegacy: DecisionsDao | null = null;
+  private _orchDecisions: OrchestratorDecisionsDao | null = null;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -178,23 +165,6 @@ export class DriftDb {
     this.stmtGetLastFlowRunCompletedAt = db.prepare(`
       SELECT completed FROM flow_runs ORDER BY completed DESC LIMIT 1
     `);
-
-    // Decisions
-    this.stmtInsertDecision = db.prepare(`
-      INSERT OR IGNORE INTO decisions (
-        decision_id, run_id, flow, task, title, content, file_path, timestamp
-      ) VALUES (
-        @decision_id, @run_id, @flow, @task, @title, @content, @file_path, @timestamp
-      )
-    `);
-
-    this.stmtGetDecisionsByRun = db.prepare(
-      `SELECT * FROM decisions WHERE run_id = ? ORDER BY timestamp ASC`,
-    );
-
-    this.stmtGetRecentDecisions = db.prepare(
-      `SELECT * FROM decisions ORDER BY timestamp DESC LIMIT ?`,
-    );
 
     // Archive manifests
     this.stmtInsertArchive = db.prepare(`
@@ -437,45 +407,6 @@ export class DriftDb {
     return row?.completed ?? null;
   }
 
-  // Decisions
-
-  /**
-   * INSERT a DecisionEntry into the decisions table.
-   * Uses INSERT OR IGNORE — duplicate decision_id is a no-op (idempotent).
-   * (no-silent-failures: the duplicate is intentional, not an error)
-   */
-  appendDecision(entry: DecisionEntry): void {
-    this.stmtInsertDecision.run({
-      content: entry.content,
-      decision_id: entry.decision_id,
-      file_path: entry.file_path ?? null,
-      flow: entry.flow ?? null,
-      run_id: entry.run_id ?? null,
-      task: entry.task ?? null,
-      timestamp: entry.timestamp,
-      title: entry.title,
-    });
-  }
-
-  /**
-   * Fetch all decisions for a given run_id, ordered by timestamp ASC.
-   * Returns empty array when no decisions exist for the run
-   * (define-errors-out-of-existence).
-   */
-  getDecisionsByRun(runId: string): DecisionEntry[] {
-    const rows = this.stmtGetDecisionsByRun.all(runId) as DecisionRow[];
-    return rows.map(rowToDecisionEntry);
-  }
-
-  /**
-   * Fetch the most recent N decisions across all runs, ordered by timestamp DESC.
-   * Returns empty array when no decisions exist (define-errors-out-of-existence).
-   */
-  getRecentDecisions(limit: number): DecisionEntry[] {
-    const rows = this.stmtGetRecentDecisions.all(limit) as DecisionRow[];
-    return rows.map(rowToDecisionEntry);
-  }
-
   /**
    * Return all flow runs (no filter, ascending start order from SQL).
    * Used by get_history for full-table queries before in-memory sort/filter.
@@ -628,6 +559,27 @@ export class DriftDb {
   getAppliedEvolutions(): AppliedEvolutionsDao {
     this._appliedEvolutions ??= new AppliedEvolutionsDao(this.db);
     return this._appliedEvolutions;
+  }
+
+  /**
+   * Lazy accessor for the legacy per-run decisions DAO (v2 `decisions` table).
+   * Dead wire (0 rows, 0 live writers) — relocated here from drift-db.ts for
+   * line-count remediation. See decisions-dao.ts for the ADR-0040 disposition note.
+   */
+  getDecisionsLegacy(): DecisionsDao {
+    this._decisionsLegacy ??= new DecisionsDao(this.db);
+    return this._decisionsLegacy;
+  }
+
+  /**
+   * Lazy accessor for the durable, cross-workspace orchestrator-decisions DAO
+   * (v14 `orchestrator_decisions` table, ADR-0040).
+   * The OrchestratorDecisionsDao class operates on the same Database.Database handle.
+   * Returns the same instance on repeated calls (lazy singleton).
+   */
+  getOrchestratorDecisions(): OrchestratorDecisionsDao {
+    this._orchDecisions ??= new OrchestratorDecisionsDao(this.db);
+    return this._orchDecisions;
   }
 
   // Lifecycle

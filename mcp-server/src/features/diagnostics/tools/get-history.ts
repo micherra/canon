@@ -57,13 +57,14 @@ export const getHistory = async (
   runs = runs.slice(0, limit);
 
   // Enrich each run with its associated decisions
+  const decisionsLegacy = driftDb.getDecisionsLegacy();
   const enriched = runs.map((run) => ({
     ...run,
-    decisions: driftDb.getDecisionsByRun(run.run_id),
+    decisions: decisionsLegacy.getByRun(run.run_id),
   }));
 
   // Count total decisions across all runs in the database
-  const totalDecisions = driftDb.getRecentDecisions(1_000_000).length;
+  const totalDecisions = decisionsLegacy.getRecent(1_000_000).length;
 
   return toolOk({ flow_runs: enriched, total_decisions: totalDecisions });
 };

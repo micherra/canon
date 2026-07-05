@@ -200,8 +200,8 @@ describe("getHistory — decision enrichment", () => {
 
     const dec1 = makeDecision("run-with-decisions", { title: "Decision A" });
     const dec2 = makeDecision("run-with-decisions", { title: "Decision B" });
-    db.appendDecision(dec1);
-    db.appendDecision(dec2);
+    db.getDecisionsLegacy().append(dec1);
+    db.getDecisionsLegacy().append(dec2);
 
     const result = await getHistory({ limit: 20, project_dir: projectDir });
 
@@ -234,9 +234,9 @@ describe("getHistory — decision enrichment", () => {
     db.appendFlowRun(run1);
     db.appendFlowRun(run2);
 
-    db.appendDecision(makeDecision("run-1", { title: "D1" }));
-    db.appendDecision(makeDecision("run-1", { title: "D2" }));
-    db.appendDecision(makeDecision("run-2", { title: "D3" }));
+    db.getDecisionsLegacy().append(makeDecision("run-1", { title: "D1" }));
+    db.getDecisionsLegacy().append(makeDecision("run-1", { title: "D2" }));
+    db.getDecisionsLegacy().append(makeDecision("run-2", { title: "D3" }));
 
     const result = await getHistory({ limit: 20, project_dir: projectDir });
 
