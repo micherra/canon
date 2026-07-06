@@ -30,4 +30,4 @@ Complexity compounds. Adding a new feature or fix on top of code you don't fully
 
 ## Exceptions
 
-None. If simplification would require changes beyond the scope of your task, report the opportunity in your summary and proceed with the minimal extension. Do not simplify out of scope — but do not ignore it either.
+None. If simplification would require changes beyond the scope of your task, report the opportunity in your summary and proceed with the minimal extension. Do not simplify out of scope — but do not ignore it either. This rule governs feature/extension work; in fix mode, `agent-minimal-fix` takes precedence when the two would otherwise conflict.
