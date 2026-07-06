@@ -439,14 +439,14 @@ Also add CSS for:
 - Narrative content typography (copy verbatim):
 
 ```css
-.narrative-content h3 { font-size: 14px; font-weight: 600; margin: 16px 0 8px; color: var(--text); }
-.narrative-content h4 { font-size: 13px; font-weight: 600; margin: 12px 0 6px; color: var(--text-secondary); }
-.narrative-content p { margin: 8px 0; font-size: 12px; line-height: 1.6; color: var(--text); }
+.narrative-content h3 { font-size: 18px; font-weight: 600; margin: 16px 0 8px; color: var(--text); }
+.narrative-content h4 { font-size: 17px; font-weight: 600; margin: 12px 0 6px; color: var(--text-secondary); }
+.narrative-content p { margin: 8px 0; font-size: 16px; line-height: 1.6; color: var(--text); }
 .narrative-content ul, .narrative-content ol { margin: 8px 0; padding-left: 20px; }
-.narrative-content li { font-size: 12px; line-height: 1.6; color: var(--text); margin: 4px 0; }
-.narrative-content code { background: var(--bg-secondary); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+.narrative-content li { font-size: 16px; line-height: 1.6; color: var(--text); margin: 4px 0; }
+.narrative-content code { background: var(--bg-secondary); padding: 1px 4px; border-radius: 3px; font-size: 15px; }
 .narrative-content .table-scroll-wrapper { margin: 12px 0; }
-.narrative-content .requirement-table td, .narrative-content .requirement-table th { font-size: 11px; padding: 6px 10px; }
+.narrative-content .requirement-table td, .narrative-content .requirement-table th { font-size: 15px; padding: 6px 10px; }
 ```
 
 - Expandable file card pattern CSS (copy verbatim):
@@ -459,21 +459,21 @@ Also add CSS for:
 }
 .file-expandable-summary::-webkit-details-marker { display: none; }
 .file-expand-arrow {
-  font-size: 8px; color: var(--text-muted); transition: transform 0.15s; flex-shrink: 0;
+  font-size: 13px; color: var(--text-muted); transition: transform 0.15s; flex-shrink: 0;
 }
 details[open] > .file-expandable-summary .file-expand-arrow { transform: rotate(90deg); }
 .file-expandable-summary .file-summary-path {
-  flex: 1; font-family: monospace; font-size: 11px; color: var(--text);
+  flex: 1; font-family: monospace; font-size: 15px; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .file-expandable-summary .file-summary-shape {
-  font-size: 10px; color: var(--text-muted); font-style: italic; flex-shrink: 0;
+  font-size: 13px; color: var(--text-muted); font-style: italic; flex-shrink: 0;
 }
 .review-subgraph-section {
   margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px;
 }
 .review-subgraph-label {
-  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  font-size: 15px; font-weight: 600; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: 0.04em; padding: 0 0 8px;
 }
 ```

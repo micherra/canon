@@ -1,7 +1,7 @@
 # UI Snippets — Agent Guidelines
 
 <!-- Managed by Canon. Manual edits are preserved. -->
-<!-- last-updated: 2026-06-06 -->
+<!-- last-updated: 2026-07-05 -->
 
 ## Purpose
 
@@ -46,6 +46,7 @@ HTML/CSS/JS component recipes emitted verbatim into renderer-generated artifacts
 - **Emit verbatim, exactly once**: Each snippet's `<script>` block is emitted verbatim before `</body>`, exactly once per page.
 - **No inline force-sim in renderer templates**: `grep` for `K_REPEL`/`K_SPRING`/`REST_LENGTH`/`K_GRAVITY`/`ITERATIONS`/`MAX_FORCE` in any renderer template is a violation — these constants belong only in `force-graph.html`.
 - **Token comments on all Canvas hex literals**: every `#RRGGBB` in executable Canvas code carries a `/* --token */` comment; no new theme colors without a token.
+- **Type-scale floor (legibility, 2026-07-05)**: snippet/renderer `font-size:` declarations floor at **13px**; the scale is the discrete set {13,15,16,17,18,20,22,24,28}px (primary body 15px). Canvas `ctx.font` sizes floor at 13px and carry `/* fs-floor */` or `/* fs-body */` scale-role comments (parallel to the Canvas-hex token-comment invariant above). All snippet + `templates/renderer-*.md` font sizes are drawn from this scale.
 - **`file-detail-card.html` is deliberately separate**: the columnar `drawFileGraph` engine in `file-detail-card.html` is a different algorithm with a different data contract; it serves file-context and review per-file cards; do NOT unify it with `force-graph.html`.
 - **Docblock format**: every snippet must have a 5-tag docblock (`@snippet`, `@description`, `@data`, `@tokens`, `@usage`) — enforced by `agent-composition.test.ts`.
 - **PARITY sentinels** (`DESIGN-SYSTEM.md` Section E): `<!-- PARITY:name:BEGIN/END -->` HTML-comment sentinels bracket each canonical JS function in Section E; matching `// PARITY:name:BEGIN/END` line-comment sentinels appear in `markdown-to-html.test.ts`; `section-e-parity.test.ts` extracts both copies, normalizes whitespace/type annotations, and asserts equality — drift causes test failure. Do NOT remove or reorder sentinels; add sentinel pairs when adding a new canonical function to Section E.

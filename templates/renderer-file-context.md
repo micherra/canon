@@ -347,7 +347,7 @@ Blast severity CSS class map: `"contained"` and `"low"` → `fdc-severity-low`;
       <h2 class="section-title">Blast Radius</h2>
       <span class="fdc-severity-badge fdc-severity-{blastSummary.severity}">{blastSummary.severity}</span>
     </div>
-    <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">{escapeHtml(blastSummary.description)}</p>
+    <p style="font-size:16px;color:var(--text-muted);margin-top:4px;">{escapeHtml(blastSummary.description)}</p>
   </div>
   <div class="section-card-body">
     <details class="collapsible-section" open>
@@ -450,8 +450,8 @@ Omit entirely if `coChangePartners` is empty.
       <tbody>
         {coChangePartners.map(p => `
         <tr>
-          <td style="font-family:monospace;font-size:11px;">{escapeHtml(p.path)}</td>
-          <td style="text-align:right;font-family:monospace;font-size:11px;">{Math.round(p.jaccard * 100)}%</td>
+          <td style="font-family:monospace;font-size:15px;">{escapeHtml(p.path)}</td>
+          <td style="text-align:right;font-family:monospace;font-size:15px;">{Math.round(p.jaccard * 100)}%</td>
         </tr>`).join("")}
       </tbody>
     </table>
@@ -519,7 +519,7 @@ Assemble the full `<style>` block in this order:
 2. **Reset and base** — from Section B:
    ```css
    * { margin: 0; padding: 0; box-sizing: border-box; }
-   body { font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+   body { font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); font-size: 17px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
    .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
    ```
 
@@ -527,8 +527,8 @@ Assemble the full `<style>` block in this order:
    ```css
    .section-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
    .section-card-header { padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
-   .section-title { font-size: 13px; font-weight: 700; color: var(--text-bright); margin: 0; letter-spacing: 0.02em; }
-   .section-card-body { padding: 14px 16px; color: var(--text); font-size: 13px; line-height: 1.5; }
+   .section-title { font-size: 17px; font-weight: 700; color: var(--text-bright); margin: 0; letter-spacing: 0.02em; }
+   .section-card-body { padding: 14px 16px; color: var(--text); font-size: 17px; line-height: 1.5; }
    ```
 
 4. **Collapsible section** — from Section C:
@@ -536,38 +536,38 @@ Assemble the full `<style>` block in this order:
    .collapsible-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
    .collapsible-summary { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; list-style: none; user-select: none; }
    .collapsible-summary::-webkit-details-marker { display: none; }
-   .collapsible-arrow { font-size: 9px; color: var(--text-muted); transition: transform 0.15s ease; display: inline-block; }
+   .collapsible-arrow { font-size: 13px; color: var(--text-muted); transition: transform 0.15s ease; display: inline-block; }
    details[open] .collapsible-arrow { transform: rotate(90deg); }
-   .collapsible-title { font-size: 12px; font-weight: 700; color: var(--text-bright); text-transform: uppercase; letter-spacing: 0.06em; }
-   .collapsible-body { padding: 10px 14px 14px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+   .collapsible-title { font-size: 16px; font-weight: 700; color: var(--text-bright); text-transform: uppercase; letter-spacing: 0.06em; }
+   .collapsible-body { padding: 10px 14px 14px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 16px; line-height: 1.5; }
    ```
 
 5. **Stats row** — from Section C:
    ```css
    .stats-row { display: flex; gap: 12px; padding: 12px 16px; }
    .stat-card { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border); min-width: 0; }
-   .stat-value { font-size: 24px; font-weight: 700; color: var(--text-bright); line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-   .stat-label { font-size: 11px; color: var(--text-muted); }
-   .stat-sub { font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+   .stat-value { font-size: 28px; font-weight: 700; color: var(--text-bright); line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+   .stat-label { font-size: 15px; color: var(--text-muted); }
+   .stat-sub { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
    ```
 
 6. **File context header** — custom:
    ```css
    .fc-header-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-   .fc-file-path { font-family: monospace; font-size: 13px; color: var(--text-bright); flex: 1; word-break: break-all; }
+   .fc-file-path { font-family: monospace; font-size: 17px; color: var(--text-bright); flex: 1; word-break: break-all; }
    .fc-header-badges { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: nowrap; align-items: center; }
-   .fc-layer-badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid transparent; white-space: nowrap; }
-   .fc-shape-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-glow); white-space: nowrap; }
-   .fc-violation-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; white-space: nowrap; border: 1px solid transparent; }
+   .fc-layer-badge { font-size: 13px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid transparent; white-space: nowrap; }
+   .fc-shape-badge { font-size: 13px; font-weight: 600; padding: 2px 7px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-glow); white-space: nowrap; }
+   .fc-violation-badge { font-size: 13px; font-weight: 600; padding: 2px 7px; border-radius: 10px; white-space: nowrap; border: 1px solid transparent; }
    .fc-violation-clean { background: rgba(52,211,153,0.12); color: var(--success); border-color: rgba(52,211,153,0.25); }
    .fc-violation-danger { background: rgba(255,107,107,0.12); color: var(--danger); border-color: rgba(255,107,107,0.25); }
-   .fc-shape-desc { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
+   .fc-shape-desc { font-size: 15px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
    ```
 
 7. **Graph legend** — custom:
    ```css
    .fc-graph-legend { display: flex; gap: 12px; justify-content: flex-end; padding: 8px 14px 6px; flex-wrap: wrap; }
-   .fc-legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-muted); }
+   .fc-legend-item { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-muted); }
    .fc-legend-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
    ```
 
@@ -580,33 +580,33 @@ Assemble the full `<style>` block in this order:
 
 9. **Entity table** — extracted from file-detail-card.html `<style>` block (`.fdc-entity-table` and related):
    ```css
-   .fdc-entity-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-   .fdc-entity-table th { font-size: 9px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; padding: 5px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+   .fdc-entity-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+   .fdc-entity-table th { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; padding: 5px 10px; text-align: left; border-bottom: 1px solid var(--border); }
    .fdc-entity-table td { padding: 4px 10px; border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
    .fdc-entity-table tr:last-child td { border-bottom: none; }
-   .fdc-entity-name { font-family: monospace; color: var(--text-bright); font-size: 10px; word-break: break-all; }
-   .fdc-entity-exported { text-align: center; color: var(--success); font-size: 11px; }
-   .fdc-entity-lines { font-family: monospace; font-size: 9px; color: var(--text-muted); white-space: nowrap; }
-   .fdc-kind-badge { font-size: 8px; padding: 1px 5px; border-radius: 3px; font-weight: 600; white-space: nowrap; border: 1px solid; }
+   .fdc-entity-name { font-family: monospace; color: var(--text-bright); font-size: 13px; word-break: break-all; }
+   .fdc-entity-exported { text-align: center; color: var(--success); font-size: 15px; }
+   .fdc-entity-lines { font-family: monospace; font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+   .fdc-kind-badge { font-size: 13px; padding: 1px 5px; border-radius: 3px; font-weight: 600; white-space: nowrap; border: 1px solid; }
    ```
 
 10. **Blast radius tree** — extracted from blast-radius-tree.html `<style>` block:
     ```css
     .dep-tree { display: flex; flex-direction: column; gap: 16px; }
     .dep-tree-group { display: flex; flex-direction: column; gap: 4px; }
-    .dep-tree-root { font-family: monospace; font-size: 12px; font-weight: 700; color: var(--text-bright); padding: 6px 10px; background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 6px; display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dep-tree-root { font-family: monospace; font-size: 16px; font-weight: 700; color: var(--text-bright); padding: 6px 10px; background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 6px; display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .dep-tree-edges { display: flex; flex-direction: column; gap: 3px; padding-left: 16px; margin-top: 4px; }
     .dep-tree-edge { display: flex; align-items: center; gap: 6px; }
-    .dep-tree-connector { font-family: monospace; font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
-    .dep-tree-node { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 3px 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; min-width: 0; }
+    .dep-tree-connector { font-family: monospace; font-size: 16px; color: var(--text-muted); flex-shrink: 0; }
+    .dep-tree-node { display: flex; align-items: center; gap: 6px; font-size: 15px; padding: 3px 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; min-width: 0; }
     .dep-tree-name { font-family: monospace; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
     .dep-tree-node--summary { color: var(--text-muted); font-style: italic; }
-    .layer-badge { font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px; border: 1px solid; white-space: nowrap; flex-shrink: 0; }
+    .layer-badge { font-size: 13px; font-weight: 600; padding: 1px 5px; border-radius: 3px; border: 1px solid; white-space: nowrap; flex-shrink: 0; }
     ```
 
 11. **Blast radius severity badges** — from file-detail-card.html:
     ```css
-    .fdc-severity-badge { font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 20px; border: 1px solid transparent; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+    .fdc-severity-badge { font-size: 13px; font-weight: 700; padding: 2px 8px; border-radius: 20px; border: 1px solid transparent; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
     .fdc-severity-low, .fdc-severity-contained { background: rgba(52,211,153,0.12); color: #34d399; border-color: rgba(52,211,153,0.3); }
     .fdc-severity-moderate { background: rgba(251,191,36,0.12); color: #fbbf24; border-color: rgba(251,191,36,0.3); }
     .fdc-severity-high { background: rgba(251,146,60,0.12); color: #fb923c; border-color: rgba(251,146,60,0.3); }
@@ -617,10 +617,10 @@ Assemble the full `<style>` block in this order:
     ```css
     .violation-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
     .violation-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border); }
-    .severity-badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid transparent; white-space: nowrap; letter-spacing: 0.03em; flex-shrink: 0; }
+    .severity-badge { font-size: 13px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid transparent; white-space: nowrap; letter-spacing: 0.03em; flex-shrink: 0; }
     .item-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
-    .principle-id-text { font-size: 11px; font-family: monospace; color: var(--text-bright); }
-    .item-message { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+    .principle-id-text { font-size: 15px; font-family: monospace; color: var(--text-bright); }
+    .item-message { font-size: 16px; color: var(--text-muted); line-height: 1.4; }
     ```
 
 13. **Co-change table** — reuse `.requirement-table` from Section C.
@@ -628,13 +628,13 @@ Assemble the full `<style>` block in this order:
 14. **Tags panel** — custom:
     ```css
     .fc-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
-    .fc-tag-badge { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-glow); white-space: nowrap; }
+    .fc-tag-badge { font-size: 13px; font-weight: 600; padding: 3px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-glow); white-space: nowrap; }
     ```
 
 15. **Shared table** — for co-change partners:
     ```css
-    .requirement-table { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--bg-card); }
-    .requirement-table th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 700; color: var(--text-bright); background: var(--bg-surface); border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .requirement-table { width: 100%; border-collapse: collapse; font-size: 16px; background: var(--bg-card); }
+    .requirement-table th { padding: 8px 12px; text-align: left; font-size: 15px; font-weight: 700; color: var(--text-bright); background: var(--bg-surface); border-bottom: 1px solid var(--border); white-space: nowrap; }
     .requirement-table td { padding: 7px 12px; color: var(--text); border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.4; }
     .requirement-table tbody tr:last-child td { border-bottom: none; }
     .requirement-table tbody tr:nth-child(even) td { background: var(--bg-surface); }
@@ -642,7 +642,7 @@ Assemble the full `<style>` block in this order:
 
 16. **Misc** — empty states:
     ```css
-    .empty-note { font-size: 12px; color: var(--text-muted); padding: 8px 0; }
+    .empty-note { font-size: 16px; color: var(--text-muted); padding: 8px 0; }
     ```
 
 ## Composition Protocol
