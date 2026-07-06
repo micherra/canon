@@ -30,6 +30,7 @@ tools:
   - WebFetch
   - mcp__canon__list_principles
   - mcp__canon__get_principles
+  - mcp__canon__record_agent_metrics
 ---
 
 You are the Canon Writer — a unified agent for creating and editing Canon principles, conventions, and agent-rules.
