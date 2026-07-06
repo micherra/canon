@@ -151,17 +151,17 @@ Use the design system (Section A tokens, Section B page boilerplate, Section C c
 <div class="section-card" style="margin-bottom: 16px;">
   <div class="section-card-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
     <div>
-      <h1 style="font-size: 18px; font-weight: 700; color: var(--text-bright);">{title}</h1>
-      <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">{scope summary}</p>
+      <h1 style="font-size: 22px; font-weight: 700; color: var(--text-bright);">{title}</h1>
+      <p style="font-size: 17px; color: var(--text-muted); margin-top: 4px;">{scope summary}</p>
     </div>
     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-      <span style="background: {badgeColor}22; color: {badgeColor}; border: 1px solid {badgeColor}44; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px; letter-spacing: 0.04em;">{OUTCOME}</span>
-      <span style="font-size: 11px; font-family: monospace; color: var(--text-muted); background: var(--bg-surface); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${SLUG}</span>
+      <span style="background: {badgeColor}22; color: {badgeColor}; border: 1px solid {badgeColor}44; font-size: 15px; font-weight: 700; padding: 3px 10px; border-radius: 10px; letter-spacing: 0.04em;">{OUTCOME}</span>
+      <span style="font-size: 15px; font-family: monospace; color: var(--text-muted); background: var(--bg-surface); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${SLUG}</span>
     </div>
   </div>
   <div class="section-card-body" style="display: flex; gap: 12px; flex-wrap: wrap; padding-top: 8px;">
-    <span style="font-size: 12px; color: var(--text-muted);">Effort: {effort}</span>
-    <span style="font-size: 12px; color: var(--text-muted);">Value: {value}</span>
+    <span style="font-size: 16px; color: var(--text-muted);">Effort: {effort}</span>
+    <span style="font-size: 16px; color: var(--text-muted);">Value: {value}</span>
   </div>
 </div>
 ```
@@ -179,10 +179,10 @@ Omit the effort/value row if neither value is present in the PRD.
 <div class="section-card" style="margin-bottom: 16px;">
   <div class="section-card-header" style="display: flex; align-items: center; justify-content: space-between;">
     <div>
-      <h1 style="font-size: 18px; font-weight: 700; color: var(--text-bright);">{title}</h1>
-      <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">{scope summary}</p>
+      <h1 style="font-size: 22px; font-weight: 700; color: var(--text-bright);">{title}</h1>
+      <p style="font-size: 17px; color: var(--text-muted); margin-top: 4px;">{scope summary}</p>
     </div>
-    <span style="font-size: 11px; font-family: monospace; color: var(--text-muted); background: var(--bg-surface); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${SLUG}</span>
+    <span style="font-size: 15px; font-family: monospace; color: var(--text-muted); background: var(--bg-surface); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${SLUG}</span>
   </div>
 </div>
 ```
@@ -223,7 +223,7 @@ If no table rows exist, render an `.empty-note`: "No requirement coverage map de
 
 Use `.section-card` with title "Scope & Constraints". Render the in-scope items as a `<ul>` list
 under a sub-label, out-of-scope items under a second sub-label, and constraints under a third.
-Use `font-size: 11px; font-weight: 600; color: var(--text-muted)` for sub-labels. Omit
+Use `font-size: 15px; font-weight: 600; color: var(--text-muted)` for sub-labels. Omit
 sub-sections that have no items. Use `markdownToHtml()` for item text (items may contain
 inline code or bold emphasis); use `escapeHtml()` for sub-label text only.
 
@@ -252,13 +252,13 @@ visual — no JavaScript or SVG required. Use a wave/column layout:
     <div style="display: flex; gap: 24px; overflow-x: auto; padding-bottom: 8px;">
       <!-- One column per depth level -->
       <div style="display: flex; flex-direction: column; gap: 8px; min-width: 160px;">
-        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;">Wave {depth}</div>
+        <div style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;">Wave {depth}</div>
         <!-- Task chip -->
         <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px;">
-          <div style="font-size: 12px; font-weight: 600; color: var(--accent); font-family: monospace;">{task_id}</div>
-          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">{file count} files</div>
+          <div style="font-size: 16px; font-weight: 600; color: var(--accent); font-family: monospace;">{task_id}</div>
+          <div style="font-size: 15px; color: var(--text-muted); margin-top: 4px;">{file count} files</div>
           <!-- Dependencies (when depends_on is non-empty) -->
-          <div style="font-size: 10px; color: var(--text-muted); margin-top: 6px; border-top: 1px solid var(--border); padding-top: 4px;">
+          <div style="font-size: 13px; color: var(--text-muted); margin-top: 6px; border-top: 1px solid var(--border); padding-top: 4px;">
             Depends on: {depends_on joined by ", "}
           </div>
         </div>
@@ -266,9 +266,9 @@ visual — no JavaScript or SVG required. Use a wave/column layout:
     </div>
     <!-- Summary stats row -->
     <div style="display: flex; gap: 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-      <span style="font-size: 12px; color: var(--text-muted);">{taskCount} tasks</span>
-      <span style="font-size: 12px; color: var(--text-muted);">{waveCount} waves</span>
-      <span style="font-size: 12px; color: var(--text-muted);">{rootCount} parallel roots</span>
+      <span style="font-size: 16px; color: var(--text-muted);">{taskCount} tasks</span>
+      <span style="font-size: 16px; color: var(--text-muted);">{waveCount} waves</span>
+      <span style="font-size: 16px; color: var(--text-muted);">{rootCount} parallel roots</span>
     </div>
   </div>
 </div>
@@ -288,16 +288,16 @@ numbered list.
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
   <div class="section-card">
     <div class="section-card-header" style="display: flex; align-items: center; gap: 8px;">
-      <span style="font-size: 12px; font-weight: 700; font-family: monospace; color: var(--accent);">{task_id}</span>
+      <span style="font-size: 16px; font-weight: 700; font-family: monospace; color: var(--accent);">{task_id}</span>
       <!-- Dependency indicator -->
-      {depends_on.length > 0 ? '<span style="font-size: 10px; color: var(--text-muted);">← depends on ' + deps + '</span>' : ''}
+      {depends_on.length > 0 ? '<span style="font-size: 13px; color: var(--text-muted);">← depends on ' + deps + '</span>' : ''}
     </div>
     <div class="section-card-body">
       <!-- Files list -->
       <div style="margin-bottom: 8px;">
-        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Files</div>
+        <div style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Files</div>
         <ul style="list-style: none; display: flex; flex-direction: column; gap: 2px;">
-          <li style="font-size: 11px; font-family: monospace; color: var(--text-bright);">{file}</li>
+          <li style="font-size: 15px; font-family: monospace; color: var(--text-bright);">{file}</li>
         </ul>
       </div>
       <!-- Brief coverage (if task plan has a Brief Coverage table) -->
@@ -372,11 +372,11 @@ type, and expected artifacts listed. Render each step as a numbered row with:
   <div class="section-card-body">
     <ol style="list-style: none; display: flex; flex-direction: column; gap: 10px;">
       <li style="display: flex; gap: 12px; align-items: flex-start;">
-        <span style="font-size: 20px; font-weight: 700; color: var(--accent); min-width: 28px;">{N}</span>
+        <span style="font-size: 24px; font-weight: 700; color: var(--accent); min-width: 28px;">{N}</span>
         <div>
-          <div style="font-weight: 600; color: var(--text-bright); font-size: 13px;">{step name}</div>
-          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Agent: {agent type}</div>
-          <div style="font-size: 11px; color: var(--text-muted);">Artifacts: {artifacts}</div>
+          <div style="font-weight: 600; color: var(--text-bright); font-size: 17px;">{step name}</div>
+          <div style="font-size: 15px; color: var(--text-muted); margin-top: 2px;">Agent: {agent type}</div>
+          <div style="font-size: 15px; color: var(--text-muted);">Artifacts: {artifacts}</div>
         </div>
       </li>
     </ol>

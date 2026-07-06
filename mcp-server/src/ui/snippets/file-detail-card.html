@@ -164,7 +164,7 @@
 
   .fdc-path {
     font-family: monospace;
-    font-size: 12px;
+    font-size: 16px;
     color: var(--text-bright);
     flex: 1;
     overflow: hidden;
@@ -180,7 +180,7 @@
   }
 
   .fdc-layer-badge {
-    font-size: 10px;
+    font-size: 13px;
     font-weight: 600;
     padding: 2px 6px;
     border-radius: 4px;
@@ -189,7 +189,7 @@
   }
 
   .fdc-violation-badge {
-    font-size: 10px;
+    font-size: 13px;
     font-weight: 600;
     padding: 2px 7px;
     border-radius: 10px;
@@ -231,19 +231,19 @@
   }
 
   .fdc-metric-value {
-    font-size: 20px;
+    font-size: 24px;
     font-weight: 700;
     color: var(--text-bright);
     line-height: 1;
   }
 
   .fdc-metric-label {
-    font-size: 10px;
+    font-size: 13px;
     color: var(--text-muted);
   }
 
   .fdc-metric-sub {
-    font-size: 9px;
+    font-size: 13px;
     color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -265,7 +265,7 @@
   }
 
   .fdc-shape-icon {
-    font-size: 16px;
+    font-size: 20px;
     color: var(--success, #34d399);
     flex-shrink: 0;
     margin-top: 2px;
@@ -278,13 +278,13 @@
   }
 
   .fdc-shape-label {
-    font-size: 12px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--text-bright);
   }
 
   .fdc-shape-desc {
-    font-size: 10px;
+    font-size: 13px;
     color: var(--text);
     line-height: 1.4;
   }
@@ -308,7 +308,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 10px;
+    font-size: 13px;
     color: var(--text-muted);
   }
 
@@ -334,7 +334,7 @@
   .fdc-graph-empty-note {
     display: none;
     padding: 8px 14px 10px;
-    font-size: 10px;
+    font-size: 13px;
     font-style: italic;
     color: var(--text-muted);
   }
@@ -349,7 +349,7 @@
   }
 
   .fdc-empty-note {
-    font-size: 10px;
+    font-size: 13px;
     font-style: italic;
     color: var(--text-muted);
     padding: 6px 10px;
@@ -373,7 +373,7 @@
   }
 
   .fdc-panel-header {
-    font-size: 10px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -387,11 +387,11 @@
   .fdc-entity-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: 15px;
   }
 
   .fdc-entity-table th {
-    font-size: 9px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -414,25 +414,25 @@
   .fdc-entity-name {
     font-family: monospace;
     color: var(--text-bright);
-    font-size: 10px;
+    font-size: 13px;
     word-break: break-all;
   }
 
   .fdc-entity-exported {
     text-align: center;
     color: var(--success, #34d399);
-    font-size: 11px;
+    font-size: 15px;
   }
 
   .fdc-entity-lines {
     font-family: monospace;
-    font-size: 9px;
+    font-size: 13px;
     color: var(--text-muted);
     white-space: nowrap;
   }
 
   .fdc-kind-badge {
-    font-size: 8px;
+    font-size: 13px;
     padding: 1px 5px;
     border-radius: 3px;
     font-weight: 600;
@@ -450,7 +450,7 @@
   }
 
   .fdc-severity-badge {
-    font-size: 9px;
+    font-size: 13px;
     font-weight: 700;
     padding: 2px 8px;
     border-radius: 20px;
@@ -493,13 +493,13 @@
   }
 
   .fdc-depth-arrow {
-    font-size: 12px;
+    font-size: 16px;
     color: var(--text-muted);
     margin-bottom: 2px;
   }
 
   .fdc-depth-label {
-    font-size: 9px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -515,7 +515,7 @@
 
   .fdc-depth-chip {
     font-family: monospace;
-    font-size: 9px;
+    font-size: 13px;
     padding: 2px 6px 2px 5px;
     border-radius: 3px;
     border-left: 3px solid #5F5E5A;
@@ -531,7 +531,7 @@
   .fdc-chip-rel {
     display: inline-block;
     margin-left: 4px;
-    font-size: 8px;
+    font-size: 13px;
     color: var(--text-muted);
     font-family: monospace;
   }
@@ -571,7 +571,7 @@
     var H = Math.max(160, maxNodes * 28 + 80);
     var maxLabelChars = 26;
 
-    ctx.font = "10px monospace";
+    ctx.font = "13px monospace"; /* fs-floor */
     var maxLeftLabel = 0;
     for (var i = 0; i < imports.length; i++) {
       var w = ctx.measureText(truncateStr(shortName(imports[i]), maxLabelChars)).width;
@@ -645,7 +645,7 @@
   }
 
   function drawColumnHeaders(ctx, layout, hasImports, hasDependents) {
-    ctx.font = "9px monospace";
+    ctx.font = "13px monospace"; /* fs-floor */
     ctx.textAlign = "center";
     ctx.fillStyle = "#636a80";
     if (hasImports) ctx.fillText("DEPENDS ON", layout.LEFT_X, HEADER_Y);
@@ -667,13 +667,13 @@
     ctx.fillStyle = "#7F77DD";
     ctx.fill();
 
-    ctx.font = "11px monospace";
+    ctx.font = "15px monospace"; /* fs-body */
     ctx.fillStyle = "#e8eaf0";
     ctx.textAlign = "center";
     ctx.fillText(truncateStr(fileName, 28), CX, CY + 28);
 
     if (exportCount > 0 && hasDependents) {
-      ctx.font = "8px monospace";
+      ctx.font = "13px monospace"; /* fs-floor */
       ctx.fillStyle = "#7F77DD";
       ctx.globalAlpha = 0.7;
       ctx.textAlign = "center";
@@ -693,7 +693,7 @@
       ctx.fillStyle = color;
       ctx.fill();
 
-      ctx.font = "10px monospace";
+      ctx.font = "13px monospace"; /* fs-floor */
       ctx.fillStyle = "#b4b8c8";
       ctx.textAlign = "end";
       ctx.fillText(truncateStr(shortName(pos.path), maxLabelChars), pos.x - LABEL_GAP, pos.y + 3);
@@ -711,7 +711,7 @@
       ctx.fillStyle = color;
       ctx.fill();
 
-      ctx.font = "10px monospace";
+      ctx.font = "13px monospace"; /* fs-floor */
       ctx.fillStyle = "#b4b8c8";
       ctx.textAlign = "start";
       ctx.fillText(truncateStr(shortName(pos.path), maxLabelChars), pos.x + LABEL_GAP, pos.y + 3);
