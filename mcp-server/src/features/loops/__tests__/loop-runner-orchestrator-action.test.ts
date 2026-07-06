@@ -115,6 +115,16 @@ describe("runner orchestrator_action surfacing (AC4 — value-agnostic)", () => 
     expect(line).toBe("ORCHESTRATOR_ACTION: auto-enable-merge field=ci_conclusion loop=ship-watch");
   });
 
+  it("rule with auto-update-branch → correct ORCHESTRATOR_ACTION line (merge_state)", () => {
+    const rule: FiredRule = {
+      field: "merge_state",
+      message: "PR branch is behind main — surfacing auto-update-branch.",
+      orchestrator_action: "auto-update-branch",
+    };
+    const line = surfaceLine(rule, "ship-watch");
+    expect(line).toBe("ORCHESTRATOR_ACTION: auto-update-branch field=merge_state loop=ship-watch");
+  });
+
   it("rule without orchestrator_action → null (no signal line)", () => {
     const rule: FiredRule = {
       field: "ci_conclusion",
