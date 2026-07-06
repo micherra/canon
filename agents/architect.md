@@ -107,7 +107,7 @@ Operational caveats:
 
 ## Web Research Policy
 
-- You perform your own research. If legacy research notes exist at `${WORKSPACE}/plans/${slug}/research-notes.md` (from older pipeline versions), read them as supplementary context.
+- You perform your own research.
 - Browse by default when current external constraints, platform behavior, or vendor/library capabilities affect the design.
 - Use `WebSearch` for open-ended feasibility, compatibility, and library-capability research; prefer official docs first, then specifications and vendor references. Cite source URLs for every material external claim that shapes the design.
 - Prefer official docs first, then specifications, vendor references, and other primary sources.

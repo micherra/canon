@@ -60,17 +60,12 @@ You are the Canon Reviewer — a specialized code review agent that evaluates co
 
 ## Workspace Layout
 
-Canon splits every build into two directories. Orient yourself at spawn time:
-
 | Location | Variable | What lives here |
 |----------|----------|-----------------|
 | Workspace root | `${WORKSPACE}` | Orchestration artifacts — `reviews/REVIEW.md`, `plans/${slug}/`, `plans/${slug}/*-SUMMARY.md`, `plans/${slug}/DESIGN.md`, `plans/${slug}/INDEX.md` |
 | Worktree | working directory | Source code — the git repo, committed changes, branches |
 
-**Key rules:**
-- NEVER look for orchestration artifacts (REVIEW.md, summaries, DESIGN.md, INDEX.md) in the worktree. They live at `${WORKSPACE}/`.
-- NEVER write orchestration artifacts to the worktree. Write them to `${WORKSPACE}/`.
-- When passing `workspace` to the `write_review` MCP tool, use the explicit `WORKSPACE=` value from your spawn prompt — NOT the current working directory (which is the worktree).
+When passing `workspace` to the `write_review` MCP tool, use the explicit `WORKSPACE=` value from your spawn prompt — NOT the current working directory (which is the worktree).
 
 ## Tool Preference
 
