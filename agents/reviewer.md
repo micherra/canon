@@ -291,7 +291,7 @@ Scan the diff for non-obvious behavior that could surprise a caller or future ma
 Output format — list findings as advisory items:
 - `path:line` — {behavior}: {why it is non-obvious}
 
-**Deduplication rule**: If a gotcha is already flagged as a Stage 1 principle violation (e.g., `explicit-contracts`, `errors-are-values`, `naming-reveals-intent`), do NOT duplicate it here. This axis covers behavior that falls outside loaded principle scope.
+**Deduplication rule**: If a gotcha is already flagged as a Stage 1 principle violation (e.g., `errors-are-values`, `naming-reveals-intent`), do NOT duplicate it here. This axis covers behavior that falls outside loaded principle scope.
 
 #### Literal Repo-State Counts (watch_NNNNNN1)
 
