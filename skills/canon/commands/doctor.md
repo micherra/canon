@@ -126,6 +126,95 @@ Parse the output:
 | `node-too-old` | "MCP server boot check failed: Node {NODE_VERSION} is too old" | "Upgrade Node.js to v24+ (found {NODE_VERSION})" |
 | _(exit 1 / CANON ERROR)_ | "MCP server boot check failed: {CANON ERROR message}" | "Reinstall Canon or check `CLAUDE_PLUGIN_ROOT`" — e.g. `CANON ERROR: cannot resolve MCP server dir` means the plugin directory is misconfigured or the symlink is dangling |
 
+Check 7 only validates that the MCP server *can* boot (`boot.sh --print-resolution`
+is a static resolution check — no server is started). It says nothing about
+whether an already-running HTTP daemon is reachable or on the right version.
+Check 7b below covers that live-runtime case.
+
+#### Check 7b: HTTP daemon health and recovery
+
+This check is diagnostic by default and only takes action with explicit user
+confirmation — unlike Check 7, it probes the *live* daemon process, not a
+static resolution.
+
+**Step 1 — Is HTTP daemon mode enabled?**
+
+If `CANON_HTTP_DAEMON` is not `1`, this check is not applicable: **OK** —
+"HTTP daemon mode not enabled (stdio MCP transport in use); nothing to check."
+Skip the remaining steps.
+
+**Step 2 — Resolve the latest installed plugin version.** Same resolution
+`hooks/canon-agent-teams/daemon-version-nudge.sh` uses: the max-semver sibling
+directory of `$CLAUDE_PLUGIN_ROOT`'s parent (a mid-session `plugin-update`
+writes a new sibling dir; `CLAUDE_PLUGIN_ROOT` itself is pinned at session
+start and would miss it):
+
+```bash
+PARENT="$(dirname "$CLAUDE_PLUGIN_ROOT")"
+INSTALLED_VERSION=$(
+  for d in "$PARENT"/*/; do
+    [[ -d "$d" ]] || continue
+    b="$(basename "$d")"
+    [[ "$b" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo "$b"
+  done | sort -t. -k1,1n -k2,2n -k3,3n | tail -n1
+)
+```
+
+**Step 3 — Probe the running daemon's `/health` endpoint** (same grep/sed idiom
+as `hooks/canon-agent-teams/session-start-daemon-supervisor.sh`):
+
+```bash
+PORT="${CANON_DAEMON_PORT:-3142}"
+HEALTH=$(curl -s -m 2 "http://127.0.0.1:${PORT}/health" 2>/dev/null)
+DAEMON_VERSION=$(echo "$HEALTH" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+```
+
+**Step 4 — Diagnose** (explicit match/mismatch/unreachable — this replaces the
+old diagnostics-only gap, where the nudge hook's "run `/canon:doctor`"
+remediation pointer led nowhere):
+
+| Condition | Status | Message |
+|---|---|---|
+| `$HEALTH` is empty (no response within the timeout) | ERROR | "HTTP daemon unreachable on 127.0.0.1:{PORT}. `mcp__canon__*` tool calls will fail this session." |
+| `$DAEMON_VERSION` == `$INSTALLED_VERSION` | OK | "Daemon healthy, running v{DAEMON_VERSION}." |
+| `$DAEMON_VERSION` != `$INSTALLED_VERSION` (both non-empty) | WARN | "Daemon stale: running v{DAEMON_VERSION}, latest installed v{INSTALLED_VERSION}." |
+
+**Step 5 — Recovery (ERROR or WARN only; ASK-FIRST, never automatic).**
+
+Before offering recovery, warn the user: *the daemon is a shared multi-session
+singleton — restarting it will error in-flight `mcp__canon__*` calls in any
+OTHER active Canon session, not just this one.* Only proceed on explicit
+confirmation. This ask-first restart inside a user-invoked `/canon:doctor` run
+is the sanctioned restart moment for this daemon (the supervisor's own
+`SessionStart` hook only self-heals opportunistically; anything stronger
+requires a human decision at a quiescent moment).
+
+On confirmation, run the version handoff — the fresh cache dir for
+`$INSTALLED_VERSION` may not yet have `node_modules`/`tsx` installed, so
+deps-install MUST run before the supervisor or the boot fails with "tsx not
+found":
+
+```bash
+export CANON_HTTP_DAEMON=1
+export CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/canon-canon-marketplace}"
+LATEST_CACHE_DIR="$PARENT/$INSTALLED_VERSION"
+bash "$LATEST_CACHE_DIR/hooks/canon-agent-teams/session-start-deps-install.sh"
+bash "$LATEST_CACHE_DIR/hooks/canon-agent-teams/session-start-daemon-supervisor.sh"
+curl -s -m 2 "http://127.0.0.1:${PORT}/health"
+```
+
+`session-start-daemon-supervisor.sh` performs the identity-validated kill +
+handoff + health poll (see its SessionStart contract in
+`hooks/.claude/CLAUDE.md`) — it will not touch a non-Canon process on the
+port. `CLAUDE_PLUGIN_DATA` must resolve to the actual marketplace data
+directory for this install; adjust the default above if the project uses a
+different plugin source. Confirm the re-probed `/health` now reports
+`$INSTALLED_VERSION`, then remind the user to run `/mcp` to reconnect this
+session to the fresh daemon.
+
+If the user declines recovery, report the diagnosis only (WARN/ERROR per Step
+4) and take no further action.
+
 #### Check 8: CLAUDE.md integration
 
 Check if `CLAUDE.md` exists and contains a Canon section.
@@ -206,6 +295,7 @@ Render one row per finding:
 | 5 | Scope validation | WARN | 1 unmatched file pattern |
 | 6 | Agent-rules | OK | All valid |
 | 7 | MCP server | OK | Server loads successfully |
+| 7b | HTTP daemon health | OK | Daemon healthy, running v2.17.0 |
 | 8 | CLAUDE.md | OK | Canon section present |
 | 9 | Data files | OK | All valid |
 | 10 | Convention bloat | OK | 12 conventions |
@@ -225,4 +315,8 @@ If all checks pass: "Canon is healthy. No issues found."
 If errors exist: "Found {N} error(s) that need fixing. {details}"
 If only warnings: "Canon is functional but has {N} warning(s) worth addressing."
 
-The summary count covers all 13 checks. Check 12 may produce INFO entries (not warnings or errors) when failed states have transcripts available for review. Check 13 reports context artifact drift between the installed plugin and the committed manifest.
+The summary count covers all 13 numbered checks plus Check 7b. Check 7b is
+skipped (OK, not counted as a check run) when `CANON_HTTP_DAEMON` is not `1`.
+Check 12 may produce INFO entries (not warnings or errors) when failed states
+have transcripts available for review. Check 13 reports context artifact
+drift between the installed plugin and the committed manifest.
