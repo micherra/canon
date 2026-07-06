@@ -1,3 +1,8 @@
+---
+title: Infrastructure Domain
+description: Risk and rollback tradeoffs specific to infrastructure changes versus application code.
+---
+
 # Infrastructure Domain
 
 ## Mental Models

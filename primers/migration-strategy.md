@@ -1,3 +1,8 @@
+---
+title: Migration Strategy Domain
+description: The expand-migrate-contract discipline for safe, rollback-friendly data and system migrations.
+---
+
 # Migration Strategy Domain
 
 ## Mental Models

@@ -1,3 +1,8 @@
+---
+title: Frontend Domain
+description: Designing frontend code for the realities of user hardware, networks, and accessibility.
+---
+
 # Frontend Domain
 
 ## Mental Models

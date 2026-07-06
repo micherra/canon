@@ -1,3 +1,8 @@
+---
+title: Observability Domain
+description: Choosing the right signal -- logs, metrics, or traces -- for the question being asked.
+---
+
 # Observability Domain
 
 ## Mental Models

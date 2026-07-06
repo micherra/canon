@@ -1,3 +1,8 @@
+---
+title: Authentication & Security Domain
+description: Mental models and decision frameworks for authentication, authorization, and security-sensitive code.
+---
+
 # Authentication & Security Domain
 
 ## Mental Models

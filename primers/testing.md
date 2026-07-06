@@ -1,3 +1,8 @@
+---
+title: Testing Domain
+description: The test pyramid as a resource-allocation model for unit, integration, and end-to-end tests.
+---
+
 # Testing Domain
 
 ## Mental Models
@@ -30,7 +35,7 @@
 
 **Test-per-method symmetry** — You should test behavior. If your test file mirrors the source file method-by-method (one test per function, named after the function), you're testing implementation structure, not behavior. Tests should be organized around scenarios and behaviors, not around the source file's table of contents.
 
-**Assertion overload** — You should verify outcomes. If a single test has 15 assertions checking every field of a response, every call to a mock, and every side effect, you've gone too far. A test with too many assertions is testing multiple behaviors — when it fails, you don't know which behavior broke. Prefer one logical assertion per test.
+**Assertion overload** — You should verify outcomes. If a single test has 15 assertions checking every field of a response, every call to a mock, and every side effect, you've gone too far. A test with too many assertions is testing multiple behaviors — when it fails, you don't know which behavior broke; see `one-behavior-per-test` for the underlying constraint.
 
 **Coverage worship** — You should track test coverage. If you're writing trivial tests (getter/setter tests, tests that only assert a constructor sets fields) to hit a coverage number, you've gone too far. Coverage measures which lines executed, not which behaviors are verified. 80% meaningful coverage beats 100% with padding.
 
