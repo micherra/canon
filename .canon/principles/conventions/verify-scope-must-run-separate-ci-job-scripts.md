@@ -15,7 +15,7 @@ tags:
   - process-health
 ---
 
-When a build modifies shell or Node scripts that run as their own independent CI jobs — scripts that are NOT part of `npm test`'s vitest suite, NOT in `hooks/**` (which is covered by `[[shell-test-gate]]`), and NOT exercised by `bash hooks/lint.sh` (shellcheck syntax only) — the verify step MUST explicitly execute those scripts before committing. Standard verify (`npm run build → npm run lint → npm test → bash hooks/lint.sh → bash hooks/dead-wire-gate.sh → bash hooks/shell-test-gate.sh`) does not invoke them. The engineer must add the invocation manually.
+When a build modifies shell or Node scripts that run as their own independent CI jobs — scripts that are NOT part of `npm test`'s vitest suite, NOT in `hooks/**` (which is covered by `hooks/shell-test-gate.sh`), and NOT exercised by `bash hooks/lint.sh` (shellcheck syntax only) — the verify step MUST explicitly execute those scripts before committing. Standard verify (`npm run build → npm run lint → npm test → bash hooks/lint.sh → bash hooks/dead-wire-gate.sh → bash hooks/shell-test-gate.sh`) does not invoke them. The engineer must add the invocation manually.
 
 **Discriminator:** the script runs as its own CI job (a separate YAML workflow step or job), but the local verify pipeline does not invoke it. When that script changes, CI is the first place the break surfaces — the verify step passes locally because it never ran the changed script.
 
@@ -99,7 +99,7 @@ Any behavioral change — flag parsing, output format, exit codes, invoked comma
 - [ ] If yes: the SUMMARY (or verify-step evidence) shows the script was explicitly invoked and its exit code confirmed.
 - [ ] If the script has environment-conditional exit codes (e.g., `install-sim-smoke.mjs` exits 1 when Node == pin), the SUMMARY notes the expected vs observed exit code and confirms it matches CI's expected behavior.
 - [ ] If the change was documentation-only, the SUMMARY explicitly states "no behavioral change — no execution needed."
-- [ ] `hooks/**/*.test.sh` suites are NOT expected to be run manually here — `hooks/shell-test-gate.sh` covers them automatically (see `[[shell-test-gate]]`).
+- [ ] `hooks/**/*.test.sh` suites are NOT expected to be run manually here — `hooks/shell-test-gate.sh` covers them automatically.
 
 ## Related
 

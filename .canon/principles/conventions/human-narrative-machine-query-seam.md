@@ -148,4 +148,4 @@ writeFileSync("reviews/REVIEW.meta.json",
 
 - `[[managed-artifact-class-shape]]` — convention governing how Canon's managed artifact classes are structured; the `.meta.json` sidecar pattern is an instance of the machine-queryable component.
 - `[[disk-is-source-of-truth-on-resume]]` — sibling convention governing intra-agent cursor writes; composes with the seam: each incremental reviewer write (`REVIEW.md` prose + `REVIEW.meta.json`) is a valid cursor checkpoint.
-- `[[feedback-always-render-review-html]]` — user feedback requiring the renderer spawn at every review HITL gate; this seam convention is the structural guarantee that the prose artifact the renderer reads always exists separately from the machine-queryable sidecar.
+- The `feedback_always_render_review_html` obligation (user feedback requiring the renderer spawn at every review HITL gate) — this seam convention is the structural guarantee that the prose artifact the renderer reads always exists separately from the machine-queryable sidecar.
