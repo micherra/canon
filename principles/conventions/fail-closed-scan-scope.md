@@ -2,6 +2,7 @@
 id: fail-closed-scan-scope
 title: A Fail-Closed Scan Must Be Scoped to Its Threat Model
 severity: convention
+portable: true
 scope:
   layers:
     - hooks

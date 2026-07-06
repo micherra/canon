@@ -80,21 +80,6 @@ One folder per component. Delete the folder, and every artifact goes with it. Ad
 
 Truly shared type definitions that multiple components import (e.g., `Theme`, `DesignTokens`) belong in a shared location, not duplicated inside each component folder. Global styles (resets, token definitions) are cross-cutting by nature and live at the project root, not inside a component. End-to-end tests that exercise multi-component flows belong in a top-level `e2e/` directory since they don't map to a single component.
 
-## Anti-Rationalization
-
-| Excuse | Why It's Wrong | Correct Action |
-|--------|---------------|----------------|
-| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
-| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
-| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
-| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
-
-## Verification
-
-- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
-- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
-- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
-
 ## Related
 
 [[single-source-of-component-styles]] — colocation ensures the one style source for a component lives in the same directory as the component, not scattered in a parallel style tree. [[compose-from-small-to-large]] — colocating a component's assets makes each atomic piece self-contained so it can be freely composed into larger structures without hidden dependencies in other directories.

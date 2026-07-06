@@ -1,3 +1,8 @@
+---
+title: DevOps & CI/CD Domain
+description: Treating CI/CD pipelines as reviewed, tested, version-controlled software.
+---
+
 # DevOps & CI/CD Domain
 
 ## Mental Models

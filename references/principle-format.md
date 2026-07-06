@@ -51,9 +51,9 @@ The markdown body after frontmatter follows this fixed structure:
 
 4. **Exceptions** (`## Exceptions`, optional) — When it's acceptable to deviate. Be specific.
 
-5. **Anti-Rationalization** (`## Anti-Rationalization`) — A short table that names common excuses for violating this principle, why each excuse is incorrect, and the correct action.
+5. **Anti-Rationalization** (`## Anti-Rationalization`, conditional) — Include only when this principle attracts bespoke excuses worth naming: a short table listing each excuse, why it's incorrect, and the correct action, all specific to this principle. Omit the section rather than fill it with a generic/boilerplate table — a boilerplate Anti-Rationalization block is a defect, not a complete principle.
 
-6. **Verification** (`## Verification`) — A concrete checklist for reviewing compliance in code/config/tests and confirming any allowed exceptions are bounded and explicit.
+6. **Verification** (`## Verification`, conditional) — Include only when this principle has mechanically checkable compliance steps specific to it: a concrete checklist for reviewing compliance in code/config/tests and confirming any allowed exceptions are bounded and explicit. Omit the section rather than fill it with a generic/boilerplate checklist — a boilerplate Verification block is a defect, not a complete principle.
 
 ## Severity Definitions
 

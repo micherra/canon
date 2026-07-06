@@ -1,3 +1,8 @@
+---
+title: Refactoring Patterns Domain
+description: Refactoring as the earned third step of red-green-refactor, not an afterthought.
+---
+
 # Refactoring Patterns Domain
 
 ## Mental Models

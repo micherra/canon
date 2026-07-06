@@ -88,17 +88,10 @@ resource "aws_launch_template" "app" {
 
 Stateful systems — databases, persistent volumes, message broker data — cannot be trivially replaced. The principle applies to compute and configuration, not to data. Emergency hotfixes may require runtime changes to stop active incidents, but must be followed immediately by a proper rebuild and redeploy that incorporates the fix into the code.
 
-## Anti-Rationalization
+## Related
 
-| Excuse | Why It's Wrong | Correct Action |
-|--------|---------------|----------------|
-| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
-| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
-| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
-| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
+- [[least-privilege-access]] — shares this principle's full IaC `file_patterns` scope; least-privilege governs what an immutable artifact is allowed to do, this principle governs how it gets replaced.
+- [[minimize-attack-surface]] — an immutable artifact is easier to keep minimal, since every rebuild is an opportunity to drop unused surface rather than accumulate runtime drift.
+- [[infrastructure-tested-like-code]] — validating infrastructure definitions before deployment only pays off if deployment is the *only* way configuration reaches production; mutable infrastructure lets untested runtime edits bypass that gate entirely.
+- [[design-for-self-healing]] — self-healing (automatic recovery by replacing a bad instance) presumes instances are replaceable artifacts, which is exactly what immutability guarantees.
 
-## Verification
-
-- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
-- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
-- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.

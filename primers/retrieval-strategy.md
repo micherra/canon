@@ -1,3 +1,8 @@
+---
+title: Retrieval Strategy
+description: Choosing the right codebase retrieval tool along the exact-match-to-semantic spectrum.
+---
+
 # Retrieval Strategy
 
 ## Mental Models

@@ -117,3 +117,9 @@ Emergency break-glass roles used for incident response may have broader permissi
 - [ ] No wildcard actions in production IAM policies — grep for `"Action": "*"` and `Action = "*"` in Terraform and CloudFormation files under `infra/` or `deploy/`.
 - [ ] No wildcard resources paired with sensitive actions — grep for `"Resource": "*"` and confirm that any matches are paired only with read-only or explicitly scoped actions.
 - [ ] No `cluster-admin` ClusterRoleBindings for application service accounts — grep for `name: cluster-admin` in Kubernetes RBAC files and confirm each binding is for an infrastructure-level service, not an application service account.
+
+## Related
+
+- [[minimize-attack-surface]] — least privilege is minimize-attack-surface applied specifically to identity and access permissions rather than to exposed endpoints and features.
+- [[fail-closed-by-default]] — a permission check that cannot be evaluated should deny by default; the same fail-closed posture this principle expects of the access grants it scopes.
+- [[secrets-never-in-code]] — both are core cloud-security hygiene: this principle scopes what an identity can do, secrets-never-in-code scopes what an identity can leak.

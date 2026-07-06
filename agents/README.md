@@ -10,23 +10,20 @@ The orchestrator reads these definition files when spawning agents and feeds the
 
 ## The Agent Roster
 
-Canon ships with thirteen specialists, covering the full software development lifecycle:
+Canon ships with ten specialists, covering the full software development lifecycle:
 
-- **Researcher** — Investigates a single research dimension; produces structured findings for the architect
-- **Architect** — Designs solutions, evaluates tradeoffs, and decomposes work into implementable task plans
-- **Implementor** — Executes a single task plan; writes code and tests, commits incrementally
+- **Architect** — Researches the codebase, designs solutions, evaluates tradeoffs, and decomposes work into implementable task plans and runbooks
+- **Engineer** — Executes code-writing work in two modes: implementation (new code per a task plan) or fix (targeted bug or violation fixes)
 - **Tester** — Fills integration test gaps and verifies coverage after implementation
 - **Reviewer** — Reviews code for principle compliance and code quality
-- **Fixer** — Resolves failing tests and principle violations identified by the reviewer
+- **Evaluator** — Lightweight post-implement/fix quality gate; interprets pre-computed structural signals (pattern findings, scope overlap, diff stats) against acceptance criteria and returns a PASS/FAIL verdict
 - **Security** — Performs security assessments on implemented code
 - **Scribe** — Updates CLAUDE.md files and context documents after implementation
 - **Shipper** — Handles final shipping decisions and PR preparation
-- **Chat** — Project-aware conversational agent for design discussions and brainstorming
-- **Guide** — Answers questions and shows status dashboards (read-only)
 - **Writer** — Creates and edits Canon principles and agent-behavior rules
 - **Learner** — Analyzes patterns and proposes improvements to principles
 
-Agents running at different tiers use different models. The reviewer, architect, and security agents use the most capable model because their jobs require deep reasoning. The rest use a faster model to keep iteration loops quick.
+Agents running at different tiers use different models. The reviewer, architect, and security agents use the most capable model because their jobs require deep reasoning. The evaluator runs on the fastest model since it interprets pre-computed signals rather than raw code. The rest use a mid-tier model to keep iteration loops quick.
 
 ## File Format
 

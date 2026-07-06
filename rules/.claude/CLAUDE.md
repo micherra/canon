@@ -19,7 +19,7 @@ Rules are organized into behavioral categories:
 - **Design rules** — govern pre-code planning (`agent-design-before-code`, `agent-plans-are-prompts`, `agent-document-decisions`)
 - **Testing rules** — govern test quality (`agent-test-sad-paths`, `agent-test-the-contract`)
 - **Coordination rules** — govern agent collaboration (`agent-fresh-context`, `agent-workspace-scoping`, `agent-conflict-detection`, `agent-context-sync`, `agent-convergence-discipline`, `agent-worktree-orientation`, `agent-working-environment`, `agent-budget-checkpoint`)
-- **Dispatch rules** — govern orchestrator dispatch behavior (`agent-dispatch-before-analysis`, `agent-discovery-execution-pairing`, `agent-compound-task-decomposition`)
+- **Dispatch rules** — govern orchestrator dispatch behavior (`agent-compound-task-decomposition`)
 - **Efficiency rules** — govern resource and tool usage (`agent-batch-tools`, `agent-metrics-before-return`)
 - **Review rules** — govern review behavior (`agent-cold-review`, `agent-assume-hostile-input`)
 - **Security/behavior rules** — govern agent trust posture (`agent-never-trust-overlay-tier`)
@@ -31,19 +31,17 @@ Rules are organized into behavioral categories:
 | agent-artifact-write-before-return.md | Write All Declared Artifacts Before Returning |
 | agent-artifacts-only.md | Synthesize From Artifacts, Never Fabricate |
 | agent-assume-hostile-input.md | Assume Hostile Input |
-| agent-batch-tools.md |  |
+| agent-batch-tools.md | Prefer Batch MCP Tools for Multi-File Operations |
 | agent-budget-checkpoint.md | Budget-Aware Checkpointing |
 | agent-cold-review.md | Cold Review, Two Stages |
 | agent-compound-task-decomposition.md | Decompose Compound Rebase+Fix Tasks |
 | agent-conflict-detection.md | Detect Principle Conflicts Before Saving |
 | agent-context-budget-dispatch.md | Architect Must Estimate Input Complexity for Dispatch Decisions |
-| agent-context-check.md |  |
+| agent-context-check.md | Verify Context Before Starting Work |
 | agent-context-sync.md | Diff-Driven, Contract-Scoped Updates |
 | agent-convergence-discipline.md | Flow Convergence Discipline |
 | agent-design-before-code.md | Design Before Code |
-| agent-discovery-execution-pairing.md | Discovery and Execution Are Paired Obligations |
-| agent-dispatch-before-analysis.md | Dispatch Before Analysis — No Self-Produced Substantive Output |
-| agent-document-decisions.md | Promote Significant Workspace Decisions to Project ADRs |
+| agent-document-decisions.md | Two-Tier Decision Record System |
 | agent-document-public-apis.md | Document Public APIs with JSDoc/TSDoc |
 | agent-evidence-over-intuition.md | Suggestions Require Quantified Evidence |
 | agent-fresh-context.md | Fresh Context, Atomic Commits |
