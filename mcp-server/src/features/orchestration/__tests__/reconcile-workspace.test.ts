@@ -205,6 +205,38 @@ describe("reconcileWorkspace", () => {
     expect(result.incomplete_steps[0]?.partial_artifacts).toContain("reviews/REVIEW.md");
   });
 
+  it("started step with present IN_PROGRESS scribe skeleton (frontmatter status) => flagged via partial_artifacts", async () => {
+    const workspace = makeTmpDir();
+    mkdirSync(join(workspace, "plans", "slug"), { recursive: true });
+    writeFileSync(
+      join(workspace, "plans", "slug", "CONTEXT-SYNC.md"),
+      '---\nstatus: "IN_PROGRESS"\nagent: scribe\ntimestamp: "2026-07-06T00:00:00Z"\n---\n\n## Context Sync\n',
+      "utf-8",
+    );
+
+    const journal: Journal = {
+      steps: [
+        {
+          agent_type: "scribe",
+          artifacts_expected: ["plans/slug/CONTEXT-SYNC.md"],
+          started_at: new Date().toISOString(),
+          status: "started",
+          step_id: "context-sync",
+        },
+      ],
+      version: 1,
+      workspace,
+    };
+    writeJournal(workspace, journal);
+
+    const result = await reconcileWorkspace({ workspace });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.needs_recovery).toBe(true);
+    expect(result.incomplete_steps[0]?.partial_artifacts).toContain("plans/slug/CONTEXT-SYNC.md");
+  });
+
   it("started step with present, FINAL artifact (no skeleton marker) => NOT flagged", async () => {
     const workspace = makeTmpDir();
     mkdirSync(join(workspace, "reviews"), { recursive: true });
