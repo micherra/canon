@@ -57,8 +57,8 @@ describe("OrchestratorDecisionsDao", () => {
       const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(row.value).toBe("14");
-      expect(DRIFT_SCHEMA_VERSION).toBe("14");
+      expect(row.value).toBe("15");
+      expect(DRIFT_SCHEMA_VERSION).toBe("15");
     });
   });
 

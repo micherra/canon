@@ -344,6 +344,8 @@ function makeCliffEventRow(
     partial_count: 0,
     recovery_outcome: "recovered",
     recorded_at: "2026-06-06T12:01:00.000Z",
+    transcript_path: null,
+    transcript_uncaptured_reason: null,
     ...overrides,
   };
 }

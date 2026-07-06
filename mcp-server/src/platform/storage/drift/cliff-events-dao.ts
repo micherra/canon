@@ -42,6 +42,10 @@ export type CliffEventRow = {
   partial_count: number | null;
   recovery_outcome: CliffRecoveryOutcome;
   recorded_at: string; // ISO-8601
+  /** Path to the captured transcript evidence (v15, cliff-transcript-01), when capture succeeded. */
+  transcript_path: string | null;
+  /** Typed reason capture did not happen (v15, cliff-transcript-01), when it didn't. */
+  transcript_uncaptured_reason: string | null;
 };
 
 /**
@@ -57,6 +61,10 @@ export type UpsertCliffEventInput = {
   missing_count?: number;
   partial_count?: number;
   recovery_outcome?: CliffRecoveryOutcome; // defaults to "unknown"
+  /** Captured transcript evidence path (v15, cliff-transcript-01). */
+  transcript_path?: string;
+  /** Typed absent-reason when capture did not happen (v15, cliff-transcript-01). */
+  transcript_uncaptured_reason?: string;
 };
 
 // ---- Raw DB row type ----
@@ -72,6 +80,8 @@ type CliffEventDbRow = {
   partial_count: number | null;
   recovery_outcome: string;
   recorded_at: string;
+  transcript_path: string | null;
+  transcript_uncaptured_reason: string | null;
 };
 
 // ---- Row deserializer ----
@@ -97,6 +107,8 @@ function rowToCliffEventRow(row: CliffEventDbRow): CliffEventRow {
     recovery_outcome: outcome,
     source: row.source,
     step_id: row.step_id,
+    transcript_path: row.transcript_path,
+    transcript_uncaptured_reason: row.transcript_uncaptured_reason,
     workspace_slug: row.workspace_slug,
   };
 }
@@ -122,13 +134,17 @@ export class CliffEventsDao {
     // - agent_type uses COALESCE: existing non-null preserved over incoming null
     // - missing_count / partial_count: COALESCE preserves existing non-null
     // - recovery_outcome: CASE guards against downgrading a known outcome to "unknown"
+    // - transcript_path / transcript_uncaptured_reason: COALESCE preserves a
+    //   previously-captured value across a later count-only re-upsert (v15)
     this.stmtUpsert = db.prepare(`
       INSERT INTO cliff_events (
         workspace_slug, step_id, agent_type, source, detected_at,
-        missing_count, partial_count, recovery_outcome, recorded_at
+        missing_count, partial_count, recovery_outcome, recorded_at,
+        transcript_path, transcript_uncaptured_reason
       ) VALUES (
         @workspace_slug, @step_id, @agent_type, @source, @detected_at,
-        @missing_count, @partial_count, @recovery_outcome, @recorded_at
+        @missing_count, @partial_count, @recovery_outcome, @recorded_at,
+        @transcript_path, @transcript_uncaptured_reason
       )
       ON CONFLICT(workspace_slug, step_id) DO UPDATE SET
         detected_at      = excluded.detected_at,
@@ -140,19 +156,25 @@ export class CliffEventsDao {
           WHEN excluded.recovery_outcome != 'unknown'
             THEN excluded.recovery_outcome
             ELSE cliff_events.recovery_outcome
-          END
+          END,
+        transcript_path = COALESCE(excluded.transcript_path, cliff_events.transcript_path),
+        transcript_uncaptured_reason = COALESCE(
+          excluded.transcript_uncaptured_reason, cliff_events.transcript_uncaptured_reason
+        )
     `);
 
     this.stmtGetAll = db.prepare(`
       SELECT id, workspace_slug, step_id, agent_type, source, detected_at,
-             missing_count, partial_count, recovery_outcome, recorded_at
+             missing_count, partial_count, recovery_outcome, recorded_at,
+             transcript_path, transcript_uncaptured_reason
       FROM cliff_events
       ORDER BY detected_at ASC
     `);
 
     this.stmtGetByWorkspace = db.prepare(`
       SELECT id, workspace_slug, step_id, agent_type, source, detected_at,
-             missing_count, partial_count, recovery_outcome, recorded_at
+             missing_count, partial_count, recovery_outcome, recorded_at,
+             transcript_path, transcript_uncaptured_reason
       FROM cliff_events
       WHERE workspace_slug = ?
       ORDER BY detected_at ASC
@@ -181,6 +203,8 @@ export class CliffEventsDao {
       recovery_outcome: input.recovery_outcome ?? "unknown",
       source: input.source,
       step_id: input.step_id,
+      transcript_path: input.transcript_path ?? null,
+      transcript_uncaptured_reason: input.transcript_uncaptured_reason ?? null,
       workspace_slug: input.workspace_slug,
     });
   }

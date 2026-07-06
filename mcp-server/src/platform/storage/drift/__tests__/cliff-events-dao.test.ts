@@ -94,11 +94,11 @@ describe("CliffEventsDao", () => {
       dbV9.close();
     });
 
-    it("fresh DB initializes straight to v13", () => {
+    it("fresh DB initializes straight to the current schema version", () => {
       const version = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(version.value).toBe("14");
+      expect(version.value).toBe("15");
     });
   });
 
@@ -468,6 +468,86 @@ describe("CliffEventsDao", () => {
         const rows = dao.getByWorkspace(slug);
         expect(rows[0].recovery_outcome).toBe(outcome);
       }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // transcript_path / transcript_uncaptured_reason (v15, cliff-transcript-01)
+  // ---------------------------------------------------------------------------
+
+  describe("transcript columns (v15)", () => {
+    it("v14→v15 migration adds transcript_path and transcript_uncaptured_reason columns", () => {
+      const columns = db.prepare("PRAGMA table_info(cliff_events)").all() as Array<{
+        name: string;
+      }>;
+      const names = columns.map((c) => c.name);
+      expect(names).toContain("transcript_path");
+      expect(names).toContain("transcript_uncaptured_reason");
+    });
+
+    it("stores transcript_path when provided", () => {
+      dao.upsert({
+        detected_at: "2026-07-06T10:00:00.000Z",
+        source: "post_subagent",
+        step_id: "implement",
+        transcript_path: "/workspace/transcripts/implement--engineer--iso.jsonl",
+        workspace_slug: "ws",
+      });
+
+      const rows = dao.getAll();
+      expect(rows[0].transcript_path).toBe("/workspace/transcripts/implement--engineer--iso.jsonl");
+      expect(rows[0].transcript_uncaptured_reason).toBeNull();
+    });
+
+    it("stores transcript_uncaptured_reason when provided", () => {
+      dao.upsert({
+        detected_at: "2026-07-06T10:00:00.000Z",
+        source: "post_subagent",
+        step_id: "implement",
+        transcript_uncaptured_reason: "no_source_match",
+        workspace_slug: "ws",
+      });
+
+      const rows = dao.getAll();
+      expect(rows[0].transcript_path).toBeNull();
+      expect(rows[0].transcript_uncaptured_reason).toBe("no_source_match");
+    });
+
+    it("legacy insert with no transcript fields still works (both columns null)", () => {
+      dao.upsert({
+        detected_at: "2026-07-06T10:00:00.000Z",
+        source: "post_subagent",
+        step_id: "legacy-step",
+        workspace_slug: "ws",
+      });
+
+      const rows = dao.getAll();
+      expect(rows[0].transcript_path).toBeNull();
+      expect(rows[0].transcript_uncaptured_reason).toBeNull();
+    });
+
+    it("COALESCE preserves a previously-captured transcript_path across a later count-only upsert", () => {
+      dao.upsert({
+        detected_at: "2026-07-06T10:00:00.000Z",
+        source: "post_subagent",
+        step_id: "implement",
+        transcript_path: "/workspace/transcripts/implement--engineer--iso.jsonl",
+        workspace_slug: "ws",
+      });
+
+      // Later re-upsert (e.g. a repeated cliff-detection tick) with no transcript fields.
+      dao.upsert({
+        detected_at: "2026-07-06T11:00:00.000Z",
+        missing_count: 1,
+        source: "resume",
+        step_id: "implement",
+        workspace_slug: "ws",
+      });
+
+      const rows = dao.getAll();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].transcript_path).toBe("/workspace/transcripts/implement--engineer--iso.jsonl");
+      expect(rows[0].missing_count).toBe(1);
     });
   });
 

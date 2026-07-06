@@ -189,13 +189,13 @@ describe("runDriftMigrations — v9 to v10 upgrade (cliff_events)", () => {
     db.close();
   });
 
-  test("migrates a v9 DB: schema_version advances past 10 to current '14'", () => {
+  test("migrates a v9 DB: schema_version advances past 10 to current '15'", () => {
     const db = createV9Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("14");
+    expect(row.value).toBe("15");
     db.close();
   });
 });
@@ -294,13 +294,13 @@ describe("runDriftMigrations — v10 to v11 upgrade (lifecycle columns)", () => 
     db.close();
   });
 
-  test("v10→v11 migration updates schema_version to current '14'", () => {
+  test("v10→v11 migration updates schema_version to current '15'", () => {
     const db = createV10Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("14");
+    expect(row.value).toBe("15");
     db.close();
   });
 });
@@ -320,13 +320,13 @@ describe("runDriftMigrations — v9 to v11 full upgrade", () => {
     db.close();
   });
 
-  test("migrates a v9 DB: schema_version reaches current '14'", () => {
+  test("migrates a v9 DB: schema_version reaches current '15'", () => {
     const db = createV9Db();
     runDriftMigrations(db);
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("14");
+    expect(row.value).toBe("15");
     db.close();
   });
 });

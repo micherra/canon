@@ -20,7 +20,7 @@ import Database from "better-sqlite3";
 // Schema version — increment when DDL changes require a migration. Pre-existing test-only
 // export (asserted across platform/storage/drift/__tests__); no production code imports it.
 // canon:allow-unwired: value bumps on every migration re-trigger the dead-wire line-diff heuristic even though the export itself is not new
-export const DRIFT_SCHEMA_VERSION = "14";
+export const DRIFT_SCHEMA_VERSION = "15";
 
 // DDL statements — v1 base tables
 //
@@ -495,6 +495,25 @@ const MIGRATIONS: Migration[] = [
       db.exec(
         `CREATE INDEX IF NOT EXISTS idx_orch_decisions_type ON orchestrator_decisions(decision_type)`,
       );
+      // v14 is no longer terminal (cliff_events transcript columns below add v15) —
+      // stamp the literal historical version, not the exported constant.
+      db.exec(`UPDATE meta SET value = '14' WHERE key = 'schema_version'`);
+    },
+    version: "14",
+  },
+  {
+    up: (db) => {
+      // cliff_events transcript columns (cliff-transcript-01) — additive-nullable
+      // per backward-compatible-schema-changes; legacy rows read back with both
+      // columns null. transcript_path is the durable evidence path when a
+      // best-effort capture succeeded; transcript_uncaptured_reason is the typed
+      // absent-marker otherwise (never both set — see CliffCaptureOutcome).
+      if (!columnExists(db, "cliff_events", "transcript_path")) {
+        db.exec(`ALTER TABLE cliff_events ADD COLUMN transcript_path TEXT`);
+      }
+      if (!columnExists(db, "cliff_events", "transcript_uncaptured_reason")) {
+        db.exec(`ALTER TABLE cliff_events ADD COLUMN transcript_uncaptured_reason TEXT`);
+      }
       // Terminal-version stamp is driven by the exported constant — DRIFT_SCHEMA_VERSION
       // is the single source of truth for the current schema version.
       db.exec(`UPDATE meta SET value = '${DRIFT_SCHEMA_VERSION}' WHERE key = 'schema_version'`);

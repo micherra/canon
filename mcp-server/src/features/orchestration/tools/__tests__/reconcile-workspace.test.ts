@@ -14,13 +14,15 @@
  * rejected the value in production before the P1 fix.
  */
 
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { reconcileWorkspaceInputSchema } from "@app/register-journal.ts";
 import { EventPayloadSchemas } from "@domains/messages/events.ts";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
+import { evictDriftDbForScope, getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { reconcileWorkspace } from "../reconcile-workspace.ts";
 
 let workspace: string;
@@ -233,5 +235,213 @@ describe("reconcileWorkspace — registered schema boundary (loops-phase-c-02 P1
       source: "unknown",
     });
     expect(result.success).toBe(false);
+  });
+});
+
+/**
+ * Cliff-transcript capture (cliff-transcript-01) — reconcileWorkspace best-effort
+ * threads a transcript snapshot (or typed absent-marker) into IncompleteStep,
+ * the cliff_detected event, and the drift.db cliff_events row.
+ */
+describe("reconcileWorkspace — cliff-transcript capture (cliff-transcript-01)", () => {
+  const SESSION_ID = "session-reconcile-capture";
+  // NOTE: reconcile_workspace's single `projectDir` input serves both purposes —
+  // locating drift.db AND (now) locating the Claude Code projects dir for
+  // transcript resolution — so the fixture must be planted under THIS same
+  // value, not a separate fake path.
+  let projectDir: string;
+  let originalHome: string | undefined;
+
+  beforeEach(async () => {
+    projectDir = await mkdtemp(join(tmpdir(), "canon-reconcile-drift-"));
+    originalHome = process.env.HOME;
+  });
+
+  afterEach(async () => {
+    evictDriftDbForScope(projectDir);
+    await rm(projectDir, { force: true, recursive: true });
+    if (originalHome !== undefined) process.env.HOME = originalHome;
+  });
+
+  function writeJournalWithSession(workspacePath: string): void {
+    const journal = {
+      session_id: SESSION_ID,
+      steps: [
+        {
+          agent_type: "canon:engineer",
+          artifacts_expected: ["plans/slug/SUMMARY.md"],
+          started_at: new Date().toISOString(),
+          status: "started",
+          step_id: "implement",
+        },
+      ],
+      version: 1,
+    };
+    writeFileSync(join(workspacePath, "journal.json"), JSON.stringify(journal, null, 2));
+  }
+
+  function plantFixture(homeDir: string): void {
+    const projectId = projectDir.replace(/\//g, "-");
+    const dir = join(homeDir, ".claude", "projects", projectId, SESSION_ID, "subagents");
+    mkdirSync(dir, { recursive: true });
+    const entries = [
+      {
+        agentId: "irrelevant",
+        isSidechain: true,
+        message: { content: "hi", role: "user" },
+        parentUuid: "parent",
+        timestamp: new Date().toISOString(),
+        type: "user",
+      },
+    ];
+    writeFileSync(
+      join(dir, "agent-aengineer-implement-jobsfx-hash.jsonl"),
+      entries.map((e) => JSON.stringify(e)).join("\n"),
+      "utf-8",
+    );
+  }
+
+  it("cliff + fixture file: IncompleteStep.transcript_path set, and both the cliff_detected event and the drift.db row carry the path", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "canon-reconcile-home-"));
+    process.env.HOME = homeDir;
+    getExecutionStore(workspace); // ensure the execution store exists for appendEvent
+    writeJournalWithSession(workspace);
+    plantFixture(homeDir);
+
+    try {
+      const result = await reconcileWorkspace({
+        workspace,
+        emit_telemetry: true,
+        projectDir,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const step = result.incomplete_steps.find((s) => s.step_id === "implement");
+      expect(step?.transcript_path).toBeDefined();
+      expect(step?.transcript_path).toContain(join(workspace, "transcripts"));
+
+      const events = getExecutionStore(workspace).getEventsByType("cliff_detected");
+      const payload = events[0].payload as {
+        steps: Array<{ step_id: string; transcript_path?: string }>;
+      };
+      const eventStep = payload.steps.find((s) => s.step_id === "implement");
+      expect(eventStep?.transcript_path).toBe(step?.transcript_path);
+
+      const rows = getDriftDb(projectDir).getCliffEvents().getByWorkspace(basename(workspace));
+      const row = rows.find((r) => r.step_id === "implement");
+      expect(row?.transcript_path).toBe(step?.transcript_path);
+    } finally {
+      await rm(homeDir, { force: true, recursive: true });
+    }
+  });
+
+  it("cliff + no fixture file: transcript_uncaptured_reason populated, tool output otherwise unchanged", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "canon-reconcile-home-"));
+    process.env.HOME = homeDir;
+    getExecutionStore(workspace);
+    writeJournalWithSession(workspace);
+    // No fixture planted — subagents dir exists but empty is optional; leave absent.
+
+    try {
+      const result = await reconcileWorkspace({
+        workspace,
+        emit_telemetry: true,
+        projectDir,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.needs_recovery).toBe(true);
+      const step = result.incomplete_steps.find((s) => s.step_id === "implement");
+      expect(step?.transcript_path).toBeUndefined();
+      expect(step?.transcript_uncaptured_reason).toBe("projects_dir_unreadable");
+
+      const rows = getDriftDb(projectDir).getCliffEvents().getByWorkspace(basename(workspace));
+      const row = rows.find((r) => r.step_id === "implement");
+      expect(row?.transcript_uncaptured_reason).toBe("projects_dir_unreadable");
+    } finally {
+      await rm(homeDir, { force: true, recursive: true });
+    }
+  });
+
+  it("journal without session_id: no_session_id marker, never a cross-session guess", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "canon-reconcile-home-"));
+    process.env.HOME = homeDir;
+    getExecutionStore(workspace);
+    plantFixture(homeDir);
+    // Journal WITHOUT session_id.
+    const journal = {
+      steps: [
+        {
+          agent_type: "canon:engineer",
+          artifacts_expected: ["plans/slug/SUMMARY.md"],
+          started_at: new Date().toISOString(),
+          status: "started",
+          step_id: "implement",
+        },
+      ],
+      version: 1,
+    };
+    writeFileSync(join(workspace, "journal.json"), JSON.stringify(journal, null, 2));
+
+    try {
+      const result = await reconcileWorkspace({
+        workspace,
+        emit_telemetry: true,
+        projectDir,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const step = result.incomplete_steps.find((s) => s.step_id === "implement");
+      expect(step?.transcript_path).toBeUndefined();
+      expect(step?.transcript_uncaptured_reason).toBe("no_session_id");
+    } finally {
+      await rm(homeDir, { force: true, recursive: true });
+    }
+  });
+
+  it("no cliff: capture is never attempted (spy) — clean-path output identical to today", async () => {
+    vi.resetModules();
+    vi.doMock("../../services/cliff-transcript-capture.ts", () => ({
+      captureCliffTranscripts: vi.fn(),
+    }));
+    const captureModule = await import("../../services/cliff-transcript-capture.ts");
+    const { reconcileWorkspace: reconcileWorkspaceFresh } = await import(
+      "../reconcile-workspace.ts"
+    );
+
+    // Clean journal: a completed step, no missing artifacts.
+    const journal = {
+      steps: [
+        {
+          agent_type: "engineer",
+          artifacts_expected: [],
+          started_at: new Date().toISOString(),
+          status: "completed",
+          step_id: "implement",
+        },
+      ],
+      version: 1,
+    };
+    writeFileSync(join(workspace, "journal.json"), JSON.stringify(journal, null, 2));
+
+    try {
+      const result = await reconcileWorkspaceFresh({
+        workspace,
+        emit_telemetry: true,
+        projectDir,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.needs_recovery).toBe(false);
+      expect(result.incomplete_steps).toHaveLength(0);
+      expect(captureModule.captureCliffTranscripts).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock("../../services/cliff-transcript-capture.ts");
+      vi.resetModules();
+    }
   });
 });

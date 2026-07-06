@@ -21,6 +21,9 @@ import { basename, isAbsolute, join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import type { CliffCaptureOutcome } from "../services/cliff-transcript-capture.ts";
+import { captureCliffTranscripts } from "../services/cliff-transcript-capture.ts";
+import type { CliffCaptureAbsentReason } from "../services/cliff-transcript-source.ts";
 import type { JournalStep } from "./orchestration-journal.ts";
 import {
   _journalPath as journalPath,
@@ -42,7 +45,8 @@ export type IncompleteStep = {
   started_at?: string;
   missing_artifacts: string[]; // from scanArtifactList(step.artifacts_expected)
   partial_artifacts: string[]; // present on disk but still a Partial/IN_PROGRESS skeleton
-  transcript_path?: string; // step.transcript_path if already captured
+  transcript_path?: string; // step.transcript_path if already captured, or freshly captured on cliff
+  transcript_uncaptured_reason?: CliffCaptureAbsentReason; // typed reason when capture did not happen
 };
 
 export type ReconcileWorkspaceResult = {
@@ -160,6 +164,8 @@ function emitCliffTelemetry(
         missing_count: s.missing_artifacts.length,
         partial_count: s.partial_artifacts.length,
         step_id: s.step_id,
+        transcript_path: s.transcript_path,
+        transcript_uncaptured_reason: s.transcript_uncaptured_reason,
       })),
       timestamp: new Date().toISOString(),
     });
@@ -195,6 +201,8 @@ function writeCliffEventsThrough(
         partial_count: step.partial_artifacts.length,
         source,
         step_id: step.step_id,
+        transcript_path: step.transcript_path,
+        transcript_uncaptured_reason: step.transcript_uncaptured_reason,
         workspace_slug: slug,
       });
     }
@@ -203,6 +211,65 @@ function writeCliffEventsThrough(
       "[canon] reconcile-workspace: cliff_events write-through to drift.db failed:",
       err instanceof Error ? err.message : err,
     );
+  }
+}
+
+/**
+ * Best-effort resolve a transcript-capture outcome per incomplete step.
+ * Fail-open: a `captureCliffTranscripts` throw is caught and every step falls
+ * back to an empty outcome map (each step later reads as `undefined`, so the
+ * merge step below leaves its transcript fields unset — capture must never
+ * break reconcile itself, this is diagnostic instrumentation, not a safety gate).
+ * Absent `projectDir` never attempts capture — every step gets a typed
+ * `no_project_dir` marker directly.
+ */
+async function resolveCliffCaptureOutcomes(
+  workspace: string,
+  projectDir: string | undefined,
+  sessionId: string | undefined,
+  incompleteSteps: readonly IncompleteStep[],
+): Promise<Map<string, CliffCaptureOutcome>> {
+  if (!projectDir) {
+    return new Map(
+      incompleteSteps.map((s) => [
+        s.step_id,
+        { transcript_uncaptured_reason: "no_project_dir" as const },
+      ]),
+    );
+  }
+  try {
+    return await captureCliffTranscripts({
+      projectDir,
+      sessionId,
+      steps: incompleteSteps.map((s) => ({
+        agent_type: s.agent_type,
+        started_at: s.started_at,
+        step_id: s.step_id,
+      })),
+      workspace,
+    });
+  } catch (err) {
+    console.warn(
+      "[canon] reconcile-workspace: cliff-transcript capture failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return new Map();
+  }
+}
+
+/** Merge each step's resolved capture outcome onto its IncompleteStep, in place. */
+function mergeCliffCaptureOutcomes(
+  incompleteSteps: readonly IncompleteStep[],
+  outcomes: ReadonlyMap<string, CliffCaptureOutcome>,
+): void {
+  for (const step of incompleteSteps) {
+    const outcome = outcomes.get(step.step_id);
+    if (!outcome) continue;
+    if ("transcript_path" in outcome) {
+      step.transcript_path = outcome.transcript_path;
+    } else {
+      step.transcript_uncaptured_reason = outcome.transcript_uncaptured_reason;
+    }
   }
 }
 
@@ -235,13 +302,22 @@ export async function reconcileWorkspace(
     return toolError("WORKSPACE_NOT_FOUND", `No journal found at ${path}`, false, { workspace });
   }
 
-  const { steps } = await readJournal(workspace);
+  const { steps, session_id } = await readJournal(workspace);
   const incompleteSteps = (
     await Promise.all(steps.map((step) => toIncompleteStep(workspace, step)))
   ).filter((s): s is IncompleteStep => s !== null);
 
   if (input.emit_telemetry && incompleteSteps.length > 0) {
     const source = input.source ?? "resume";
+
+    const outcomes = await resolveCliffCaptureOutcomes(
+      workspace,
+      input.projectDir,
+      session_id,
+      incompleteSteps,
+    );
+    mergeCliffCaptureOutcomes(incompleteSteps, outcomes);
+
     emitCliffTelemetry(workspace, incompleteSteps, source);
     if (input.projectDir) {
       writeCliffEventsThrough(input.projectDir, workspace, incompleteSteps, source);
