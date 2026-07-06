@@ -25,6 +25,9 @@ INPUT=$(cat)
 
 PORT="${CANON_DAEMON_PORT:-3142}"
 TTL="${CANON_DAEMON_NUDGE_TTL:-60}"
+if [[ ! "$TTL" =~ ^[0-9]+$ ]]; then
+  TTL=60 # DOCUMENTED FAIL-OPEN -- non-numeric TTL override; fall back to default rather than leak a bash arithmetic error
+fi
 CANON_DIR="${CANON_PROJECT_DIR:-.}/.canon"
 PROBE_FILE="$CANON_DIR/.daemon-version-probe"
 NUDGE_FILE="$CANON_DIR/.daemon-version-nudge-shown"
@@ -75,7 +78,7 @@ if [[ -f "$PROBE_FILE" ]]; then
   read -r PROBE_TS PROBE_VERSION < "$PROBE_FILE" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- unreadable/malformed probe file; treated as no cache below
   if [[ "$PROBE_TS" =~ ^[0-9]+$ ]]; then
     AGE=$(( NOW - PROBE_TS ))
-    if (( AGE < TTL )); then
+    if (( AGE >= 0 && AGE < TTL )); then
       DAEMON_VERSION="$PROBE_VERSION"
       USE_CACHE=1
     fi

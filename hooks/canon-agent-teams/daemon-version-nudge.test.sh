@@ -295,6 +295,74 @@ fi
 rm -rf "$TMPU"
 
 # ---------------------------------------------------------------------------
+# F1: non-numeric CANON_DAEMON_NUDGE_TTL -> no stderr leak, exit 0, and the
+# mismatch check still runs (falls back to default-TTL semantics)
+# ---------------------------------------------------------------------------
+TMP8=$(mktemp -d)
+PARENT8="$TMP8/cache/canon"
+ROOT8=$(make_plugin_root "$PARENT8" "2.16.0" "2.17.0")
+PROJDIR8="$TMP8/proj"
+CANONDIR8="$PROJDIR8/.canon"
+mkdir -p "$CANONDIR8"
+printf '%s %s\n' "$(date +%s)" "2.16.0" > "$CANONDIR8/.daemon-version-probe"
+
+OUTPUT=$(CLAUDE_PLUGIN_ROOT="$ROOT8" \
+  CANON_PROJECT_DIR="$PROJDIR8" \
+  CANON_NUDGE_HEALTH_CMD='echo "{\"version\":\"2.16.0\"}"' \
+  CANON_DAEMON_NUDGE_TTL=abc \
+  bash "$HOOK" <<<'{}' 2>&1)
+EXIT_CODE=$?
+
+if [[ $EXIT_CODE -eq 0 ]] && ! echo "$OUTPUT" | grep -qi "unbound variable" \
+  && ! echo "$OUTPUT" | grep -qi "syntax error" \
+  && echo "$OUTPUT" | grep -q "2.16.0" && echo "$OUTPUT" | grep -q "2.17.0"; then
+  pass "F1: non-numeric TTL -> no stderr leak, exit 0, mismatch check still runs"
+else
+  fail "F1: exit=$EXIT_CODE, output=$OUTPUT"
+fi
+rm -rf "$TMP8"
+
+# ---------------------------------------------------------------------------
+# F2: future-dated probe timestamp (negative age) -> forces a fresh re-probe
+# instead of pinning the stale cached version forever
+# ---------------------------------------------------------------------------
+TMP9=$(mktemp -d)
+PARENT9="$TMP9/cache/canon"
+ROOT9=$(make_plugin_root "$PARENT9" "2.16.0" "2.17.0")
+PROJDIR9="$TMP9/proj"
+CANONDIR9="$PROJDIR9/.canon"
+mkdir -p "$CANONDIR9"
+FUTURE9=$(( $(date +%s) + 9999 ))
+printf '%s %s\n' "$FUTURE9" "2.16.0" > "$CANONDIR9/.daemon-version-probe"
+
+COUNTER9="$TMP9/counter"
+HEALTHCMD9="$TMP9/health_counter.sh"
+cat > "$HEALTHCMD9" <<EOF
+#!/usr/bin/env bash
+echo x >> "$COUNTER9"
+echo '{"version":"2.17.0"}'
+EOF
+chmod +x "$HEALTHCMD9"
+
+OUTPUT=$(CLAUDE_PLUGIN_ROOT="$ROOT9" \
+  CANON_PROJECT_DIR="$PROJDIR9" \
+  CANON_NUDGE_HEALTH_CMD="bash $HEALTHCMD9" \
+  CANON_DAEMON_NUDGE_TTL=3600 \
+  bash "$HOOK" <<<'{}' 2>&1)
+EXIT_CODE=$?
+
+COUNT9=0
+if [[ -f "$COUNTER9" ]]; then
+  COUNT9=$(wc -l < "$COUNTER9" | tr -d '[:space:]')
+fi
+if [[ $EXIT_CODE -eq 0 ]] && [[ "$COUNT9" -eq 1 ]]; then
+  pass "F2: future-dated probe timestamp forces a fresh re-probe"
+else
+  fail "F2: expected 1 re-probe, got $COUNT9 (exit=$EXIT_CODE, output=$OUTPUT)"
+fi
+rm -rf "$TMP9"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
