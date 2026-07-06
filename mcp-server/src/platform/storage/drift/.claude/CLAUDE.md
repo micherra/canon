@@ -6,13 +6,13 @@
 SQLite-backed drift storage: violation history, path effects, error fixes, area observations, craft profiles, and confidence-decay adapters. All DAO classes are synchronous (better-sqlite3). This layer is imported by `features/diagnostics/` and `features/orchestration/` but must not import from features.
 
 ## Architecture
-<!-- last-updated: 2026-07-03 -->
+<!-- last-updated: 2026-07-06 -->
 
 **Schema / migration:**
 
 | File | Responsibility |
 |------|---------------|
-| `drift-schema.ts` | `DRIFT_SCHEMA_VERSION = "13"`, idempotent `runMigrations(db)`; tables: `file_violation_history`, `path_effects` (v4), `error_fixes` (v6), `violation_outcomes` (v7), `area_observations` (v8), `craft_profiles` (v9 — `flow`/`run_id` nullable review-only; `source`, `subsystem_key`, `ratings` JSON, `rollup` REAL), `cliff_events` (v10 — UNIQUE(workspace_slug, step_id); 11 columns; index on `detected_at`), violation lifecycle columns: `status`, `resolved_at`, `resolved_by_review_id`, `resolution_reason` + `idx_violations_open` partial index (v11), `applied_evolutions` (v12 — apply-provenance for evolution-candidates; UNIQUE(proposal_id); 12 columns; indexes on `applied_at` + `principle_id`; ADR-0034), `active_workspaces` (v13 — project-level active-build discovery registry; PK `workspace_path`; `status` ('live'\|'finalized_on_disk'\|'reaped') enforced at the DAO write layer, not a DB CHECK; index on `status`) |
+| `drift-schema.ts` | `DRIFT_SCHEMA_VERSION = "15"`, idempotent `runMigrations(db)`; tables: `file_violation_history`, `path_effects` (v4), `error_fixes` (v6), `violation_outcomes` (v7), `area_observations` (v8), `craft_profiles` (v9 — `flow`/`run_id` nullable review-only; `source`, `subsystem_key`, `ratings` JSON, `rollup` REAL), `cliff_events` (v10 — UNIQUE(workspace_slug, step_id); 10 columns; index on `detected_at`; v15 adds nullable `transcript_path`/`transcript_uncaptured_reason`, 12 columns total — see below), violation lifecycle columns: `status`, `resolved_at`, `resolved_by_review_id`, `resolution_reason` + `idx_violations_open` partial index (v11), `applied_evolutions` (v12 — apply-provenance for evolution-candidates; UNIQUE(proposal_id); 12 columns; indexes on `applied_at` + `principle_id`; ADR-0034), `active_workspaces` (v13 — project-level active-build discovery registry; PK `workspace_path`; `status` ('live'\|'finalized_on_disk'\|'reaped') enforced at the DAO write layer, not a DB CHECK; index on `status`); `orchestrator_decisions` (v14 — durable decisions-ledger mirror for reaped workspaces, ADR-0040); `cliff_events` transcript columns (v15 — cliff-transcript-01, ADR-0041) |
 | `drift-db.ts` | `DriftDb` class — lazy-accessor facade; `getSignals()`, `getOutcomes()`, `getAreaMemory()`, `getCraftProfiles()`, `getCliffEvents()`, `getClosures()`, `getActiveWorkspaces()`, `getAppliedEvolutions()` accessors |
 | `drift-db-cache.ts` | `getDriftDb(projectDir)` factory + `evictDriftDbForScope(projectDir)` lifecycle hook; import `getDriftDb` here directly (no barrel) |
 | `drift-db-rows.ts` | Private row types + deserializers; not exported from barrel |
@@ -53,12 +53,12 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 | `analyzer.ts` | `analyzeDrift`, `DocFreshness` | `DocFreshness: { doc_path, commits_since_sync, confidence, warning? }`; `DriftReport.doc_freshness: DocFreshness[]` defaults to `[]` |
 
 ## Contracts
-<!-- last-updated: 2026-07-03 -->
+<!-- last-updated: 2026-07-06 -->
 
 - `getDriftDb(projectDir)` — module-level cache keyed by resolved `projectDir`; returns existing `DriftDb` or creates + migrates; `evictDriftDbForScope(projectDir)` removes entry (lifecycle hook, currently unwired at HTTP transport layer)
 - `DriftDb` — lazy accessors: `.getSignals()` returns `DriftDbSignals`, `.getOutcomes()` returns `OutcomeStore`, `.getAreaMemory()` returns `AreaMemoryDao`, `.getCraftProfiles()` returns `CraftProfileDao`, `.getCliffEvents()` returns `CliffEventsDao`, `.getClosures()` returns `ViolationClosureDao`, `.getActiveWorkspaces()` returns `ActiveWorkspacesDao`
 - `DriftDb.getReviews(options?)` / `DriftStore.getReviews(options?)` — two-views invariant: default (`includeResolvedViolations` absent) reconstitutes **open-only** violations — the view used by `get_compliance`, `getComplianceTrend`, re-review paths, and every other caller (preserves the closure-02 / Codex P2 compliance fix); `includeResolvedViolations: true` reconstitutes **open + resolved** violations — used ONLY by `get-drift-report.ts` so `most_violated` / historical drift analytics reflect the true historical record. These two views must not be unified — unifying would re-depress compliance.
-- `cliff_events` schema (v10): UNIQUE(workspace_slug, step_id); upsert with COALESCE for nullable enrichment columns; `recovery_outcome` CASE-guarded against downgrade; 11 columns including `agent_type`, `missing_count`, `partial_count`, `source`, `detected_at`, `recorded_at`
+- `cliff_events` schema (v10, transcript columns added v15 — ADR-0041): UNIQUE(workspace_slug, step_id); upsert with COALESCE for nullable enrichment columns; `recovery_outcome` CASE-guarded against downgrade; 12 columns including `agent_type`, `missing_count`, `partial_count`, `source`, `detected_at`, `recorded_at`, and the v15-added `transcript_path` (captured-evidence path) / `transcript_uncaptured_reason` (typed absent-reason) — both nullable, both COALESCE-preserved across a later count-only re-upsert so a captured value is never overwritten by a subsequent no-fixture pass
 - violations lifecycle schema (v11): `status TEXT NOT NULL DEFAULT 'open'`, `resolved_at TEXT`, `resolved_by_review_id TEXT`, `resolution_reason TEXT`; partial index `idx_violations_open` on `status='open'`; `DriftDb.appendReview()` calls `ViolationClosureDao.supersedeOpenViolations()` inside the review transaction
 - `craft_profiles` schema (v9): columns `subsystem_key`, `source` ("review"|"audit"), `flow` (nullable, review-only), `run_id` (nullable, review-only), `ratings` (JSON), `rollup` (REAL)
 - `area_observations` schema (v8): keyed by `subsystem_key`; 7-day TTL enforced by `AreaMemoryDao`
