@@ -14,6 +14,8 @@ rules:
   - agent-context-check
   - agent-artifact-write-before-return
   - agent-batch-tools
+  - agent-never-trust-overlay-tier
+  - agent-metrics-before-return
 references:
   - security-checklist
   - principle-loading

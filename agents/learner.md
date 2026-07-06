@@ -16,6 +16,8 @@ rules:
   - agent-artifact-write-before-return
   - agent-batch-tools
   - agent-budget-checkpoint
+  - agent-never-trust-overlay-tier
+  - agent-metrics-before-return
 references:
   - status-protocol
   - content-flow

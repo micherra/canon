@@ -12,6 +12,9 @@ permissionMode: acceptEdits
 rules:
   - agent-template-required
   - agent-context-check
+  - agent-conflict-detection
+  - agent-never-trust-overlay-tier
+  - agent-metrics-before-return
 references:
   - status-protocol
   - content-flow

@@ -16,6 +16,8 @@ rules:
   - agent-worktree-orientation
   - agent-working-environment
   - agent-budget-checkpoint
+  - agent-never-trust-overlay-tier
+  - agent-metrics-before-return
 references:
   - status-protocol
 templates:

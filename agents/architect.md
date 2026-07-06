@@ -23,6 +23,8 @@ rules:
   - agent-context-budget-dispatch
   - agent-budget-checkpoint
   - agent-document-decisions
+  - agent-never-trust-overlay-tier
+  - agent-metrics-before-return
 references:
   - status-protocol
 templates:

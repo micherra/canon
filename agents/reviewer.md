@@ -18,6 +18,8 @@ rules:
   - agent-integration-boundary-check
   - agent-batch-tools
   - agent-budget-checkpoint
+  - agent-never-trust-overlay-tier
+  - agent-metrics-before-return
 references:
   - principle-loading
   - status-protocol

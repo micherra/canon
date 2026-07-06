@@ -20,6 +20,8 @@ rules:
   - agent-working-environment
   - agent-batch-tools
   - agent-budget-checkpoint
+  - agent-never-trust-overlay-tier
+  - agent-metrics-before-return
 references:
   - workspace-logging
   - status-protocol

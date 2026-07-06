@@ -19,6 +19,8 @@ rules:
   - agent-worktree-orientation
   - agent-working-environment
   - agent-integration-boundary-check
+  - agent-never-trust-overlay-tier
+  - agent-metrics-before-return
 references:
   - principle-loading
   - status-protocol
