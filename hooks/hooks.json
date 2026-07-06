@@ -96,6 +96,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "mcp__canon__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/canon-agent-teams/daemon-version-nudge.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
