@@ -191,6 +191,28 @@ describe("resolveCliffTranscriptSource", () => {
     expect(result.path).toBe(newer);
   });
 
+  it("re-spawn disambiguation without startedAt: falls back to the newest file by mtimeMs", () => {
+    const homeDir = makeHomeDir();
+    const dir = subagentsDir(homeDir, SESSION_ID);
+    // Force distinguishable real birthtimes/mtimes via creation order + a real gap.
+    plantFixture(dir, "engineer", "implement", "aaa1111a-hash1");
+    sleepSync(50);
+    const newer = plantFixture(dir, "engineer", "implement", "bbb2222b-hash2");
+
+    const result = resolveCliffTranscriptSource(
+      {
+        agentType: "canon:engineer",
+        // startedAt intentionally omitted — exercises the useProximity===false branch.
+        projectDir: PROJECT_DIR,
+        sessionId: SESSION_ID,
+        stepId: "implement",
+      },
+      { homeDir },
+    );
+
+    expect(result.path).toBe(newer);
+  });
+
   it("is session-scoped: a fixture in a different session dir is never matched", () => {
     const homeDir = makeHomeDir();
     const otherSessionDir = subagentsDir(homeDir, "other-session");

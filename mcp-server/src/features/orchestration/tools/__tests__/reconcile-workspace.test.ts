@@ -14,7 +14,7 @@
  * rejected the value in production before the P1 fix.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -442,6 +442,196 @@ describe("reconcileWorkspace — cliff-transcript capture (cliff-transcript-01)"
     } finally {
       vi.doUnmock("../../services/cliff-transcript-capture.ts");
       vi.resetModules();
+    }
+  });
+
+  /** Plant a fixture for an arbitrary shortType/stepId pair (the shared
+   * plantFixture above is hardcoded to canon:engineer/implement). */
+  function plantFixtureFor(homeDir: string, shortType: string, stepId: string): void {
+    const projectId = projectDir.replace(/\//g, "-");
+    const dir = join(homeDir, ".claude", "projects", projectId, SESSION_ID, "subagents");
+    mkdirSync(dir, { recursive: true });
+    const entries = [
+      {
+        isSidechain: true,
+        message: { content: "user turn", role: "user" },
+        timestamp: "2026-07-06T00:00:00.000Z",
+        type: "user",
+      },
+      {
+        isSidechain: true,
+        message: { content: "assistant turn", role: "assistant" },
+        timestamp: "2026-07-06T00:00:01.000Z",
+        type: "assistant",
+      },
+    ];
+    writeFileSync(
+      join(dir, `agent-a${shortType}-${stepId}-jobsfx-hash.jsonl`),
+      entries.map((e) => JSON.stringify(e)).join("\n"),
+      "utf-8",
+    );
+  }
+
+  it("full loop: the persisted transcript file physically exists and is transformed Canon TranscriptEntry JSONL, not raw CC entries", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "canon-reconcile-home-"));
+    process.env.HOME = homeDir;
+    getExecutionStore(workspace);
+    writeJournalWithSession(workspace);
+    plantFixtureFor(homeDir, "engineer", "implement");
+
+    try {
+      const result = await reconcileWorkspace({
+        workspace,
+        emit_telemetry: true,
+        projectDir,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const step = result.incomplete_steps.find((s) => s.step_id === "implement");
+      const transcriptPath = step?.transcript_path;
+      expect(transcriptPath).toBeDefined();
+      if (!transcriptPath) return;
+
+      // Physically on disk, under the workspace's transcripts/ dir.
+      const raw = readFileSync(transcriptPath, "utf-8");
+      expect(transcriptPath).toContain(join(workspace, "transcripts"));
+
+      const lines = raw.split("\n").filter(Boolean);
+      expect(lines.length).toBeGreaterThan(0);
+      const parsed = lines.map((l) => JSON.parse(l));
+
+      for (const entry of parsed) {
+        // Canon TranscriptEntry shape: turn_number + role + content + timestamp.
+        expect(entry).toHaveProperty("turn_number");
+        expect(entry).toHaveProperty("role");
+        expect(entry).toHaveProperty("content");
+        expect(entry).toHaveProperty("timestamp");
+        // Raw CC-only fields must NOT survive the transform.
+        expect(entry).not.toHaveProperty("isSidechain");
+        expect(entry).not.toHaveProperty("agentId");
+        expect(entry).not.toHaveProperty("message");
+      }
+      expect(parsed.map((e) => e.role)).toEqual(["user", "assistant"]);
+      expect(parsed.map((e) => e.content)).toEqual(["user turn", "assistant turn"]);
+
+      // Same path threaded into the durable drift.db row.
+      const rows = getDriftDb(projectDir).getCliffEvents().getByWorkspace(basename(workspace));
+      const row = rows.find((r) => r.step_id === "implement");
+      expect(row?.transcript_path).toBe(transcriptPath);
+    } finally {
+      await rm(homeDir, { force: true, recursive: true });
+    }
+  });
+
+  it("absent-marker distinction: session dir exists but no matching agent file yields no_source_match (vs projects_dir_unreadable when the dir is absent)", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "canon-reconcile-home-"));
+    process.env.HOME = homeDir;
+    getExecutionStore(workspace);
+    writeJournalWithSession(workspace);
+    // Create the session's subagents dir but plant no matching fixture file —
+    // distinct from the "cliff + no fixture" test above, where the whole
+    // projects dir tree is absent (-> projects_dir_unreadable).
+    const projectId = projectDir.replace(/\//g, "-");
+    mkdirSync(join(homeDir, ".claude", "projects", projectId, SESSION_ID, "subagents"), {
+      recursive: true,
+    });
+
+    try {
+      const result = await reconcileWorkspace({
+        workspace,
+        emit_telemetry: true,
+        projectDir,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const step = result.incomplete_steps.find((s) => s.step_id === "implement");
+      expect(step?.transcript_path).toBeUndefined();
+      expect(step?.transcript_uncaptured_reason).toBe("no_source_match");
+
+      const rows = getDriftDb(projectDir).getCliffEvents().getByWorkspace(basename(workspace));
+      const row = rows.find((r) => r.step_id === "implement");
+      expect(row?.transcript_uncaptured_reason).toBe("no_source_match");
+    } finally {
+      await rm(homeDir, { force: true, recursive: true });
+    }
+  });
+
+  it("topology: two cliffed steps in one reconcile call resolve independently (partial success), both rows written with correct per-step fields", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "canon-reconcile-home-"));
+    process.env.HOME = homeDir;
+    getExecutionStore(workspace);
+
+    // Two started steps: "implement" (fixture present) and "review" (no fixture).
+    const journal = {
+      session_id: SESSION_ID,
+      steps: [
+        {
+          agent_type: "canon:engineer",
+          artifacts_expected: ["plans/slug/SUMMARY.md"],
+          started_at: new Date().toISOString(),
+          status: "started",
+          step_id: "implement",
+        },
+        {
+          agent_type: "canon:reviewer",
+          artifacts_expected: ["reviews/REVIEW.md"],
+          started_at: new Date().toISOString(),
+          status: "started",
+          step_id: "review",
+        },
+      ],
+      version: 1,
+    };
+    writeFileSync(join(workspace, "journal.json"), JSON.stringify(journal, null, 2));
+    // Only "implement" gets a matching fixture; "review"'s token never matches
+    // anything in the (existing, non-empty) subagents dir -> no_source_match.
+    plantFixtureFor(homeDir, "engineer", "implement");
+
+    try {
+      const result = await reconcileWorkspace({
+        workspace,
+        emit_telemetry: true,
+        projectDir,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.incomplete_steps).toHaveLength(2);
+
+      const implementStep = result.incomplete_steps.find((s) => s.step_id === "implement");
+      const reviewStep = result.incomplete_steps.find((s) => s.step_id === "review");
+
+      expect(implementStep?.transcript_path).toBeDefined();
+      expect(implementStep?.transcript_uncaptured_reason).toBeUndefined();
+      expect(reviewStep?.transcript_path).toBeUndefined();
+      expect(reviewStep?.transcript_uncaptured_reason).toBe("no_source_match");
+
+      // Both durable drift.db rows exist with their own, independent fields.
+      const rows = getDriftDb(projectDir).getCliffEvents().getByWorkspace(basename(workspace));
+      const implementRow = rows.find((r) => r.step_id === "implement");
+      const reviewRow = rows.find((r) => r.step_id === "review");
+      expect(implementRow?.transcript_path).toBe(implementStep?.transcript_path);
+      expect(implementRow?.transcript_uncaptured_reason).toBeNull();
+      expect(reviewRow?.transcript_path).toBeNull();
+      expect(reviewRow?.transcript_uncaptured_reason).toBe("no_source_match");
+
+      // The cliff_detected event also carries independent per-step fields.
+      const events = getExecutionStore(workspace).getEventsByType("cliff_detected");
+      const payload = events[0].payload as {
+        steps: Array<{
+          step_id: string;
+          transcript_path?: string;
+          transcript_uncaptured_reason?: string;
+        }>;
+      };
+      const eventImplement = payload.steps.find((s) => s.step_id === "implement");
+      const eventReview = payload.steps.find((s) => s.step_id === "review");
+      expect(eventImplement?.transcript_path).toBe(implementStep?.transcript_path);
+      expect(eventReview?.transcript_uncaptured_reason).toBe("no_source_match");
+    } finally {
+      await rm(homeDir, { force: true, recursive: true });
     }
   });
 });
