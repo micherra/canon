@@ -47,6 +47,7 @@ export const ORCHESTRATOR_ACTIONS = [
   "run-learner",
   "run-evolve",
   "auto-enable-merge",
+  "auto-update-branch",
 ] as const;
 export type OrchestratorAction = (typeof ORCHESTRATOR_ACTIONS)[number];
 
