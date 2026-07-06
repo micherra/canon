@@ -2,6 +2,7 @@
 id: grey-box-module
 title: Grey-Box Modules — Human Owns the Interface, AI Fills the Body
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:

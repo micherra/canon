@@ -87,3 +87,7 @@ async function fetchWeather(city: string): Promise<WeatherResult> {
 
 If you're writing a thin wrapper library whose entire purpose is to expose a third-party API (e.g., a logging facade), wrapping every error may add unnecessary indirection. Also, in prototype or throwaway code, the boundary discipline may not be worth the investment.
 
+## Related
+
+- [[errors-are-values]] — this principle is the boundary-specific instance of that broader constraint: wrap the external exception into the typed result pattern errors-are-values requires everywhere else.
+

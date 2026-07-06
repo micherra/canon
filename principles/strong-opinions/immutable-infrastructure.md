@@ -88,3 +88,10 @@ resource "aws_launch_template" "app" {
 
 Stateful systems — databases, persistent volumes, message broker data — cannot be trivially replaced. The principle applies to compute and configuration, not to data. Emergency hotfixes may require runtime changes to stop active incidents, but must be followed immediately by a proper rebuild and redeploy that incorporates the fix into the code.
 
+## Related
+
+- [[least-privilege-access]] — shares this principle's full IaC `file_patterns` scope; least-privilege governs what an immutable artifact is allowed to do, this principle governs how it gets replaced.
+- [[minimize-attack-surface]] — an immutable artifact is easier to keep minimal, since every rebuild is an opportunity to drop unused surface rather than accumulate runtime drift.
+- [[infrastructure-tested-like-code]] — validating infrastructure definitions before deployment only pays off if deployment is the *only* way configuration reaches production; mutable infrastructure lets untested runtime edits bypass that gate entirely.
+- [[design-for-self-healing]] — self-healing (automatic recovery by replacing a bad instance) presumes instances are replaceable artifacts, which is exactly what immutability guarantees.
+

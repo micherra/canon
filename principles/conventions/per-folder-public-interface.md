@@ -2,6 +2,7 @@
 id: per-folder-public-interface
 title: One Public Interface Per Module Folder
 severity: convention
+portable: true
 scope:
   layers: []
   file_patterns:
@@ -65,3 +66,5 @@ import { runGitIntel } from "@features/knowledge-graph/index";
 
 - [[grey-box-module]] — the single public entry point is the structural enforcement of the grey-box boundary: the index file is the grey-box seam the reviewer trusts, without needing to read the feature's internals.
 - [[information-hiding]] — the per-folder interface is the file-system manifestation of information hiding: all implementation details of a feature folder are hidden behind one boundary file.
+- [[bounded-context-boundaries]] — the feature folder IS the bounded context at the file-system level; this convention is the mechanical (dependency-cruiser) enforcement of that boundary.
+- [[decompose-by-domain-not-layer]] — a per-folder public interface only makes sense once folders are organized by domain; this convention presumes that decomposition and enforces its boundary in code.
