@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.17.0](https://github.com/micherra/canon/compare/v2.16.0...v2.17.0) (2026-07-06)
+
+
+### Features
+
+* **autonomy:** deterministic Stop-hook tail-enforcement gate (D3) ([#451](https://github.com/micherra/canon/issues/451)) ([d716112](https://github.com/micherra/canon/commit/d716112585afa28fdabb67b567a52cf57fe28982))
+* **diagnostics:** deterministic context-manifest-freshness gate (sug_MANIFESTGAP1) ([#448](https://github.com/micherra/canon/issues/448)) ([3b43965](https://github.com/micherra/canon/commit/3b439650497a2888ad7012e538a2183dc8c9e356))
+* **evolution:** post-apply regression detection Inc 1+2 — applied_evolutions v12 + provenance tools (ADR-0034) ([#445](https://github.com/micherra/canon/issues/445)) ([eea940d](https://github.com/micherra/canon/commit/eea940d1cc7053299ffa49b351c25dcae7b1eeb8))
+* **orchestration:** cache hit/miss token telemetry in execution metrics ([#442](https://github.com/micherra/canon/issues/442)) ([3bb84f0](https://github.com/micherra/canon/commit/3bb84f071cf04454f44f3cca2bf0b272d3a6b3a0))
+* **orchestration:** cross-session chatter + active-workspaces registry (event-backbone epic Inc 0) ([#450](https://github.com/micherra/canon/issues/450)) ([8130fd2](https://github.com/micherra/canon/commit/8130fd24b87ea7ef39eba22a203f2e6af0b5383b))
+* **orchestration:** durable cross-workspace decisions corpus + get_decisions_corpus (ADR-0040) ([#456](https://github.com/micherra/canon/issues/456)) ([6b26f13](https://github.com/micherra/canon/commit/6b26f13c839fc7ec810ad8a23ff71d7b6c5ac8d9))
+* **orchestration:** plan-time base-advance advisory (forecast_base_advance, anticipatory-canon Inc-0) ([#455](https://github.com/micherra/canon/issues/455)) ([18512d7](https://github.com/micherra/canon/commit/18512d72f70f7a2c3d6a9f1be6891864418574d3))
+* **principles:** promote 2 threshold-met learnings — sug_EVALWIRE1 reachability-probe clause + sug_BBBB1 removal-sweep-includes-prose ([#447](https://github.com/micherra/canon/issues/447)) ([ab4a4e0](https://github.com/micherra/canon/commit/ab4a4e0777eb06e9cf5f129129b12d4d2cbf0385))
+* **ui:** Artifact-tool gate presentation + design-system type-scale legibility bump ([#459](https://github.com/micherra/canon/issues/459)) ([330cfbb](https://github.com/micherra/canon/commit/330cfbbad73dc71c165af264b15293768e71319f))
+
+
+### Bug Fixes
+
+* **drift-db:** isolate finalize-test fixture leak + recurrence guard + reviewer-blindspot ADR ([#446](https://github.com/micherra/canon/issues/446)) ([ef4c3c1](https://github.com/micherra/canon/commit/ef4c3c1a0af9463d1d5b017f5c9c47acaf74cd15))
+* **hooks:** daemon supervisor self-recovers from a surviving port owner on handoff ([#452](https://github.com/micherra/canon/issues/452)) ([bdb1ed3](https://github.com/micherra/canon/commit/bdb1ed326d7c363de26584fc382a2af88ac2a066))
+* **orchestration:** re-wire evaluator step-transition gate clobbered by PR [#175](https://github.com/micherra/canon/issues/175); retire planner+janitor shells ([#443](https://github.com/micherra/canon/issues/443)) ([fd69ae6](https://github.com/micherra/canon/commit/fd69ae61ac4972a1e986fea694286d2f8ac5b69b))
+* **release:** bump context-manifest.json version in lockstep via release-please extra-files ([#460](https://github.com/micherra/canon/issues/460)) ([60f6059](https://github.com/micherra/canon/commit/60f60595ddfc2e224b489c803760f81aa2ff027c))
+
 ## [2.16.0](https://github.com/micherra/canon/compare/v2.15.0...v2.16.0) (2026-07-02)
 
 

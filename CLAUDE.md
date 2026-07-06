@@ -158,6 +158,23 @@ Append the matching enrichment text from `references/engineer-spawn-enrichment.m
 3. **Spawn `canon:architect`** with request, requirements summary, `PRD_PATH`, `WORKSPACE`, `worktree_path` (needed for durable ADR writes — see `agents/architect.md` Durable ADR gate). **Pre-design probe obligation**: if the architect's DESIGN.md ASSUMPTIONS section contains any `confidence: medium` or `confidence: unknown` claim about external SDK behavior, protocol timing/ordering/availability, or existing hook/script behavior, a throwaway empirical probe must run before design freeze — committed to `${WORKSPACE}/plans/${SLUG}/PROBE-FINDINGS.md` and cited in DESIGN.md Research. Probes must invoke the capability; environment-inspection inferences do not count. If the probing agent lacks the required tool or spawn capability, the orchestrator takes over the probe. See `principles/conventions/probe-before-build-invoke-not-infer.md`.
 4. **Validate architect output**: Check Requirements Coverage section. Surface any `descoped`/`partial`/missing requirements to user before proceeding. If the section is absent or has no rows, treat all requirements as `descoped` and surface to user. For `covered` rows, verify each names an owning runbook step — rows without an owner are treated as `partial`. Proceed silently if all requirements are `covered` with owners.
 5. Present runbook for user approval. Architect decides execution strategy — orchestrator follows it.
+   **Plan-time base-advance advisory (Inc-0):** Before presenting the runbook for approval, run
+   `git fetch origin` **fail-open** (e.g. `git fetch origin || true`) — a fetch failure (origin
+   missing or temporarily unreachable) must NOT block plan approval; proceed against possibly-stale
+   `origin/main` in that case. Then call `forecast_base_advance({ workspace, declared_files, base_commit })`
+   where `declared_files` is the union of the task plans' `files:` frontmatter. If the returned
+   `advisory` is non-null, include it verbatim as a one-line note in the plan-approval presentation
+   ("Heads-up: {advisory}"). **Advisory-only — it never blocks dispatch and never alters the
+   approval decision.** Silent (no line shown) when `advisory` is null (including when the fetch
+   above failed and the tool ran against stale ref data). (Cross-referenced from Post-Step Effects
+   → "After architect", which already spawns the design renderer before this gate.)
+
+   **Kill-criterion (Inc-0 anticipatory thesis):** If, over a handful of real builds, the
+   base-advance advisory never fires OR never changes what the user/orchestrator does (they would
+   have merged-and-reacted just as cheaply), the anticipatory thesis is falsified for Canon and the
+   mechanism is retired (delete `forecast_base_advance` + this clause). If it repeatedly saves a
+   wasted verify+review cycle, promote it from advisory to a real pre-dispatch signal. Evaluated by
+   the learner during retrospective build analysis.
 6. `batch_log_steps` with all approved runbook steps.
 7. **Pre-spawn check**: `test -d "${worktree_path}"` before any code-writing agent spawn. If missing, report BLOCKED.
 8. Execute steps in order. Pass `turn_budget: {maxTurns}` to all agents. Pass `worktree_path` to code-writing agents (engineer, scribe, tester, shipper). The evaluator gate fires as a post-step effect after implement/fix (before verify) — it is not a runbook step (see Post-Step Effects).
@@ -291,7 +308,7 @@ checkpoint, Incomplete-step surfacing (cliff detected), merge conflict, gate fai
 
 ### Post-Step Effects
 
-- **After reviewer**: call `store_pr_review` or `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) — renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` → `${WORKSPACE}/artifacts/review.html`. Open in browser before HITL verdict. **Dogfood-render obligation (watch_OOOOO2)**: when `git diff {base_commit}..HEAD --name-only` includes `templates/renderer-*.md` or renderer-consumed snippets (`mcp-server/src/ui/snippets/*.html` or `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`), the mandatory renderer spawn MUST use the changed template/snippet files from the build worktree (not the installed plugin copies) so the build's own review.html is rendered through its own renderer changes before the review step closes; record `dogfood_render: true` in the review step's `log_step` outcome. Builds changing only renderer data inputs (REVIEW.md, DESIGN.md) are exempt.
+- **After reviewer**: call `store_pr_review` or `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) — renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` → `${WORKSPACE}/artifacts/review.html`. Publish the local file via the `Artifact` tool and present the returned claude.ai URL before the HITL verdict; on any `Artifact` failure, fall back to localhost `open_artifact({ workspace, artifact_name: "review.html" })` (see `references/hitl-patterns.md` Review verdict bullet). **Dogfood-render obligation (watch_OOOOO2)**: when `git diff {base_commit}..HEAD --name-only` includes `templates/renderer-*.md` or renderer-consumed snippets (`mcp-server/src/ui/snippets/*.html` or `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`), the mandatory renderer spawn MUST use the changed template/snippet files from the build worktree (not the installed plugin copies) so the build's own review.html is rendered through its own renderer changes before the review step closes; record `dogfood_render: true` in the review step's `log_step` outcome. Builds changing only renderer data inputs (REVIEW.md, DESIGN.md) are exempt.
 - **After engineer (implement)**: Run `bash hooks/summary-diff-check.sh {summary_path} {base_commit} [worktree_path]` per `*-SUMMARY.md` (pass `worktree_path` when not invoked with the worktree as CWD — see CWD for diff hooks in Step Enforcement Contracts). **Phantom claims BLOCK** (non-zero exit) — surface the named phantom claim to the user and do NOT proceed to review until resolved. **Unreported changes are advisory** — surface the `ADVISORY:` lines but proceed. Log the result in `log_step` outcome as `summary_diff_check: { phantom: N, advisory: M }`. For multi-task DAG builds, run per summary; any phantom in any summary blocks.
 - **After engineer (implement/fix), before verify — evaluator gate (post-step effect, NOT a runbook step):**
   1. Call `evaluate_step({ workspace, slug, base_commit, worktree_path, declared_files })`. `declared_files` = the task plan's `files:` frontmatter; for trivial/inferred runbooks with no task plan, pass the engineer's summary-declared files (fall back to `[]`, which makes file-scope drift advisory-only).
@@ -303,7 +320,7 @@ checkpoint, Incomplete-step surfacing (cliff detected), merge conflict, gate fai
   7. **Parse failure** (no delimiters) → treat as PASS with `evaluator_gate: { verdict: "PASS_parse_fallback" }` (fail-open on malformed agent output).
   8. **Tier**: runs in **all tiers** (autonomous, light-touch, supervised). It is an automated, fail-open, pre-review quality gate — NOT a HITL build-step checkpoint — so the Autonomy Tier Protocol's skip-rules do not apply to it. The deterministic-gate invariant trades away only HITL supervision at higher tiers; this gate is not HITL and is strictly weaker than the always-mandatory review that backstops every tier.
   9. Fires only after `implement`/`fix` steps — NOT after verify, review, test, context-sync, ship, or learn. Effect ordering: **implement → evaluate → verify → review**.
-- **After architect**: spawn renderer (mandatory) → `${WORKSPACE}/artifacts/design.html`. Open in browser before plan approval HITL.
+- **After architect**: spawn renderer (mandatory) → `${WORKSPACE}/artifacts/design.html`. Publish the local file via the `Artifact` tool and present the returned claude.ai URL before the plan approval HITL; on any `Artifact` failure, fall back to localhost `open_artifact({ workspace, artifact_name: "design.html" })` (see `references/hitl-patterns.md` Plan approval HTML bullet).
 - **After scribe**: verify the scribe committed its worktree edits before proceeding to ship. Run `git log --oneline -3` in the worktree and confirm a `docs(context-sync):` commit is present. If absent, recover: `git add -A && git commit -m "docs(context-sync): update CLAUDE.md, context.md, and CONVENTIONS.md" -m "Canon-Workflow: {slug}" -m "Canon-Agent: scribe" -m "Canon-State: context-sync"` in the worktree before proceeding.
   **Post-scribe scope guard**: run `bash hooks/scribe-scope-guard.sh {base_commit} [threshold] [worktree_path]` in the worktree, or pass `worktree_path` when not invoked with the worktree as CWD (see CWD for diff hooks in Step Enforcement Contracts). Non-zero exit ⇒ surface the deletion count to the user and require confirmation before proceeding (existing HITL). A scribe may only delete lines added by this build or demonstrably-stale references to artifacts this build deleted.
 - **After each step**: call `record_agent_metrics` if agent didn't. Pass `agent_id` to `log_step` completion (transcript capture is automatic — no separate call needed).
@@ -463,7 +480,7 @@ initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named life
 
 Read `references/loop-framework.md` BEFORE dispatching any loop or consuming an `ORCHESTRATOR_ACTION` line.
 
-## Project Structure <!-- last-updated: 2026-07-03 -->
+## Project Structure <!-- last-updated: 2026-07-05 -->
 
 ```
 canon/
@@ -479,7 +496,7 @@ canon/
 │       ├── app/          # Entry point (index.ts), tool registration
 │       ├── domains/      # Shared domain types (flows, workspaces, messages, board)
 │       ├── features/     # Tool implementations grouped by feature
-│       │   ├── orchestration/   # Orchestration runtime: init_workspace, finalize_workspace, log_step, batch_log_steps, record_agent_metrics, etc.
+│       │   ├── orchestration/   # Orchestration runtime: init_workspace, finalize_workspace, log_step, batch_log_steps, record_agent_metrics, etc.; get_decisions_corpus — offline cross-workspace decisions reader/aggregator unioning live workspaces with the durable drift.db `orchestrator_decisions` table (ADR-0040)
 │       │   ├── principles/      # get_principles, list_principles, get_compliance
 │       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review

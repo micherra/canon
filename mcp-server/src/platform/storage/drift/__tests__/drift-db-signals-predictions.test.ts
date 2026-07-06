@@ -44,8 +44,8 @@ function makePredictionInput(
 // DRIFT_SCHEMA_VERSION
 
 describe("DRIFT_SCHEMA_VERSION", () => {
-  test("is '11'", () => {
-    expect(DRIFT_SCHEMA_VERSION).toBe("13");
+  test("is '14'", () => {
+    expect(DRIFT_SCHEMA_VERSION).toBe("14");
   });
 });
 
@@ -93,12 +93,12 @@ describe("v5 migration — predictions table", () => {
     db.close();
   });
 
-  test("schema_version is '10' after fresh DB init", () => {
+  test("schema_version is '14' after fresh DB init", () => {
     const db = initDriftDb(":memory:");
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("13");
+    expect(row.value).toBe("14");
     db.close();
   });
 

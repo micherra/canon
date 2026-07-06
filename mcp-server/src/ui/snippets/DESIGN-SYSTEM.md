@@ -85,7 +85,7 @@ the component styles.
       font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--bg);
       color: var(--text);
-      font-size: 13px;
+      font-size: 17px;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
     }
@@ -126,7 +126,7 @@ A card with a titled header and body content area. Use for grouping related info
   border-bottom: 1px solid var(--border);
 }
 .section-title {
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--text-bright);
   margin: 0;
@@ -135,7 +135,7 @@ A card with a titled header and body content area. Use for grouping related info
 .section-card-body {
   padding: 14px 16px;
   color: var(--text);
-  font-size: 13px;
+  font-size: 17px;
   line-height: 1.5;
 }
 ```
@@ -173,14 +173,14 @@ CSS-only disclosure widget using `<details>/<summary>`. No JavaScript required.
 }
 .collapsible-summary::-webkit-details-marker { display: none; }
 .collapsible-arrow {
-  font-size: 9px;
+  font-size: 13px;
   color: var(--text-muted);
   transition: transform 0.15s ease;
   display: inline-block;
 }
 details[open] .collapsible-arrow { transform: rotate(90deg); }
 .collapsible-title {
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-bright);
   text-transform: uppercase;
@@ -190,7 +190,7 @@ details[open] .collapsible-arrow { transform: rotate(90deg); }
   padding: 10px 14px 14px;
   border-top: 1px solid var(--border);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 16px;
   line-height: 1.5;
 }
 ```
@@ -220,13 +220,13 @@ Compact data tables with alternating row backgrounds and a scroll wrapper for na
 .requirement-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 16px;
   background: var(--bg-card);
 }
 .requirement-table th {
   padding: 8px 12px;
   text-align: left;
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-bright);
   background: var(--bg-surface);
@@ -251,7 +251,7 @@ Color-code requirement/criterion dispositions using these badge classes:
 ```css
 .disposition {
   display: inline-block;
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 10px;
@@ -271,7 +271,7 @@ Color-code principle severity using these badge patterns:
 
 ```css
 .severity-badge {
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 4px;
@@ -306,7 +306,7 @@ A flex row of stat cards for summary metrics.
   min-width: 0;
 }
 .stat-value {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--text-bright);
   line-height: 1;
@@ -316,8 +316,8 @@ A flex row of stat cards for summary metrics.
 }
 .stat-value--danger { color: var(--danger); }
 .stat-value--muted  { color: var(--text-muted); }
-.stat-value--file   { font-size: 14px; font-family: monospace; padding-top: 5px; }
-.stat-label { font-size: 11px; color: var(--text-muted); }
+.stat-value--file   { font-size: 18px; font-family: monospace; padding-top: 5px; }
+.stat-label { font-size: 15px; color: var(--text-muted); }
 ```
 
 ### Section Titles (uppercase variant)
@@ -326,7 +326,7 @@ Used for sub-section headers inside dashboard grid cards:
 
 ```css
 .section-title--upper {
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -908,14 +908,14 @@ CSS classes used:
 - `.fix-before-merge` — section wrapper with `padding: 12px 16px`
 - `.violation-list` — `list-style: none; display: flex; flex-direction: column; gap: 8px`
 - `.violation-item` — flex row: number + body; `padding: 10px 12px; background: var(--bg-card); border-radius: 6px`
-- `.item-number` — colored by severity, `font-size: 11px; font-weight: 700; min-width: 16px`
+- `.item-number` — colored by severity, `font-size: 15px; font-weight: 700; min-width: 16px`
 - `.item-body` — flex column, `gap: 4px`
-- `.file-path-text` — `font-family: monospace; font-size: 11px; color: var(--text-bright)`
+- `.file-path-text` — `font-family: monospace; font-size: 15px; color: var(--text-bright)`
 - `.badge-message-row` — flex column, `gap: 4px`
-- `.principle-badge` — `font-size: 9px; font-weight: 600; letter-spacing: 0.02em`
-- `.item-message` — `font-size: 12px; color: var(--text-muted)`
-- `.overflow-note` — `font-size: 11px; color: var(--text-muted); text-align: center`
-- `.empty-note` — `font-size: 12px; color: var(--text-muted)`
+- `.principle-badge` — `font-size: 13px; font-weight: 600; letter-spacing: 0.02em`
+- `.item-message` — `font-size: 16px; color: var(--text-muted)`
+- `.overflow-note` — `font-size: 15px; color: var(--text-muted); text-align: center`
+- `.empty-note` — `font-size: 16px; color: var(--text-muted)`
 
 ### F.7 Violations by Principle Section
 
@@ -954,10 +954,10 @@ CSS classes:
 - `.group-list` — `list-style: none; flex-direction: column; gap: 6px`
 - `.group-item` — `border-radius: 6px; border: 1px solid var(--border); overflow: hidden`
 - `.group-header` — flex row; `padding: 8px 12px; background: var(--bg-card)`
-- `.principle-id` — `font-family: monospace; font-size: 12px; font-weight: 600; color: var(--text-bright)`
-- `.file-count-text` — `font-size: 11px; color: var(--text-muted); white-space: nowrap`
+- `.principle-id` — `font-family: monospace; font-size: 16px; font-weight: 600; color: var(--text-bright)`
+- `.file-count-text` — `font-size: 15px; color: var(--text-muted); white-space: nowrap`
 - `.file-list` — `list-style: none; border-top: 1px solid var(--border)`
-- `.file-list-item` — `font-family: monospace; font-size: 11px; color: var(--text-muted); padding: 5px 12px 5px 28px`
+- `.file-list-item` — `font-family: monospace; font-size: 15px; color: var(--text-muted); padding: 5px 12px 5px 28px`
 
 ### F.8 Compliance Score Section
 
@@ -997,15 +997,15 @@ Bar width formula: `Math.round((passed / total) * 100) + "%"`. Use `"0%"` when `
 CSS classes:
 - `.compliance-score` — `padding: 12px 16px; border-top: 1px solid var(--border)`
 - `.bars` — `flex-direction: column; gap: 8px`
-- `.bar-row` — flex row; `font-size: 12px; gap: 8px`
+- `.bar-row` — flex row; `font-size: 16px; gap: 8px`
 - `.bar-label` — `width: 80px; flex-shrink: 0; color: var(--text-bright)`
-- `.bar-count` — `width: 36px; text-align: right; font-size: 11px; color: var(--text-muted)`
+- `.bar-count` — `width: 36px; text-align: right; font-size: 15px; color: var(--text-muted)`
 - `.bar-track` — `flex: 1; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden`
 - `.bar-fill` — `height: 100%; border-radius: 4px`
 - `.honored-section` — `margin-top: 14px; flex-direction: column; gap: 6px`
-- `.honored-label` — `font-size: 11px; color: var(--text-muted); font-weight: 600`
+- `.honored-label` — `font-size: 15px; color: var(--text-muted); font-weight: 600`
 - `.honored-badges` — `flex-wrap: wrap; gap: 4px`
-- `.honored-badge` — `font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; background: rgba(52,211,153,0.18); color: var(--success); border: 1px solid rgba(52,211,153,0.35)`
+- `.honored-badge` — `font-size: 13px; font-weight: 600; padding: 2px 7px; border-radius: 10px; background: rgba(52,211,153,0.18); color: var(--success); border: 1px solid rgba(52,211,153,0.35)`
 
 ### F.9 Blast Radius Chart Section
 
@@ -1035,9 +1035,9 @@ Bar width formula: `Math.round((depCount / maxDepCount) * 100) + "%"`.
 CSS classes:
 - `.blast-radius-chart` — `padding: 12px 16px`
 - `.chart-rows` — `flex-direction: column; gap: 6px`
-- `.chart-row` — flex row; `font-size: 11px; gap: 8px`
+- `.chart-row` — flex row; `font-size: 15px; gap: 8px`
 - `.file-name` — `width: 140px; flex-shrink: 0; font-family: monospace; color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap`
-- `.dep-count` — `width: 28px; text-align: right; font-size: 10px; color: var(--text-muted)`
+- `.dep-count` — `width: 28px; text-align: right; font-size: 13px; color: var(--text-muted)`
 
 ### F.10 Layer Chart Section
 
@@ -1063,7 +1063,7 @@ Bar chart of layers by file count. Color is derived from layer name via hash-bas
 
 CSS classes:
 - `.layer-chart` — `padding: 12px 16px`
-- `.layer-name` — `width: 100px; flex-shrink: 0; font-size: 11px; color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap`
+- `.layer-name` — `width: 100px; flex-shrink: 0; font-size: 15px; color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap`
 
 ### F.11 Subsystems Panel Section
 
@@ -1090,12 +1090,12 @@ Stacked below the layer chart. Shows new or removed subsystem directories.
 CSS classes:
 - `.subsystems-panel` — `padding: 12px 16px; border-top: 1px solid var(--border)`
 - `.subsystem-list` — `flex-direction: column; gap: 8px`
-- `.subsystem-row` — flex row; `font-size: 12px; gap: 8px`
-- `.directory-text` — `flex: 1; font-family: monospace; font-size: 11px; color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap`
-- `.label-badge` — `font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em`
+- `.subsystem-row` — flex row; `font-size: 16px; gap: 8px`
+- `.directory-text` — `flex: 1; font-family: monospace; font-size: 15px; color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap`
+- `.label-badge` — `font-size: 13px; font-weight: 700; padding: 2px 7px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em`
 - `.label-new` — `background: rgba(52,211,153,0.18); color: var(--success); border: 1px solid rgba(52,211,153,0.35)`
 - `.label-removed` — `background: rgba(255,107,107,0.18); color: var(--danger); border: 1px solid rgba(255,107,107,0.35)`
-- `.subsystem-file-count` — `font-size: 11px; color: var(--text-muted); white-space: nowrap`
+- `.subsystem-file-count` — `font-size: 15px; color: var(--text-muted); white-space: nowrap`
 
 ### F.12 Helper Patterns
 
@@ -1176,24 +1176,24 @@ body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--bg);
   color: var(--text);
-  font-size: 13px;
+  font-size: 17px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
 /* Verdict Banner */
-.verdict-banner { display: flex; align-items: center; gap: 12px; padding: 10px 16px; font-size: 13px; }
-.verdict-badge { font-weight: 700; font-size: 11px; letter-spacing: 0.06em; padding: 3px 9px; border-radius: 4px; white-space: nowrap; color: #fff; flex-shrink: 0; }
+.verdict-banner { display: flex; align-items: center; gap: 12px; padding: 10px 16px; font-size: 17px; }
+.verdict-badge { font-weight: 700; font-size: 15px; letter-spacing: 0.06em; padding: 3px 9px; border-radius: 4px; white-space: nowrap; color: #fff; flex-shrink: 0; }
 .verdict-headline { color: var(--text-bright, #e8eaf0); flex: 1; line-height: 1.4; }
 
 /* Stats Row */
 .stats-row { display: flex; gap: 12px; padding: 12px 16px; }
 .stat-card { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border); min-width: 0; }
-.stat-value { font-size: 24px; font-weight: 700; color: var(--text-bright, #e8eaf0); line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-value { font-size: 28px; font-weight: 700; color: var(--text-bright, #e8eaf0); line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat-value--danger { color: var(--danger, #ff6b6b); }
 .stat-value--muted { color: var(--text-muted, #636a80); }
-.stat-value--file { font-size: 14px; font-family: monospace; padding-top: 5px; }
-.stat-label { font-size: 11px; color: var(--text-muted, #636a80); }
+.stat-value--file { font-size: 18px; font-family: monospace; padding-top: 5px; }
+.stat-label { font-size: 15px; color: var(--text-muted, #636a80); }
 
 /* Dashboard Grid */
 .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 12px 16px; }
@@ -1201,66 +1201,66 @@ body {
 .grid-card--stack { display: flex; flex-direction: column; }
 
 /* Section titles */
-.section-title { font-size: 13px; font-weight: 700; color: var(--text-bright, #e8eaf0); margin: 0 0 10px 0; letter-spacing: 0.02em; }
-.section-title--upper { font-size: 12px; font-weight: 700; color: var(--text-muted, #636a80); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+.section-title { font-size: 17px; font-weight: 700; color: var(--text-bright, #e8eaf0); margin: 0 0 10px 0; letter-spacing: 0.02em; }
+.section-title--upper { font-size: 16px; font-weight: 700; color: var(--text-muted, #636a80); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
 
 /* Fix Before Merge */
 .fix-before-merge { padding: 12px 16px; }
 .violation-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .violation-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border); }
-.item-number { font-size: 11px; font-weight: 700; min-width: 16px; flex-shrink: 0; padding-top: 1px; }
+.item-number { font-size: 15px; font-weight: 700; min-width: 16px; flex-shrink: 0; padding-top: 1px; }
 .item-body { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
-.file-path-text { font-size: 11px; font-family: monospace; color: var(--text-bright, #e8eaf0); word-break: break-all; }
+.file-path-text { font-size: 15px; font-family: monospace; color: var(--text-bright, #e8eaf0); word-break: break-all; }
 .badge-message-row { display: flex; flex-direction: column; gap: 4px; }
-.principle-badge { font-size: 9px; font-weight: 600; white-space: nowrap; letter-spacing: 0.02em; opacity: 0.85; }
-.item-message { font-size: 12px; color: var(--text-muted, #636a80); line-height: 1.4; }
-.overflow-note { font-size: 11px; color: var(--text-muted, #636a80); margin: 6px 0 0; text-align: center; }
-.empty-note { font-size: 12px; color: var(--text-muted, #636a80); padding: 8px 0; }
+.principle-badge { font-size: 13px; font-weight: 600; white-space: nowrap; letter-spacing: 0.02em; opacity: 0.85; }
+.item-message { font-size: 16px; color: var(--text-muted, #636a80); line-height: 1.4; }
+.overflow-note { font-size: 15px; color: var(--text-muted, #636a80); margin: 6px 0 0; text-align: center; }
+.empty-note { font-size: 16px; color: var(--text-muted, #636a80); padding: 8px 0; }
 
 /* Violations by Principle */
 .violations-by-principle { padding: 12px 16px; }
 .group-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .group-item { border-radius: 6px; border: 1px solid var(--border); overflow: hidden; }
 .group-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg-card); }
-.severity-badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid transparent; white-space: nowrap; letter-spacing: 0.03em; flex-shrink: 0; }
-.principle-id { font-size: 12px; font-weight: 600; font-family: monospace; color: var(--text-bright, #e8eaf0); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-count-text { font-size: 11px; color: var(--text-muted, #636a80); white-space: nowrap; flex-shrink: 0; }
+.severity-badge { font-size: 13px; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid transparent; white-space: nowrap; letter-spacing: 0.03em; flex-shrink: 0; }
+.principle-id { font-size: 16px; font-weight: 600; font-family: monospace; color: var(--text-bright, #e8eaf0); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-count-text { font-size: 15px; color: var(--text-muted, #636a80); white-space: nowrap; flex-shrink: 0; }
 .file-list { list-style: none; border-top: 1px solid var(--border); }
-.file-list-item { font-size: 11px; font-family: monospace; color: var(--text-muted, #636a80); padding: 5px 12px 5px 28px; border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.04)); word-break: break-all; }
+.file-list-item { font-size: 15px; font-family: monospace; color: var(--text-muted, #636a80); padding: 5px 12px 5px 28px; border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.04)); word-break: break-all; }
 
 /* Compliance Score */
 .compliance-score { padding: 12px 16px; border-top: 1px solid var(--border); }
 .bars { display: flex; flex-direction: column; gap: 8px; }
-.bar-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.bar-row { display: flex; align-items: center; gap: 8px; font-size: 16px; }
 .bar-label { width: 80px; flex-shrink: 0; color: var(--text-bright, #e8eaf0); }
-.bar-count { width: 36px; flex-shrink: 0; color: var(--text-muted, #636a80); font-size: 11px; text-align: right; }
+.bar-count { width: 36px; flex-shrink: 0; color: var(--text-muted, #636a80); font-size: 15px; text-align: right; }
 .bar-track { flex: 1; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 4px; }
 .honored-section { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
-.honored-label { font-size: 11px; color: var(--text-muted, #636a80); font-weight: 600; }
+.honored-label { font-size: 15px; color: var(--text-muted, #636a80); font-weight: 600; }
 .honored-badges { display: flex; flex-wrap: wrap; gap: 4px; }
-.honored-badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; background: rgba(52,211,153,0.18); color: var(--success, #34d399); border: 1px solid rgba(52,211,153,0.35); white-space: nowrap; letter-spacing: 0.02em; }
+.honored-badge { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 7px; border-radius: 10px; background: rgba(52,211,153,0.18); color: var(--success, #34d399); border: 1px solid rgba(52,211,153,0.35); white-space: nowrap; letter-spacing: 0.02em; }
 
 /* Blast Radius Chart */
 .blast-radius-chart { padding: 12px 16px; }
 .chart-rows { display: flex; flex-direction: column; gap: 6px; }
-.chart-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.chart-row { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .file-name { width: 140px; flex-shrink: 0; color: var(--text-bright, #e8eaf0); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dep-count { width: 28px; flex-shrink: 0; color: var(--text-muted, #636a80); text-align: right; font-size: 10px; }
+.dep-count { width: 28px; flex-shrink: 0; color: var(--text-muted, #636a80); text-align: right; font-size: 13px; }
 
 /* Layer Chart */
 .layer-chart { padding: 12px 16px; }
-.layer-name { width: 100px; flex-shrink: 0; color: var(--text-bright, #e8eaf0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.layer-name { width: 100px; flex-shrink: 0; color: var(--text-bright, #e8eaf0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
 
 /* Subsystems Panel */
 .subsystems-panel { padding: 12px 16px; border-top: 1px solid var(--border); }
 .subsystem-list { display: flex; flex-direction: column; gap: 8px; }
-.subsystem-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.directory-text { flex: 1; color: var(--text-bright, #e8eaf0); font-family: monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.label-badge { flex-shrink: 0; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.subsystem-row { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.directory-text { flex: 1; color: var(--text-bright, #e8eaf0); font-family: monospace; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.label-badge { flex-shrink: 0; font-size: 13px; font-weight: 700; padding: 2px 7px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
 .label-new { background: rgba(52,211,153,0.18); color: var(--success, #34d399); border: 1px solid rgba(52,211,153,0.35); }
 .label-removed { background: rgba(255,107,107,0.18); color: var(--danger, #ff6b6b); border: 1px solid rgba(255,107,107,0.35); }
-.subsystem-file-count { flex-shrink: 0; font-size: 11px; color: var(--text-muted, #636a80); white-space: nowrap; }
+.subsystem-file-count { flex-shrink: 0; font-size: 15px; color: var(--text-muted, #636a80); white-space: nowrap; }
 ```
 
 ---
@@ -1592,6 +1592,6 @@ When `blastRadius.affected` is empty or `show_pr_impact` returns no blast radius
 
 The ring-specific CSS classes are self-contained in the `blast-radius-rings.html` snippet's `<style>` block. The renderer extracts and merges them with other styles during composition. Key classes:
 
-- `.ring-node-label` — `font-size: 9px; fill: var(--text-muted, #636a80); font-family: monospace`
+- `.ring-node-label` — `font-size: 13px; fill: var(--text-muted, #636a80); font-family: monospace`
 - `.rings-svg` — `width: 100%; max-width: 500px; height: auto; display: block; margin: 0 auto`
 - `.rings-title` — section heading for the rings panel

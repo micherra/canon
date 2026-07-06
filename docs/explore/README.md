@@ -11,6 +11,7 @@ This directory holds design explorations, competed proposals, and research docum
 | **[adaptive-queen.md](adaptive-queen.md)** | Exploration of an adaptive orchestrator model (parked; see context in project memory). |
 | **[automatic-craft-prerequisites-scoping.md](automatic-craft-prerequisites-scoping.md)** | Analysis of automatic prerequisite scoping for craft audits. |
 | **[orchestrator-scoped-principle-measurement-gap.md](orchestrator-scoped-principle-measurement-gap.md)** | Open: the 23-principle zero-citation measurement gap (decision recorded in ADR-0035) and the deferred orchestration-trace self-review surface (Option B) as its long-term fix. |
+| **[compilation-gradient.md](compilation-gradient.md)** | Open: pressure-tests the "compilation gradient" framing (PAW paper) against Canon's fuzzy→deterministic architecture; recommends a three-tier execution gradient and one probe-build. The recommended probe ran (see `docs/t2-probe-results.md` — INCONCLUSIVE, 0/96 retrievable). |
 
 ## Using these documents
 

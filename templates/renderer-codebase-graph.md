@@ -209,10 +209,10 @@ A `.section-card` with `.container` wrapper:
 <div class="container">
   <div class="section-card" style="margin-bottom: 16px;">
     <div class="section-card-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-      <h2 class="section-title" style="font-size: 18px;">Codebase Graph</h2>
+      <h2 class="section-title" style="font-size: 22px;">Codebase Graph</h2>
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 11px; font-family: monospace; color: var(--text-muted); background: var(--bg-surface); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${SLUG}</span>
-        <span style="font-size: 11px; color: var(--text-muted);">{generatedDate}</span>
+        <span style="font-size: 15px; font-family: monospace; color: var(--text-muted); background: var(--bg-surface); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${SLUG}</span>
+        <span style="font-size: 15px; color: var(--text-muted);">{generatedDate}</span>
       </div>
     </div>
   </div>
@@ -249,7 +249,7 @@ CSS for the stats bar (add to `<style>` block):
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  font-size: 12px;
+  font-size: 16px;
   color: var(--text-muted);
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -262,7 +262,7 @@ CSS for the stats bar (add to `<style>` block):
 .stats-bar-accent { color: var(--accent); }
 .stats-bar-filter {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 15px;
   color: var(--accent);
   font-weight: 600;
 }
@@ -295,11 +295,11 @@ A `.section-card` with `.container` wrapper and title "Layers". Use a horizontal
 CSS for the chart:
 ```css
 .chart-rows { display: flex; flex-direction: column; gap: 6px; }
-.chart-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.chart-row { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .layer-name { width: 120px; flex-shrink: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-track { flex: 1; height: 8px; background: var(--bg-surface); border-radius: 4px; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 4px; }
-.file-count { width: 32px; flex-shrink: 0; color: var(--text-muted); text-align: right; font-size: 10px; }
+.file-count { width: 32px; flex-shrink: 0; color: var(--text-muted); text-align: right; font-size: 13px; }
 ```
 
 ### 4.4 Graph canvas panel (full-width, no .container wrapper)
@@ -329,7 +329,7 @@ it to the page's main `<style>` tag.
       <!-- Node detail panel (from node-detail-panel.html snippet, hidden by default) -->
       {embed node-detail-panel.html <div id="node-detail-panel"> block here}
     </div>
-    <div id="graph-tooltip" style="position: fixed; display: none; pointer-events: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 11px; color: var(--text-bright); font-family: monospace; max-width: 360px; word-break: break-all; box-shadow: var(--shadow); z-index: 1000;"></div>
+    <div id="graph-tooltip" style="position: fixed; display: none; pointer-events: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 15px; color: var(--text-bright); font-family: monospace; max-width: 360px; word-break: break-all; box-shadow: var(--shadow); z-index: 1000;"></div>
   </div>
 </div>
 ```
@@ -422,7 +422,7 @@ handle to preserve the selection highlight):
     const chip = document.createElement('span');
     chip.style.cssText = `
       display: inline-flex; align-items: center; gap: 5px;
-      font-size: 11px; color: var(--text-muted);
+      font-size: 15px; color: var(--text-muted);
       background: var(--bg-card); border: 1px solid var(--border);
       border-radius: 4px; padding: 2px 8px; cursor: default;
     `;
@@ -434,13 +434,13 @@ handle to preserve the selection highlight):
   const hasViolations = nodes.some(n => (n.violation_count ?? 0) > 0);
   if (hasChanged) {
     const chip = document.createElement('span');
-    chip.style.cssText = 'display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:2px 8px;';
+    chip.style.cssText = 'display:inline-flex;align-items:center;gap:5px;font-size:15px;color:var(--text-muted);background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:2px 8px;';
     chip.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6c8cff;"></span>changed';
     legend.appendChild(chip);
   }
   if (hasViolations) {
     const chip = document.createElement('span');
-    chip.style.cssText = 'display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:2px 8px;';
+    chip.style.cssText = 'display:inline-flex;align-items:center;gap:5px;font-size:15px;color:var(--text-muted);background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:2px 8px;';
     chip.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff6b6b;"></span>violations';
     legend.appendChild(chip);
   }

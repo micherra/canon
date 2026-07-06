@@ -1,4 +1,5 @@
 import { getDecisions, logDecision } from "@features/orchestration/tools/decisions-ledger.ts";
+import { getDecisionsCorpus } from "@features/orchestration/tools/get-decisions-corpus.ts";
 import {
   batchLogSteps,
   finalizeWorkspace,
@@ -231,6 +232,31 @@ function registerGetDecisions(server: McpServer): void {
   );
 }
 
+function registerGetDecisionsCorpus(server: McpServer): void {
+  server.registerTool(
+    "get_decisions_corpus",
+    {
+      description:
+        "Read the offline, cross-workspace decisions corpus — unions every live-on-disk " +
+        "workspace's decisions (.canon/workspaces/**/orchestration.db) with durably-persisted " +
+        "decisions from workspaces already reaped (drift.db orchestrator_decisions table). " +
+        "Returns the unioned, source-tagged (live|durable), deterministically-sorted records " +
+        "plus an aggregation (by_category keyed on gate ?? decision_type, by_decision_type, " +
+        "by_outcome, fill_rates) and a rendered markdown summary. Unreadable live stores are " +
+        "surfaced in skipped[], never silently dropped.",
+      inputSchema: {
+        project_dir: z
+          .string()
+          .optional()
+          .describe("Project root directory path (overridden by session scope server-side)"),
+      },
+    },
+    gatedWrapHandler(async (input, extra) =>
+      getDecisionsCorpus({ ...input, project_dir: resolveScope(extra) }),
+    ),
+  );
+}
+
 function registerWriteOrchestratorCheckpoint(server: McpServer): void {
   server.registerTool(
     "write_orchestrator_checkpoint",
@@ -263,5 +289,6 @@ export function registerJournalTools(server: McpServer): void {
   registerReconcileWorkspace(server);
   registerLogDecision(server);
   registerGetDecisions(server);
+  registerGetDecisionsCorpus(server);
   registerWriteOrchestratorCheckpoint(server);
 }

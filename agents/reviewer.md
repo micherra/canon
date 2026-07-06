@@ -228,6 +228,12 @@ Correctness findings are written into the `write_review` `violations[]` array us
 
 **Important**: `correctness-scan` is NOT a Canon principle — it never appears in `honored[]` and does not count in principle-keyed score tiers. The `file:line` evidence and `failure_scenario` prose go in the human-readable REVIEW.md section.
 
+### Stage 1.5 ↔ Stage 2 Boundary (Tie-Break Rule)
+
+The line between this stage and Stage 2's Gotcha Documentation axis is drawn by **output**, not by **mechanism**: a reachable input that produces deterministically wrong output is a Stage 1.5 correctness defect — even when the mechanism is a "surprising built-in default" or a silent coercion. Canonical examples: `value || 5` overriding an explicit `0` (falsy-zero coercion); `name ?? "Guest"` letting an explicit `""` pass through unintended; `points.sort()` sorting numbers lexicographically instead of numerically; `parseInt(x)` without a radix producing a wrong base for a leading-zero string. Stage 2 (Gotcha Documentation) is reserved for defects that do **not** change output for any reachable input — clarity, documentation, naming, and other non-behavior-changing quality concerns.
+
+**Heuristic**: does a reachable input produce wrong output? → Stage 1.5. Otherwise → Stage 2.
+
 ## Graph-Aware Context
 
 If the `review_code` MCP tool returned `graph_context`, use it to inform your review:
@@ -279,7 +285,7 @@ Skip this axis for:
 #### Gotcha Documentation
 
 Scan the diff for non-obvious behavior that could surprise a caller or future maintainer:
-- Silent coercions or fallbacks (e.g., `?? defaultValue` that changes behavior)
+- Silent coercions or fallbacks that are non-obvious but do not produce wrong output for any reachable input (e.g., an `?? defaultValue` fallback whose default matches spec intent). If the coercion produces wrong output for a reachable input, it is a Stage 1.5 correctness defect per the tie-break rule above, not a Stage 2 gotcha.
 - Implicit ordering dependencies (must call A before B)
 - Error swallowing (catch blocks that don't re-throw or log)
 - Side effects in functions whose names suggest purity

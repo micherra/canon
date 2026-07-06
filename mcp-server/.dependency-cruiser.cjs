@@ -5,9 +5,9 @@ module.exports = {
       name: "no-orchestration-to-graph-direct",
       comment:
         "Orchestration must not import directly from graph/ — use IKgStore/IKgQuery interface in domains/knowledge-graph/. " +
-        "DEFERRED-DI exceptions: inject-context.ts, init-workspace.ts, and workspace-structure.ts still instantiate " +
-        "KgQuery/KgStore/initDatabase directly because full DI wiring is deferred to a future task. " +
-        "Remove these pathNot entries once a DI container is wired.",
+        "DEFERRED-DI exceptions: inject-context.ts, init-workspace.ts, workspace-structure.ts, and " +
+        "forecast-base-advance.ts still instantiate KgQuery/KgStore/initDatabase directly because full DI " +
+        "wiring is deferred to a future task. Remove these pathNot entries once a DI container is wired.",
       severity: "error",
       from: {
         path: "^src/features/orchestration/",
@@ -20,6 +20,7 @@ module.exports = {
           "^src/features/orchestration/services/kg-context-formatter\\.ts$",
           "^src/features/orchestration/tools/init-workspace\\.ts$",
           "^src/features/orchestration/services/workspace-structure\\.ts$",
+          "^src/features/orchestration/tools/forecast-base-advance\\.ts$",
         ],
       },
       to: { path: "^src/graph/" },
@@ -66,6 +67,16 @@ module.exports = {
           "^src/features/orchestration/services/pitfall-enrichment\\.ts$",
           "^src/features/orchestration/services/hot-file-detection\\.ts$",
           "^src/features/orchestration/services/area-memory-enrichment\\.ts$",
+          // ADR-0040: decision-persistence mirrors a reaped workspace's decision events
+          // into drift.db orchestrator_decisions, called by janitor.ts (already excepted
+          // above) at the reap-time destruction boundary — deferred DI exception until a
+          // DI container is wired
+          "^src/features/orchestration/services/decision-persistence\\.ts$",
+          // ADR-0040: decisions-corpus reads the durable orchestrator_decisions table
+          // (getDriftDb(...).getOrchestratorDecisions().getAll()) for the offline
+          // cross-workspace reader/aggregator — deferred DI exception until a DI
+          // container is wired
+          "^src/features/orchestration/services/decisions-corpus\\.ts$",
         ],
       },
       to: { path: "^src/platform/storage/drift/" },
