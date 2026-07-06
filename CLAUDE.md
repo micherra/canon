@@ -451,7 +451,7 @@ Re-spawned agents MUST receive prior progress context. **Include in every re-spa
 
 **Scenario rules:** Fix-after-review → engineer receives reviewer findings + completed-files list. Failure retry → prior partial work list. Reviewer re-spawn → prior stage progress (e.g., "Stage 1–2 written to REVIEW.md — continue from Stage 3").
 
-## Loop Framework <!-- last-updated: 2026-06-22 -->
+## Loop Framework <!-- last-updated: 2026-07-06 -->
 
 Loops are Canon's managed periodic-observation artifact class. A loop is authored as
 `loops/<id>.md` (YAML frontmatter + action-prompt body), registered via `list_loops`,
@@ -477,6 +477,7 @@ initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named life
 - `run-learner`: fires on harness-watch `learner_due`; supervised → ask user first; autonomous/light-touch → auto-spawn.
 - `run-evolve`: fires on the `evolve` loop's `evolve_due`; supervised → ask user first; autonomous/light-touch → auto-spawn after a cost-visibility `PushNotification`. Proposals are HITL-gated regardless of tier.
 - `auto-enable-merge`: fires on `ci_conclusion` pending→success while PR OPEN & not-already-armed → orchestrator runs `gh pr merge --auto --squash`; autonomous/light-touch unattended, supervised ASK-FIRST; runner read-only (dc-06).
+- `auto-update-branch`: fires on `merge_state` transitioning to `BEHIND`/`DIRTY` while PR OPEN → orchestrator merges `origin/main` into the PR branch and pushes; generated-artifact-only conflicts auto-resolved by regeneration, SOURCE conflicts always HITL; unattended in all tiers for the clean/generated-only path; runner read-only (dc-06).
 
 Read `references/loop-framework.md` BEFORE dispatching any loop or consuming an `ORCHESTRATOR_ACTION` line.
 

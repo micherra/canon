@@ -175,11 +175,12 @@ describe("loadLoopsFromDir — real loops/ directory (ship-watch smoke test)", (
       expect(shipWatch.trigger?.firing_posture.autonomous).toBe("auto");
       expect(shipWatch.trigger?.firing_posture["light-touch"]).toBe("auto");
       expect(shipWatch.trigger?.firing_posture.supervised).toBe("opt-in");
-      // Verify all 4 snapshot fields
+      // Verify all 5 snapshot fields
       expect(shipWatch.state.snapshot).toContain("pr_state");
       expect(shipWatch.state.snapshot).toContain("ci_conclusion");
       expect(shipWatch.state.snapshot).toContain("release_tag");
       expect(shipWatch.state.snapshot).toContain("external_review_comment_ids");
+      expect(shipWatch.state.snapshot).toContain("merge_state");
       // Verify Bash read-only carve-out: shell_commands declared
       expect(shipWatch.observe.shell_commands.length).toBeGreaterThan(0);
     }
@@ -352,6 +353,48 @@ describe("loadLoopsFromDir — ship-watch orchestrator_action directives", () =>
   });
 
   it("ship-watch still parses cleanly with all three directives (no invalid[] entry)", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const invalidShipWatch = result.invalid.find((e) => e.file.includes("ship-watch"));
+    expect(invalidShipWatch).toBeUndefined();
+  });
+
+  it("merge_state (to: BEHIND) transition carries orchestrator_action: auto-update-branch", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const shipWatch = result.valid.find((d) => d.id === "ship-watch");
+    expect(shipWatch).toBeDefined();
+    if (!shipWatch) return;
+    const rule = shipWatch.surface.on_transition.find(
+      (r) => r.field === "merge_state" && r.to === "BEHIND",
+    );
+    expect(rule).toBeDefined();
+    expect(rule?.orchestrator_action).toBe("auto-update-branch");
+  });
+
+  it("merge_state (to: DIRTY) transition carries orchestrator_action: auto-update-branch", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const shipWatch = result.valid.find((d) => d.id === "ship-watch");
+    expect(shipWatch).toBeDefined();
+    if (!shipWatch) return;
+    const rule = shipWatch.surface.on_transition.find(
+      (r) => r.field === "merge_state" && r.to === "DIRTY",
+    );
+    expect(rule).toBeDefined();
+    expect(rule?.orchestrator_action).toBe("auto-update-branch");
+  });
+
+  it("merge_state transitions do NOT set terminate (loop keeps watching)", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const shipWatch = result.valid.find((d) => d.id === "ship-watch");
+    expect(shipWatch).toBeDefined();
+    if (!shipWatch) return;
+    const rules = shipWatch.surface.on_transition.filter((r) => r.field === "merge_state");
+    expect(rules.length).toBe(2);
+    for (const rule of rules) {
+      expect(rule.terminate).toBeFalsy();
+    }
+  });
+
+  it("ship-watch still parses cleanly with the merge_state directives (no invalid[] entry)", async () => {
     const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
     const invalidShipWatch = result.invalid.find((e) => e.file.includes("ship-watch"));
     expect(invalidShipWatch).toBeUndefined();
