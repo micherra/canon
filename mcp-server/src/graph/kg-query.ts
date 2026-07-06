@@ -7,12 +7,11 @@
  */
 
 import type Database from "better-sqlite3";
-import { computeImpactScore, toEntityRow } from "./kg-query-insights.ts";
+import { computeImpactScore } from "./kg-query-insights.ts";
 import type {
   BlastRadiusResult,
   CallerResult,
   DeadCodeResult,
-  EntityRow,
   FileBlastRadiusResult,
   FileMetrics,
   FileRow,
@@ -31,7 +30,6 @@ export class KgQuery {
   private readonly stmtSearch: Database.Statement;
   private stmtDeadCode!: Database.Statement;
   private stmtDeadCodeIncludeTests!: Database.Statement;
-  private readonly stmtGetAncestors: Database.Statement;
   private readonly stmtGetAdjacencyList: Database.Statement;
   private stmtFileEntityCount!: Database.Statement;
   private stmtFileExportCount!: Database.Statement;
@@ -74,14 +72,6 @@ export class KgQuery {
       WHERE entity_fts MATCH ?
       ORDER BY fts.rank
       LIMIT ?
-    `);
-    this.stmtGetAncestors = db.prepare(`
-      SELECT ent.entity_id, ent.file_id, ent.name, ent.qualified_name,
-             ent.kind, ent.line_start, ent.line_end,
-             ent.is_exported, ent.is_default_export, ent.signature, ent.metadata
-      FROM edges ed
-      JOIN entities ent ON ent.entity_id = ed.source_entity_id
-      WHERE ed.target_entity_id = ? AND ed.edge_type = 'contains'
     `);
     this.stmtGetAdjacencyList = db.prepare(`SELECT source_entity_id, target_entity_id FROM edges`);
     // Pinned to edge_type='imports': adjacency list is used for cycle detection
@@ -201,9 +191,7 @@ export class KgQuery {
 
   /**
    * Return all entities that depend on the given seed entity IDs within
-   * `maxDepth` hops following reverse edges (callers/dependents), excluding
-   * `contains` edges which represent structural containment rather than
-   * functional dependency.
+   * `maxDepth` hops following reverse edges (callers/dependents).
    *
    * Uses a recursive CTE; the seed set is expanded via a VALUES clause so a
    * single prepared statement is not possible — the statement is built and
@@ -312,17 +300,6 @@ export class KgQuery {
       name: row.name as string,
       qualified_name: row.qualified_name as string,
     }));
-  }
-
-  // Ancestry
-
-  /**
-   * Return entities that contain entityId (i.e. parent scopes — file, class,
-   * or function that encloses this entity via 'contains' edges).
-   */
-  getAncestors(entityId: number): EntityRow[] {
-    const rows = this.stmtGetAncestors.all(entityId) as Record<string, unknown>[];
-    return rows.map(toEntityRow);
   }
 
   // Adjacency List (Community Detection Prep)
