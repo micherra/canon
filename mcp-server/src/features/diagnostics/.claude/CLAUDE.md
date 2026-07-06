@@ -6,7 +6,7 @@
 Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint, agent metrics, signal compilation, and summary storage. All tools surface quality signals; none mutate workflow state.
 
 ## Architecture
-<!-- last-updated: 2026-06-25 -->
+<!-- last-updated: 2026-07-05 -->
 
 **`tools/`** — MCP tool handlers (thin wrappers calling services).
 
@@ -16,8 +16,8 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `get-drift-report.ts` | `get_drift_report` | Full drift report — compliance rates, hotspots, trend, doc freshness |
 | `record-agent-metrics.ts` | `record_agent_metrics` | Agent-callable metrics recorder |
 | `store-summaries.ts` | `store_summaries` | DB-only summary persistence |
-| `sync-indexes.ts` | `sync_indexes` | Regenerates sentinel-delimited `## Artifact Inventory` blocks in the 6 sibling artifact-class indexes (adds `primers/`); returns `{ synced[], skipped[] }` |
-| `check-context-staleness.ts` | `check_context_staleness` | Reads committed `context-manifest.json`, re-scans installed corpus, returns `StalenessReport`; `MANIFEST_NOT_FOUND` when manifest unreadable |
+| `sync-indexes.ts` | `sync_indexes` | Regenerates sentinel-delimited `## Artifact Inventory` blocks in the 6 sibling artifact-class indexes (adds `primers/`); returns `{ synced[], skipped[] }`; `syncIndexes(input, defaultProjectDir)` rejects a supplied `project_dir` outside the resolved scope fail-closed (`isPathInWorktree` containment), zero writes on reject — see Contracts below |
+| `check-context-staleness.ts` | `check_context_staleness` | Reads committed `context-manifest.json`, re-scans installed corpus, returns `StalenessReport`; `MANIFEST_NOT_FOUND` when manifest unreadable; new exported `checkContextStalenessGuarded(input, scope)` scope-guards `project_dir` + optional `manifest_path` before delegating to the unchanged read-only `checkContextStaleness` — see Contracts below |
 
 **`services/`** — Pure functions; all accept pre-loaded data (no I/O except `scanDirectories`).
 
@@ -37,13 +37,15 @@ Diagnostic tools for Canon's meta-layer: drift reports, doc freshness, wiki lint
 | `craft-audit-service.ts` | Pure audit area selector + profile persistence; see Contracts below |
 
 ## Contracts
-<!-- last-updated: 2026-06-25 -->
+<!-- last-updated: 2026-07-05 -->
 
 **Craft audit service** (`services/craft-audit-service.ts`) — `selectAuditAreas(files, options?)` pure selector; bounded by `limit` default 5; `persistAuditProfile(areas, ratings, dao)` writes `source:"audit"` rows via injected `CraftProfileDao`; reuses `CraftProfileSchema` + `deriveSubsystemKey`. Added 2026-06-03.
 
 **`wiki_lint` tool** — `wikiLint(input, projectDir)` runs any combination of 12 non-`index_drift` checks (13 total with `index_drift`); returns `WikiLintOutput` with per-check arrays + `total_findings`. `WIKI_LINT_CHECK_NAMES` exported from `register-knowledge.ts` — derive-from-const parity with `CheckName` union (schema-parity test enforces this).
 
-**`check_context_staleness` tool** (`tools/check-context-staleness.ts`) — reads `context-manifest.json`, calls `checkContextStaleness(project_dir, manifest)` from service; returns `toolOk(StalenessReport)` or `toolError("INVALID_INPUT", "MANIFEST_NOT_FOUND: ...")` when manifest unreadable. Added 2026-06-25.
+**`sync_indexes` tool** (`tools/sync-indexes.ts`) — `syncIndexes(input, defaultProjectDir)` guards a supplied `input.project_dir` with `isPathInWorktree(input.project_dir, defaultProjectDir)` before any read/write; outside-scope override → `toolError("INVALID_INPUT", ...)`, no `atomicWriteFile` call reached (fail-closed, zero writes on reject). Omitted `project_dir` skips the guard entirely — unchanged default behavior. Scope root itself and any subpath (the real worktree topology) remain contained and succeed. Closes a cross-session `project_dir` write-scope-escape (Codex P2). Added 2026-07-05.
+
+**`check_context_staleness` tool** (`tools/check-context-staleness.ts`) — reads `context-manifest.json`, calls `checkContextStaleness(project_dir, manifest)` from service; returns `toolOk(StalenessReport)` or `toolError("INVALID_INPUT", "MANIFEST_NOT_FOUND: ...")` when manifest unreadable. Added 2026-06-25. **New exported `checkContextStalenessGuarded(input, scope)`** (2026-07-05) — thin wrapper: guards `input.project_dir` via `isPathInWorktree(input.project_dir, scope)`, then (when supplied) guards `input.manifest_path` the same way, then delegates to the unchanged `checkContextStaleness(input)`; either guard failing → `toolError("INVALID_INPUT", ...)`, no read of the out-of-scope path. Omitted `manifest_path` skips its check (the default `<project_dir>/context-manifest.json` is already covered by the `project_dir` guard). Registered handler in `register-knowledge.ts` rewired to `gatedWrapHandler(async (input, extra) => checkContextStalenessGuarded(input, resolveScope(extra)))` — the unguarded `checkContextStaleness(input)` export and its existing tests are untouched. Closes a cross-session `project_dir`/`manifest_path` read-scope-escape (Codex P2, read-severity sibling of the `sync_indexes` write escape).
 
 **Index inventory** (`services/index-inventory.ts`) — `ArtifactClass` union has 6 members: `rules`, `principles`, `agents`, `templates`, `references`, `primers` (added 2026-06-25). `CLASS_DIRS.primers = ["primers"]`. `sync_indexes` operates on all 6 classes; `index_drift` wiki_lint check covers all 6.
 

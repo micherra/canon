@@ -36,7 +36,7 @@ When a design ASSUMPTIONS section contains any claim with `confidence: medium` o
 
 ...a throwaway empirical probe must run before the architect finalizes DESIGN.md. The probe exercises exactly the contract question and nothing more. Results are committed as `${WORKSPACE}/plans/${SLUG}/PROBE-FINDINGS.md` and cited in the DESIGN.md Research section.
 
-A probe is NOT required for `confidence: high` assumptions verified by direct code reading during research.
+A probe is NOT required for `confidence: high` assumptions verified by direct code reading during research — except the reachability half of a compound claim, which always requires a call-site check regardless of confidence label. See "Existence vs. reachability" in Part 2 below.
 
 **Part 2 — Invocation is the only valid probe.**
 
@@ -46,6 +46,8 @@ A probe must actually invoke the capability. The following are NOT probes — th
 - "The harness does not block this tool name in my allowlist" → the tool may not be installed at all, or may lack the specific operation needed
 
 If the probing agent lacks the tool or spawn capability needed to run the probe (e.g., the engineer does not have the target tool in its `tools:` allowlist, or lacks the `Agent` tool to spawn a subprobe), the probe is structurally impossible for that agent. In that case, the orchestrator MUST take over and run the probe using its own spawn capability. The engineer must NOT report a probe result derived from indirect evidence.
+
+**Existence vs. reachability.** A "verified by direct code reading" claim about **reachability** — is this symbol registered, called, or wired into the live execution path — requires reading the **call site**, not just the **definition site**. Confirming that a file exists, an export is present, or two type shapes match is a definition-site check; it does not satisfy a reachability claim, even at `confidence: high`. When an ASSUMPTIONS entry bundles a shape/contract claim together with a reachability claim, split them: the shape claim may keep `confidence: high` from definition-site reading, but the reachability claim requires either a call-site grep (e.g. `grep -rn 'registerXTool(' src/app/`) cited as its own verification, or a probe. This mirrors the reviewer's Stage 2 "Agent→Tool Reachability" sub-axis (`agents/reviewer.md`) — both enforcement points must apply the same existence-vs-reachability discipline, or the defect recurs one build phase earlier (architect ASSUMPTIONS, or the PRD that precedes it), where a false "no code change needed" conclusion can shape an entire runbook before a downstream reviewer gate catches it.
 
 ## Examples
 
@@ -102,10 +104,43 @@ PROBE-FINDINGS.md committed. Design updated: LSP diagnostic capability is UNAVAI
 
 *Confidence upgraded to high after actual invocation. Probe also surfaced the macOS realpath finding — an obligation that could not have been discovered by reading docs.*
 
+**Bad — compound claim inherits high confidence from only the verified half:**
+
+```yaml
+# DESIGN.md ASSUMPTIONS section:
+- id: A1
+  claim: "evaluate-step.ts exports EvaluateStepOutput matching agents/evaluator.md's
+          Input Contract; tool is registered and reachable from the orchestrator.
+          No code change needed."
+  confidence: high
+  source: "Direct code reading: grepped register-evaluate-step.ts, confirmed it
+           defines registerEvaluateStepTool."
+```
+
+*Wrong.* The grep chain confirmed `registerEvaluateStepTool` is *defined* — a definition-site check — but never confirmed it is *called* anywhere. `registerEvaluateStepTool` had zero call sites; a prior PR had silently removed the registration call the same day this one added it. The shape half of the claim was correctly high-confidence; the reachability half was never checked, but the whole compound ASSUMPTION inherited "high confidence, no probe needed."
+
+**Good — compound claim split into its shape and reachability halves:**
+
+```yaml
+# DESIGN.md ASSUMPTIONS section:
+- id: A1a
+  claim: "evaluate-step.ts exports EvaluateStepOutput matching agents/evaluator.md's
+          Input Contract."
+  confidence: high
+  source: "Direct code reading — definition-site shape comparison."
+- id: A1b
+  claim: "registerEvaluateStepTool is called from register-orchestration.ts (reachable)."
+  confidence: high
+  source: "grep -rn 'registerEvaluateStepTool(' mcp-server/src/app/ — 1 call site
+           found at register-orchestration.ts:27."
+```
+
+*Each half now cites its own verification.* A1b's call-site grep would have caught the zero-call-site defect before design freeze, instead of one full implement-review cycle later.
+
 ## Exceptions
 
-- `confidence: high` assumptions verified by direct code reading during research do not require a probe.
-- Probes for assumptions that are structurally verifiable by static analysis (e.g., "this function has this signature") are satisfied by the code reading itself — no runtime invocation needed.
+- `confidence: high` assumptions verified by direct code reading during research do not require a probe — **except** the reachability half of a compound claim (is this symbol registered/called/wired), which always requires a call-site grep or probe regardless of confidence label. See "Existence vs. reachability" above.
+- Probes for assumptions that are structurally verifiable by static analysis (e.g., "this function has this signature") are satisfied by the code reading itself — no runtime invocation needed. This exception covers *shape* claims only, not reachability claims.
 - When a probe would require provisioning external infrastructure not available in the build environment (e.g., a third-party SaaS with no local equivalent), document the assumption as unverifiable and add a runtime validation instead.
 
 ## Anti-Rationalization
@@ -116,6 +151,7 @@ PROBE-FINDINGS.md committed. Design updated: LSP diagnostic capability is UNAVAI
 | "It worked in the last build, so the assumption still holds." | Environment, PATH, and tool versions change between sessions and builds. A past result is not a current probe. | Re-probe when the assumption is load-bearing for the current design. |
 | "The engineer said CONSTRAINED — I'll trust that." | CONSTRAINED is a valid probe result only when the agent actually called the tool and received a permission error. Inference-derived CONSTRAINED is indistinguishable from wrong until something breaks. | Verify the engineer's probe report includes the actual tool response, not an environment-inspection rationale. |
 | "Running a probe adds a step." | The probe step costs minutes. The alternative — discovering wrong assumptions during implementation, review, or post-ship — costs hours and may ship incorrect documentation to downstream agents. | Run the probe. |
+| "I read the code and confirmed it — that's `confidence: high`." | Reading a definition site confirms existence and shape, not reachability. A symbol can exist, have the right type, and still have zero call sites. | Split the claim: keep `confidence: high` for the shape half; require a call-site grep or probe for the reachability half. |
 
 ## Verification
 
@@ -124,3 +160,4 @@ The architect's `DESIGN.md` passes this convention when:
 - [ ] All `confidence: medium` or `confidence: unknown` ASSUMPTIONS entries cite `PROBE-FINDINGS.md` as their source (or are explicitly marked as unverifiable exceptions with a runtime-validation substitute).
 - [ ] `${WORKSPACE}/plans/${SLUG}/PROBE-FINDINGS.md` exists and reports at least one actual invocation result (not environment-inspection inference).
 - [ ] If the probing agent lacked the required tool or spawn capability, the probe was taken over by the orchestrator and the PROBE-FINDINGS.md was written by the orchestrator's probe subagent — not by the engineer based on indirect evidence.
+- [ ] Any ASSUMPTIONS entry making a reachability claim (registered / called / wired into the live path) cites a call-site grep result or a probe finding as its source — a definition-site grep alone does not satisfy this, even at `confidence: high`. Compound shape+reachability claims are split so each half cites its own verification.

@@ -105,7 +105,7 @@ describe("AppliedEvolutionsDao", () => {
       const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(row.value).toBe("13");
+      expect(row.value).toBe("14");
     });
 
     it("runDriftMigrations is idempotent on a v12 DB", () => {
@@ -139,7 +139,7 @@ describe("AppliedEvolutionsDao", () => {
       const ver = v11.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(ver.value).toBe("13");
+      expect(ver.value).toBe("14");
       v11.close();
     });
   });
