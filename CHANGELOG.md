@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.18.0](https://github.com/micherra/canon/compare/v2.17.0...v2.18.0) (2026-07-06)
+
+
+### Features
+
+* **hooks:** PreToolUse stale-daemon version-mismatch nudge (handoff hardening item 2) ([#465](https://github.com/micherra/canon/issues/465)) ([2910442](https://github.com/micherra/canon/commit/29104426054d9980f28762b5183eca4f62329a80))
+* **loops:** ship-watch surfaces auto-update-branch when the PR falls behind main ([#464](https://github.com/micherra/canon/issues/464)) ([d321bcf](https://github.com/micherra/canon/commit/d321bcfbf212c16dda6d61592d20b2cdc105181c))
+* **orchestration:** capture cliff transcripts at reconcile-time detection (watch_GGGGGG1 follow-up) ([#466](https://github.com/micherra/canon/issues/466)) ([3f06820](https://github.com/micherra/canon/commit/3f06820eff3a1a01bf7eab470aec91df3e6ceac9))
+
+
+### Bug Fixes
+
+* **agents:** give the scribe a step-1 skeleton to end the dominant context-sync write-cliff (watch_GGGGGG1) ([#461](https://github.com/micherra/canon/issues/461)) ([62c9600](https://github.com/micherra/canon/commit/62c96003582890711e9066225128088425717d50))
+
 ## [2.17.0](https://github.com/micherra/canon/compare/v2.16.0...v2.17.0) (2026-07-06)
 
 
