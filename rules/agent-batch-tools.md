@@ -1,5 +1,6 @@
 ---
 id: agent-batch-tools
+title: Prefer Batch MCP Tools for Multi-File Operations
 severity: strong-opinion
 tags: [agent-behavior, efficiency, mcp]
 scope:

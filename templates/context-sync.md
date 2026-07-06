@@ -7,7 +7,7 @@ used-by: [scribe]
 read-by: [shipper]
 output-path: ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md
 fields:
-  status: "UPDATED | NO_UPDATES"
+  status: "IN_PROGRESS (step-1 skeleton only, see agent-artifact-write-before-return) | UPDATED | NO_UPDATES"
   agent: scribe
   timestamp: ISO-8601
   context-budget: "per-file advisory size status for CLAUDE.md files touched (report-don't-trim)"
@@ -70,3 +70,4 @@ _If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync
 6. **Context Budget table (advisory only)**: Always include this section when any CLAUDE.md file was touched. One row per file touched. If no CLAUDE.md files were touched, write "No CLAUDE.md files updated this sync." This section records advisory size status only — the scribe never trims. If a file looks oversized, mark status as "Looks oversized (≈NN,NNN chars)" and note in Action Taken that a dedicated trim build is recommended and the file was not trimmed this sync. This is a heads-up for a future build, not a warning about a failure or an enforced limit.
 7. **Direction-Doc Disposition**: List every top-level `docs/*.md` direction doc (excluding `docs/reference/`). For each, give a disposition: `factual-update` (you synced a fact), `left-untouched` (drift observed but deliberately not edited — always state the reason, especially editorial-prose drift), or `not-relevant` (diff did not touch its domain). Omit the section entirely only when status is NO_UPDATES.
 8. **DDD Doc Disposition**: For every DDD doc on which Step 5c fired a trigger (Trigger A, B, or C), record one row: the doc path, which trigger(s) fired, and the disposition (`factual-update` or `no-drift` with a one-line reason). Silence on a triggered DDD doc is a protocol gap. Omit the section entirely only when no triggers fired and status is NO_UPDATES.
+9. **`status: "IN_PROGRESS"` is the step-1 skeleton value only** (per `agent-artifact-write-before-return`'s Mandatory Step-1 Skeleton obligation). The scribe writes the skeleton with `status: "IN_PROGRESS"` in frontmatter plus the `## Context Sync` body headings below, populated as far as Steps 1–2 allow; it then finalizes the frontmatter `status` to `UPDATED` or `NO_UPDATES` once the sync is complete. `IN_PROGRESS` must never be the terminal value reported to the orchestrator — it signals a recoverable partial artifact to the cliff-detection reconcile pass, the same role reviewer's `verdict: IN_PROGRESS` stub plays for REVIEW.md.

@@ -1,3 +1,8 @@
+---
+title: Diagnosis Domain
+description: A feedback-loop-driven approach to diagnosing bugs before touching code.
+---
+
 # Diagnosis Domain
 
 ## Mental Models

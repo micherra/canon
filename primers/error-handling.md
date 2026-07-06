@@ -1,3 +1,8 @@
+---
+title: Error Handling Domain
+description: Treating errors as typed values instead of exceptional emergencies.
+---
+
 # Error Handling Domain
 
 ## Mental Models

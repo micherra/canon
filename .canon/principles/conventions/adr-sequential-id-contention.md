@@ -86,6 +86,7 @@ When reviewing a PR that adds a new `docs/adr/NNNN-*.md`:
 - [[hooks-fail-closed]] — the gate must exit non-zero on a confirmed collision; this convention applies the fail-closed principle to the ADR numbering check.
 - [[fail-closed-by-default]] — general fail-closed principle; the local `origin/main` tier of `adr-number-check.sh` is the fail-closed surface.
 - [[security-hook-parser-allowlist-posture]] — the same mechanical-gate-beats-manual-vigilance lesson: behavioral mitigations for a structural failure require mechanization, not more documentation.
+- [[pre-mutate-reread-gate]] — the general re-read-before-mutate discipline this convention specializes: ADR number assignment must scan both `origin/main` and sibling worktrees immediately before assignment, not from a cached snapshot.
 
 ## Verification
 

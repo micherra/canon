@@ -46,15 +46,12 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 
 | Agent | Read | Write |
 |-------|------|-------|
-| **intake** | board.json (read-only for status) | — (no workspace writes; spawns orchestrator) |
-| **orchestrator** | board.json, flow templates | board.json, progress.md |
 | **architect** | templates/, context.md | decisions/, plans/, context.md |
-| **implementor** | plans/{slug}/{task}-PLAN.md, context.md, decisions/ | plans/{slug}/{task}-SUMMARY.md |
+| **engineer** | plans/{slug}/{task}-PLAN.md, context.md, decisions/ | plans/{slug}/{task}-SUMMARY.md |
 | **tester** | plans/{slug}/*-SUMMARY.md, context.md | plans/{slug}/TEST-REPORT.md |
 | **security** | plans/{slug}/*-SUMMARY.md | plans/{slug}/SECURITY.md |
 | **reviewer** | plans/{slug}/*-SUMMARY.md (post-Stage-2 cross-check only) | plans/{slug}/REVIEW.md, reviews/ |
 | **scribe** | plans/{slug}/*-SUMMARY.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md | plans/{slug}/CONTEXT-SYNC.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md |
-| **refactorer** | reviews/, decisions/, context.md | — |
 | **learner** | everything in workspace | — |
 | **writer** | everything in workspace | — |
 

@@ -1,3 +1,8 @@
+---
+title: Interface Design for Testability Domain
+description: Designing function and module interfaces so dependencies are accepted, not constructed, for testability.
+---
+
 # Interface Design for Testability Domain
 
 ## Mental Models

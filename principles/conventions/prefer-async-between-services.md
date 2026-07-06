@@ -75,17 +75,3 @@ Queries where the user is actively waiting for a response — search, lookups, r
 
 [[handle-partial-failure]] applies to the synchronous calls that remain — those calls still need timeouts, retries, and circuit breakers to prevent cascading failures. [[structured-logging-with-levels]] — async event flows require structured, correctly-leveled logs so operators can trace events across service boundaries during incident response.
 
-## Anti-Rationalization
-
-| Excuse | Why It's Wrong | Correct Action |
-|--------|---------------|----------------|
-| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
-| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
-| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
-| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
-
-## Verification
-
-- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
-- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
-- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.

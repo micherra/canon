@@ -47,7 +47,7 @@ function applyDiscount(cart: Cart, code: string): number {
 
 ## Exceptions
 
-None. If surrounding code needs improvement, that belongs in a separate task.
+None. If surrounding code needs improvement, that belongs in a separate task. When a fix touches already-complex surrounding code, this rule takes precedence over `agent-simplify-before-extending` — simplification opportunities are reported in the summary, not applied; that rule governs feature/extension work, not fix-mode changes.
 
 ## Anti-Rationalization
 
