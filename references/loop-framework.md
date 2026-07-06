@@ -4,10 +4,10 @@ description: >-
   Full Canon loop dispatch framework. Covers command registration, resilient
   dispatch, lifecycle-hook vocabulary and code, phase history, post-ship tap,
   session-start tap, non-declarative invariant, orchestrator_action consumption,
-  and the five named consumers (auto-triage-fix, auto-plugin-update, run-learner, run-evolve, auto-enable-merge).
+  and the six named consumers (auto-triage-fix, auto-plugin-update, run-learner, run-evolve, auto-enable-merge, auto-update-branch).
 ---
 
-# Loop Framework <!-- last-updated: 2026-07-01 -->
+# Loop Framework <!-- last-updated: 2026-07-06 -->
 
 <!-- Managed by Canon. Manual edits are preserved. -->
 
@@ -143,3 +143,28 @@ baseline-only), and does NOT retroactively arm prior PRs. dc-06 holds: `ship-wat
 surfaces `ORCHESTRATOR_ACTION: auto-enable-merge field=ci_conclusion loop=ship-watch`;
 `guardrails.mutates_build` stays `false` and no mutating `gh` is on the loop's
 `observe.shell_commands` allowlist — the orchestrator does the mutation, not the runner.
+
+**`auto-update-branch`** (fires on the `ship-watch` `merge_state` transitioning to `BEHIND`
+or `DIRTY`, while the PR is OPEN): motivated by a real incident (PR #462) where `main`
+advanced mid-watch, the PR went `mergeStateStatus: DIRTY` / `mergeable: CONFLICTING`, and an
+already-armed auto-merge silently stalled until a human noticed.
+1. Read-only precheck: `gh pr view <pr> --json state,mergeStateStatus`. Proceed only if the
+   PR is still `OPEN` and `mergeStateStatus` is still `BEHIND` or `DIRTY` (idempotent — a tick
+   that races a concurrent fix is a no-op, not a retry).
+2. The orchestrator merges `origin/main` into the PR branch in the build worktree.
+3. Conflict triage: conflicts confined ONLY to generated artifacts (`context-manifest.json`,
+   generated `**/.claude/CLAUDE.md` index blocks) are auto-resolved by regenerating them
+   (`npm run regen:context-manifest` / `sync_indexes`) and committing the result. Any conflict
+   touching a SOURCE file is never auto-resolved — surface via the merge-conflict HITL pattern
+   (`references/hitl-patterns.md`) instead.
+4. Re-run `hooks/context-manifest-gate.sh` before pushing (a regenerated manifest must still
+   pass the freshness gate).
+5. Push to the PR branch. If auto-merge was already armed (`auto-enable-merge`), it proceeds
+   on green once GitHub re-evaluates mergeability — this consumer does not re-arm it.
+Tier gate: unattended in all tiers (autonomous, light-touch, AND supervised) for the
+clean/generated-only-conflict path — the merge is reversible and branch-scoped, unlike arming
+a real merge (`auto-enable-merge`), which still ASKs under supervised. A SOURCE-file conflict
+always routes to HITL regardless of tier. dc-06 holds: `ship-watch` only surfaces
+`ORCHESTRATOR_ACTION: auto-update-branch field=merge_state loop=ship-watch`;
+`guardrails.mutates_build` stays `false` and no mutating `git`/`gh` command is on the loop's
+`observe.shell_commands` allowlist — the orchestrator does the merge and push, not the runner.

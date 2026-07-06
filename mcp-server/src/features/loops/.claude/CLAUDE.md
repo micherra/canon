@@ -51,7 +51,7 @@ so future authors cannot bypass it by omission.
 ## `orchestrator_action` on `TransitionRuleSchema` (Phase B+)
 
 `orchestrator_action` — optional `z.enum(ORCHESTRATOR_ACTIONS)` field on a transition rule.
-Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-update", "run-learner", "run-evolve", "auto-enable-merge"] as const`
+Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-update", "run-learner", "run-evolve", "auto-enable-merge", "auto-update-branch"] as const`
 (exported from `loop-schema.ts`). `OrchestratorAction` type derived from the same const.
 
 - **Omitted** → `undefined` (backward compat; existing loops parse unchanged)
@@ -59,7 +59,7 @@ Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-upda
 - **Orchestrator-consumed signal** — the loop/runner NEVER executes the action; the runner
   surfaces a structured `ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>` line in Step 6
   when the transition fires; the orchestrator reads and acts on it
-- See CLAUDE.md § Loop Framework, "Consuming `orchestrator_action`" for the five consumption contracts
+- See CLAUDE.md § Loop Framework, "Consuming `orchestrator_action`" for the six consumption contracts
 
 ## Phase Boundary
 
@@ -67,7 +67,8 @@ Phase A: schema + loader + tools + `_probe` demo loop; no production loop fires.
 Phase B: `loops/ship-watch.md` added — first real loop, dispatched post-ship; `orchestrator_action` directive added (Phase B+) with two-member derive-from-const vocabulary (`auto-triage-fix`, `auto-plugin-update`) wired on three ship-watch transitions.
 Phase C: self-paced mode + ScheduleWakeup + `loops/session-watch.md`; `BUILTIN_FORBIDDEN_MCP` denylist + `max_wall` schedule field added to schema (ADR-0002 first-tick-baseline invariant formalised).
 Phase D: `loops/harness-watch.md` added — third real loop (post-ship, self-paced); `run-learner` added to `ORCHESTRATOR_ACTIONS` as the third vocabulary member.
-Phase E (current): `loops/evolve.md` added — fourth real loop (session-start, self-paced, attribution-signal observer); `run-evolve` added to `ORCHESTRATOR_ACTIONS` as the fourth vocabulary member; `auto-enable-merge` added as the fifth vocabulary member (a second `ci_conclusion` rule on `ship-watch`, `pending → success`) — arms squash auto-merge on CI-green, no new loop.
+Phase E: `loops/evolve.md` added — fourth real loop (session-start, self-paced, attribution-signal observer); `run-evolve` added to `ORCHESTRATOR_ACTIONS` as the fourth vocabulary member; `auto-enable-merge` added as the fifth vocabulary member (a second `ci_conclusion` rule on `ship-watch`, `pending → success`) — arms squash auto-merge on CI-green, no new loop.
+Phase F (current): `auto-update-branch` added as the sixth vocabulary member (two new `merge_state` rules on `ship-watch`, `to: BEHIND` and `to: DIRTY`) — surfaces a stale/conflicting PR branch so the orchestrator can merge `origin/main` in and push; no new loop.
 
 ## Non-Declarative Constraint (dc-06)
 

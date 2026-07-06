@@ -21,6 +21,7 @@ state:
     - ci_conclusion
     - release_tag
     - external_review_comment_ids
+    - merge_state
 observe:
   tools:
     - Bash
@@ -51,6 +52,14 @@ surface:
       append: true
       orchestrator_action: auto-triage-fix
       message: "New external review comment(s) on the PR — surfacing for triage."
+    - field: merge_state
+      to: BEHIND
+      orchestrator_action: auto-update-branch
+      message: "PR branch is behind main — surfacing auto-update-branch (orchestrator merges origin/main into the PR branch and pushes)."
+    - field: merge_state
+      to: DIRTY
+      orchestrator_action: auto-update-branch
+      message: "PR branch conflicts with main — surfacing auto-update-branch (orchestrator merges origin/main into the PR branch and pushes)."
 terminate:
   when:
     - resolved
@@ -84,14 +93,17 @@ All commands are GET-only. Do NOT use `gh api -X POST` or any other mutating fla
 3. Run these read-only commands (each is on the `observe.shell_commands` allowlist):
 
    ```
-   # Derive pr_state and ci_conclusion:
-   gh pr view <pr-number> --json state,statusCheckRollup
+   # Derive pr_state, ci_conclusion, and merge_state:
+   gh pr view <pr-number> --json state,statusCheckRollup,mergeStateStatus
    ```
    - `pr_state` = the `state` field (`OPEN`, `MERGED`, `CLOSED`).
    - `ci_conclusion` = aggregate `statusCheckRollup`:
      - Any `FAILURE` or `ERROR` → `failure`
      - All `SUCCESS` → `success`
      - Otherwise (any `PENDING` / `IN_PROGRESS` / absent) → `pending`
+   - `merge_state` = the `mergeStateStatus` field verbatim — GitHub's own enum
+     (`BEHIND`, `DIRTY`, `CLEAN`, `BLOCKED`, `UNSTABLE`, `UNKNOWN`, `DRAFT`, `HAS_HOOKS`),
+     passed through unmodified with no reinterpretation.
 
    ```
    # Derive release_tag:
@@ -110,12 +122,13 @@ All commands are GET-only. Do NOT use `gh api -X POST` or any other mutating fla
 
 ### Diff against snapshot
 
-Compare each of the four fields against the last-seen value from `state.path`:
+Compare each of the five fields against the last-seen value from `state.path`:
 
 - `pr_state` — string equality.
 - `ci_conclusion` — string equality.
 - `release_tag` — string equality (null → non-null is a transition).
 - `external_review_comment_ids` — array equality; new IDs present = transition (append mode).
+- `merge_state` — string equality.
 
 ### Surface on transition
 
@@ -147,11 +160,40 @@ Apply `surface.on_transition` rules (transition-only — silent on no-op ticks):
    and dispatches a fix flow (or asks first if ambiguous). The runner only surfaces the
    signal; it does NOT act on it.
 
+5. **`merge_state`: → `BEHIND`** — emit the auto-update-branch message. Carries
+   `orchestrator_action: auto-update-branch` — the ORCHESTRATOR merges `origin/main` into
+   the PR branch and pushes. No `terminate` on this rule — the loop keeps watching (the
+   branch update may itself flip `merge_state` again, or CI/review transitions may still
+   need to surface). The runner only surfaces the signal; it does NOT run any `git merge`
+   or `git push`.
+
+6. **`merge_state`: → `DIRTY`** — emit the auto-update-branch message (same action as
+   `BEHIND`; `DIRTY` means the merge would produce real conflicts, which the ORCHESTRATOR's
+   consumption contract handles by attempting a merge and routing genuine source conflicts
+   to HITL — see `references/loop-framework.md`). No `terminate` on this rule. The runner
+   only surfaces the signal; it does NOT run any `git merge` or `git push`.
+
 Ticks where no field changes: emit nothing. Silent on no-op is by construction.
+
+### auto-update-branch
+
+`merge_state` transitioning to `BEHIND` or `DIRTY` means the watched PR's branch has
+fallen behind `origin/main` (or now conflicts with it) since the PR was opened or since
+the loop's last tick — this is exactly the failure mode that let PR #462 sit with an
+armed-but-stalled auto-merge until a human noticed. The loop's job stops at observation:
+it reads `mergeStateStatus` via the existing read-only `gh pr view` call (already on the
+`observe.shell_commands` allowlist — no allowlist change needed) and surfaces
+`ORCHESTRATOR_ACTION: auto-update-branch field=merge_state loop=ship-watch` when the
+transition fires. The runner never runs `git merge`, `git push`, or any other mutating
+command (dc-06; `guardrails.mutates_build` stays `false`, and no mutating `git`/`gh`
+subcommand is on this loop's `observe.shell_commands` allowlist). The ORCHESTRATOR
+performs the actual branch update — read-only precheck, merge `origin/main` into the PR
+branch, resolve generated-artifact conflicts by regeneration, re-run the manifest gate,
+then push. Full consumer contract: `references/loop-framework.md`.
 
 ### Write snapshot
 
-Persist the four fields plus `last_tick` (ISO-8601 timestamp) to `state.path` atomically:
+Persist the five fields plus `last_tick` (ISO-8601 timestamp) to `state.path` atomically:
 
 ```json
 {
@@ -159,6 +201,7 @@ Persist the four fields plus `last_tick` (ISO-8601 timestamp) to `state.path` at
   "ci_conclusion": "<value>",
   "release_tag": "<value or null>",
   "external_review_comment_ids": [<sorted-ids>],
+  "merge_state": "<value>",
   "last_tick": "<ISO-8601>"
 }
 ```
