@@ -61,21 +61,6 @@ import { runGitIntel } from "@features/knowledge-graph/index";
 
 `@shared/*` and `@domains/*` are sanctioned shared kernels — reach-through to them is allowed because they ARE the public contract, not an internal. Only sibling-feature reach-through is forbidden. Also, test files within the same feature folder may import internal modules for white-box unit testing — the boundary applies to cross-feature imports, not intra-feature test depth.
 
-## Anti-Rationalization
-
-| Excuse | Why It's Wrong | Correct Action |
-|--------|---------------|----------------|
-| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
-| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
-| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
-| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
-
-## Verification
-
-- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
-- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
-- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
-
 ## Related
 
 - [[grey-box-module]] — the single public entry point is the structural enforcement of the grey-box boundary: the index file is the grey-box seam the reviewer trusts, without needing to read the feature's internals.
