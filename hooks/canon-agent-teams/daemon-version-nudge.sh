@@ -119,7 +119,7 @@ if [[ -f "$NUDGE_FILE" ]]; then
   fi
 fi
 
-echo "CANON NOTE: stale Canon daemon — running v${DAEMON_VERSION}, plugin v${INSTALLED_VERSION}. Run /canon:doctor to reconcile (no action taken; this is advisory)."
+echo "CANON NOTE: stale Canon daemon — running v${DAEMON_VERSION}, plugin v${INSTALLED_VERSION}. Run /canon:doctor to diagnose and, on confirmation, restart it (no action taken; this is advisory)."
 printf '%s\n' "$PAIR" > "$NUDGE_FILE" 2>/dev/null || true # DOCUMENTED FAIL-OPEN -- nudge-shown write failure only risks a repeat nudge next call; not fatal
 
 exit 0
