@@ -73,7 +73,7 @@ Artifact writes happen at the end of your execution. If you exhaust your context
 **Turn budget awareness**:
 - At 50% of your available turns, verify you have started producing your primary artifact. If you have not started, reduce scope and begin writing immediately.
 - At 75% of your available turns, your primary artifact MUST be written to disk. Remaining turns are for refinement only.
-- If you detect you are running low on turns (repeated tool calls without progress, investigation spiraling), write a partial artifact immediately with a `## Status: Partial` heading and return BLOCKED. A partial artifact that exists is strictly better than a complete artifact that was never written.
+- If you detect you are running low on turns (repeated tool calls without progress, investigation spiraling), write a template-conformant partial artifact immediately (see Single-Artifact Agents: Mandatory Step-1 Skeleton below) and return BLOCKED. A partial artifact that exists is strictly better than a complete artifact that was never written.
 
 **Early-write pattern**:
 For complex artifacts (design documents, reviews, test reports), write a skeleton to disk early in your execution, then refine it in place:
@@ -91,17 +91,24 @@ final write. For these agents the early-write pattern is NOT advisory: it is a
 hard step-1 obligation.
 
 **Step 1 (before any deep analysis):** immediately after orientation, write a
-skeleton to your declared artifact path containing a `## Status: Partial`
-heading and the section headings your final document will use. Then refine the
-artifact in place as you complete each stage.
+skeleton to your declared artifact path that is a **template-conformant Partial
+instance** — valid per your declared template's schema (frontmatter fields and
+body headings), carrying a partial/in-progress status in whichever field or
+heading your template designates for status, plus the section headings your
+final document will use. Then refine the artifact in place as you complete each
+stage.
 
 This shrinks the failure window from the entire run to the first few turns: an
 external kill after step 1 leaves a recoverable partial artifact on disk instead
-of nothing. The `## Status: Partial` heading signals downstream consumers (and
-the SubagentStop reconcile hook) that the artifact is incomplete — they must not
+of nothing. The partial-status marker signals downstream consumers (and the
+SubagentStop reconcile hook) that the artifact is incomplete — they must not
 treat a `Partial` artifact as final.
 
-The reviewer already implements this via its Early Output Protocol (write an
-`IN_PROGRESS` stub before Stage 1) — that is the reference pattern; security,
-architect, and scribe must adopt the equivalent for their assessment / design /
-context-sync documents.
+The reviewer already implements this via its Early Output Protocol (frontmatter
+`verdict: IN_PROGRESS`, whose template declares a `verdict` field) — that is the
+reference pattern. Security and architect templates have no frontmatter status
+field, so they use a `## Status: Partial` body heading instead. Scribe's
+context-sync template DOES declare a frontmatter `status` field, so scribe
+extends that field with a transient `"IN_PROGRESS"` value rather than inventing
+a heading outside the template (see `templates/context-sync.md` Rule 9). Do not
+invent a new field or heading your declared template doesn't already have.

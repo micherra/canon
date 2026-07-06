@@ -88,9 +88,12 @@ If a FIX-SUMMARY.md exists (from fix-impl), read that too.
 
 Per `agent-artifact-write-before-return` (Single-Artifact Agents: Mandatory
 Step-1 Skeleton), immediately after Steps 1–2 — before any doc edit or
-commit — write a `## Status: Partial` skeleton to
-`${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md` using the context-sync
-template's section headings, then refine it in place as Steps 3–7 complete.
+commit — write a template-conformant skeleton to
+`${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md`: frontmatter `status: "IN_PROGRESS"`
+(the context-sync template's own status field — see `agent-template-required`
+and Rule 9 in `templates/context-sync.md`) plus the `## Context Sync` body
+using the template's section headings, then refine it in place as Steps 3–7
+complete.
 
 The scribe was previously the only heavy single-artifact agent whose declared
 artifact was written dead last (after the Step 7 commit) — any stall in
@@ -285,7 +288,7 @@ Replace `{slug}` with the workflow slug from the orchestrator's spawn prompt. If
 
 ### Step 8: Finalize summary
 
-Finalize the sync report at `${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md` — the skeleton you wrote in Step 2a and refined through Steps 3–7. Fill in any remaining sections, flip the `## Status: Partial` heading to the final `UPDATED` / `NO_UPDATES` status, and verify the artifact follows the template structure exactly (see agent-template-required rule). The orchestrator **must** provide the context-sync template path. If no template path was provided at spawn, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format at `${CLAUDE_PLUGIN_ROOT}/templates/context-sync.md`.
+Finalize the sync report at `${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md` — the skeleton you wrote in Step 2a and refined through Steps 3–7. Fill in any remaining sections, flip the frontmatter `status` from `"IN_PROGRESS"` to the final `"UPDATED"` / `"NO_UPDATES"` value, and verify the artifact follows the template structure exactly (see agent-template-required rule). The orchestrator **must** provide the context-sync template path. If no template path was provided at spawn, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format at `${CLAUDE_PLUGIN_ROOT}/templates/context-sync.md`.
 
 ### Step 9: Log activity
 
