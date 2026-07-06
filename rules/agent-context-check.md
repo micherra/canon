@@ -1,5 +1,6 @@
 ---
 id: agent-context-check
+title: Verify Context Before Starting Work
 severity: rule
 tags: [agent-behavior, context, self-serve]
 scope:

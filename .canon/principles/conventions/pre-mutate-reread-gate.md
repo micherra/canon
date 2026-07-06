@@ -151,3 +151,4 @@ grep -n "Pre-Mutate Re-Read Gate\|pre-mutate" CLAUDE.md
 - [[step-scoped-review-artifacts]] (OOOOOOOOOO1) — atomic pair write is the artifact-level analog of the same invariant (don't let consumers see half-written state)
 - [[session-unique-agent-naming]] (OOOOOOOOOO2) — the naming convention prevents misrouting; the re-read gate prevents stale-state mutations; both address concurrent-session interference
 - `disk-is-source-of-truth-on-resume` — the resume-time variant of this principle (re-read disk before re-doing unit work); the re-read gate is the pre-mutation variant
+- [[adr-sequential-id-contention]] — the ADR-numbering instance of this gate: scanning `origin/main` alone (a cached snapshot) is exactly the stale-read hazard this convention generalizes; corroborated by the same 2026-06-24 incident's ADR-0021 collision.

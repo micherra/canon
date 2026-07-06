@@ -86,21 +86,6 @@ Each service is self-contained. Adding a new order notification requires changes
 
 Genuinely shared infrastructure — logging, monitoring, authentication, API gateways — may be centralized as platform capabilities. The distinction: platform services provide generic capabilities (send an email, write a log) without domain logic; domain services contain business rules. A centralized email-sending library or infrastructure is fine; a centralized "order notification" service is not. Also, very small teams or early-stage products may keep everything in a monolith — the principle guides how to organize modules within the monolith, not a mandate to adopt microservices.
 
-## Anti-Rationalization
-
-| Excuse | Why It's Wrong | Correct Action |
-|--------|---------------|----------------|
-| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
-| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
-| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
-| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
-
-## Verification
-
-- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
-- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
-- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
-
 ## Related
 
 - [[bounded-context-boundaries]] — decomposing by domain creates the bounded contexts; enforcing those context boundaries in code is the next necessary step, otherwise the domain decomposition is organizational, not structural.

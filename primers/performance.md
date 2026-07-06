@@ -1,3 +1,8 @@
+---
+title: Performance Domain
+description: Measurement-first performance work; profiling before optimizing.
+---
+
 # Performance Domain
 
 ## Mental Models

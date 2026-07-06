@@ -2,6 +2,7 @@
 id: grey-box-module
 title: Grey-Box Modules — Human Owns the Interface, AI Fills the Body
 severity: strong-opinion
+portable: true
 scope:
   layers: []
 tags:
@@ -75,21 +76,6 @@ The reviewer reads the architect's signature and test cases to establish trust. 
 ## Exceptions
 
 Throwaway scripts, spikes, and proof-of-concept code where no reviewer trust is needed and the output will not be merged. Also applies to code that is small enough that reading the implementation is faster than writing a test suite for it — typically under ~15 lines with a single clear behavior.
-
-## Anti-Rationalization
-
-| Excuse | Why It's Wrong | Correct Action |
-|--------|---------------|----------------|
-| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
-| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
-| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
-| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
-
-## Verification
-
-- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
-- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
-- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
 
 ## Related
 

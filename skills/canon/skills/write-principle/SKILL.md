@@ -95,8 +95,8 @@ Produce the complete file with:
 - `## Rationale` section
 - `## Examples` section (good and bad)
 - `## Exceptions` section (when deviation is acceptable)
-- `## Anti-Rationalization` section (table: excuse, why it's wrong, correct action)
-- `## Verification` section (checklist with concrete compliance checks)
+- `## Anti-Rationalization` section, conditional — include only with bespoke excuses specific to this principle (table: excuse, why it's wrong, correct action); omit rather than fill with a generic/boilerplate table
+- `## Verification` section, conditional — include only with mechanically checkable compliance steps specific to this principle (checklist with concrete compliance checks); omit rather than fill with a generic/boilerplate checklist
 
 Generate a kebab-case `id` from the title. For agent-rules, prefix with `agent-`.
 Ensure the final structure matches the format spec exactly.
@@ -182,7 +182,7 @@ A missing `portable` field is a defect that `wiki_lint misrouted_principles` wil
 Re-read the saved file and verify:
 - YAML frontmatter parses correctly (id, title, severity, scope, tags all present)
 - The severity is one of: `rule`, `strong-opinion`, `convention`
-- The body has required sections (summary, `## Rationale`, `## Examples`, `## Anti-Rationalization`, `## Verification`)
+- The body has required sections (summary, `## Rationale`, `## Examples`); `## Anti-Rationalization` and `## Verification` are conditional — present only when they carry bespoke, principle-specific content
 - For agent-rules: `id` starts with `agent-`, tags include `agent-behavior`
 
 ### Step 8: Suggest testing

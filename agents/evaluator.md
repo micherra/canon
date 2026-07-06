@@ -10,7 +10,7 @@ color: yellow
 maxTurns: 5
 permissionMode: plan
 rules:
-  - agent-template-required
+  - agent-never-trust-overlay-tier
 references:
   - status-protocol
 tools:
