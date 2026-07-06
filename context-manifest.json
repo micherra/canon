@@ -130,7 +130,7 @@
     "references/workspace-logging.md": "a7a4153237e0fbeb88f0fb67d9abe31511899045a8c6521c88a799eb565f9e36",
     "references/writer-worked-example.md": "6fd58517d3822e5af7c3ed1a960bae85e3d3158247d6414bd9c0a8ea165e2bb9",
     "rules/.claude/CLAUDE.md": "f3e006811cbc85bb86efe61b8553a00bf3c129bd0ee2ea81423376a83e0442dd",
-    "rules/README.md": "d5041d2dfad31ed9f39cb4f6450d48bb24735f994d6edb623b6ffa5b34a010ce",
+    "rules/README.md": "d9cee445a7bd97f5497a462ce9bc9e11f3d8fe48c77d71fd1f0eadd63d94cba3",
     "rules/agent-artifact-write-before-return.md": "4e11afb762ed73987c0bdd3ce05a34b9c2d3703554b2af037edcd520e2e9ee2e",
     "rules/agent-artifacts-only.md": "edcd5475c068932eecce3eb7eb9b08870d64c87571a5e619b7cfc49af580413b",
     "rules/agent-assume-hostile-input.md": "ebb976d5371b98841ba1f6bbbc8b6421a0fc8f0176e4f22792963c115fc820b8",

@@ -28,7 +28,7 @@ Rules cluster into ten behavioral areas:
 
 **Coordination rules** manage how parallel agents stay coherent. Fresh-context isolation, workspace scoping, and conflict detection prevent agents working in parallel from trampling each other's work.
 
-**Dispatch rules** govern orchestrator dispatch behavior — when the orchestrator may act directly versus must hand work to a specialist agent, and how discovery and execution steps are paired.
+**Dispatch rules** govern how compound work is decomposed and paced across agent spawns — for example, splitting a rebase-plus-fix task into a rebase-only spawn followed by a fixes-only spawn so neither workstream exhausts a single agent's context budget.
 
 **Efficiency rules** govern resource and tool usage, such as preferring batched MCP calls over sequential per-file lookups and recording agent metrics before returning.
 
