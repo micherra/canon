@@ -187,9 +187,9 @@ it reads `mergeStateStatus` via the existing read-only `gh pr view` call (alread
 transition fires. The runner never runs `git merge`, `git push`, or any other mutating
 command (dc-06; `guardrails.mutates_build` stays `false`, and no mutating `git`/`gh`
 subcommand is on this loop's `observe.shell_commands` allowlist). The ORCHESTRATOR
-performs the actual branch update — read-only precheck, merge `origin/main` into the PR
-branch, resolve generated-artifact conflicts by regeneration, re-run the manifest gate,
-then push. Full consumer contract: `references/loop-framework.md`.
+performs the actual branch update — read-only precheck, fetch `origin` (fail-open), merge
+`origin/main` into the PR branch, resolve generated-artifact conflicts by regeneration,
+re-run the manifest gate, then push. Full consumer contract: `references/loop-framework.md`.
 
 ### Write snapshot
 

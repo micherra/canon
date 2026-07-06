@@ -151,15 +151,20 @@ already-armed auto-merge silently stalled until a human noticed.
 1. Read-only precheck: `gh pr view <pr> --json state,mergeStateStatus`. Proceed only if the
    PR is still `OPEN` and `mergeStateStatus` is still `BEHIND` or `DIRTY` (idempotent — a tick
    that races a concurrent fix is a no-op, not a retry).
-2. The orchestrator merges `origin/main` into the PR branch in the build worktree.
-3. Conflict triage: conflicts confined ONLY to generated artifacts (`context-manifest.json`,
+2. `git fetch origin` in the build worktree, fail-open (`git fetch origin || true`) like the
+   plan-time base-advance advisory's fetch — a fetch failure surfaces (the merge proceeds
+   against a possibly-stale `origin/main`) rather than silently blocking the consumer. Without
+   this, a stale local `origin/main` remote-tracking ref makes the next step a no-op merge that
+   never clears the `BEHIND`/`DIRTY` state the loop surfaced.
+3. The orchestrator merges `origin/main` into the PR branch in the build worktree.
+4. Conflict triage: conflicts confined ONLY to generated artifacts (`context-manifest.json`,
    generated `**/.claude/CLAUDE.md` index blocks) are auto-resolved by regenerating them
    (`npm run regen:context-manifest` / `sync_indexes`) and committing the result. Any conflict
    touching a SOURCE file is never auto-resolved — surface via the merge-conflict HITL pattern
    (`references/hitl-patterns.md`) instead.
-4. Re-run `hooks/context-manifest-gate.sh` before pushing (a regenerated manifest must still
+5. Re-run `hooks/context-manifest-gate.sh` before pushing (a regenerated manifest must still
    pass the freshness gate).
-5. Push to the PR branch. If auto-merge was already armed (`auto-enable-merge`), it proceeds
+6. Push to the PR branch. If auto-merge was already armed (`auto-enable-merge`), it proceeds
    on green once GitHub re-evaluates mergeability — this consumer does not re-arm it.
 Tier gate: unattended in all tiers (autonomous, light-touch, AND supervised) for the
 clean/generated-only-conflict path — the merge is reversible and branch-scoped, unlike arming
