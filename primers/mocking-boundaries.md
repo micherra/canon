@@ -1,6 +1,6 @@
 ---
 title: Mocking Boundaries Domain
-description: Where to mock in tests: at system boundaries, not at internal class or module boundaries.
+description: "Where to mock in tests: at system boundaries, not at internal class or module boundaries."
 ---
 
 # Mocking Boundaries Domain

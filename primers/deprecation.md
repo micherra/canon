@@ -1,8 +1,3 @@
----
-title: Deprecation Domain
-description: How to deprecate and remove symbols, endpoints, and behaviors safely.
----
-
 # Deprecation Domain
 
 ## Mental Models

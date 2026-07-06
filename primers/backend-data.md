@@ -1,8 +1,3 @@
----
-title: Backend Data Domain
-description: Schema design, normalization, and data-layer tradeoffs for backend persistence.
----
-
 # Backend Data Domain
 
 ## Mental Models

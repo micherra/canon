@@ -1,8 +1,3 @@
----
-title: Testing Domain
-description: The test pyramid as a resource-allocation model for unit, integration, and end-to-end tests.
----
-
 # Testing Domain
 
 ## Mental Models

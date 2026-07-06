@@ -1,8 +1,3 @@
----
-title: Backend API Domain
-description: Design and evolution guidance for backend API contracts, versioning, and consumer compatibility.
----
-
 # Backend API Domain
 
 ## Mental Models
