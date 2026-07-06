@@ -94,11 +94,11 @@ describe("CliffEventsDao", () => {
       dbV9.close();
     });
 
-    it("fresh DB initializes straight to v13", () => {
+    it("fresh DB initializes straight to the current schema version", () => {
       const version = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
         value: string;
       };
-      expect(version.value).toBe("14");
+      expect(version.value).toBe("15");
     });
   });
 
@@ -470,6 +470,12 @@ describe("CliffEventsDao", () => {
       }
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // transcript_path / transcript_uncaptured_reason (v15, cliff-transcript-01):
+  // see the sibling cliff-events-dao-transcript.test.ts (split out 2026-07-06 to
+  // keep both files under the 600-line biome noExcessiveLinesPerFile limit).
+  // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
   // Foreign data tolerance

@@ -90,7 +90,7 @@ describe("build_archives migration", () => {
     const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as {
       value: string;
     };
-    expect(row.value).toBe("14");
+    expect(row.value).toBe("15");
     db.close();
   });
 });
