@@ -85,7 +85,7 @@ This ensures the artifact exists on disk even if you exhaust context mid-executi
 
 ## Single-Artifact Agents: Mandatory Step-1 Skeleton
 
-Single-artifact agents — **security, reviewer, architect** — produce one
+Single-artifact agents — **security, reviewer, architect, scribe** — produce one
 terminal document whose entire value is lost if the agent is killed before its
 final write. For these agents the early-write pattern is NOT advisory: it is a
 hard step-1 obligation.
@@ -102,5 +102,6 @@ the SubagentStop reconcile hook) that the artifact is incomplete — they must n
 treat a `Partial` artifact as final.
 
 The reviewer already implements this via its Early Output Protocol (write an
-`IN_PROGRESS` stub before Stage 1) — that is the reference pattern; security and
-architect must adopt the equivalent for their assessment / design documents.
+`IN_PROGRESS` stub before Stage 1) — that is the reference pattern; security,
+architect, and scribe must adopt the equivalent for their assessment / design /
+context-sync documents.
