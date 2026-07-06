@@ -134,8 +134,12 @@ export class CliffEventsDao {
     // - agent_type uses COALESCE: existing non-null preserved over incoming null
     // - missing_count / partial_count: COALESCE preserves existing non-null
     // - recovery_outcome: CASE guards against downgrading a known outcome to "unknown"
-    // - transcript_path / transcript_uncaptured_reason: COALESCE preserves a
-    //   previously-captured value across a later count-only re-upsert (v15)
+    // - transcript_path: COALESCE preserves a previously-captured path across a later
+    //   count-only re-upsert (v15)
+    // - transcript_uncaptured_reason: path-or-reason invariant — once the resulting
+    //   row has a transcript_path (existing or incoming), the reason is forced NULL,
+    //   so a stale reason can never survive a later successful capture and an
+    //   incoming reason can never clobber an already-captured path
     this.stmtUpsert = db.prepare(`
       INSERT INTO cliff_events (
         workspace_slug, step_id, agent_type, source, detected_at,
@@ -158,9 +162,11 @@ export class CliffEventsDao {
             ELSE cliff_events.recovery_outcome
           END,
         transcript_path = COALESCE(excluded.transcript_path, cliff_events.transcript_path),
-        transcript_uncaptured_reason = COALESCE(
-          excluded.transcript_uncaptured_reason, cliff_events.transcript_uncaptured_reason
-        )
+        transcript_uncaptured_reason = CASE
+          WHEN COALESCE(excluded.transcript_path, cliff_events.transcript_path) IS NOT NULL
+            THEN NULL
+            ELSE COALESCE(excluded.transcript_uncaptured_reason, cliff_events.transcript_uncaptured_reason)
+          END
     `);
 
     this.stmtGetAll = db.prepare(`
