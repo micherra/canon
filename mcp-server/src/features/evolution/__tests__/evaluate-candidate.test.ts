@@ -8,7 +8,7 @@
  * (d) holdout-only gating end-to-end
  */
 
-import { rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
@@ -20,7 +20,8 @@ vi.mock("@platform/adapters/process-adapter.ts", () => ({
 }));
 
 import { runShell } from "@platform/adapters/process-adapter.ts";
-import { evaluateCandidate } from "../tools/evaluate-candidate.ts";
+import { resolveAgentEvalRoot } from "../services/eval-runner.ts";
+import { EvaluateCandidateInputSchema, evaluateCandidate } from "../tools/evaluate-candidate.ts";
 
 const mockRunShell = vi.mocked(runShell);
 
@@ -393,5 +394,166 @@ describe("evaluateCandidate", () => {
       expect(result.baseline_score).toBe(2);
       expect(result.candidate_score).toBe(2);
     });
+  });
+});
+
+// ── resolveAgentEvalRoot — pure target→suite resolution (eval-candidate-resolution) ──
+
+describe("resolveAgentEvalRoot", () => {
+  let sandboxDir: string;
+
+  beforeEach(async () => {
+    const { mkdtemp } = await import("node:fs/promises");
+    sandboxDir = await mkdtemp(join(tmpdir(), "canon-agent-resolve-test-"));
+  });
+
+  afterEach(async () => {
+    await rm(sandboxDir, { force: true, recursive: true });
+  });
+
+  it("agents/reviewer.md with a present suite resolves to agents/reviewer/evals", async () => {
+    await mkdir(join(sandboxDir, "agents", "reviewer", "evals"), { recursive: true });
+    await writeFile(
+      join(sandboxDir, "agents", "reviewer", "evals", "run-agent-evals.sh"),
+      "#!/bin/bash\necho test",
+    );
+
+    const result = resolveAgentEvalRoot(sandboxDir, "agents/reviewer.md");
+    expect(result).toBe(join("agents", "reviewer", "evals"));
+  });
+
+  it("agents/reviewer.md with the suite absent returns null", async () => {
+    // No agents/reviewer/evals/run-agent-evals.sh created in the sandbox.
+    const result = resolveAgentEvalRoot(sandboxDir, "agents/reviewer.md");
+    expect(result).toBeNull();
+  });
+
+  it("skills/canon/evals/eval-set.json (not an agent-def) returns null", () => {
+    const result = resolveAgentEvalRoot(sandboxDir, "skills/canon/evals/eval-set.json");
+    expect(result).toBeNull();
+  });
+
+  it("agents/engineer.md with no suite present returns null", async () => {
+    await mkdir(join(sandboxDir, "agents"), { recursive: true });
+    await writeFile(join(sandboxDir, "agents", "engineer.md"), "---\nname: engineer\n---\nbody");
+
+    const result = resolveAgentEvalRoot(sandboxDir, "agents/engineer.md");
+    expect(result).toBeNull();
+  });
+});
+
+// ── Schema stability (Codex F1) — public contract must stay byte-unchanged ──
+
+describe("EvaluateCandidateInputSchema — schema stability (Codex F1)", () => {
+  it("shape keys are exactly the base set — no new fields added for suite resolution", () => {
+    expect(Object.keys(EvaluateCandidateInputSchema.shape).sort()).toEqual(
+      ["candidate_text", "project_dir", "splits", "target_path"].sort(),
+    );
+  });
+});
+
+// ── Target→runner dispatch — agent-def-with-suite invokes run-agent-evals.sh ──
+
+describe("target→runner dispatch (eval-candidate-resolution)", () => {
+  let projectDir: string;
+
+  beforeEach(async () => {
+    const { mkdtemp } = await import("node:fs/promises");
+    projectDir = await mkdtemp(join(tmpdir(), "canon-eval-dispatch-test-"));
+    vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    await rm(projectDir, { force: true, recursive: true });
+  });
+
+  const AGENT_FRONTMATTER = "---\nname: reviewer\n---\n";
+
+  it("agent-def target with a present suite invokes run-agent-evals.sh, not run-evals.sh", async () => {
+    await mkdir(join(projectDir, "agents", "reviewer", "evals"), { recursive: true });
+    await writeFile(
+      join(projectDir, "agents", "reviewer", "evals", "run-agent-evals.sh"),
+      "#!/bin/bash\necho test",
+    );
+    await writeFile(join(projectDir, "agents", "reviewer.md"), `${AGENT_FRONTMATTER}baseline body`);
+
+    mockRunShell.mockImplementation(() =>
+      makeOkResult("Total: 1 | Passed: 1 | Failed: 0 | Errors: 0 | Skipped: 0"),
+    );
+
+    const result = await evaluateCandidate({
+      candidate_text: `${AGENT_FRONTMATTER}candidate body`,
+      project_dir: projectDir,
+      splits: ["holdout"],
+      target_path: "agents/reviewer.md",
+    });
+
+    expect(result.ok).toBe(true);
+
+    // The cheap dry-run sanity check (checkScriptReachable) is out of scope for suite
+    // resolution and still probes the global run-evals.sh — only the actual scored splits
+    // (runOneSplit) dispatch to the per-agent runner. Assert the per-agent runner WAS invoked,
+    // with the expected --eval-root flag.
+    const commands = mockRunShell.mock.calls.map((call) => call[0] as string);
+    const agentCommands = commands.filter((c) => c.includes("run-agent-evals.sh"));
+    expect(agentCommands.length).toBeGreaterThan(0);
+    expect(agentCommands.every((c) => c.includes("--eval-root"))).toBe(true);
+  });
+
+  it("agent-def target with no suite present falls back to run-evals.sh (global)", async () => {
+    // agents/reviewer.md exists but agents/reviewer/evals/run-agent-evals.sh does not.
+    await mkdir(join(projectDir, "agents"), { recursive: true });
+    await writeFile(join(projectDir, "agents", "reviewer.md"), `${AGENT_FRONTMATTER}baseline body`);
+    await mkdir(join(projectDir, "skills", "canon", "evals"), { recursive: true });
+    await writeFile(
+      join(projectDir, "skills", "canon", "evals", "run-evals.sh"),
+      "#!/bin/bash\necho test",
+    );
+
+    mockRunShell.mockImplementation(() =>
+      makeOkResult("Total: 1 | Passed: 1 | Failed: 0 | Errors: 0 | Skipped: 0"),
+    );
+
+    const result = await evaluateCandidate({
+      candidate_text: `${AGENT_FRONTMATTER}candidate body`,
+      project_dir: projectDir,
+      splits: ["holdout"],
+      target_path: "agents/reviewer.md",
+    });
+
+    expect(result.ok).toBe(true);
+
+    const commands = mockRunShell.mock.calls.map((call) => call[0] as string);
+    expect(commands.some((c) => c.includes("run-agent-evals.sh"))).toBe(false);
+    expect(commands.some((c) => c.includes("run-evals.sh"))).toBe(true);
+  });
+
+  it("non-agent-def (eval-surface) target invokes run-evals.sh as before", async () => {
+    await mkdir(join(projectDir, "skills", "canon", "evals"), { recursive: true });
+    await writeFile(
+      join(projectDir, "skills", "canon", "evals", "run-evals.sh"),
+      "#!/bin/bash\necho test",
+    );
+    await writeFile(
+      join(projectDir, "skills", "canon", "evals", "eval-set.json"),
+      '{"skill_name":"canon","evals":[]}',
+    );
+
+    mockRunShell.mockImplementation(() =>
+      makeOkResult("Total: 1 | Passed: 1 | Failed: 0 | Errors: 0 | Skipped: 0"),
+    );
+
+    const result = await evaluateCandidate({
+      candidate_text: "improved candidate text",
+      project_dir: projectDir,
+      splits: ["holdout"],
+      target_path: "skills/canon/evals/eval-set.json",
+    });
+
+    expect(result.ok).toBe(true);
+
+    const commands = mockRunShell.mock.calls.map((call) => call[0] as string);
+    expect(commands.some((c) => c.includes("run-agent-evals.sh"))).toBe(false);
+    expect(commands.some((c) => c.includes("run-evals.sh"))).toBe(true);
   });
 });

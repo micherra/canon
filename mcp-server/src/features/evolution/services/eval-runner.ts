@@ -7,11 +7,13 @@
  * Exports:
  * - parseSummary(stdout): { passed, failed, total } — pure, last-line scan
  * - decideGate(perSplit): { accepted, regressed } — pure, HOLDOUT ONLY (§7)
+ * - resolveAgentEvalRoot(tmpDir, targetPath): string | null — pure target→suite resolution
  * - runSplit(tmpDir, split, opts): ProcessResult — calls runShell with explicit timeout
  * - PerSplit — type for per-split pass counts
  */
 
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { join, normalize, sep } from "node:path";
 import { runShell } from "@platform/adapters/process-adapter.ts";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
 
@@ -54,6 +56,12 @@ type RunSplitOpts = {
    * Not set for eval-surface injection (ADR-0022) — only guardrail mode uses this.
    */
   pluginDir?: string;
+  /**
+   * Optional per-agent eval root (relative to tmpDir, e.g. "agents/reviewer/evals") resolved
+   * by resolveAgentEvalRoot. When set, runSplit invokes that suite's run-agent-evals.sh
+   * instead of the global skills/canon/evals/run-evals.sh. Not set → unchanged global behavior.
+   */
+  agentEvalRoot?: string;
 };
 
 /**
@@ -104,9 +112,40 @@ export function decideGate(perSplit: PerSplit): { accepted: boolean; regressed: 
 }
 
 /**
- * runSplit — runs run-evals.sh for a given split in the temp directory.
+ * resolveAgentEvalRoot — pure target→suite resolution (eval-candidate-resolution).
+ *
+ * Returns `agents/<name>/evals` (relative to tmpDir) when targetPath matches an
+ * agent-def path directly under `agents/` (e.g. `agents/reviewer.md`) AND
+ * `<tmpDir>/agents/<name>/evals/run-agent-evals.sh` exists in the sandbox.
+ * Returns `null` for any other targetPath, or when the per-agent suite is absent
+ * (fail-open — caller falls back to the global run-evals.sh).
+ *
+ * Never throws. Pure aside from the one existsSync check.
+ */
+export function resolveAgentEvalRoot(tmpDir: string, targetPath: string): string | null {
+  const parts = normalize(targetPath).split(sep);
+
+  // Must be exactly "agents/<name>.md" — first segment "agents", one filename, ".md" suffix.
+  if (parts.length !== 2 || parts[0] !== "agents") return null;
+
+  const filename = parts[1];
+  if (!filename.endsWith(".md")) return null;
+
+  const name = filename.slice(0, -".md".length);
+  if (!name) return null;
+
+  const evalRoot = join("agents", name, "evals");
+  const runnerPath = join(tmpDir, evalRoot, "run-agent-evals.sh");
+
+  return existsSync(runnerPath) ? evalRoot : null;
+}
+
+/**
+ * runSplit — runs run-evals.sh (or, when `agentEvalRoot` is set, that suite's
+ * run-agent-evals.sh) for a given split in the temp directory.
  *
  * Constructs the command with:
+ * - optional --eval-root <agentEvalRoot> (per-agent suite dispatch)
  * - --split <split>
  * - --structured-judge (always for gate runs)
  * - --judge-votes <N>
@@ -121,11 +160,24 @@ export function runSplit(
   split: "train" | "val" | "holdout" | "all",
   opts: RunSplitOpts = {},
 ): ProcessResult {
-  const { dryRun = false, filter, judgeVotes = 1, pluginDir, structuredJudge = true } = opts;
+  const {
+    agentEvalRoot,
+    dryRun = false,
+    filter,
+    judgeVotes = 1,
+    pluginDir,
+    structuredJudge = true,
+  } = opts;
 
-  const scriptPath = join(tmpDir, "skills", "canon", "evals", "run-evals.sh");
+  const scriptPath = agentEvalRoot
+    ? join(tmpDir, agentEvalRoot, "run-agent-evals.sh")
+    : join(tmpDir, "skills", "canon", "evals", "run-evals.sh");
 
   const parts: string[] = ["bash", scriptPath];
+
+  if (agentEvalRoot) {
+    parts.push("--eval-root", agentEvalRoot);
+  }
 
   if (split !== "all") {
     parts.push("--split", split);

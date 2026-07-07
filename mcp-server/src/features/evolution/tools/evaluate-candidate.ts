@@ -21,7 +21,12 @@ import {
   withInjectedGuardrailCandidate,
 } from "../services/candidate-injection.ts";
 import type { PerSplit } from "../services/eval-runner.ts";
-import { decideGate, parseSummary, runSplit } from "../services/eval-runner.ts";
+import {
+  decideGate,
+  parseSummary,
+  resolveAgentEvalRoot,
+  runSplit,
+} from "../services/eval-runner.ts";
 import { checkFrontmatterImmutable } from "../services/frontmatter-guard.ts";
 
 /** Input schema for evaluate_candidate. */
@@ -98,10 +103,22 @@ async function runOneSplit(
   // - Guardrail-corpus targets (rules/, agents/, primers/, etc.) → full plugin sandbox injection.
   //   The sandbox is passed as pluginDir so run-evals.sh loads the rewritten guardrail artifact.
   // - Eval-surface targets (skills/canon/evals/**) → eval-surface injection (ADR-0022, unchanged).
+  //
+  // Suite selection (eval-candidate-resolution) is likewise DERIVED from target_path — no new
+  // input field. Inside the guardrail sandbox, resolveAgentEvalRoot checks whether target_path
+  // is an agent-def with a per-agent eval suite present; when it is, runSplit dispatches to that
+  // suite's run-agent-evals.sh instead of the global run-evals.sh. Absent suite → null → the
+  // global runner (today's behavior), same fail-open fallback as the injection-mode dispatch.
   const result = isGuardrailTarget(targetPath)
-    ? await withInjectedGuardrailCandidate(projectDir, fileContent, targetPath, async (tmpDir) =>
-        runSplit(tmpDir, split, { judgeVotes, pluginDir: tmpDir, structuredJudge: true }),
-      )
+    ? await withInjectedGuardrailCandidate(projectDir, fileContent, targetPath, async (tmpDir) => {
+        const agentEvalRoot = resolveAgentEvalRoot(tmpDir, targetPath) ?? undefined;
+        return runSplit(tmpDir, split, {
+          agentEvalRoot,
+          judgeVotes,
+          pluginDir: tmpDir,
+          structuredJudge: true,
+        });
+      })
     : await withInjectedCandidate(projectDir, fileContent, targetPath, async (tmpDir) =>
         runSplit(tmpDir, split, { judgeVotes, structuredJudge: true }),
       );
