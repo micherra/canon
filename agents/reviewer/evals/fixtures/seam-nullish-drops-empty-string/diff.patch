@@ -1,0 +1,13 @@
+diff --git a/src/services/profile.ts b/src/services/profile.ts
+index ccc3333..ddd4444 100644
+--- a/src/services/profile.ts
++++ b/src/services/profile.ts
+@@ -3,6 +3,12 @@ type ProfileInput = { name?: string | null };
+
++export function resolveDisplayName(input: ProfileInput): string {
++  // Intended: fall back to "Guest" when the user has no usable name.
++  // `??` only substitutes on null/undefined, so a user who explicitly clears
++  // their name (name === "") passes an empty string straight through and the
++  // UI renders a blank label instead of "Guest".
++  return input.name ?? "Guest";
++}

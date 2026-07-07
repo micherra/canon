@@ -1,13 +1,13 @@
 {
   "version": "2.18.0",
   "artifacts": {
-    "agents/.claude/CLAUDE.md": "09b8108408a54f418a3e6d311e9dc1a1d66f3d8aaa254776f5eae5a8cb4d796f",
+    "agents/.claude/CLAUDE.md": "eb72054f930f20c1f8792bc89c45dd8208336ce2d37d4627674ec8ad9c3c57fa",
     "agents/README.md": "3299fa992439c99085eabe4a5a0e1bb2e045143de7215bc488930a75eeae8a54",
     "agents/architect.md": "098302727f1c646b01dcf3ed1804b25d8ea02f67ba7dd5de4175b9a7ddf378ae",
     "agents/engineer.md": "d1aaa9084361d12748361092ec449a87faa9d2f450eb5d42c8c2fd909c8dd036",
     "agents/evaluator.md": "78ad2ac2a672ced740365f5fe0ae50492ffc456eac07e43ab97ef5bcf8965f03",
     "agents/learner.md": "7460a40a8984495b1f801073f1b7e10359026bc22363a0b7209daed2874b9f3c",
-    "agents/reviewer.md": "9a51795bc72c0eb62a9bddbc2590964084d2c70ac2f96656c74dec5509519ae8",
+    "agents/reviewer.md": "c44bbe5b45d60a4518b0d201a6d3bcd82bb4bb2be844569297590b582d05a441",
     "agents/scribe.md": "49c0e673e4075c5503b3a6e25ef95785810e3f0e9217f02db4a8e5845b73a877",
     "agents/security.md": "e7dbc5f2fc32abce53bf954d48635277248f4c1f439d013df67b62b9eab162bc",
     "agents/shipper.md": "1c82d2d705d46a28634020d576935e063a989c3e7bfaac227acd36a6b3b61bb6",

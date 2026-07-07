@@ -1,0 +1,17 @@
+diff --git a/agents/toy-protocol.md b/agents/toy-protocol.md
+index 1234567..89abcde 100644
+--- a/agents/toy-protocol.md
++++ b/agents/toy-protocol.md
+@@ -5,7 +5,12 @@
+ ### Sign-off Guard
+ 
+ If a deploy step is missing a required sign-off, flag as **BLOCKING**.
++
++### Retry-Budget Guard (new)
++
++If a retry loop has no maximum-attempts cap, flag as **BLOCKING** -- an uncapped
++retry loop can spin indefinitely and starve the worker pool.
+ 
+ ## Verdict
+ 
+ | Severity | Condition |

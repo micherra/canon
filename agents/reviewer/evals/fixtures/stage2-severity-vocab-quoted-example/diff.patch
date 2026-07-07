@@ -1,0 +1,13 @@
+diff --git a/templates/toy-status-template.md b/templates/toy-status-template.md
+index aaa0001..bbb0002 100644
+--- a/templates/toy-status-template.md
++++ b/templates/toy-status-template.md
+@@ -4,3 +4,8 @@
+ 
+ - id: unique identifier
+ - Status: current state
++
++## Output Format
++
++Set the Status field to one of BLOCKING, WARNING, or CLEAN to match the reviewer's
++standard severity vocabulary.

@@ -23,7 +23,7 @@ features/evolution/
 │   ├── attribute-failure.ts        # MCP tool handler (thin wrapper over attribution services)
 │   └── select-mutation-targets.ts  # MCP tool handler — composes attribution pipeline + selectMutationTargets()
 ├── services/
-│   ├── eval-runner.ts          # parseSummary, decideGate, runSplit (pure + one I/O fn)
+│   ├── eval-runner.ts          # parseSummary, decideGate, decideCompositeGate (holistic veto, 2026-07-06), resolveAgentEvalRoot + resolveHolisticEvalRoot (per-agent + holistic suite resolution, 2026-07-06), runSplit (pure + one I/O fn, agentEvalRoot/evalRootOverride options)
 │   ├── candidate-injection.ts  # withInjectedCandidate (ADR-0022) + withInjectedGuardrailCandidate (ADR-0025) + isGuardrailTarget()
 │   ├── mutation-types.ts       # Pure types: MutationTarget, GateIneligibleTarget, SkippedAttribution, SelectMutationTargetsResult, MutationProposal, ArtifactClass; budget constants DEFAULT_MAX_TARGETS_PER_PASS, CANDIDATES_PER_TARGET
 │   ├── mutation-selection.ts   # selectMutationTargets() — pure join+rank+filter; PLUGIN_ARTIFACT_ROOTS eligibility check; derivePrincipleId() keys agent-def targets off the violated principle, not the agent name (Codex P2 #2)
@@ -35,9 +35,10 @@ features/evolution/
 │   ├── artifact-path-resolver.ts  # resolveArtifactReadPath() — pure cross-root re-read resolver: project_dir-first, pluginDir-fallback for trusted plugin-tier artifacts (Codex P2 #1)
 │   └── frontmatter-guard.ts    # checkFrontmatterImmutable() — pure runtime frontmatter-immutability guard (ADR-0031 amendment)
 └── __tests__/
-    ├── decide-gate.test.ts
+    ├── decide-gate.test.ts               # decideGate + decideCompositeGate (holistic veto, 2026-07-06)
     ├── parse-summary.test.ts
     ├── evaluate-candidate.test.ts
+    ├── evaluate-candidate-holistic-gate.test.ts  # handler-wiring for the holistic composite gate (split out of evaluate-candidate.test.ts on file-length grounds)
     ├── candidate-injection.test.ts
     ├── guardrail-injection-integration.test.ts  # Integration: guardrail sandbox build + isGuardrailTarget predicate
     ├── mutation-proposal.test.ts
@@ -154,6 +155,36 @@ function decideGate(perSplit: PerSplit): { accepted: boolean; regressed: boolean
 - **Holdout-only** — train and val numbers NEVER enter the accept decision.
 - **Strict `>`** — equal holdout is a rejection ("unchanged holdout is not an accept").
 - **Fail-closed** — timeout or subprocess error → `ToolResult` error (NOT an accept).
+
+## Holistic Composite Gate: decideCompositeGate (added 2026-07-06)
+
+```ts
+function decideCompositeGate(
+  perStage: PerSplit,
+  holistic: PerSplit | null,
+): { accepted: boolean; regressed: boolean } {
+  const perStageDecision = decideGate(perStage);
+  if (holistic === null) return perStageDecision; // no holistic suite -> unchanged decideGate result
+  const h = holistic.holdout;
+  const holisticNonRegress = h.candidate_passed >= h.baseline_passed;
+  const holisticRegressed = h.candidate_passed < h.baseline_passed;
+  return {
+    accepted: perStageDecision.accepted && holisticNonRegress, // veto, not a second strict-improvement term
+    regressed: perStageDecision.regressed || holisticRegressed,
+  };
+}
+```
+
+- ANDs the unchanged per-stage strict `>` (`decideGate`) with a holistic **non-regression veto** (`>=`) — never a second strict-improvement term. A stage-targeted mutation usually leaves most golden-PR whole-file verdicts unchanged; requiring holistic to also strictly improve would make acceptance practically impossible. The composite can only make acceptance STRICTER than the per-stage decision alone, never looser.
+- Only runs for the **holdout** split — train/val are never read by the composite decision.
+- Motivated by the PR #332 incident (a new WARNING-assigning sub-check added without updating the Verdict table) — the mandatory Goodhart guard (G4, watch_VVVVV2) for per-agent candidate evaluation.
+- Wired into `evaluate_candidate` (`tools/evaluate-candidate.ts`): `resolveHolisticEvalRoot(tmpDir, agentEvalRoot)` resolves the holistic sub-suite path (e.g. `agents/reviewer/evals/holistic`) when `<agentEvalRoot>/holistic/eval-set.json` exists in the sandbox; absent → `null`, holistic run skipped, composite equals the per-stage-only decision. When present, `runSplit`'s `evalRootOverride` option points `--eval-root` at the holistic subdir while the invoked script stays `agentEvalRoot`'s `run-agent-evals.sh` (the script always lives at the suite root, one level above `holistic/`).
+
+## Per-Agent Eval Suite Resolution: resolveAgentEvalRoot (added 2026-07-06)
+
+`resolveAgentEvalRoot(tmpDir, targetPath)` (`services/eval-runner.ts`, pure) resolves an agent-def `target_path` (`agents/<name>.md`) to its per-agent eval suite root (`agents/<name>/evals`) when that directory exists in the injected sandbox; returns `null` for non-agent-def targets (e.g. `skills/canon/evals/eval-set.json`) or when the agent has no per-agent suite. `tools/evaluate-candidate.ts` threads the resolved root into `runSplit`'s `agentEvalRoot` option, which dispatches to `agents/<name>/evals/run-agent-evals.sh --eval-root agents/<name>/evals` instead of the global `skills/canon/evals/run-evals.sh`. Only `runOneSplit` is threaded through — `checkScriptReachable` (the cheap dry-run sanity check) still probes the global `run-evals.sh`, which is always present in the guardrail sandbox. Currently only `agents/reviewer.md` has a per-agent suite (`agents/reviewer/evals/`).
+
+Both `run-evals.sh` and `agents/reviewer/evals/run-agent-evals.sh` source a shared judge/vote/split core extracted to `skills/canon/evals/lib/eval-core.sh` — byte-identical global behavior, no duplicated judge logic.
 
 ## ADR-002 Constraint
 

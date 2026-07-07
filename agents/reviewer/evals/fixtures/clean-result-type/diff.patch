@@ -1,0 +1,18 @@
+diff --git a/src/services/coupon.ts b/src/services/coupon.ts
+index 7777777..8888888 100644
+--- a/src/services/coupon.ts
++++ b/src/services/coupon.ts
+@@ -5,6 +5,14 @@ export type CouponResult =
+   | { ok: true; discount: number }
+   | { ok: false; error: "expired" | "not_found" };
+ 
++export function applyCoupon(code: string, now: number): CouponResult {
++  const coupon = lookupCoupon(code);
++  if (!coupon) {
++    return { ok: false, error: "not_found" };
++  }
++  if (coupon.expiresAt < now) {
++    return { ok: false, error: "expired" };
++  }
++  return { ok: true, discount: coupon.discount };
++}

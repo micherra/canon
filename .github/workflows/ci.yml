@@ -26,17 +26,17 @@ jobs:
         run: npm ci
       - name: Shellcheck hook scripts + install-faithfulness checks (toolchain pins, mcp.json args token)
         run: bash hooks/lint.sh
-      - name: Run hook test suites
+      - name: Run hook + agent + skill test suites
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
           failed=0
-          for t in hooks/**/*.test.sh; do
+          for t in hooks/**/*.test.sh agents/**/*.test.sh skills/**/*.test.sh; do
             echo "=== $t ==="
             bash "$t" || failed=1
           done
           if [ "$failed" -ne 0 ]; then
-            echo "One or more hook test suites failed." >&2
+            echo "One or more hook/agent/skill test suites failed." >&2
             exit 1
           fi
       - name: Shellcheck mcp-server/boot.sh

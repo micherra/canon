@@ -438,9 +438,15 @@ export class ExecutionStore {
   /**
    * Merge provided metrics fields into existing metrics JSON for a state.
    * Preserves orchestrator-written fields (duration_ms, spawns, model).
+   * The merge is shallow (top-level keys only) — a `stage_metrics` value must
+   * already be the fully-merged sub-object the caller wants written; this
+   * method will not merge nested `stage_metrics` entries for the caller.
    * Returns true when updated, false when state not found.
    */
-  updateStateMetrics(stateId: string, metrics: Record<string, number | string>): boolean {
+  updateStateMetrics(
+    stateId: string,
+    metrics: Record<string, number | string | Record<string, Record<string, number>>>,
+  ): boolean {
     const row = this.s.stmtGetState.get(stateId) as ExecutionStateRow | undefined;
     if (!row) return false;
 

@@ -1,0 +1,10 @@
+{
+  "principles": [
+    {
+      "id": "simplicity-first",
+      "severity": "strong-opinion",
+      "summary": "Prefer the simplest implementation that solves the problem.",
+      "note": "Loaded principle does NOT directly name falsy-zero coercion; this is a Stage 2 Gotcha-axis finding (silent fallback that changes behavior for maxRetries: 0)."
+    }
+  ]
+}

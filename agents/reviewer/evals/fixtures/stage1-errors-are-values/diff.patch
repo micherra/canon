@@ -1,0 +1,17 @@
+diff --git a/src/services/order.ts b/src/services/order.ts
+index 1111111..2222222 100644
+--- a/src/services/order.ts
++++ b/src/services/order.ts
+@@ -10,6 +10,13 @@ import { findProductById } from "./catalog.ts";
+ export type CreateOrderInput = { userId: string; productId: string; quantity: number };
+ 
++export function validateOrder(input: CreateOrderInput): Order {
++  const product = findProductById(input.productId);
++  if (!product) {
++    throw new Error("product_not_found");
++  }
++  if (product.stock < input.quantity) {
++    throw new Error("insufficient_stock");
++  }
++  return { ...input, total: product.price * input.quantity };
++}

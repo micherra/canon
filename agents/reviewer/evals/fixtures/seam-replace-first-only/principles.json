@@ -1,0 +1,10 @@
+{
+  "principles": [
+    {
+      "id": "naming-reveals-intent",
+      "severity": "strong-opinion",
+      "summary": "Identifiers should reveal intent; names should not mislead about behavior.",
+      "note": "Deliberately NON-matching to the bug mechanism: no loaded principle names String.prototype.replace's first-occurrence-only semantics. HELD-OUT control: this mechanism is NOT in the reviewer.md tie-break examples."
+    }
+  ]
+}

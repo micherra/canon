@@ -1,0 +1,12 @@
+diff --git a/src/config/load.ts b/src/config/load.ts
+index 5555555..6666666 100644
+--- a/src/config/load.ts
++++ b/src/config/load.ts
+@@ -8,6 +8,11 @@ type RetryConfig = { maxRetries: number };
+ 
++export function resolveMaxRetries(cfg: Partial<RetryConfig>): number {
++  // Falls back to 5 when maxRetries is 0 as well as when it is undefined,
++  // because `|| 5` treats 0 as falsy — a caller that sets maxRetries: 0
++  // to disable retries silently gets 5 retries instead.
++  return cfg.maxRetries || 5;
++}
