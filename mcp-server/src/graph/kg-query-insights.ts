@@ -238,14 +238,3 @@ export function fileNormalizeCycle(cycle: string[]): string[] {
   }
   return [...cycle.slice(minIdx), ...cycle.slice(0, minIdx)];
 }
-
-// Helper — SQLite returns 0/1 for booleans; coerce to boolean
-import type { EntityRow } from "./kg-types.ts";
-
-export function toEntityRow(row: Record<string, unknown>): EntityRow {
-  return {
-    ...(row as unknown as EntityRow),
-    is_default_export: Boolean(row.is_default_export),
-    is_exported: Boolean(row.is_exported),
-  };
-}
