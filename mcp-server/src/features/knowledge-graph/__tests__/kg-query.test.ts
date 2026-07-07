@@ -102,39 +102,6 @@ describe("KgQuery.getBlastRadius()", () => {
     expect(aResult!.depth).toBe(1);
   });
 
-  test("does NOT follow contains edges", () => {
-    // Setup: file entity "contains" funcA. Seed = funcA. Result should NOT include file.
-    const fileA = store.upsertFile(makeFileRow({ layer: "api", path: "src/A.ts" }));
-    const fileEntity = store.insertEntity(
-      makeEntityRow(fileA.file_id!, {
-        kind: "file",
-        name: "A",
-        qualified_name: "src/A.ts",
-      }),
-    );
-    const funcA = store.insertEntity(
-      makeEntityRow(fileA.file_id!, {
-        kind: "function",
-        name: "funcA",
-        qualified_name: "src/A.ts::funcA",
-      }),
-    );
-
-    // File entity "contains" funcA
-    store.insertEdge({
-      confidence: 1.0,
-      edge_type: "contains",
-      metadata: null,
-      source_entity_id: fileEntity.entity_id!,
-      target_entity_id: funcA.entity_id!,
-    });
-
-    // Blast radius of funcA should NOT include fileEntity (contains is excluded)
-    const results = query.getBlastRadius([funcA.entity_id!], 3);
-    const entityIds = results.map((r) => r.entity_id);
-    expect(entityIds).not.toContain(fileEntity.entity_id);
-  });
-
   test("respects maxDepth", () => {
     // Setup: A calls B calls C calls D. Seed = D. maxDepth = 2.
     // Expected: C (depth 1) and B (depth 2) are included, A (depth 3) is NOT.

@@ -30,7 +30,6 @@ export type EdgeType =
   | "extends"
   | "implements"
   | "type-references"
-  | "contains"
   | "re-exports"
   | "composition"
   | "fm:references"
