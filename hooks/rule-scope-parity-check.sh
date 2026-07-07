@@ -18,7 +18,11 @@
 # For each rules/*.md whose frontmatter `scope.agents` is `all` (require every
 # agent) or an explicit list (require each named agent), assert every required
 # agent's frontmatter `rules:` array contains that rule id. Rules with no
-# `scope.agents` (e.g. an orchestrator-dispatch rule) are IGNORED. The agent set
+# `scope.agents` (e.g. an orchestrator-dispatch rule) are IGNORED. When
+# `scope.agents` is `all`, an optional sibling `scope.exclude:` list (inline
+# `[a, b]` or multi-line) removes those agents from the required set — so
+# `scope: { agents: all, exclude: [evaluator] }` requires every agent EXCEPT
+# evaluator to wire the rule. `exclude:` has no effect on an explicit list. The agent set
 # is every agents/*.md whose LEADING YAML frontmatter carries a `name:` field —
 # a `name:` appearing outside frontmatter (e.g. in agents/README.md prose or a
 # fenced example) is not an agent.
@@ -108,6 +112,39 @@ rule_scope() {
 }
 
 # ---------------------------------------------------------------------------
+# awk: emit a rule's optional scope.exclude list — a space-separated list of
+# agent names to remove from a scope:all required set. Handles both the inline
+# (`exclude: [a, b]`) and multi-line list forms, mirroring rule_scope's agents
+# parsing. Prints nothing when no exclude list is present.
+# ---------------------------------------------------------------------------
+rule_exclude() {
+  awk '
+    NR == 1 { if ($0 != "---") exit; next }
+    $0 == "---" { exit }
+    /^scope:/ { inscope = 1; next }
+    inscope && /^[^[:space:]]/ { inscope = 0 }
+    inscope && /^  exclude:[[:space:]]*\[/ {
+      line = $0
+      sub(/^  exclude:[[:space:]]*\[/, "", line)
+      sub(/\].*/, "", line)
+      gsub(/[[:space:],]+/, " ", line)
+      print line
+      exit
+    }
+    inscope && /^  exclude:[[:space:]]*$/ { inlist = 1; next }
+    inlist && /^    -[[:space:]]*/ {
+      v = $0
+      sub(/^    -[[:space:]]*/, "", v)
+      gsub(/[[:space:]]/, "", v)
+      acc = acc " " v
+      next
+    }
+    inlist && /^  [^[:space:]]/ { inlist = 0 }
+    END { if (acc != "") print acc }
+  ' "$1"
+}
+
+# ---------------------------------------------------------------------------
 # Build the agent set: "name<TAB>file" rows.
 # ---------------------------------------------------------------------------
 AGENTS_FILE="$(mktemp)"
@@ -141,7 +178,21 @@ for rf in "$ROOT"/rules/*.md; do
   [[ -z "$scope" ]] && continue
 
   if [[ "$scope" == "ALL" ]]; then
-    required="$ALL_AGENT_NAMES"
+    # scope:all requires every agent MINUS an optional scope.exclude list.
+    exclude="$(rule_exclude "$rf")"
+    if [[ -z "$exclude" ]]; then
+      required="$ALL_AGENT_NAMES"
+    else
+      required=""
+      for agent in $ALL_AGENT_NAMES; do
+        skip=false
+        for ex in $exclude; do
+          [[ "$agent" == "$ex" ]] && { skip=true; break; }
+        done
+        [[ "$skip" == "true" ]] && continue
+        required="$required $agent"
+      done
+    fi
   else
     required="$scope"
   fi

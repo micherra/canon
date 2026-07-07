@@ -167,6 +167,41 @@ echo "-- (g) non-directory worktree_path -> fail-closed exit 2 --"
   run_gate_out 2 "not a directory" "non-directory arg -> fail-closed exit 2" "/nonexistent/worktree/path"
 }
 
+echo "-- (h) scope-all with inline exclude: excluded agent exempt; non-excluded still required --"
+{
+  # Excluded agent (evaluator) legitimately lacks the rule -> exit 0.
+  FIX=$(mktemp -d)
+  write_rule "$FIX" agent-metrics-before-return "  agents: all
+  exclude: [evaluator]"
+  write_agent "$FIX" architect "agent-metrics-before-return"
+  write_agent "$FIX" engineer "agent-metrics-before-return"
+  write_agent "$FIX" evaluator ""   # excluded -> legitimately exempt
+  run_gate 0 "inline exclude: excluded agent exempt -> exit 0" "$FIX"
+
+  # A NON-excluded agent still missing the rule -> exit 2 naming it.
+  FIX2=$(mktemp -d)
+  write_rule "$FIX2" agent-metrics-before-return "  agents: all
+  exclude: [evaluator]"
+  write_agent "$FIX2" architect ""   # NOT excluded, missing -> violation
+  write_agent "$FIX2" engineer "agent-metrics-before-return"
+  write_agent "$FIX2" evaluator ""   # excluded -> exempt
+  run_gate_out 2 "architect" "inline exclude: non-excluded missing -> exit 2 names it" "$FIX2"
+  rm -rf "$FIX" "$FIX2"
+}
+
+echo "-- (i) scope-all with multi-line exclude list is parsed -> excluded agent exempt --"
+{
+  FIX=$(mktemp -d)
+  write_rule "$FIX" agent-context-check "  agents: all
+  exclude:
+    - evaluator"
+  write_agent "$FIX" architect "agent-context-check"
+  write_agent "$FIX" engineer "agent-context-check"
+  write_agent "$FIX" evaluator ""   # excluded via multi-line list -> exempt
+  run_gate 0 "multi-line exclude: excluded agent exempt -> exit 0" "$FIX"
+  rm -rf "$FIX"
+}
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 if [[ "$FAIL" -gt 0 ]]; then
