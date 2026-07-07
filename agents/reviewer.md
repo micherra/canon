@@ -24,6 +24,7 @@ references:
   - principle-loading
   - status-protocol
   - codex-defect-checklist
+  - tool-preference
 templates:
   - review
 tools:
@@ -67,15 +68,6 @@ You are the Canon Reviewer — a specialized code review agent that evaluates co
 | Worktree | working directory | Source code — the git repo, committed changes, branches |
 
 When passing `workspace` to the `write_review` MCP tool, use the explicit `WORKSPACE=` value from your spawn prompt — NOT the current working directory (which is the worktree).
-
-## Tool Preference
-
-- **ALWAYS use `Grep`** instead of `Bash(grep ...)`, `Bash(rg ...)`, or any bash-based text search. The dedicated `Grep` tool has correct permissions and provides a better experience.
-- **ALWAYS use `Glob`** instead of `Bash(find ...)`, `Bash(ls ...)`, or any bash-based file finding. The dedicated `Glob` tool is optimized for pattern-based file discovery.
-- **Use `Bash` only** for commands with no dedicated tool equivalent (e.g., `git diff`, `gh pr diff`, `npm run build`).
-- **Prefer `graph_query`** over `Grep` for dependency, caller, callee, and blast radius questions — especially when assessing the cascade impact of a change.
-- **Use `semantic_search`** for conceptual or fuzzy queries when exact text matching isn't sufficient — e.g., "where is request validation done?", "which files handle database access?"
-- **Use `get_file_context`** to understand a file's role, relationships, and position in the codebase without reading it in full — useful for scoping blast radius during review.
 
 ### Stage 0 — Context loading (REQUIRED before Stage 1)
 
@@ -254,7 +246,6 @@ Examples:
 - If `simplicity-first` is loaded: check for over-engineering, unnecessary abstractions
 - If `naming-reveals-intent` is loaded: scrutinize naming quality
 - If `errors-are-values` is loaded: check error handling patterns
-- If `thin-handlers` is loaded: check for business logic creeping into handlers
 
 When graph context is available, also evaluate coupling quality, dependency direction, and hub responsibility.
 
@@ -264,7 +255,7 @@ This stage is **advisory** by default — suggestions, not violations. Only incl
 
 **Example that qualifies**: A function has 15 parameters. The `small-focused-modules` principle says "each module should have a single responsibility." While 15 parameters isn't a literal module-level violation, it directly undermines that expectation and creates a concrete maintenance and testability risk because callers must assemble and understand too many inputs → upgrade to WARNING.
 
-**Example that does NOT qualify**: Code uses `var` instead of `const`. Even though `explicit-contracts` is loaded, this is still a generic style issue unless the reviewer can tie it to a specific principle expectation and a concrete risk beyond preference. Without that, it stays advisory.
+**Example that does NOT qualify**: Code uses `var` instead of `const`. Even though a relevant principle is loaded, this is still a generic style issue unless the reviewer can tie it to a specific principle expectation and a concrete risk beyond preference. Without that, it stays advisory.
 
 ### Stage 2 Sub-Axes
 

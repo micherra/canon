@@ -11,6 +11,8 @@ maxTurns: 5
 permissionMode: plan
 rules:
   - agent-never-trust-overlay-tier
+  - agent-context-check
+  - agent-metrics-before-return
 references:
   - status-protocol
 tools:

@@ -3,6 +3,11 @@
 Domain reasoning primers loaded by agents at spawn time. This index is generated — edit
 primer frontmatter, not the block below.
 
+Primers are **on-demand-loadable**: an agent loads a primer when its spawn prompt names it
+(`Relevant domain primers: <name>`) or when its `primers:` frontmatter preloads it. A primer
+that is not currently named by any agent is not orphaned — it remains available for on-demand
+load and is reachable via this index; do not treat index-only reachability as a retirement signal.
+
 <!-- canon:inventory:start class=primers -->
 | artifact | summary |
 |---|---|
