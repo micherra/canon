@@ -48,12 +48,18 @@ export function registerReportTools(server: McpServer): void {
     "record_agent_metrics",
     {
       description:
-        "Record agent performance metrics (tool_calls, orientation_calls, turns) to the execution store. Merges with existing metrics without overwriting orchestrator-tracked fields.",
+        "Record agent performance metrics (tool_calls, orientation_calls, turns) to the execution store. Merges with existing metrics without overwriting orchestrator-tracked fields. Pass stage to namespace counters under metrics.stage_metrics[stage] instead of the flat merge (lets a single-window agent emit per-stage metrics).",
       inputSchema: {
         orientation_calls: z
           .number()
           .optional()
           .describe("Read/Glob/Grep calls made for orientation before writing"),
+        stage: z
+          .string()
+          .optional()
+          .describe(
+            "Optional stage label (e.g. '1.5'). When provided, counters are namespaced under metrics.stage_metrics[stage] instead of the flat merge; append-merged so an earlier stage's counters are preserved. Must be non-empty when provided.",
+          ),
         state_id: z.string().describe("Current state ID the agent is working in"),
         tool_calls: z.number().optional().describe("Total tool invocations the agent made"),
         turns: z

@@ -71,6 +71,8 @@ export const StateMetricsSchema = z.object({
   postcondition_results: z.array(PostconditionResultSchema).optional(),
   revision_count: z.number().optional(),
   spawns: z.number().optional(),
+  // Per-stage counters for a single-window agent (topology C, G3); keyed by stage label.
+  stage_metrics: z.record(z.string(), z.record(z.string(), z.number())).optional(),
   test_results: TestResultsSchema.optional(),
   // ADR-003a agent performance metrics
   tool_calls: z.number().optional(),
