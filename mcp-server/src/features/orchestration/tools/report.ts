@@ -38,7 +38,7 @@ async function recordReview(
   signals: SignalWriter | undefined,
 ): Promise<ReportOutput> {
   // Strip correctness-scan from analytics paths only — NOT from the store.
-  // The store retains the full violations list so present_review can show
+  // The store retains the full violations list so show_pr_impact can surface
   // all findings to humans. Analytics (updateFileViolationHistory, analyzer)
   // exclude correctness-scan at their own boundaries.
   const analyticsViolations = stripNonPersistableViolations(review.violations);
