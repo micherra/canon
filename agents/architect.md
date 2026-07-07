@@ -49,6 +49,7 @@ tools:
   - mcp__canon__graph_query
   - mcp__canon__codebase_graph
   - mcp__canon__write_plan_index
+  - mcp__canon__write_design
   - mcp__canon__get_context
   - mcp__canon__record_agent_metrics
 ---
@@ -139,12 +140,15 @@ Load principles per `${CLAUDE_PLUGIN_ROOT}/references/principle-loading.md`. Use
 
 **Mandatory step-1 skeleton (single-artifact obligation):** per
 `agent-artifact-write-before-return` (Single-Artifact Agents), immediately after
-reading inputs and before deep design work, write a `## Status: Partial`
-skeleton DESIGN.md to the declared path with the design-document template's
-section headings, then refine in place. The architect is a single-artifact-style
-long-running producer; an early kill must leave a recoverable partial design on
-disk. (This session's own architect run demonstrated the value — a 529 mid-run
-left a survivable doc because it had been written early.)
+reading inputs and before deep design work, persist a `## Status: Partial`
+skeleton DESIGN.md via `write_design({ workspace, slug, content })` — do NOT use
+raw `Write` — with the design-document template's section headings, then refine
+in place. The architect is a single-artifact-style long-running producer; an
+early kill must leave a recoverable partial design on disk. (This session's own
+architect run demonstrated the value — a 529 mid-run left a survivable doc
+because it had been written early.) Persisting through `write_design` (rather
+than raw `Write`) is also what makes the skeleton receipt-backed for the
+write-receipt completion gate (ADR-0042) — see Step 5.
 
 ### Step 1a: Design Conversation
 
@@ -268,7 +272,7 @@ Do not create the index entry until after the ADR file itself is written. If the
 
 ### Step 5: Produce design document
 
-Save to the path specified by the orchestrator (typically `.canon/plans/{task-slug}/DESIGN.md`) using the design-document template at `${CLAUDE_PLUGIN_ROOT}/templates/design-document.md`. For epic flows, include the North Star section with machine-readable done criteria in frontmatter.
+Author the design document using the design-document template at `${CLAUDE_PLUGIN_ROOT}/templates/design-document.md`, then persist it via `write_design({ workspace, slug, content })` — the tool owns the canonical path (`plans/{slug}/DESIGN.md`, typically `.canon/plans/{task-slug}/DESIGN.md`) and emits the write receipt the completion gate requires (ADR-0042). Do NOT save DESIGN.md with raw `Write`. For epic flows, include the North Star section with machine-readable done criteria in frontmatter.
 
 **North Star section (epic flows)**: When designing for an epic flow, the DESIGN.md must include:
 - A `done_criteria` array in YAML frontmatter with `id`, `description`, and `testable` fields

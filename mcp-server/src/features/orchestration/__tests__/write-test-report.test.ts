@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { writeTestReport } from "../tools/write-test-report.ts";
@@ -416,6 +417,28 @@ describe("writeTestReport — manual_verification field", () => {
     // The raw unescaped pipe should not appear inside a table cell value
     // (it can appear as the cell delimiter but the content should be escaped)
     expect(md).toContain("Step A &#124; Step B works");
+  });
+});
+
+describe("writeTestReport — write receipt", () => {
+  it("emits a write_receipt event of kind 'test_report' pointing at TEST-REPORT.md", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
+
+    const result = await writeTestReport({
+      failed: 0,
+      passed: 5,
+      skipped: 0,
+      slug: "receipt-test",
+      summary: "All passed.",
+      workspace: tmpDir,
+    });
+
+    assertOk(result);
+    const store = getExecutionStore(tmpDir);
+    const events = store.getEvents({ type: "write_receipt" });
+    expect(events).toHaveLength(1);
+    expect(events[0].payload.artifact_kind).toBe("test_report");
+    expect(events[0].payload.artifact_path).toBe(result.path);
   });
 });
 

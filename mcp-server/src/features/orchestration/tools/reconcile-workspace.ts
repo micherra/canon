@@ -24,6 +24,7 @@ import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import type { CliffCaptureOutcome } from "../services/cliff-transcript-capture.ts";
 import { captureCliffTranscripts } from "../services/cliff-transcript-capture.ts";
 import type { CliffCaptureAbsentReason } from "../services/cliff-transcript-source.ts";
+import { PARTIAL_MARKERS } from "../services/partial-markers.ts";
 import type { JournalStep } from "./orchestration-journal.ts";
 import {
   _journalPath as journalPath,
@@ -56,22 +57,11 @@ export type ReconcileWorkspaceResult = {
   needs_recovery: boolean; // incomplete_steps.length > 0
 };
 
-/**
- * Skeleton markers written by single-artifact agents on step 1 (per
- * `rules/agent-artifact-write-before-return.md`). A present artifact still
- * carrying one of these is a recoverable cliff, not a finished deliverable:
- * - `## Status: Partial` — architect, security skeletons
- * - `IN_PROGRESS` verdict — reviewer Early Output Protocol stub (frontmatter
- *   `verdict: IN_PROGRESS` and `## Canon Review — Verdict: IN_PROGRESS`)
- * - `IN_PROGRESS` status — scribe skeleton (frontmatter `status: "IN_PROGRESS"`,
- *   the context-sync template's own status field, per `templates/context-sync.md`)
- */
-const PARTIAL_MARKERS: readonly RegExp[] = [
-  /^#{1,6}\s*Status:\s*Partial\b/im,
-  /^verdict:\s*IN_PROGRESS\b/im,
-  /Verdict:\s*IN_PROGRESS\b/i,
-  /^status:\s*["']?IN_PROGRESS["']?\b/im,
-];
+// Skeleton-marker regex list moved to services/partial-markers.ts (single
+// source of truth shared with write-receipt.ts's WR-02 gate fallback — see
+// docs/adr/0042-fail-closed-write-receipt-completion-gate.md). Re-exported
+// here for backward compatibility with any existing import of this module.
+export { PARTIAL_MARKERS };
 
 /** Resolve an artifact entry (plain path or glob) to concrete files, checking
  * both the workspace root and the worktree/ subdirectory (mirrors artifactExists). */

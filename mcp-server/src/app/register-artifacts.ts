@@ -1,8 +1,11 @@
 import { reconcilePredictions } from "@features/diagnostics/services/prediction-tracker.ts";
 import { computeViolationConfidence } from "@features/orchestration/services/review-confidence-adapter.ts";
+import { writeContextSync } from "@features/orchestration/tools/write-context-sync.ts";
+import { writeDesign } from "@features/orchestration/tools/write-design.ts";
 import { writeImplementationSummary } from "@features/orchestration/tools/write-implementation-summary.ts";
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
 import { type ConfidenceAdapter, writeReview } from "@features/orchestration/tools/write-review.ts";
+import { writeSecurityAssessment } from "@features/orchestration/tools/write-security-assessment.ts";
 import { writeTestReport } from "@features/orchestration/tools/write-test-report.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
@@ -198,8 +201,60 @@ function registerWriteImplementationSummaryTool(server: McpServer): void {
   );
 }
 
+/**
+ * Registers the three write-receipt-gate dedicated write tools (ADR-0042):
+ * write_design, write_context_sync, write_security_assessment. Each is a thin
+ * persist-and-receipt wrapper — the agent still authors the markdown; these
+ * tools own the canonical path and emit the artifact's `write_receipt` event.
+ */
+function registerWriteReceiptTools(server: McpServer): void {
+  server.registerTool(
+    "write_design",
+    {
+      description:
+        "Persist the architect's DESIGN.md to its canonical path and emit a write receipt. The architect authors the markdown content; this tool owns the path and the receipt.",
+      inputSchema: {
+        content: z.string().describe("Full DESIGN.md markdown content, already authored"),
+        slug: z.string(),
+        workspace: z.string(),
+      },
+    },
+    gatedWrapHandler(async (input) => writeDesign(input)),
+  );
+
+  server.registerTool(
+    "write_context_sync",
+    {
+      description:
+        "Persist the scribe's CONTEXT-SYNC.md to its canonical path and emit a write receipt. Emits on both UPDATED and NO_UPDATES status — a NO_UPDATES sync still produces the file.",
+      inputSchema: {
+        content: z.string().describe("Full CONTEXT-SYNC.md markdown content, already authored"),
+        slug: z.string(),
+        status: z.enum(["UPDATED", "NO_UPDATES"]),
+        workspace: z.string(),
+      },
+    },
+    gatedWrapHandler(async (input) => writeContextSync(input)),
+  );
+
+  server.registerTool(
+    "write_security_assessment",
+    {
+      description:
+        "Persist the security agent's SECURITY.md to its canonical path and emit a write receipt. The security agent authors the markdown content; this tool owns the path and the receipt.",
+      inputSchema: {
+        content: z.string().describe("Full SECURITY.md markdown content, already authored"),
+        slug: z.string(),
+        workspace: z.string(),
+      },
+    },
+    gatedWrapHandler(async (input) => writeSecurityAssessment(input)),
+  );
+}
+
 export function registerArtifactTools(server: McpServer): void {
   registerPlanTools(server);
   registerWriteReviewTool(server);
   registerWriteImplementationSummaryTool(server);
+  registerWriteReceiptTools(server);
 }

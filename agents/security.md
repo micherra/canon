@@ -29,12 +29,12 @@ tools:
   - Grep
   - WebFetch
   - WebSearch
-  - Write
   - mcp__canon__semantic_search
   - mcp__canon__get_file_context
   - mcp__canon__graph_query
   - mcp__canon__codebase_graph
   - mcp__canon__get_context
+  - mcp__canon__write_security_assessment
   - mcp__canon__record_agent_metrics
 ---
 
@@ -92,12 +92,15 @@ Read the files to scan. This will be:
 ### Step 1b: Write the skeleton assessment first (mandatory)
 
 Per `agent-artifact-write-before-return` (Single-Artifact Agents): immediately
-after determining scope, write a `## Status: Partial` skeleton to the declared
-security-assessment artifact path with the section headings from the
-security-assessment template, then refine it in place as you scan. This is a
-hard step-1 obligation — a killed security agent must leave a recoverable
-partial on disk, not nothing. (Does not apply in `early-scan` mode, which
-produces inline output only.)
+after determining scope, persist a `## Status: Partial` skeleton via
+`write_security_assessment({ workspace, slug, content })` — do NOT use raw
+`Write` — with the section headings from the security-assessment template,
+then refine it in place as you scan. This is a hard step-1 obligation — a
+killed security agent must leave a recoverable partial on disk, not nothing.
+(Does not apply in `early-scan` mode, which produces inline output only.)
+Persisting through `write_security_assessment` (rather than raw `Write`) is
+also what makes the skeleton receipt-backed for the write-receipt completion
+gate (ADR-0042) — see Step 5.
 
 ### Step 1.5: Detect project stack
 
@@ -144,7 +147,7 @@ Follow the `### Planned Security Controls` section in the security-assessment te
 
 The orchestrator **must** provide the security-assessment template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format at `${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md`. (This guard does not apply in `early-scan` mode — early-scan short-circuits before Step 5.)
 
-Save to the path specified by the orchestrator (typically `.canon/plans/{task-slug}/SECURITY.md`).
+Persist via `write_security_assessment({ workspace, slug, content })` — do NOT use raw `Write`. The tool owns the canonical path (`plans/{slug}/SECURITY.md`, typically `.canon/plans/{task-slug}/SECURITY.md`) and emits the write receipt the completion gate requires (ADR-0042).
 
 ### Step 6: Report blocking issues
 

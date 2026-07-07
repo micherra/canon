@@ -110,9 +110,11 @@ describe("logStep — completed + agent_id writes backfill event", () => {
     // Create artifacts/ dir so artifact scan doesn't fail
     await mkdir(join(workspace, "artifacts"), { recursive: true });
 
+    // No agent_type — this test exercises the backfill wiring only, not the
+    // write-receipt gate (a mapped agent_type like "engineer" would reject
+    // this completion since the fixture writes no artifact/receipt).
     const result = await logStep({
       agent_id: "agent-log-step-001",
-      agent_type: "engineer",
       artifacts_expected: [],
       projectDir: workspace,
       status: "completed",
@@ -217,12 +219,13 @@ describe("batchLogSteps — completed entry with agent_id writes backfill event"
     await writeEmptyJournal(workspace);
     await mkdir(join(workspace, "artifacts"), { recursive: true });
 
+    // No agent_type on the completed entry — same rationale as the logStep
+    // test above (this exercises backfill wiring, not the write-receipt gate).
     const result = await batchLogSteps({
       projectDir: workspace,
       steps: [
         {
           agent_id: "agent-batch-001",
-          agent_type: "engineer",
           artifacts_expected: [],
           status: "completed",
           step_id: "implement",

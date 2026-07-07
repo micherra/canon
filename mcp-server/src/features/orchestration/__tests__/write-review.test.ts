@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { VERDICT_MAP, type WriteReviewInput, writeReview } from "../tools/write-review.ts";
@@ -361,6 +362,23 @@ describe("writeReview — return value", () => {
 
     assertOk(result);
     expect(result.violation_count).toBe(0);
+  });
+});
+
+// Write receipt (wrgate-02)
+
+describe("writeReview — write receipt", () => {
+  it("emits a write_receipt event of kind 'review' pointing at REVIEW.md", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
+
+    const result = await writeReview(makeInput());
+    assertOk(result);
+
+    const store = getExecutionStore(tmpDir);
+    const events = store.getEvents({ type: "write_receipt" });
+    expect(events).toHaveLength(1);
+    expect(events[0].payload.artifact_kind).toBe("review");
+    expect(events[0].payload.artifact_path).toBe(result.path);
   });
 });
 

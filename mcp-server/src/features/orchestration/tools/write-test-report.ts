@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { emitWriteReceipt } from "../services/write-receipt.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 function escapeMdCell(value: string): string {
@@ -138,6 +139,12 @@ export async function writeTestReport(
     total,
   };
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+
+  emitWriteReceipt(input.workspace, {
+    artifact_kind: "test_report",
+    artifact_path: reportPath,
+    slug: input.slug,
+  });
 
   return toolOk({ meta_path: metaPath, pass_rate, path: reportPath, total });
 }

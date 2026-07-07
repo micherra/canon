@@ -58,6 +58,9 @@ function getToolNames(server: McpServer): Set<string> {
 //   +1 list_active_workspaces     (this build, registerMessagingTools — event-backbone Inc 0)
 //   +1 forecast_base_advance     (this build, registerConfidenceTools — anticipatory-canon Inc-0)
 //   New total: 64 tools (computed from a live run, not hand-counted)
+//   +3 write_design + write_context_sync + write_security_assessment (this build,
+//      registerArtifactTools — write-receipt completion gate, ADR-0042)
+//   New total: 68 tools (computed from a live run, not hand-counted)
 //
 // To recount: run this test — the received value in the failure message is authoritative.
 //
@@ -79,9 +82,9 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
     resetForTesting();
   });
 
-  it("factory produces a server with exactly 64 registered tools", () => {
+  it("factory produces a server with exactly 68 registered tools", () => {
     const server = createCanonServer();
-    expect(getToolCount(server)).toBe(65);
+    expect(getToolCount(server)).toBe(68);
   });
 
   it("tool names include a stable known subset", () => {
@@ -107,6 +110,9 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
       "write_implementation_summary",
       "write_plan_index",
       "write_test_report",
+      "write_design",
+      "write_context_sync",
+      "write_security_assessment",
       "present_artifact",
       "open_artifact",
       "capture_transcript",
@@ -177,8 +183,8 @@ describe("createCanonServer(): factory independence", () => {
   it("each instance has the full tool count independently", () => {
     const s1 = createCanonServer();
     const s2 = createCanonServer();
-    expect(getToolCount(s1)).toBe(65);
-    expect(getToolCount(s2)).toBe(65);
+    expect(getToolCount(s1)).toBe(68);
+    expect(getToolCount(s2)).toBe(68);
   });
 });
 

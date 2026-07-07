@@ -37,6 +37,7 @@ import { computeFlowOutcome, getStepsMissingSkipReason } from "../services/final
 import { tryTranscriptCapture } from "../services/transcript-capture-hook.ts";
 import { archiveWorkspaceOnly, runCompletionSideEffects } from "../services/workspace-cleanup.ts";
 import { releaseLock } from "../services/workspace-lock.ts";
+import { enforceWriteReceipt } from "../services/write-receipt.ts";
 
 export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
 
@@ -349,6 +350,30 @@ function enforceArtifacts(
   return null;
 }
 
+/**
+ * Build the JournalStep shape `enforceWriteReceipt` needs (agent_type,
+ * started_at, step_id) from the step's PRE-upsert journal entry plus this
+ * call's input — mirrors `enforceArtifacts`'s `inputArtifacts ?? existingStep`
+ * fallback pattern so an agent_type passed again at completion wins over the
+ * one recorded at "started".
+ */
+function resolveStepForReceiptGate(
+  journal: Journal,
+  stepId: string,
+  inputAgentType: string | null | undefined,
+): JournalStep {
+  const existingStep = journal.steps.find((s) => s.step_id === stepId);
+  if (existingStep) {
+    return { ...existingStep, agent_type: inputAgentType ?? existingStep.agent_type };
+  }
+  return {
+    agent_type: inputAgentType ?? null,
+    artifacts_expected: [],
+    status: "completed",
+    step_id: stepId,
+  };
+}
+
 export type BatchLogStepsInput = {
   workspace: string;
   /** Project directory — threaded from resolveScope(extra) in register-journal.ts. */
@@ -400,15 +425,10 @@ function processEntries(
     };
 
     if (entry.status === "completed") {
-      const rejection = enforceArtifacts(
-        input.workspace,
-        entry.step_id,
-        journal,
-        entry.artifacts_expected,
-      );
       // Return immediately on rejection — no back-fill tasks accumulated yet for this
       // entry, so the partial backfillTasks list does NOT contain a stale event for
       // this rejected entry. Callers must check `rejection` before firing back-fills.
+      const rejection = enforceCompletionGates(journal, logInput);
       if (rejection) return { backfillTasks, captureTasks, rejection, results };
     }
 
@@ -508,7 +528,8 @@ async function runStepCompletionSideEffects(
   }
 }
 
-export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
+/** Cheap, non-I/O input validation for logStep — extracted to keep logStep's own complexity bounded. */
+function validateLogStepInput(input: LogStepInput): ToolResult<never> | null {
   if (!input.step_id?.trim()) {
     return toolError("INVALID_INPUT", "step_id must be a non-empty string", false);
   }
@@ -523,11 +544,9 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
       workspace: input.workspace,
     });
   }
-
   if (input.status === "skipped" && !input.skip_reason?.trim()) {
     return toolError("INVALID_INPUT", "skip_reason is required when status is 'skipped'", false);
   }
-
   if (input.status === "completed" && !input.agent_id && input.step_id !== "inline-fix") {
     return toolError(
       "INVALID_INPUT",
@@ -535,16 +554,33 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
       false,
     );
   }
+  return null;
+}
+
+/** Both completion gates (artifacts, then write-receipt) for a single logStep call. */
+function enforceCompletionGates(journal: Journal, input: LogStepInput): ToolResult<null> | null {
+  const rejection = enforceArtifacts(
+    input.workspace,
+    input.step_id,
+    journal,
+    input.artifacts_expected,
+  );
+  if (rejection) return rejection;
+
+  return enforceWriteReceipt(
+    input.workspace,
+    resolveStepForReceiptGate(journal, input.step_id, input.agent_type),
+  );
+}
+
+export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepResult>> {
+  const validationError = validateLogStepInput(input);
+  if (validationError) return validationError;
 
   const journal = await readJournal(input.workspace);
 
   if (input.status === "completed") {
-    const rejection = enforceArtifacts(
-      input.workspace,
-      input.step_id,
-      journal,
-      input.artifacts_expected,
-    );
+    const rejection = enforceCompletionGates(journal, input);
     if (rejection) return rejection;
   }
 

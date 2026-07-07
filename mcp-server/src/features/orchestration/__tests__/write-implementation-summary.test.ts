@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { writeImplementationSummary } from "../tools/write-implementation-summary.ts";
@@ -253,6 +254,27 @@ describe("writeImplementationSummary — valid input", () => {
     // Each path must contain its own task_id
     expect(resultA.path).toContain("task-alpha");
     expect(resultB.path).toContain("task-beta");
+  });
+});
+
+describe("writeImplementationSummary — write receipt", () => {
+  it("emits a write_receipt event of kind 'implementation_summary' pointing at the SUMMARY path", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
+
+    const result = await writeImplementationSummary({
+      files_changed: [{ action: "added", path: "src/a.ts" }],
+      slug: "my-epic",
+      task_id: "task-01",
+      workspace: tmpDir,
+    });
+
+    assertOk(result);
+    const store = getExecutionStore(tmpDir);
+    const events = store.getEvents({ type: "write_receipt" });
+    expect(events).toHaveLength(1);
+    expect(events[0].payload.artifact_kind).toBe("implementation_summary");
+    expect(events[0].payload.artifact_path).toBe(result.path);
+    expect(events[0].payload.task_id).toBe("task-01");
   });
 });
 
