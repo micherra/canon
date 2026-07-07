@@ -1,29 +1,28 @@
 #!/usr/bin/env bash
-# Canon Skill Eval Runner
-# Runs eval cases from eval-set.json using the claude CLI in print mode.
-# Usage: bash skills/canon/evals/run-evals.sh [--filter <id-substring>] [--split <name>] [--model <model>]
-#          [--parallel] [--jobs <n>] [--dry-run] [--no-judge] [--structured-judge]
-#          [--judge-votes <N>] [--emit-baseline <path>]
+# Canon Reviewer Agent Eval Runner
+# Runs per-agent eval cases (agents/reviewer/evals/eval-set.json by default) using the
+# claude CLI in print mode. Shares its judge/vote/parallel-slot core with
+# skills/canon/evals/run-evals.sh via lib/eval-core.sh (DRY — one judge, both runners).
+#
+# Usage: bash agents/reviewer/evals/run-agent-evals.sh [--eval-root <dir>] [--filter <id-substring>]
+#          [--split <name>] [--model <model>] [--parallel] [--jobs <n>] [--dry-run]
+#          [--no-judge] [--structured-judge] [--judge-votes <N>] [--emit-baseline <path>]
 #
 # Examples:
-#   bash skills/canon/evals/run-evals.sh                          # Run all evals
-#   bash skills/canon/evals/run-evals.sh --filter trigger         # Run only trigger evals
-#   bash skills/canon/evals/run-evals.sh --split holdout          # Run only holdout-split cases
-#   bash skills/canon/evals/run-evals.sh --model sonnet           # Use sonnet model
-#   bash skills/canon/evals/run-evals.sh --parallel               # Run cases in parallel (max 4)
-#   bash skills/canon/evals/run-evals.sh --parallel --jobs 8
-#   bash skills/canon/evals/run-evals.sh --judge-votes 3          # Majority-of-3 judging (tie → FAIL)
-#   bash skills/canon/evals/run-evals.sh --emit-baseline out.json # Write machine-readable per-split counts
+#   bash agents/reviewer/evals/run-agent-evals.sh                    # Run all reviewer evals
+#   bash agents/reviewer/evals/run-agent-evals.sh --split holdout     # Run only holdout-split cases
+#   bash agents/reviewer/evals/run-agent-evals.sh --judge-votes 3     # Majority-of-3 judging (tie → FAIL)
+#   bash agents/reviewer/evals/run-agent-evals.sh --eval-root agents/reviewer/evals/holistic
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EVAL_FILE="$SCRIPT_DIR/eval-set.json"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-# shellcheck source=./lib/eval-core.sh
-source "$SCRIPT_DIR/lib/eval-core.sh"
+# shellcheck source=../../../skills/canon/evals/lib/eval-core.sh
+source "$PROJECT_DIR/skills/canon/evals/lib/eval-core.sh"
 
+EVAL_ROOT="$SCRIPT_DIR"
 MODEL="sonnet"
 FILTER=""
 SPLIT_FILTER=""
@@ -37,9 +36,9 @@ JUDGE_VOTES=1
 EMIT_BASELINE=""
 
 # Guardrail injection mode (ADR-0025): when EVAL_PLUGIN_DIR is set (by eval-runner.ts),
-# pass --plugin-dir <dir> --setting-sources project to activating claude -p runs so they
-# load the rewritten guardrail artifact from the sandbox instead of the marketplace plugin.
-# Default unset = current eval-surface behavior (ADR-0022) — no plugin flags added.
+# pass --plugin-dir <dir> --setting-sources project to the activating claude -p run so it
+# loads the rewritten guardrail artifact from the sandbox instead of the marketplace plugin.
+# Default unset = current eval-surface behavior — no plugin flags added.
 EVAL_PLUGIN_DIR="${EVAL_PLUGIN_DIR:-}"
 if [[ -n "$EVAL_PLUGIN_DIR" ]]; then
   PLUGIN_FLAGS=(--plugin-dir "$EVAL_PLUGIN_DIR" --setting-sources project)
@@ -49,6 +48,7 @@ fi
 
 while [[ $# -gt 0 ]]; do
   case $1 in
+    --eval-root) EVAL_ROOT="$2"; shift 2 ;;
     --filter) FILTER="$2"; shift 2 ;;
     --split) SPLIT_FILTER="$2"; shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;
@@ -78,6 +78,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Resolve EVAL_ROOT relative to PROJECT_DIR when a relative path was passed.
+if [[ "$EVAL_ROOT" != /* ]]; then
+  EVAL_ROOT="$PROJECT_DIR/$EVAL_ROOT"
+fi
+EVAL_FILE="$EVAL_ROOT/eval-set.json"
+
 if ! command -v jq &>/dev/null; then
   echo "Error: jq is required but not installed." >&2
   exit 1
@@ -88,44 +94,94 @@ if ! $DRY_RUN && ! command -v claude &>/dev/null; then
   exit 1
 fi
 
+if [[ ! -f "$EVAL_FILE" ]]; then
+  echo "Error: eval file not found: $EVAL_FILE" >&2
+  exit 1
+fi
+
 TMPDIR_EVALS=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_EVALS"' EXIT
 
-run_eval_case() {
+run_agent_eval_case() {
   local id="$1"
-  local type="$2"
-  local prompt="$3"
+  local stage="$2"
+  local kind="$3"
   local expected="$4"
-  local should_trigger="$5"
-  local files_json="$6"
+  local fixture="$5"
   local result_file="$TMPDIR_EVALS/$id.result"
+
+  # Resolve the fixture BEFORE the dry-run short-circuit so `--dry-run` genuinely
+  # exercises resolution (fallback + fail-closed below) instead of vacuously
+  # skipping it. A fixture that can't be found is a gate failure, not a warning
+  # to skip past — a silently-skipped resolution is how the holistic veto went
+  # inert in the first place (zero-scored cases can never fail a non-regression
+  # check).
+  local fixture_principles=""
+  local fixture_diff=""
+  if [[ -n "$fixture" && "$fixture" != "null" ]]; then
+    # Primary: fixtures colocated with this suite's eval-root. Fallback: the
+    # unit-suite fixtures dir ($SCRIPT_DIR/fixtures) — sub-suites (e.g. holistic)
+    # intentionally reuse unit fixtures wholesale (DRY) rather than duplicating them.
+    local fixture_dir="$EVAL_ROOT/fixtures/$fixture"
+    if [[ ! -d "$fixture_dir" ]]; then
+      fixture_dir="$SCRIPT_DIR/fixtures/$fixture"
+    fi
+
+    if [[ ! -d "$fixture_dir" ]]; then
+      echo "ERROR  $id  (fixture not found: $fixture — checked $EVAL_ROOT/fixtures/$fixture and $SCRIPT_DIR/fixtures/$fixture)" > "$result_file"
+      echo "  ERROR: fixture not found for $id: $fixture" >&2
+      return
+    fi
+
+    local principles_path="$fixture_dir/principles.json"
+    local diff_path="$fixture_dir/diff.patch"
+
+    if [[ -f "$principles_path" ]]; then
+      fixture_principles=$(cat "$principles_path")
+    else
+      echo "ERROR  $id  (missing principles.json in fixture: $fixture_dir)" > "$result_file"
+      echo "  ERROR: fixture file not found: $principles_path" >&2
+      return
+    fi
+
+    if [[ -f "$diff_path" ]]; then
+      fixture_diff=$(cat "$diff_path")
+    else
+      echo "ERROR  $id  (missing diff.patch in fixture: $fixture_dir)" > "$result_file"
+      echo "  ERROR: fixture file not found: $diff_path" >&2
+      return
+    fi
+  fi
 
   if $DRY_RUN; then
     echo "DRYRUN  $id" > "$result_file"
     return
   fi
 
-  # Build the prompt with fixture file contents if specified
-  local full_prompt="$prompt"
-  if [[ "$files_json" != "null" && "$files_json" != "[]" ]]; then
-    local file_count
-    file_count=$(echo "$files_json" | jq -r 'length')
-    for ((i = 0; i < file_count; i++)); do
-      local file_ref
-      file_ref=$(echo "$files_json" | jq -r ".[$i]")
-      local file_path="$SCRIPT_DIR/$file_ref"
-      if [[ -f "$file_path" ]]; then
-        local file_content
-        file_content=$(cat "$file_path")
-        full_prompt="$full_prompt
+  # Assemble the review prompt, inlining the fixture's diff + principles (mirrors
+  # run-evals.sh's files_json fixture-append loop, adapted to the per-case `fixture` field).
+  local full_prompt
+  full_prompt=$(printf '%s\n' \
+    "You are performing a Canon code review. Apply Stage 1 (Principle Compliance — using ONLY the principles provided below), Stage 1.5 (Principle-Independent Correctness Scan — reachable-input logic defects regardless of loaded principles), and Stage 2 (Code Quality, including Severity-Vocabulary Consistency) to the diff below." \
+    "" \
+    "For each finding, cite its principle id (or 'correctness-scan' for a Stage 1.5 finding) and severity, and name which stage it belongs to. If there are no findings, say so explicitly. End with a one-line aggregate verdict: CLEAN, WARNING, or BLOCKING." )
 
-\`\`\`typescript
-$file_content
+  if [[ -n "$fixture_principles" ]]; then
+    full_prompt="$full_prompt
+
+## Principles (loaded for Stage 1)
+\`\`\`json
+$fixture_principles
 \`\`\`"
-      else
-        echo "  WARNING: fixture file not found: $file_path" >&2
-      fi
-    done
+  fi
+
+  if [[ -n "$fixture_diff" ]]; then
+    full_prompt="$full_prompt
+
+## Diff under review
+\`\`\`diff
+$fixture_diff
+\`\`\`"
   fi
 
   local output=""
@@ -134,39 +190,15 @@ $file_content
   local eval_model="$MODEL"
   local max_turns="6"
 
-  if [[ "$type" == "trigger" ]]; then
-    max_turns="4"
-    if [[ "$should_trigger" == "false" ]]; then
-      output=$(cd /tmp && claude -p "$full_prompt" \
-        --model "$eval_model" \
-        --output-format text \
-        --no-session-persistence \
-        --allowedTools "Read Grep Glob" \
-        --max-turns "$max_turns" \
-        --max-budget-usd "$eval_budget" \
-        2>&1) || exit_code=$?
-    else
-      output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
-        --model "$eval_model" \
-        --output-format text \
-        --no-session-persistence \
-        --allowedTools "Read Grep Glob" \
-        --max-turns "$max_turns" \
-        --max-budget-usd "$eval_budget" \
-        "${PLUGIN_FLAGS[@]+"${PLUGIN_FLAGS[@]}"}" \
-        2>&1) || exit_code=$?
-    fi
-  else
-    output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
-      --model "$eval_model" \
-      --output-format text \
-      --no-session-persistence \
-      --allowedTools "Read Grep Glob" \
-      --max-turns "$max_turns" \
-      --max-budget-usd "$eval_budget" \
-      "${PLUGIN_FLAGS[@]+"${PLUGIN_FLAGS[@]}"}" \
-      2>&1) || exit_code=$?
-  fi
+  output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
+    --model "$eval_model" \
+    --output-format text \
+    --no-session-persistence \
+    --allowedTools "Read Grep Glob" \
+    --max-turns "$max_turns" \
+    --max-budget-usd "$eval_budget" \
+    "${PLUGIN_FLAGS[@]+"${PLUGIN_FLAGS[@]}"}" \
+    2>&1) || exit_code=$?
 
   if [[ $exit_code -ne 0 ]]; then
     echo "ERROR  $id  (exit code $exit_code)" > "$result_file"
@@ -191,8 +223,8 @@ $file_content
       "You are an eval judge. Given the following eval case and actual output, determine if the output satisfies the expected behavior." \
       "" \
       "Eval ID: ${id}" \
-      "Eval Type: ${type}" \
-      "Prompt: ${prompt}" \
+      "Eval Type: reviewer-stage-${stage}-${kind}" \
+      "Prompt: ${full_prompt:0:1000}" \
       "Expected: ${expected}" \
       "Actual Output:" \
       "---" \
@@ -208,8 +240,8 @@ $file_content
       "You are an eval judge. Given the following eval case and actual output, determine if the output satisfies the expected behavior." \
       "" \
       "Eval ID: ${id}" \
-      "Eval Type: ${type}" \
-      "Prompt: ${prompt}" \
+      "Eval Type: reviewer-stage-${stage}-${kind}" \
+      "Prompt: ${full_prompt:0:1000}" \
       "Expected: ${expected}" \
       "Actual Output:" \
       "---" \
@@ -221,7 +253,7 @@ $file_content
 
   # Collect JUDGE_VOTES votes and apply majority (tie → FAIL, fail-closed).
   # parse_single_verdict, judge_first_token_is_pass, and collect_judge_votes itself are
-  # sourced from lib/eval-core.sh — shared with agents/reviewer/evals/run-agent-evals.sh.
+  # sourced from lib/eval-core.sh — shared with skills/canon/evals/run-evals.sh.
   collect_judge_votes "$judge_prompt" "$JUDGE_VOTES"
   local vote_passes=$VOTE_PASSES
   local vote_fails=$VOTE_FAILS
@@ -253,9 +285,10 @@ $file_content
   fi
 }
 
-echo "Canon Skill Evals"
-echo "=================="
+echo "Canon Reviewer Agent Evals"
+echo "=========================="
 echo "Model: $MODEL"
+echo "Eval root: $EVAL_ROOT"
 echo "Eval file: $EVAL_FILE"
 [[ -n "$FILTER" ]] && echo "Filter: $FILTER"
 [[ -n "$SPLIT_FILTER" ]] && echo "Split: $SPLIT_FILTER"
@@ -283,11 +316,10 @@ while IFS= read -r case_json; do
   [[ -z "$case_json" ]] && continue
 
   id=$(jq -r '.id' <<<"$case_json")
-  type=$(jq -r '.type' <<<"$case_json")
-  prompt=$(jq -r '.prompt' <<<"$case_json")
+  stage=$(jq -r '.stage // ""' <<<"$case_json")
+  kind=$(jq -r '.kind // ""' <<<"$case_json")
   expected=$(jq -r '.expected_output' <<<"$case_json")
-  should_trigger=$(jq -r '.should_trigger // "true"' <<<"$case_json")
-  files_json=$(jq -c '.files // []' <<<"$case_json")
+  fixture=$(jq -r '.fixture // ""' <<<"$case_json")
   case_split=$(jq -r '.split // "train"' <<<"$case_json")
 
   if [[ -n "$FILTER" ]] && [[ "$id" != *"$FILTER"* ]]; then
@@ -298,15 +330,15 @@ while IFS= read -r case_json; do
     continue
   fi
 
-  echo "Running: $id ($type)..."
+  echo "Running: $id (stage $stage, $kind)..."
   case_ids+=("$id")
 
   if $PARALLEL; then
     wait_parallel_slot "$MAX_PARALLEL_JOBS"
-    run_eval_case "$id" "$type" "$prompt" "$expected" "$should_trigger" "$files_json" &
+    run_agent_eval_case "$id" "$stage" "$kind" "$expected" "$fixture" &
     PARALLEL_PIDS+=($!)
   else
-    run_eval_case "$id" "$type" "$prompt" "$expected" "$should_trigger" "$files_json"
+    run_agent_eval_case "$id" "$stage" "$kind" "$expected" "$fixture"
   fi
 done < <(jq -c '.evals[]' "$EVAL_FILE")
 

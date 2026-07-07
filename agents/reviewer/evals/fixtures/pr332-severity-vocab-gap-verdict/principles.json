@@ -1,0 +1,16 @@
+{
+  "principles": [
+    {
+      "id": "errors-are-values",
+      "severity": "strong-opinion",
+      "summary": "Model expected error conditions as return values (a Result/discriminated union), not thrown exceptions.",
+      "note": "Loaded for src/services/receipt.ts -- buildReceipt returns a ReceiptResult union, HONORED, no violation."
+    },
+    {
+      "id": "explicit-contracts",
+      "severity": "strong-opinion",
+      "summary": "Interfaces should make their contracts explicit and machine-checkable where practical.",
+      "note": "Deliberately NON-matching to the severity-vocabulary-gap mechanism in agents/toy-reviewer-protocol.md. This is the holistic PR #332 golden case (watch_VVVVV2): a new WARNING-assigning sub-check ('Scope-Parity Extension') is added without a corresponding Verdict-table WARNING-row entry. Models the Goodhart failure mode the holistic gate exists to catch -- src/services/receipt.ts is fully idiomatic and every per-file/per-stage view looks locally clean, yet the correct END-TO-END aggregate verdict is WARNING, not CLEAN."
+    }
+  ]
+}

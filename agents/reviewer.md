@@ -837,6 +837,57 @@ Based on the most severe finding across all six stages:
 
 Include `## Canon Review — Verdict: {BLOCKING|WARNING|CLEAN}` at the top of the report.
 
+## Measured-Step Module Contracts (topology C)
+
+Stages 0–6 above decompose into ten addressable modules — `(reads, writes, barrier)` — that are
+metrics-instrumented in place. At **topology C** (this build), the table below is a documented
+contract and a metrics obligation, not a spawn boundary: the reviewer remains a single agent running
+all modules in one window. A future topology-A/B escalation would promote the barrier column from
+prose to a structurally-enforced spawn boundary.
+
+| Module | Reads (state slice) | Writes | Barrier |
+|--------|---------------------|--------|---------|
+| M0 context-load | diff, principles, graph | `ctx` | first |
+| M0.5 review-stub | — | `write_review` IN_PROGRESS stub | first (before M1) |
+| M1 principle-compliance | `ctx` | `stage1.violations[]`, `stage1.honored[]` | cold |
+| M1.5 correctness-scan | `ctx` | `stage15.findings[]` | cold |
+| M2 code-quality | `ctx`, **`stage1.violations[]`** (dedup) | `stage2.findings[]` | cold |
+| M3 compliance-cross-check | `*-SUMMARY.md`, frozen `stage1` | `stage3.discrepancies[]` | plan-aware |
+| M4 drift-from-plan | `DESIGN.md`, `INDEX.md` | `stage4.drift[]` | plan-aware (barrier lifts) |
+| M5 ac-verification | `runbook.md` | `stage5.results[]` | plan-aware |
+| M6 cross-requirement | frozen stages 1–5 | `stage6.findings[]` | plan-aware |
+| MV verdict | all stage outputs | `verdict` | — |
+
+**Preserved invariants** (unchanged from current behavior — this table documents them, it does not
+alter them):
+
+- **Stage 2→Stage 1 dedup**: M2's `reads` column names `stage1.violations[]` explicitly — the Gotcha
+  Documentation "Deduplication rule" (Stage 2, above) operates on real Stage-1 output, never a stale or
+  hypothetical set. M1 and M2 run sequentially inside the single-agent window; they are never
+  concurrent, so M2 always sees a finished `stage1.violations[]` before it runs.
+- **Cold barrier (topology C = honor-system)**: M1, M1.5, and M2's `reads` column is `ctx` only (the
+  diff and loaded principles from M0) — plan files, engineer summaries, and the runbook are not read
+  until M3/M4. At topology C this is the SAME honor-system prose as today: the reviewer holds `Read` for
+  its whole session, and nothing structurally scopes which files it may open before Stage 3. This table
+  makes the intended barrier legible and metric-addressable, but it does not enforce it — a future
+  topology-A/B escalation (a per-stage spawn with a scoped tool grant per module) would make the barrier
+  structural instead of documented. Do not read this table as a claim that cold review is mechanically
+  guaranteed; it is not.
+- **M0.5 write-cliff fail-safe**: M0.5's write (the `write_review` IN_PROGRESS stub) remains the FIRST
+  tool call of the session, and the partial write after M1 (Stage 1 completes) remains — see
+  `## Early Output Protocol` below. A decomposition that deferred the first write to MV would regress
+  that guarantee; this table's `first (before M1)` barrier for M0.5 restates the same constraint as a
+  module contract, it does not relax it.
+
+**Per-stage metrics**: at each module boundary from M1 through M6, call `record_agent_metrics({
+workspace, state_id, stage: "<stage-id>", tool_calls, turns })` before moving to the next module. Use
+the exact `stage` id strings that key the per-agent eval suite (`agents/reviewer/evals/eval-set.json`):
+`"1"`, `"1.5"`, `"2"`, `"3"`, `"4"`, `"5"`, `"6"`. This is the flow-level
+`record_agent_metrics`-per-step pattern reused one level down, inside a single agent window — topology
+C ships per-stage *metrics*, not per-stage *spawn*. This call is additive to, and does not replace, the
+single final `record_agent_metrics` call required by `agent-metrics-before-return` before reporting
+terminal status.
+
 ## Workspace Integration
 
 When the orchestrator provides a workspace path (`${WORKSPACE}`):

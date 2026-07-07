@@ -5,24 +5,30 @@
 # Signature: bash hooks/shell-test-gate.sh <base_commit> [worktree_path]
 # Run from the worktree root, OR pass the worktree as the optional trailing
 # worktree_path arg — the git diff scope check resolves via `git -C
-# "$worktree_path"`, and the hooks/**/*.test.sh enumeration resolves under it
-# too, making CWD irrelevant (watch_CCCCCCCCCCCC2). Absent → current
-# CWD-relative behavior (backward-compatible).
+# "$worktree_path"`, and the hooks/agents/skills **/*.test.sh enumeration
+# resolves under it too, making CWD irrelevant (watch_CCCCCCCCCCCC2). Absent
+# → current CWD-relative behavior (backward-compatible).
 #
-# When any hooks/**/*.sh or *.mjs file changed in base..HEAD, executes the
-# full hooks/**/*.test.sh suite set that CI's `shell` job runs, aggregating
+# When any hooks/**/*.sh, hooks/**/*.mjs, agents/**/*.sh, or skills/**/*.sh
+# file changed in base..HEAD, executes the full *.test.sh suite set under
+# hooks/, agents/, and skills/ that CI's `shell` job runs, aggregating
 # failures without aborting mid-loop (mirrors CI behavior). Clean no-op
-# (exit 0) when no in-scope file changed.
+# (exit 0) when no in-scope script changed. Only directories that actually
+# exist are enumerated — a project without agents/ or skills/ directories
+# (e.g. a Canon-managed project outside this plugin's own repo) still
+# scopes to hooks/ only, unchanged from before.
 #
 # Exit semantics:
-#   Exit 0: all suites passed — or no in-scope hook script changed (no-op)
+#   Exit 0: all suites passed — or no in-scope script changed (no-op)
 #   Exit 2: one or more suites returned non-zero (fail-closed)
 #   Exit non-zero (other): internal error — fail-closed
 #
 # D1 GLOBSTAR-PARITY RATIONALE (see DESIGN Decision D1, PROBE-FINDINGS §2):
-# CI (ci.yml job `shell`, lines 26–38) uses:
+# CI (ci.yml job `shell`) uses:
 #   shopt -s globstar nullglob
-#   for t in hooks/**/*.test.sh; do bash "$t" || failed=1; done
+#   for t in hooks/**/*.test.sh agents/**/*.test.sh skills/**/*.test.sh; do
+#     bash "$t" || failed=1
+#   done
 #
 # macOS / local bash 3.2.57 has NO globstar support:
 #   bash -c 'shopt -s globstar' → "bash: shopt: globstar: invalid shell option name"
@@ -30,9 +36,10 @@
 # (12 of 30 files), missing top-level hooks/*.test.sh and subdirectory suites.
 #
 # We mirror CI's file SET (all depths), not CI's glob syntax, via:
-#   find hooks -type f -name '*.test.sh' | sort
-# Probe-verified: `find` and globstar return the identical 30-file set at all
-# depths (PROBE-FINDINGS.md §2-3). `sort` ensures deterministic execution order.
+#   find hooks agents skills -type f -name '*.test.sh' | sort
+# (restricted to whichever of those three roots exist). Probe-verified:
+# `find` and globstar return the identical file set at all depths
+# (PROBE-FINDINGS.md §2-3). `sort` ensures deterministic execution order.
 
 set -euo pipefail
 
@@ -55,8 +62,9 @@ fi
 # GIT_C prefixes every internal git call with -C "$WORKTREE_PATH" when set,
 # making CWD irrelevant; empty (CWD-relative) when unset. Bash 3.2-safe empty
 # array expansion (house idiom — see push-to-main-guard.sh contract).
-# WORKTREE_PREFIX resolves the hooks/**/*.test.sh enumeration under the same
-# worktree — `git -C` only repoints git's own commands, not `find`.
+# WORKTREE_PREFIX resolves the hooks/agents/skills *.test.sh enumeration
+# under the same worktree — `git -C` only repoints git's own commands, not
+# `find`.
 GIT_C=()
 WORKTREE_PREFIX=""
 if [[ -n "$WORKTREE_PATH" ]]; then
@@ -70,7 +78,8 @@ if ! git "${GIT_C[@]+"${GIT_C[@]}"}" rev-parse --verify "$BASE_COMMIT" >/dev/nul
 fi
 
 # ---------------------------------------------------------------------------
-# Scope detection: any hooks/**/*.sh or *.mjs changed in base..HEAD?
+# Scope detection: any hooks/**/*.sh, hooks/**/*.mjs, agents/**/*.sh, or
+# skills/**/*.sh changed in base..HEAD?
 # ---------------------------------------------------------------------------
 DIFF_OUTPUT=""
 # --no-renames: disable git's rename detection so a `git mv hooks/foo.sh
@@ -83,32 +92,49 @@ if ! DIFF_OUTPUT=$(git "${GIT_C[@]+"${GIT_C[@]}"}" diff --name-only --no-renames
   exit 2
 fi
 
-# Filter to in-scope paths: any file under hooks/ matching *.sh or *.mjs
+# Filter to in-scope paths: any file under hooks/ matching *.sh or *.mjs, or
+# any file under agents/ or skills/ matching *.sh.
 # grep rc1 (no match) means no in-scope change — treat as no-op, NOT an error.
 # DOCUMENTED FAIL-OPEN -- grep rc1 = no in-scope change; downstream: exit 0 no-op
 INSCOPE=""
-INSCOPE=$(echo "$DIFF_OUTPUT" | grep -E '^hooks/.*\.(sh|mjs)$' || true)
+INSCOPE=$(echo "$DIFF_OUTPUT" | grep -E '^(hooks/.*\.(sh|mjs)|(agents|skills)/.*\.sh)$' || true)
 
 if [[ -z "$INSCOPE" ]]; then
-  echo "shell-test-gate: no in-scope hook scripts changed in ${BASE_COMMIT}..HEAD — no-op."
+  echo "shell-test-gate: no in-scope hook/agent/skill scripts changed in ${BASE_COMMIT}..HEAD — no-op."
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# Enumerate the full hooks/**/*.test.sh suite set (CI-parity via `find`)
+# Enumerate the full hooks/agents/skills *.test.sh suite set (CI-parity via
+# `find`)
 #
-# D1: `find hooks -type f -name '*.test.sh' | sort` mirrors CI's globstar set
-# at all depths (top-level, one-level, __tests__/) on bash 3.2 (no mapfile,
-# no shopt -s globstar). Fail-closed if find errors.
+# D1: `find hooks agents skills -type f -name '*.test.sh' | sort` mirrors
+# CI's globstar set at all depths (top-level, one-level, __tests__/) on
+# bash 3.2 (no mapfile, no shopt -s globstar). Fail-closed if find errors.
+# Only roots that actually exist are passed to `find` — a Canon-managed
+# project without its own agents/ or skills/ directories (i.e. any project
+# other than this plugin's own repo) scopes to hooks/ only, same as before
+# this suite-set was widened.
 #
 # Latent under-inclusion: `find -type f` skips hidden directories (e.g.
 # hooks/.claude/) and does NOT follow symlinks. There are zero such *.test.sh
 # files today; the over-inclusion direction is fail-closed-safe. If a
-# hidden-dir or symlinked hook test is ever added, revisit this enumeration
+# hidden-dir or symlinked test is ever added, revisit this enumeration
 # (add -L for symlinks or explicit hidden-dir paths as needed).
 # ---------------------------------------------------------------------------
+SEARCH_ROOTS=()
+for d in hooks agents skills; do
+  candidate="${WORKTREE_PREFIX}${d}"
+  [[ -d "$candidate" ]] && SEARCH_ROOTS+=("$candidate")
+done
+
+if [[ "${#SEARCH_ROOTS[@]}" -eq 0 ]]; then
+  echo "shell-test-gate: no hooks/agents/skills directories found — no-op."
+  exit 0
+fi
+
 SUITE_LIST=""
-if ! SUITE_LIST=$(find "${WORKTREE_PREFIX}hooks" -type f -name '*.test.sh' 2>&1 | sort); then
+if ! SUITE_LIST=$(find "${SEARCH_ROOTS[@]}" -type f -name '*.test.sh' 2>&1 | sort); then
   echo "CANON: shell-test-gate failed-closed — find failed: $SUITE_LIST" >&2
   exit 2
 fi
@@ -122,7 +148,7 @@ done <<< "$SUITE_LIST"
 SUITE_COUNT="${#SUITES[@]}"
 
 if [[ "$SUITE_COUNT" -eq 0 ]]; then
-  echo "shell-test-gate: no *.test.sh suites found under hooks/ — no-op."
+  echo "shell-test-gate: no *.test.sh suites found under hooks/, agents/, or skills/ — no-op."
   exit 0
 fi
 

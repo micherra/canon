@@ -12,7 +12,7 @@
 
 import { readFile } from "node:fs/promises";
 import { join, normalize, sep } from "node:path";
-import type { ToolResult } from "@shared/lib/tool-result.ts";
+import type { ProcessResult, ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { z } from "zod";
 import {
@@ -21,7 +21,13 @@ import {
   withInjectedGuardrailCandidate,
 } from "../services/candidate-injection.ts";
 import type { PerSplit } from "../services/eval-runner.ts";
-import { decideGate, parseSummary, runSplit } from "../services/eval-runner.ts";
+import {
+  decideCompositeGate,
+  parseSummary,
+  resolveAgentEvalRoot,
+  resolveHolisticEvalRoot,
+  runSplit,
+} from "../services/eval-runner.ts";
 import { checkFrontmatterImmutable } from "../services/frontmatter-guard.ts";
 
 /** Input schema for evaluate_candidate. */
@@ -60,9 +66,14 @@ export type EvaluateCandidateResult = {
   candidate_score: number;
   /** Per-split detailed scores. */
   per_split: Record<"train" | "val" | "holdout", PerSplitResult>;
-  /** True iff candidate improved holdout (strict > baseline). §7 gate result. */
+  /**
+   * True iff the composite holistic gate accepts: per-stage holdout strictly improved
+   * (§7, unchanged) AND, when a holistic suite exists for this target, the whole-PR
+   * holistic holdout did not regress (G4, watch_VVVVV2 / PR #332). Absent holistic suite
+   * → equals the per-stage-only §7 decision (backward-compatible).
+   */
   accepted: boolean;
-  /** True iff candidate regressed holdout vs baseline. */
+  /** True iff candidate regressed holdout on either the per-stage or the holistic suite. */
   regressed: boolean;
   /** Candidate text length minus baseline file length (chars). Signal only, not a gate term. */
   size_delta: number;
@@ -77,13 +88,59 @@ export type EvaluateCandidateResult = {
     reason: "frontmatter_modified" | "frontmatter_unverifiable";
     fields?: string[];
   };
+  /**
+   * Present ONLY when a `holistic/` eval suite exists for this target (holistic-gate, G4).
+   * Additive-optional — mirrors the `guard_rejection?` precedent; existing consumers
+   * already read the composite `accepted`/`regressed` fields unaffected.
+   */
+  holistic?: PerSplitResult;
 };
 
 /** Number of judge votes for the holdout gate run (AC#7, evaluate-candidate-04). */
 const HOLDOUT_JUDGE_VOTES = 3;
 
 /** One scored run (parse result from stdout). */
-type SummaryScore = { passed: number; failed: number; total: number };
+type SummaryScore = { passed: number; failed: number; total: number; errors: number };
+
+/** One split's per-stage score plus (when a holistic suite exists) its holistic score. */
+type SplitScoreWithHolistic = { perStage: SummaryScore; holistic: SummaryScore | null };
+
+/** Raw process results for one split before summary parsing/error handling. */
+type RawSplitRun = { perStage: ProcessResult; holistic: ProcessResult | null };
+
+/**
+ * scoreRun — apply the shared fail-closed timeout/error/summary-parse contract to one
+ * raw ProcessResult. Timeout is always fail-closed. A nonzero exit is an infra error when
+ * there's no parseable summary line (run-evals.sh exits 1 whenever FAILED>0||ERRORS>0,
+ * which is a valid eval result, not a crash) OR when the summary itself reports runner
+ * errors (`errors > 0`) — a summary line can appear even when the harness never actually
+ * ran (e.g. run-agent-evals.sh's fail-closed missing-fixture path prints
+ * `Errors: 1 | Total: 1 | Passed: 0`), which must not be scored as a valid 0-pass result.
+ * A nonzero exit that is purely FAILED eval cases (`errors === 0, total > 0`) remains a
+ * valid result and is still scored.
+ */
+function scoreRun(result: ProcessResult, label: string): ToolResult<SummaryScore> {
+  if (result.timedOut) {
+    return toolError(
+      "UNEXPECTED",
+      `Eval script timed out during ${label} run. Timed-out gate is a rejection.`,
+      false,
+      { label, stderr: result.stderr },
+    );
+  }
+
+  const summary = parseSummary(result.stdout);
+  if (!result.ok && (summary.total === 0 || summary.errors > 0)) {
+    return toolError(
+      "UNEXPECTED",
+      `Eval script failed during ${label} run with no parseable summary: ${result.stderr || result.stdout}`,
+      false,
+      { exitCode: result.exitCode, label, stderr: result.stderr },
+    );
+  }
+
+  return toolOk(summary);
+}
 
 /** Run one split (baseline or candidate) inside an injected temp dir. */
 async function runOneSplit(
@@ -91,45 +148,72 @@ async function runOneSplit(
   fileContent: string,
   targetPath: string,
   split: "train" | "val" | "holdout",
-): Promise<ToolResult<SummaryScore>> {
+): Promise<ToolResult<SplitScoreWithHolistic>> {
   const judgeVotes = split === "holdout" ? HOLDOUT_JUDGE_VOTES : 1;
 
   // Auto-select injection mode based on target_path (ADR-0025):
   // - Guardrail-corpus targets (rules/, agents/, primers/, etc.) → full plugin sandbox injection.
   //   The sandbox is passed as pluginDir so run-evals.sh loads the rewritten guardrail artifact.
   // - Eval-surface targets (skills/canon/evals/**) → eval-surface injection (ADR-0022, unchanged).
-  const result = isGuardrailTarget(targetPath)
-    ? await withInjectedGuardrailCandidate(projectDir, fileContent, targetPath, async (tmpDir) =>
-        runSplit(tmpDir, split, { judgeVotes, pluginDir: tmpDir, structuredJudge: true }),
-      )
-    : await withInjectedCandidate(projectDir, fileContent, targetPath, async (tmpDir) =>
-        runSplit(tmpDir, split, { judgeVotes, structuredJudge: true }),
-      );
+  //
+  // Suite selection (eval-candidate-resolution) is likewise DERIVED from target_path — no new
+  // input field. Inside the guardrail sandbox, resolveAgentEvalRoot checks whether target_path
+  // is an agent-def with a per-agent eval suite present; when it is, runSplit dispatches to that
+  // suite's run-agent-evals.sh instead of the global run-evals.sh. Absent suite → null → the
+  // global runner (today's behavior), same fail-open fallback as the injection-mode dispatch.
+  //
+  // Mandatory holistic verdict gate (holistic-gate, G4, watch_VVVVV2 / PR #332): when a
+  // per-agent suite is resolved AND its holdout split is being run, also probe for a
+  // `holistic/` sub-suite in the SAME sandbox and run it too. Holdout-only, mirroring
+  // decideGate's own holdout-only philosophy — the composite gate never reads train/val
+  // holistic scores, so they're never run.
+  const raw: RawSplitRun = isGuardrailTarget(targetPath)
+    ? await withInjectedGuardrailCandidate(projectDir, fileContent, targetPath, async (tmpDir) => {
+        const agentEvalRoot = resolveAgentEvalRoot(tmpDir, targetPath) ?? undefined;
+        const perStage = runSplit(tmpDir, split, {
+          agentEvalRoot,
+          judgeVotes,
+          pluginDir: tmpDir,
+          structuredJudge: true,
+        });
 
-  // Timeout is always fail-closed — even if stdout contains a summary line, we reject.
-  if (result.timedOut) {
-    return toolError(
-      "UNEXPECTED",
-      `Eval script timed out during ${split} run. Timed-out gate is a rejection.`,
-      false,
-      { split, stderr: result.stderr },
-    );
+        const holisticEvalRoot =
+          agentEvalRoot && split === "holdout"
+            ? resolveHolisticEvalRoot(tmpDir, agentEvalRoot)
+            : null;
+        const holistic = holisticEvalRoot
+          ? runSplit(tmpDir, split, {
+              agentEvalRoot,
+              evalRootOverride: holisticEvalRoot,
+              judgeVotes,
+              pluginDir: tmpDir,
+              structuredJudge: true,
+            })
+          : null;
+
+        return { holistic, perStage };
+      })
+    : {
+        holistic: null,
+        perStage: await withInjectedCandidate(projectDir, fileContent, targetPath, async (tmpDir) =>
+          runSplit(tmpDir, split, { judgeVotes, structuredJudge: true }),
+        ),
+      };
+
+  const perStageResult = scoreRun(raw.perStage, split);
+  if (!perStageResult.ok) return perStageResult;
+  const perStage: SummaryScore = perStageResult;
+
+  if (!raw.holistic) {
+    return toolOk({ holistic: null, perStage });
   }
 
-  // run-evals.sh exits 1 whenever FAILED > 0 || ERRORS > 0 — a nonzero exit with a
-  // parseable summary line is a valid eval result (e.g. baseline 2/3 failing cases).
-  // Only treat as an infra error when there is NO parseable summary in stdout.
-  const summary = parseSummary(result.stdout);
-  if (!result.ok && summary.total === 0) {
-    return toolError(
-      "UNEXPECTED",
-      `Eval script failed during ${split} run with no parseable summary: ${result.stderr || result.stdout}`,
-      false,
-      { exitCode: result.exitCode, split, stderr: result.stderr },
-    );
-  }
+  // Fail-closed: an error on EITHER suite is never an accept.
+  const holisticResult = scoreRun(raw.holistic, `${split} (holistic)`);
+  if (!holisticResult.ok) return holisticResult;
+  const holistic: SummaryScore = holisticResult;
 
-  return toolOk(summary);
+  return toolOk({ holistic, perStage });
 }
 
 /** Run all requested splits in parallel; fail-closed on first error. */
@@ -138,8 +222,8 @@ async function runAllSplits(
   fileContent: string,
   targetPath: string,
   splits: Array<"train" | "val" | "holdout">,
-): Promise<ToolResult<Partial<Record<"train" | "val" | "holdout", SummaryScore>>>> {
-  const scores: Partial<Record<"train" | "val" | "holdout", SummaryScore>> = {};
+): Promise<ToolResult<Partial<Record<"train" | "val" | "holdout", SplitScoreWithHolistic>>>> {
+  const scores: Partial<Record<"train" | "val" | "holdout", SplitScoreWithHolistic>> = {};
 
   const results = await Promise.all(
     splits.map((split) => runOneSplit(projectDir, fileContent, targetPath, split)),
@@ -148,7 +232,7 @@ async function runAllSplits(
   for (let i = 0; i < splits.length; i++) {
     const result = results[i];
     if (!result.ok) return result;
-    scores[splits[i]] = { failed: result.failed, passed: result.passed, total: result.total };
+    scores[splits[i]] = { holistic: result.holistic, perStage: result.perStage };
   }
 
   return toolOk(scores);
@@ -219,13 +303,13 @@ async function checkScriptReachable(
   return toolOk({ ok: true as const });
 }
 
-/** Build PerSplit from scored baseline and candidate maps. */
+/** Build PerSplit from scored baseline and candidate maps (per-stage scores only). */
 function buildPerSplit(
-  baseline: Partial<Record<"train" | "val" | "holdout", SummaryScore>>,
-  candidate: Partial<Record<"train" | "val" | "holdout", SummaryScore>>,
+  baseline: Partial<Record<"train" | "val" | "holdout", SplitScoreWithHolistic>>,
+  candidate: Partial<Record<"train" | "val" | "holdout", SplitScoreWithHolistic>>,
 ): PerSplit {
-  const bHoldout = baseline.holdout ?? { failed: 0, passed: 0, total: 0 };
-  const cHoldout = candidate.holdout ?? { failed: 0, passed: 0, total: 0 };
+  const bHoldout = baseline.holdout?.perStage ?? { errors: 0, failed: 0, passed: 0, total: 0 };
+  const cHoldout = candidate.holdout?.perStage ?? { errors: 0, failed: 0, passed: 0, total: 0 };
   return {
     holdout: {
       baseline_passed: bHoldout.passed,
@@ -233,15 +317,85 @@ function buildPerSplit(
       total: bHoldout.total,
     },
     train: {
-      baseline_passed: baseline.train?.passed ?? 0,
-      candidate_passed: candidate.train?.passed ?? 0,
-      total: baseline.train?.total ?? 0,
+      baseline_passed: baseline.train?.perStage.passed ?? 0,
+      candidate_passed: candidate.train?.perStage.passed ?? 0,
+      total: baseline.train?.perStage.total ?? 0,
     },
     val: {
-      baseline_passed: baseline.val?.passed ?? 0,
-      candidate_passed: candidate.val?.passed ?? 0,
-      total: baseline.val?.total ?? 0,
+      baseline_passed: baseline.val?.perStage.passed ?? 0,
+      candidate_passed: candidate.val?.perStage.passed ?? 0,
+      total: baseline.val?.perStage.total ?? 0,
     },
+  };
+}
+
+/**
+ * Build a holdout-only PerSplit from holistic scores (holistic-gate, G4). Returns null when
+ * either side has no holistic score — either no holistic suite exists for this target, or
+ * the holdout split wasn't run (train/val never carry a holistic score by construction).
+ * Train/val fields are zeroed — decideCompositeGate only reads `.holdout` on the holistic arg.
+ */
+function buildHolisticPerSplit(
+  baseline: Partial<Record<"train" | "val" | "holdout", SplitScoreWithHolistic>>,
+  candidate: Partial<Record<"train" | "val" | "holdout", SplitScoreWithHolistic>>,
+): PerSplit | null {
+  const bHolistic = baseline.holdout?.holistic;
+  const cHolistic = candidate.holdout?.holistic;
+  if (!bHolistic || !cHolistic) return null;
+
+  const emptySplit = { baseline_passed: 0, candidate_passed: 0, total: 0 };
+  return {
+    holdout: {
+      baseline_passed: bHolistic.passed,
+      candidate_passed: cHolistic.passed,
+      total: bHolistic.total,
+    },
+    train: emptySplit,
+    val: emptySplit,
+  };
+}
+
+/** Build the final EvaluateCandidateResult from the composed per-stage + holistic decision. */
+function buildAcceptedResult(
+  perSplit: PerSplit,
+  holisticPerSplit: PerSplit | null,
+  candidateText: string,
+  realContentLength: number,
+): EvaluateCandidateResult {
+  const { accepted, regressed } = decideCompositeGate(perSplit, holisticPerSplit);
+  return {
+    accepted,
+    baseline_score: perSplit.holdout.baseline_passed,
+    candidate_score: perSplit.holdout.candidate_passed,
+    ...(holisticPerSplit
+      ? {
+          holistic: {
+            baseline_passed: holisticPerSplit.holdout.baseline_passed,
+            candidate_passed: holisticPerSplit.holdout.candidate_passed,
+            total: holisticPerSplit.holdout.total,
+          },
+        }
+      : {}),
+    judge_votes_holdout: HOLDOUT_JUDGE_VOTES,
+    per_split: {
+      holdout: {
+        baseline_passed: perSplit.holdout.baseline_passed,
+        candidate_passed: perSplit.holdout.candidate_passed,
+        total: perSplit.holdout.total,
+      },
+      train: {
+        baseline_passed: perSplit.train.baseline_passed,
+        candidate_passed: perSplit.train.candidate_passed,
+        total: perSplit.train.total,
+      },
+      val: {
+        baseline_passed: perSplit.val.baseline_passed,
+        candidate_passed: perSplit.val.candidate_passed,
+        total: perSplit.val.total,
+      },
+    },
+    regressed,
+    size_delta: candidateText.length - realContentLength,
   };
 }
 
@@ -251,7 +405,8 @@ function buildPerSplit(
  * Layered cheap→expensive (AC#6):
  * 1. Dry-run sanity check.
  * 2. Baseline + candidate splits run in parallel.
- * 3. decideGate on holdout only (§7).
+ * 3. decideCompositeGate: §7 per-stage strict `>` ANDed with the holistic non-regression
+ *    veto (G4) when a holistic suite exists for this target; equals decideGate otherwise.
  */
 export async function evaluateCandidate(
   input: EvaluateCandidateInput,
@@ -296,31 +451,9 @@ export async function evaluateCandidate(
   if (!candidateResult.ok) return candidateResult;
 
   const perSplit = buildPerSplit(baselineResult, candidateResult);
-  const { accepted, regressed } = decideGate(perSplit);
+  const holisticPerSplit = buildHolisticPerSplit(baselineResult, candidateResult);
 
-  return toolOk({
-    accepted,
-    baseline_score: perSplit.holdout.baseline_passed,
-    candidate_score: perSplit.holdout.candidate_passed,
-    judge_votes_holdout: HOLDOUT_JUDGE_VOTES,
-    per_split: {
-      holdout: {
-        baseline_passed: perSplit.holdout.baseline_passed,
-        candidate_passed: perSplit.holdout.candidate_passed,
-        total: perSplit.holdout.total,
-      },
-      train: {
-        baseline_passed: perSplit.train.baseline_passed,
-        candidate_passed: perSplit.train.candidate_passed,
-        total: perSplit.train.total,
-      },
-      val: {
-        baseline_passed: perSplit.val.baseline_passed,
-        candidate_passed: perSplit.val.candidate_passed,
-        total: perSplit.val.total,
-      },
-    },
-    regressed,
-    size_delta: candidate_text.length - realContent.length,
-  });
+  return toolOk(
+    buildAcceptedResult(perSplit, holisticPerSplit, candidate_text, realContent.length),
+  );
 }

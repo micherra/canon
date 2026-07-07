@@ -1,0 +1,10 @@
+{
+  "principles": [
+    {
+      "id": "errors-are-values",
+      "severity": "strong-opinion",
+      "summary": "Model expected error conditions as return values, not thrown exceptions.",
+      "note": "Deliberately NON-matching: no loaded principle names the missing-await bug. This case tests Stage 1.5 (principle-independent correctness scan)."
+    }
+  ]
+}

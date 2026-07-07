@@ -1,0 +1,9 @@
+diff --git a/src/services/redact.ts b/src/services/redact.ts
+--- a/src/services/redact.ts
++++ b/src/services/redact.ts
+@@ -1,3 +1,8 @@
+
++export function redactSecret(text: string, secret: string): string {
++  // Redact every occurrence of the secret token before the text is logged.
++  return text.replace(secret, "***");
++}

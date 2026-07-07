@@ -1,0 +1,10 @@
+{
+  "principles": [
+    {
+      "id": "errors-are-values",
+      "severity": "strong-opinion",
+      "summary": "Model expected error conditions as return values (a Result/discriminated union), not thrown exceptions.",
+      "good_example": "function f(): Result<T,E> { if (!ok) return { ok: false, error }; return { ok: true, data }; }"
+    }
+  ]
+}

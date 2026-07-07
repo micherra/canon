@@ -49,7 +49,7 @@ Quality gate contracts and execution control enums.
 | `Board` / `BoardSchema` | Full board state for a flow execution |
 | `Session` / `SessionSchema` | Session lifecycle record (branch, status, slug, tier) |
 | `BoardStateEntry` / `BoardStateEntrySchema` | Per-state execution record including metrics, gate results, wave results |
-| `StateMetrics` / `StateMetricsSchema` | Performance and quality metrics recorded per state |
+| `StateMetrics` / `StateMetricsSchema` | Performance and quality metrics recorded per state; optional `stage_metrics` field (added 2026-07-06) namespaces counters under a stage label for a single-window agent reporting per-stage measurements (e.g. `reviewer`'s Measured-Step Module Contracts) |
 | `WaveResult` / `WaveResultSchema` | Wave execution summary including consultation results and worktree entries |
 | `AgentMetrics` / `AgentMetricsSchema` | Agent-reported performance counters (ADR-003a) |
 | `IterationEntry` / `IterationEntrySchema` | Iteration count and stuck-detection history for a state |

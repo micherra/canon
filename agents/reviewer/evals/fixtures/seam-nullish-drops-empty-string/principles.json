@@ -1,0 +1,10 @@
+{
+  "principles": [
+    {
+      "id": "naming-reveals-intent",
+      "severity": "strong-opinion",
+      "summary": "Identifiers should reveal intent; names should not mislead about behavior.",
+      "note": "Deliberately NON-matching to the bug mechanism: no loaded principle names the `??`-vs-empty-string fallback gap. The defect sits on the 1.5<->2 seam."
+    }
+  ]
+}

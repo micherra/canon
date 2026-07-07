@@ -1,0 +1,11 @@
+{
+  "principles": [
+    {
+      "id": "errors-are-values",
+      "severity": "strong-opinion",
+      "summary": "Model expected error conditions as return values (a Result/discriminated union), not thrown exceptions. Reserve throw for truly unexpected, unrecoverable states.",
+      "bad_example": "function validate(x) { if (!ok) throw new Error('bad'); return x; }",
+      "good_example": "function validate(x): Result<T, E> { if (!ok) return { ok: false, error: 'bad' }; return { ok: true, data: x }; }"
+    }
+  ]
+}

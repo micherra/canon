@@ -1,0 +1,10 @@
+{
+  "principles": [
+    {
+      "id": "explicit-contracts",
+      "severity": "strong-opinion",
+      "summary": "Interfaces should make their contracts explicit and machine-checkable where practical.",
+      "note": "Deliberately NON-matching. PRECISION control for the Stage 2 Severity-Vocabulary Consistency sub-axis (agents/reviewer.md, watch_VVVVV2): this file only quotes BLOCKING/WARNING/CLEAN as an instructional placeholder teaching the output format -- it has no dedicated Verdict/severity-vocabulary section of its own and introduces no new severity-assigning rule. Per the sub-axis's documented skip condition ('A file that only quotes these marker strings as instructional examples... is not considered to have a vocabulary section and should be skipped'), this must NOT be flagged as a vocabulary gap. Net-new Stage-2 must_not_flag golden (GOLDEN-LABELS.md gap #2)."
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "principles": [
+    {
+      "id": "explicit-contracts",
+      "severity": "strong-opinion",
+      "summary": "Interfaces should make their contracts explicit and machine-checkable where practical.",
+      "note": "Deliberately NON-matching to the bug mechanism: no loaded principle names severity-vocabulary consistency. This case tests the Stage 2 Severity-Vocabulary Consistency sub-axis (agents/reviewer.md, watch_VVVVV2), which is principle-independent -- triggered by the presence of a Verdict/severity-vocabulary section in the edited protocol file, not by a loaded Canon principle. Net-new Stage-2 must_catch golden (GOLDEN-LABELS.md gap #1): the mutation must not be able to game the suite by pushing everything to Stage 1.5, because this defect does NOT change any program output -- it is a documentation/protocol-consistency gap."
+    }
+  ]
+}
