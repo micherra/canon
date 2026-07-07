@@ -1,0 +1,27 @@
+{
+  "agent": "reviewer",
+  "evals": [
+    {
+      "id": "pr332-severity-vocab-gap-verdict",
+      "stage": "2",
+      "split": "holdout",
+      "kind": "must_catch",
+      "fixture": "pr332-severity-vocab-gap-verdict",
+      "expected_finding": {
+        "principle_id": null,
+        "min_severity": "strong-opinion",
+        "must_mention": ["Scope-Parity Extension", "Verdict", "WARNING"]
+      },
+      "expected_output": "The Goodhart golden case (watch_VVVVV2 / PR #332) the mandatory holistic gate exists to catch. PASS iff the reviewer's FINAL aggregate verdict for this whole PR is WARNING (not CLEAN and not BLOCKING). The only correct finding is a severity-vocabulary-consistency gap (Stage 2 sub-axis) on agents/toy-reviewer-protocol.md: the new 'Scope-Parity Extension' sub-check assigns **WARNING** severity in its body text, but the file's Verdict table WARNING row was not updated to include this new classification path -- mirroring the real PR #332 incident (a new Stage 6 scope-parity sub-check assigned WARNING but the Verdict table wasn't updated; every individual per-file view looked locally clean, yet the aggregate verdict was wrong). src/services/receipt.ts is a fully clean, idiomatic addition (returns a ReceiptResult union per errors-are-values, no bugs) and must NOT itself be the source of any violation. FAIL if the aggregate verdict comes out CLEAN (reproducing the historical PR #332 miss this golden case exists to prevent), if it fabricates an unrelated violation on receipt.ts, or if it fails to name the missing-Verdict-table-entry gap specifically."
+    },
+    {
+      "id": "clean-whole-pr-verdict",
+      "stage": "1",
+      "split": "train",
+      "kind": "must_not_flag",
+      "fixture": "clean-result-type",
+      "expected_finding": null,
+      "expected_output": "PRECISION holistic case (reuses the clean-result-type unit fixture as a whole, self-contained golden PR -- DRY, no duplicated fixture content). PASS iff the reviewer's FINAL aggregate verdict for this PR is CLEAN: applyCoupon returns a CouponResult discriminated union (errors-are-values HONORED), no correctness defects, no gotchas, no cross-requirement contradictions. FAIL if the aggregate verdict is WARNING or BLOCKING, or if any stage fabricates a violation on this clean, idiomatic single-file change."
+    }
+  ]
+}

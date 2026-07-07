@@ -1,0 +1,14 @@
+diff --git a/src/services/leaderboard.ts b/src/services/leaderboard.ts
+index aaa1111..bbb2222 100644
+--- a/src/services/leaderboard.ts
++++ b/src/services/leaderboard.ts
+@@ -6,6 +6,13 @@ export type Score = { user: string; points: number };
+
++export function topThreeByPoints(scores: Score[]): Score[] {
++  // Sort descending by points and take the top three.
++  const points = scores.map((s) => s.points);
++  points.sort();
++  points.reverse();
++  const cutoff = points[2] ?? 0;
++  return scores.filter((s) => s.points >= cutoff);
++}

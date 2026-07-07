@@ -1,0 +1,127 @@
+{
+  "agent": "reviewer",
+  "evals": [
+    {
+      "id": "stage1-errors-are-values",
+      "stage": "1",
+      "split": "train",
+      "kind": "must_catch",
+      "fixture": "stage1-errors-are-values",
+      "expected_finding": {
+        "principle_id": "errors-are-values",
+        "min_severity": "strong-opinion",
+        "must_mention": ["throw", "Result"]
+      },
+      "expected_output": "PASS iff the reviewer's output flags validateOrder for throwing (Error('product_not_found') / Error('insufficient_stock')) instead of returning a Result/discriminated union, citing errors-are-values at Stage 1 (Principle Compliance). FAIL if the throw is not flagged, or is only mentioned as a generic remark with no principle tie."
+    },
+    {
+      "id": "clean-result-type",
+      "stage": "1",
+      "split": "holdout",
+      "kind": "must_not_flag",
+      "fixture": "clean-result-type",
+      "expected_finding": null,
+      "expected_output": "PRECISION case. PASS iff the reviewer's output marks errors-are-values as HONORED for applyCoupon (it returns a CouponResult discriminated union, no throw) and raises no violation on this code. FAIL if the output invents a violation on this clean, idiomatic Result-returning function."
+    },
+    {
+      "id": "stage15-missing-await",
+      "stage": "1.5",
+      "split": "train",
+      "kind": "must_catch",
+      "fixture": "stage15-missing-await",
+      "expected_finding": {
+        "principle_id": "correctness-scan",
+        "min_severity": "strong-opinion",
+        "must_mention": ["await", "promise"]
+      },
+      "expected_output": "PASS iff the reviewer's output flags the un-awaited persistReceipt(orderId) call in completeCheckout as a missing-await / unhandled-promise correctness defect, at Stage 1.5 (Principle-Independent Correctness Scan), using the reserved correctness-scan finding. FAIL if silent. Note: none of the loaded principles name this bug -- a Stage-1-only reviewer would miss it, so this case specifically tests that Stage 1.5 runs independently of loaded principles."
+    },
+    {
+      "id": "seam-falsy-zero-fallback",
+      "stage": "1.5",
+      "split": "train",
+      "kind": "must_catch",
+      "fixture": "seam-falsy-zero-fallback",
+      "expected_finding": {
+        "principle_id": "correctness-scan",
+        "min_severity": "strong-opinion",
+        "must_mention": ["|| 5", "0", "falsy"]
+      },
+      "expected_output": "PASS iff the reviewer's output flags `cfg.maxRetries || 5` as a falsy-zero correctness defect (an explicit `maxRetries: 0` is silently coerced to 5 -- a reachable input producing wrong output), AT STAGE 1.5, per the agents/reviewer.md Stage 1.5 <-> Stage 2 tie-break rule (PR #458). FAIL if silent, or if it is attributed only as a Stage 2 gotcha instead of a Stage 1.5 correctness defect. (Renamed from the probe's stage2-silent-fallback per GOLDEN-LABELS.md gap #3 -- the directory name stage2- is legacy; the golden stage is 1.5.)"
+    },
+    {
+      "id": "seam-nullish-drops-empty-string",
+      "stage": "1.5",
+      "split": "val",
+      "kind": "must_catch",
+      "fixture": "seam-nullish-drops-empty-string",
+      "expected_finding": {
+        "principle_id": "correctness-scan",
+        "min_severity": "strong-opinion",
+        "must_mention": ["??", "empty string", "Guest"]
+      },
+      "expected_output": "PASS iff the reviewer's output flags `input.name ?? \"Guest\"` letting an explicit empty string pass through instead of falling back to \"Guest\" (a reachable input producing wrong output) AT STAGE 1.5, per the tie-break rule. FAIL if silent, or if misattributed as only a Stage 2 gotcha."
+    },
+    {
+      "id": "seam-numeric-sort-no-comparator",
+      "stage": "1.5",
+      "split": "val",
+      "kind": "must_catch",
+      "fixture": "seam-numeric-sort-no-comparator",
+      "expected_finding": {
+        "principle_id": "correctness-scan",
+        "min_severity": "strong-opinion",
+        "must_mention": ["sort", "comparator", "lexicographic"]
+      },
+      "expected_output": "PASS iff the reviewer's output flags `points.sort()` lacking a numeric comparator (numbers sort lexicographically -> wrong ordering/cutoff for topThreeByPoints, a reachable input producing wrong output) AT STAGE 1.5, per the tie-break rule. FAIL if silent, or if misattributed as only a Stage 2 gotcha (the 'surprising built-in default' framing does not move it to Stage 2, because output changes)."
+    },
+    {
+      "id": "seam-modulo-negative",
+      "stage": "1.5",
+      "split": "holdout",
+      "kind": "must_catch",
+      "fixture": "seam-modulo-negative",
+      "expected_finding": {
+        "principle_id": "correctness-scan",
+        "min_severity": "strong-opinion",
+        "must_mention": ["modulo", "negative", "out-of-range"]
+      },
+      "expected_output": "PASS iff the reviewer's output flags that `i % length` returns a negative (out-of-range) value for a reachable negative i, breaking wrapIndex's ring-buffer index mapping (reachable input -> wrong output) AT STAGE 1.5, per the tie-break rule. FAIL if silent. Recommended primary Stage-1.5 golden per GOLDEN-LABELS.md: pure 1.5<->2 seam control, no Stage-1 surface, no matching principle."
+    },
+    {
+      "id": "seam-replace-first-only",
+      "stage": "1.5",
+      "split": "holdout",
+      "kind": "must_catch",
+      "fixture": "seam-replace-first-only",
+      "expected_finding": {
+        "principle_id": "correctness-scan",
+        "min_severity": "strong-opinion",
+        "must_mention": ["replace", "first", "occurrence"]
+      },
+      "expected_output": "PASS iff the reviewer's output flags that `text.replace(secret, \"***\")` redacts only the FIRST occurrence of a repeated secret, as a Stage 1.5 correctness defect. A separate Stage 1 naming-reveals-intent finding on the misleading 'every occurrence' comment is ALSO legitimate (this fixture is a documented 1<->1.5 dual-surface case per GOLDEN-LABELS.md) and should not be treated as a FAIL if present alongside the Stage 1.5 finding. FAIL only if the correctness defect itself is silent."
+    },
+    {
+      "id": "stage2-severity-vocab-gap",
+      "stage": "2",
+      "split": "val",
+      "kind": "must_catch",
+      "fixture": "stage2-severity-vocab-gap",
+      "expected_finding": {
+        "principle_id": null,
+        "min_severity": "strong-opinion",
+        "must_mention": ["Retry-Budget Guard", "BLOCKING", "Verdict"]
+      },
+      "expected_output": "Net-new Stage-2 must_catch golden (GOLDEN-LABELS.md gap #1 -- closes the zero-Stage-2-must_catch coverage hole). PASS iff the reviewer's output flags, at Stage 2 (Severity-Vocabulary Consistency sub-axis, watch_VVVVV2), that the new 'Retry-Budget Guard' rule assigns BLOCKING severity in agents/toy-protocol.md's body but the file's Verdict table has no corresponding BLOCKING-row entry for a missing retry-budget cap. This defect must NOT be flagged as Stage 1.5: it changes no program output for any reachable input -- it is a documentation/protocol-consistency gap, exactly the Stage 2 Gotcha/consistency class the tie-break rule reserves for defects that do not change output. FAIL if silent, or if misattributed to Stage 1.5."
+    },
+    {
+      "id": "stage2-severity-vocab-quoted-example",
+      "stage": "2",
+      "split": "train",
+      "kind": "must_not_flag",
+      "fixture": "stage2-severity-vocab-quoted-example",
+      "expected_finding": null,
+      "expected_output": "Net-new Stage-2 must_not_flag golden (GOLDEN-LABELS.md gap #2 -- precision counterweight to the must_catch case above). PASS iff the reviewer's output does NOT flag a severity-vocabulary gap on templates/toy-status-template.md: the added text only quotes BLOCKING/WARNING/CLEAN as an instructional placeholder teaching the output format, introduces no new severity-assigning rule, and the file has no dedicated Verdict/vocabulary section of its own -- exactly the documented skip condition for the Stage 2 Severity-Vocabulary Consistency sub-axis. FAIL if the reviewer invents a vocabulary-gap finding on this file."
+    }
+  ]
+}

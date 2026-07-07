@@ -1,0 +1,10 @@
+{
+  "principles": [
+    {
+      "id": "simplicity-first",
+      "severity": "strong-opinion",
+      "summary": "Prefer the simplest implementation that solves the problem.",
+      "note": "Deliberately NON-matching: no loaded principle names Array.prototype.sort()'s default lexicographic comparator. The defect sits on the 1.5<->2 seam."
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "principles": [
+    {
+      "id": "simplicity-first",
+      "severity": "strong-opinion",
+      "summary": "Prefer the simplest implementation that solves the problem.",
+      "note": "Deliberately NON-matching to the bug mechanism AND non-naming: no loaded principle names JS modulo-sign behavior, and there is no misleading-name surface. PURE 1.5<->2 seam control. Mechanism NOT in the reviewer.md tie-break examples."
+    }
+  ]
+}

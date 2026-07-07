@@ -1,0 +1,32 @@
+diff --git a/agents/toy-reviewer-protocol.md b/agents/toy-reviewer-protocol.md
+index 4444abcd..5555efab 100644
+--- a/agents/toy-reviewer-protocol.md
++++ b/agents/toy-reviewer-protocol.md
+@@ -5,6 +5,11 @@
+ ### Numeric Range Check
+ 
+ If two files validate the same field with different bounds, flag as **WARNING**.
++
++### Scope-Parity Extension (new)
++
++If a precision/scope advisory fix narrows a check's coverage without matching
++the declared scope, flag as **WARNING**.
+ 
+ ## Verdict
+ 
+diff --git a/src/services/receipt.ts b/src/services/receipt.ts
+index cccc1111..dddd2222 100644
+--- a/src/services/receipt.ts
++++ b/src/services/receipt.ts
+@@ -1,3 +1,11 @@
+ export type ReceiptResult =
+   | { ok: true; receiptId: string }
+   | { ok: false; error: "order_not_found" };
++
++export function buildReceipt(orderId: string, orders: Map<string, { total: number }>): ReceiptResult {
++  const order = orders.get(orderId);
++  if (!order) {
++    return { ok: false, error: "order_not_found" };
++  }
++  return { ok: true, receiptId: "rcpt_" + orderId };
++}

@@ -1,0 +1,12 @@
+diff --git a/src/services/notify.ts b/src/services/notify.ts
+index 3333333..4444444 100644
+--- a/src/services/notify.ts
++++ b/src/services/notify.ts
+@@ -14,7 +14,12 @@ async function persistReceipt(id: string): Promise<void> { /* ... */ }
+ 
++export async function completeCheckout(orderId: string): Promise<{ ok: true }> {
++  // persistReceipt is async and must finish before we return success,
++  // otherwise the receipt row may not exist when the client re-reads it.
++  persistReceipt(orderId);
++  return { ok: true };
++}
