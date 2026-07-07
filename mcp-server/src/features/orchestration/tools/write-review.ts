@@ -551,6 +551,7 @@ export async function writeReview(
   emitWriteReceipt(input.workspace, {
     artifact_kind: "review",
     artifact_path: reviewPath,
+    content: markdown,
     slug: input.slug,
   });
 

@@ -54,6 +54,7 @@ export async function writeDesign(input: WriteDesignInput): Promise<ToolResult<W
   emitWriteReceipt(input.workspace, {
     artifact_kind: "design",
     artifact_path: designPath,
+    content: input.content,
     slug: input.slug,
   });
 

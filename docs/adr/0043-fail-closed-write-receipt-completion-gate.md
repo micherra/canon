@@ -123,6 +123,27 @@ telemetry-visible forge-gap residual.
 - `orchestration-journal.ts` (an impact-63 hub) gained two call sites (`logStep`,
   `processEntries`) — kept to ~6 lines total by isolating all gate logic in `write-receipt.ts`.
 
+## Amendment (2026-07-07): finalized-only receipts
+
+**Gap found (Codex bot P1, PR #472):** `emitWriteReceipt` originally emitted a `write_receipt` after
+*any* successful write, including a step-1 skeleton write (`## Status: Partial`, `verdict:
+IN_PROGRESS`). The gate's strong path (step 3 above) only checks for a receipt's *existence*, not
+whether the artifact it points at was finalized — so an agent that wrote only its skeleton and
+never finalized still produced a receipt, and that receipt alone satisfied the strong path. The
+skeleton-marker tightening described above only ever guarded the WR-02 disk-fallback branch (step
+4); the strong path had no equivalent check. Net effect: the gate could be defeated for exactly the
+write-cliff case it exists to catch, by an agent that wrote a skeleton and stopped.
+
+**Fix:** `emitWriteReceipt` now takes the just-written `content` and skips the emit entirely when
+it matches `PARTIAL_MARKERS` (via the shared `isSkeletonContent` helper — the same check WR-02
+already used). A `write_receipt` event now means "a FINALIZED artifact was written by the canonical
+tool," not merely "the tool ran." A skeleton-only completion therefore has no receipt at all and
+falls straight through to WR-02, which independently rejects it (same skeleton file on disk). This
+was the minimal fix (Option B from the build's own review comment) over the alternative of also
+gating the strong path's receipt-lookup on a live disk re-check (Option A) — Option B keeps the
+receipt's semantics self-consistent at the single write boundary instead of splitting the check
+across both the emit side and the query side.
+
 ## Revisit-If
 
 - `write_receipt_weak_pass` telemetry shows a sustained, non-trivial rate of file-branch passes for

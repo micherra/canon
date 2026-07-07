@@ -239,6 +239,7 @@ export async function writeImplementationSummary(
   emitWriteReceipt(input.workspace, {
     artifact_kind: "implementation_summary",
     artifact_path: summaryPath,
+    content: summaryMarkdown,
     slug: input.slug,
     task_id: input.task_id,
   });

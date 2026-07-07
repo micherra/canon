@@ -35,6 +35,7 @@ describe("emitWriteReceipt", () => {
     emitWriteReceipt(workspace, {
       artifact_kind: "implementation_summary",
       artifact_path: join(workspace, "plans", "slug", "task-01-SUMMARY.md"),
+      content: "## Implementation Summary: task-01\n\nDone.\n",
       slug: "slug",
       task_id: "task-01",
     });
@@ -47,10 +48,25 @@ describe("emitWriteReceipt", () => {
     expect(typeof events[0].payload.written_at).toBe("string");
   });
 
+  it("does not persist `content` onto the stored event — the event log is not a content store", () => {
+    emitWriteReceipt(workspace, {
+      artifact_kind: "implementation_summary",
+      artifact_path: join(workspace, "plans", "slug", "task-01-SUMMARY.md"),
+      content: "## Implementation Summary: task-01\n\nDone.\n",
+      slug: "slug",
+      task_id: "task-01",
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getEvents({ type: "write_receipt" });
+    expect(events[0].payload.content).toBeUndefined();
+  });
+
   it("normalizes a worktree-rooted workspace to the same store the gate will query", () => {
     emitWriteReceipt(join(workspace, "worktree"), {
       artifact_kind: "review",
       artifact_path: join(workspace, "reviews", "REVIEW.md"),
+      content: "## Canon Review — Verdict: CLEAN\n",
       slug: "slug",
     });
 
@@ -70,9 +86,68 @@ describe("emitWriteReceipt", () => {
       emitWriteReceipt("/definitely/does/not/exist", {
         artifact_kind: "test_report",
         artifact_path: "/definitely/does/not/exist/plans/slug/TEST-REPORT.md",
+        content: "## Test Report\n\nAll passed.\n",
       }),
     ).not.toThrow();
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+});
+
+describe("emitWriteReceipt — finalized-only receipts (ADR-0043 amendment)", () => {
+  it("does NOT emit a receipt when the written content is a `## Status: Partial` skeleton", () => {
+    emitWriteReceipt(workspace, {
+      artifact_kind: "design",
+      artifact_path: join(workspace, "plans", "slug", "DESIGN.md"),
+      content: "## Status: Partial\n\nStill researching.\n",
+      slug: "slug",
+    });
+
+    const store = getExecutionStore(workspace);
+    expect(store.getEvents({ type: "write_receipt" })).toHaveLength(0);
+  });
+
+  it("does NOT emit a receipt when the written content carries `verdict: IN_PROGRESS` frontmatter", () => {
+    emitWriteReceipt(workspace, {
+      artifact_kind: "review",
+      artifact_path: join(workspace, "reviews", "REVIEW.md"),
+      content: "---\nverdict: IN_PROGRESS\n---\n\n## Canon Review — Verdict: IN_PROGRESS\n",
+      slug: "slug",
+    });
+
+    const store = getExecutionStore(workspace);
+    expect(store.getEvents({ type: "write_receipt" })).toHaveLength(0);
+  });
+
+  it('does NOT emit a receipt when the written content carries `status: "IN_PROGRESS"` frontmatter', () => {
+    emitWriteReceipt(workspace, {
+      artifact_kind: "context_sync",
+      artifact_path: join(workspace, "plans", "slug", "CONTEXT-SYNC.md"),
+      content: '---\nstatus: "IN_PROGRESS"\n---\n\n## Context Sync\n',
+      slug: "slug",
+    });
+
+    const store = getExecutionStore(workspace);
+    expect(store.getEvents({ type: "write_receipt" })).toHaveLength(0);
+  });
+
+  it("DOES emit a receipt when the same tool is invoked again with finalized content", () => {
+    emitWriteReceipt(workspace, {
+      artifact_kind: "design",
+      artifact_path: join(workspace, "plans", "slug", "DESIGN.md"),
+      content: "## Status: Partial\n\nStill researching.\n",
+      slug: "slug",
+    });
+    emitWriteReceipt(workspace, {
+      artifact_kind: "design",
+      artifact_path: join(workspace, "plans", "slug", "DESIGN.md"),
+      content: "## Design: Something\n\nFull body, no longer partial.\n",
+      slug: "slug",
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getEvents({ type: "write_receipt" });
+    expect(events).toHaveLength(1);
+    expect(events[0].payload.artifact_kind).toBe("design");
   });
 });

@@ -143,6 +143,7 @@ export async function writeTestReport(
   emitWriteReceipt(input.workspace, {
     artifact_kind: "test_report",
     artifact_path: reportPath,
+    content,
     slug: input.slug,
   });
 

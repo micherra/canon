@@ -20,3 +20,16 @@ export const PARTIAL_MARKERS: readonly RegExp[] = [
   /Verdict:\s*IN_PROGRESS\b/i,
   /^status:\s*["']?IN_PROGRESS["']?\b/im,
 ];
+
+/**
+ * True when `content`'s head matches any `PARTIAL_MARKERS` skeleton marker —
+ * i.e. this is a step-1 skeleton, not a finished deliverable. Only the first
+ * 8192 chars are checked (markers live in frontmatter / the first heading);
+ * shared by the write-receipt gate's WR-02 disk fallback (`hasRealCanonicalFile`)
+ * and the finalized-only receipt guard (`emitWriteReceipt`) so both consume the
+ * identical definition of "skeleton".
+ */
+export function isSkeletonContent(content: string): boolean {
+  const head = content.slice(0, 8192);
+  return PARTIAL_MARKERS.some((re) => re.test(head));
+}

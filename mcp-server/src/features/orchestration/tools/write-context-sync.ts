@@ -59,6 +59,7 @@ export async function writeContextSync(
   emitWriteReceipt(input.workspace, {
     artifact_kind: "context_sync",
     artifact_path: syncPath,
+    content: input.content,
     slug: input.slug,
   });
 

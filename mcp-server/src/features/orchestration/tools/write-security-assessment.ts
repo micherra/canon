@@ -57,6 +57,7 @@ export async function writeSecurityAssessment(
   emitWriteReceipt(input.workspace, {
     artifact_kind: "security_assessment",
     artifact_path: assessmentPath,
+    content: input.content,
     slug: input.slug,
   });
 

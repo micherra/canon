@@ -14,6 +14,7 @@ import { assertOk, isToolError } from "@shared/lib/tool-result.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Journal } from "../orchestration-journal.ts";
 import { batchLogSteps, logStep } from "../orchestration-journal.ts";
+import { writeDesign } from "../write-design.ts";
 
 let workspace: string;
 
@@ -357,6 +358,80 @@ describe("enforceWriteReceipt via logStep — gate infra failure fails open", ()
 
     assertOk(result);
     spy.mockRestore();
+  });
+});
+
+describe("enforceWriteReceipt via logStep — skeleton write never receipts (Codex P1 regression)", () => {
+  it("architect writes ONLY a Status: Partial skeleton via the real write_design tool -> completed step is REJECTED", async () => {
+    await logStep({
+      agent_type: "architect",
+      status: "started",
+      step_id: "design",
+      workspace,
+      projectDir: process.cwd(),
+    });
+
+    const skeletonResult = await writeDesign({
+      content: "## Status: Partial\n\nStill researching.\n",
+      slug: "my-slug",
+      workspace,
+    });
+    assertOk(skeletonResult);
+
+    // The skeleton write must NOT have emitted a receipt — this is the hole
+    // being closed: under the old contract, ANY successful write emitted a
+    // receipt, so a skeleton-only agent would pass the gate's strong path.
+    const store = getExecutionStore(workspace);
+    expect(store.getEvents({ type: "write_receipt" })).toHaveLength(0);
+
+    const result = await logStep({
+      agent_id: "arch-01",
+      agent_type: "architect",
+      status: "completed",
+      step_id: "design",
+      workspace,
+      projectDir: process.cwd(),
+    });
+
+    // No receipt (skeleton never receipted) AND WR-02 also rejects — the
+    // only file on disk is still the same skeleton -> genuine reject, not a
+    // false PASS via either path.
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.context?.receipt_missing).toEqual(["design"]);
+    }
+  });
+
+  it("architect finalizes the same DESIGN.md via write_design (real tool) -> completed step PASSES", async () => {
+    await logStep({
+      agent_type: "architect",
+      status: "started",
+      step_id: "design",
+      workspace,
+      projectDir: process.cwd(),
+    });
+
+    const finalResult = await writeDesign({
+      content: "## Design: Something\n\nFull body, no longer partial.\n",
+      slug: "my-slug",
+      workspace,
+    });
+    assertOk(finalResult);
+
+    const store = getExecutionStore(workspace);
+    expect(store.getEvents({ type: "write_receipt" })).toHaveLength(1);
+
+    const result = await logStep({
+      agent_id: "arch-02",
+      agent_type: "architect",
+      status: "completed",
+      step_id: "design",
+      workspace,
+      projectDir: process.cwd(),
+    });
+
+    assertOk(result);
   });
 });
 
