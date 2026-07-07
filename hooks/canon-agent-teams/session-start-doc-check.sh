@@ -37,6 +37,7 @@ DERIVED_SHA=$(git "${GIT_C[@]}" log -E \
 if [[ -n "$DERIVED_SHA" ]]; then
   LAST_SCRIBE_SHA="$DERIVED_SHA"
 elif [[ -f "$LAST_SCRIBE_FILE" ]]; then
+  # DOCUMENTED FAIL-OPEN -- empty/‹?› result falls through to exit 0
   LAST_SCRIBE_SHA=$(tr -d '[:space:]' < "$LAST_SCRIBE_FILE" 2>/dev/null || true)
   if [[ -z "$LAST_SCRIBE_SHA" ]]; then
     exit 0
@@ -51,6 +52,7 @@ EOF
   exit 0
 fi
 
+# DOCUMENTED FAIL-OPEN -- empty result falls through to the blank-HEAD_SHA exit-0 check below
 HEAD_SHA=$(git "${GIT_C[@]}" rev-parse HEAD 2>/dev/null || true)
 
 if [[ -z "$HEAD_SHA" || "$HEAD_SHA" == "$LAST_SCRIBE_SHA" ]]; then
@@ -59,6 +61,7 @@ fi
 
 # Report commits since the last scribe run. Cap at 20 lines to keep the
 # nudge terse.
+# DOCUMENTED FAIL-OPEN -- empty/‹?› result falls through to exit 0
 CHANGED_COUNT=$(git "${GIT_C[@]}" rev-list --count "${LAST_SCRIBE_SHA}..HEAD" 2>/dev/null || echo "?")
 
 cat <<EOF
