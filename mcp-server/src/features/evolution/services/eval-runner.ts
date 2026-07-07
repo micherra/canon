@@ -7,7 +7,11 @@
  * Exports:
  * - parseSummary(stdout): { passed, failed, total } — pure, last-line scan
  * - decideGate(perSplit): { accepted, regressed } — pure, HOLDOUT ONLY (§7)
+ * - decideCompositeGate(perStage, holistic): { accepted, regressed } — pure, ANDs decideGate's
+ *   strict per-stage `>` with a holistic non-regression veto (`>=`) — the Goodhart guard (G4,
+ *   watch_VVVVV2 / PR #332)
  * - resolveAgentEvalRoot(tmpDir, targetPath): string | null — pure target→suite resolution
+ * - resolveHolisticEvalRoot(tmpDir, agentEvalRoot): string | null — pure holistic-suite resolution
  * - runSplit(tmpDir, split, opts): ProcessResult — calls runShell with explicit timeout
  * - PerSplit — type for per-split pass counts
  */
@@ -62,6 +66,14 @@ type RunSplitOpts = {
    * instead of the global skills/canon/evals/run-evals.sh. Not set → unchanged global behavior.
    */
   agentEvalRoot?: string;
+  /**
+   * Optional override for the `--eval-root` flag value (holistic-gate, G4). run-agent-evals.sh
+   * always lives at `agentEvalRoot` (e.g. "agents/reviewer/evals") — this only overrides which
+   * subdir's eval-set.json + fixtures it reads, e.g. "agents/reviewer/evals/holistic" for the
+   * whole-PR holistic suite. Ignored when `agentEvalRoot` is unset. Defaults to `agentEvalRoot`
+   * itself when omitted (unchanged per-stage behavior).
+   */
+  evalRootOverride?: string;
 };
 
 /**
@@ -112,6 +124,39 @@ export function decideGate(perSplit: PerSplit): { accepted: boolean; regressed: 
 }
 
 /**
+ * decideCompositeGate — pure function. Holistic §7 veto (G4, the Goodhart guard —
+ * watch_VVVVV2 / PR #332).
+ *
+ * Composes the existing per-stage `decideGate` (unchanged, STRICT `>` on holdout) with a
+ * whole-PR holistic suite that must NOT regress. The holistic term is a non-regression
+ * VETO (`>=`), never a second improvement term — a stage-targeted mutation usually leaves
+ * most golden-PR verdicts unchanged, so requiring holistic to also strictly improve would
+ * make acceptance impossible in the common case.
+ *
+ * `holistic === null` (no holistic suite for this target) returns `perStageDecision`
+ * unchanged — the documented backward-compatible path for whole-file/non-reviewer targets.
+ *
+ * The composite can only make acceptance STRICTER than the per-stage decision alone, never
+ * looser: `accepted` requires both terms; `regressed` fires if either term regresses.
+ */
+export function decideCompositeGate(
+  perStage: PerSplit,
+  holistic: PerSplit | null,
+): { accepted: boolean; regressed: boolean } {
+  const perStageDecision = decideGate(perStage);
+  if (holistic === null) return perStageDecision;
+
+  const h = holistic.holdout;
+  const holisticNonRegress = h.candidate_passed >= h.baseline_passed;
+  const holisticRegressed = h.candidate_passed < h.baseline_passed;
+
+  return {
+    accepted: perStageDecision.accepted && holisticNonRegress,
+    regressed: perStageDecision.regressed || holisticRegressed,
+  };
+}
+
+/**
  * resolveAgentEvalRoot — pure target→suite resolution (eval-candidate-resolution).
  *
  * Returns `agents/<name>/evals` (relative to tmpDir) when targetPath matches an
@@ -141,6 +186,23 @@ export function resolveAgentEvalRoot(tmpDir: string, targetPath: string): string
 }
 
 /**
+ * resolveHolisticEvalRoot — pure holistic-suite resolution (holistic-gate, G4).
+ *
+ * Given the per-stage `agentEvalRoot` returned by `resolveAgentEvalRoot` (e.g.
+ * "agents/reviewer/evals"), returns the `holistic/` sub-suite path (e.g.
+ * "agents/reviewer/evals/holistic") when `<tmpDir>/<agentEvalRoot>/holistic/eval-set.json`
+ * exists in the sandbox. Returns `null` when absent (fail-open — caller skips the holistic
+ * run and `decideCompositeGate` falls back to the per-stage-only decision).
+ *
+ * Never throws. Pure aside from the one existsSync check.
+ */
+export function resolveHolisticEvalRoot(tmpDir: string, agentEvalRoot: string): string | null {
+  const holisticRoot = join(agentEvalRoot, "holistic");
+  const evalFile = join(tmpDir, holisticRoot, "eval-set.json");
+  return existsSync(evalFile) ? holisticRoot : null;
+}
+
+/**
  * runSplit — runs run-evals.sh (or, when `agentEvalRoot` is set, that suite's
  * run-agent-evals.sh) for a given split in the temp directory.
  *
@@ -163,12 +225,15 @@ export function runSplit(
   const {
     agentEvalRoot,
     dryRun = false,
+    evalRootOverride,
     filter,
     judgeVotes = 1,
     pluginDir,
     structuredJudge = true,
   } = opts;
 
+  // run-agent-evals.sh always lives at agentEvalRoot — evalRootOverride only changes which
+  // subdir's eval-set.json + fixtures the `--eval-root` flag points the script at (holistic-gate, G4).
   const scriptPath = agentEvalRoot
     ? join(tmpDir, agentEvalRoot, "run-agent-evals.sh")
     : join(tmpDir, "skills", "canon", "evals", "run-evals.sh");
@@ -176,7 +241,7 @@ export function runSplit(
   const parts: string[] = ["bash", scriptPath];
 
   if (agentEvalRoot) {
-    parts.push("--eval-root", agentEvalRoot);
+    parts.push("--eval-root", evalRootOverride ?? agentEvalRoot);
   }
 
   if (split !== "all") {
