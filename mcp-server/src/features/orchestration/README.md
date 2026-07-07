@@ -4,7 +4,7 @@ This bounded context owns Canon's orchestration runtime and every MCP tool the o
 
 ## What this context owns
 
-- **Orchestration tools** (`tools/`) — all harness MCP tools: `init_workspace`, `log_step`, `batch_log_steps`, `capture_transcript`, `get_transcript`, `record_agent_metrics`, `post_event`, `write_plan_index`, `resolve_agent_skills`, `invoke_janitor`, `open_artifact`, `present_artifact`, `report`, and the artifact-write tools (`write_implementation_summary`, `write_review`, `write_test_report`)
+- **Orchestration tools** (`tools/`) — all harness MCP tools: `init_workspace`, `log_step`, `batch_log_steps`, `capture_transcript`, `get_transcript`, `record_agent_metrics`, `post_event`, `write_plan_index`, `resolve_agent_skills`, `invoke_janitor`, `open_artifact`, `report`, and the artifact-write tools (`write_implementation_summary`, `write_review`, `write_test_report`)
 - **Orchestration services** (`services/`) — context budget, prompt enrichment, contract checking, diff clustering, context injection, KG context formatting, learn gate evaluation, scope resolution, wave briefing assembly
 
 ## What this context does NOT own

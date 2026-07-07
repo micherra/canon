@@ -9,7 +9,6 @@ import { registerJanitorTool } from "./register-janitor.ts";
 import { registerJournalTools } from "./register-journal.ts";
 import { registerMessagingTools } from "./register-messaging.ts";
 import { registerOpenArtifactTool } from "./register-open-artifact.ts";
-import { registerPresentArtifactTool } from "./register-present-artifact.ts";
 import { registerReportTools } from "./register-report.ts";
 
 export function registerOrchestrationTools(server: McpServer): void {
@@ -21,7 +20,6 @@ export function registerOrchestrationTools(server: McpServer): void {
   registerJanitorTool(server);
   registerAgentTeamsTools(server);
   registerHistoryTools(server);
-  registerPresentArtifactTool(server);
   registerOpenArtifactTool(server);
   registerConfidenceTools(server);
   registerEvaluateStepTool(server);
