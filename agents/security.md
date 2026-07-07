@@ -70,6 +70,18 @@ Determine your mode from the input:
 - **`early-scan`**: You receive `role: early-scan` in your prompt. Produce a brief inline advisory (max 200 tokens) covering the top 1–3 security concerns visible at design/architecture time. Do NOT load the full checklist, do NOT check for a template, do NOT produce a structured artifact. Output directly to the orchestrator. Skip to "Early-Scan Output" below.
 - **`full-scan`** (default): Proceed through the full Process below.
 
+**Write-receipt gate invariant (ADR-0042):** the full-scan Process below produces a receipt-backed
+artifact via `write_security_assessment` (Step 5) — that receipt is what satisfies the fail-closed
+write-receipt completion gate for `agent_type: "security"`. `early-scan` mode is inherently
+zero-artifact (inline advisory only, no file, no receipt) and today runs during the design
+conversation, not as a journaled runbook step, so the gate never sees it. **If an early-scan run is
+ever journaled as `log_step(status:"completed", agent_type:"security")`,** the orchestrator MUST use
+a step_id matching the reserved `^security-early-scan` prefix (see
+`exempt-step-patterns.ts`/`.txt`) — otherwise the gate will reject the completion (false-close) since
+no receipt or artifact exists. Do not journal early-scan under a plain `security`/
+`security-assessment` step_id; that step_id is reserved for the receipt-backed full-scan step and
+must keep failing closed with no receipt.
+
 ### Early-Scan Output
 
 When `role: early-scan`:

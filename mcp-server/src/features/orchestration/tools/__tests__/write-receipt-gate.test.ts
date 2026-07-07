@@ -185,6 +185,54 @@ describe("enforceWriteReceipt via logStep — genuine no-receipt-and-no-file rej
   });
 });
 
+describe("enforceWriteReceipt via logStep — security early-scan exemption", () => {
+  it("security completed under a reserved early-scan step_id, no receipt/file -> pass (exempt)", async () => {
+    await logStep({
+      agent_type: "security",
+      status: "started",
+      step_id: "security-early-scan",
+      workspace,
+      projectDir: process.cwd(),
+    });
+
+    const result = await logStep({
+      agent_id: "sec-early-01",
+      agent_type: "security",
+      status: "completed",
+      step_id: "security-early-scan",
+      workspace,
+      projectDir: process.cwd(),
+    });
+
+    assertOk(result);
+  });
+
+  it("security completed under a NORMAL step_id, no receipt/file -> reject (guarantee preserved)", async () => {
+    await logStep({
+      agent_type: "security",
+      status: "started",
+      step_id: "security",
+      workspace,
+      projectDir: process.cwd(),
+    });
+
+    const result = await logStep({
+      agent_id: "sec-01",
+      agent_type: "security",
+      status: "completed",
+      step_id: "security",
+      workspace,
+      projectDir: process.cwd(),
+    });
+
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.context?.receipt_missing).toEqual(["security_assessment"]);
+    }
+  });
+});
+
 describe("enforceWriteReceipt via logStep — structural pass-throughs", () => {
   it("shipper completed, no receipt -> pass (not in map)", async () => {
     await logStep({

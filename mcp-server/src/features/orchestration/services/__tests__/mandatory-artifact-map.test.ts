@@ -88,10 +88,19 @@ describe("isExemptStep", () => {
     expect(isExemptStep("wip-recovery")).toBe(true);
   });
 
+  it("matches security-early-scan step ids (zero-artifact early-scan/inline-only mode)", () => {
+    expect(isExemptStep("security-early-scan")).toBe(true);
+    expect(isExemptStep("security-early-scan-1")).toBe(true);
+  });
+
   it("does not match ordinary runbook step ids", () => {
     expect(isExemptStep("implement")).toBe(false);
     expect(isExemptStep("review")).toBe(false);
     expect(isExemptStep("design")).toBe(false);
     expect(isExemptStep("inline-fixed")).toBe(false); // must be exact "inline-fix", not a prefix
+    // A real security-assessment step must NOT be swept up by the early-scan
+    // exemption — the receipt guarantee stays intact for the full-scan step.
+    expect(isExemptStep("security")).toBe(false);
+    expect(isExemptStep("security-assessment")).toBe(false);
   });
 });

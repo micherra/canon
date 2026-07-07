@@ -9,6 +9,17 @@
  * precedent (`orchestration-journal.ts` special-cases it at the agent_id
  * gate). Exempt iff the step_id matches; there is no free-text discretion.
  *
+ * `^security-early-scan` covers the security agent's early-scan/inline-only
+ * mode (see `agents/security.md` "Mode Detection") — it produces a brief
+ * inline advisory, not a SECURITY.md artifact, so it is inherently
+ * zero-artifact. Early-scan runs during the design conversation today, not
+ * as a journaled runbook step, so this is currently inert — but IF a
+ * security step is ever journaled under `role: early-scan`, it MUST use this
+ * reserved step_id prefix or the write-receipt gate will false-close it. The
+ * real full-scan security-assessment step uses a plain `security`/
+ * `security-assessment` step_id and is NOT covered by this pattern — the
+ * receipt guarantee (ADR-0042) stays intact for it.
+ *
  * Mirrored verbatim (one pattern source per line) in `exempt-step-patterns.txt`
  * for grep-parity, the same convention as `hooks/lib/accepted-skip-reasons.txt`.
  * A parity test enforces the two lists stay in sync — update both together.
@@ -19,6 +30,7 @@ export const EXEMPT_STEP_PATTERNS: readonly RegExp[] = [
   /^eval-fix-/,
   /^inline-fix$/,
   /^wip-/,
+  /^security-early-scan/,
 ];
 
 export function isExemptStep(stepId: string): boolean {
