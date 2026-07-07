@@ -110,6 +110,49 @@ run_agent_eval_case() {
   local fixture="$5"
   local result_file="$TMPDIR_EVALS/$id.result"
 
+  # Resolve the fixture BEFORE the dry-run short-circuit so `--dry-run` genuinely
+  # exercises resolution (fallback + fail-closed below) instead of vacuously
+  # skipping it. A fixture that can't be found is a gate failure, not a warning
+  # to skip past — a silently-skipped resolution is how the holistic veto went
+  # inert in the first place (zero-scored cases can never fail a non-regression
+  # check).
+  local fixture_principles=""
+  local fixture_diff=""
+  if [[ -n "$fixture" && "$fixture" != "null" ]]; then
+    # Primary: fixtures colocated with this suite's eval-root. Fallback: the
+    # unit-suite fixtures dir ($SCRIPT_DIR/fixtures) — sub-suites (e.g. holistic)
+    # intentionally reuse unit fixtures wholesale (DRY) rather than duplicating them.
+    local fixture_dir="$EVAL_ROOT/fixtures/$fixture"
+    if [[ ! -d "$fixture_dir" ]]; then
+      fixture_dir="$SCRIPT_DIR/fixtures/$fixture"
+    fi
+
+    if [[ ! -d "$fixture_dir" ]]; then
+      echo "ERROR  $id  (fixture not found: $fixture — checked $EVAL_ROOT/fixtures/$fixture and $SCRIPT_DIR/fixtures/$fixture)" > "$result_file"
+      echo "  ERROR: fixture not found for $id: $fixture" >&2
+      return
+    fi
+
+    local principles_path="$fixture_dir/principles.json"
+    local diff_path="$fixture_dir/diff.patch"
+
+    if [[ -f "$principles_path" ]]; then
+      fixture_principles=$(cat "$principles_path")
+    else
+      echo "ERROR  $id  (missing principles.json in fixture: $fixture_dir)" > "$result_file"
+      echo "  ERROR: fixture file not found: $principles_path" >&2
+      return
+    fi
+
+    if [[ -f "$diff_path" ]]; then
+      fixture_diff=$(cat "$diff_path")
+    else
+      echo "ERROR  $id  (missing diff.patch in fixture: $fixture_dir)" > "$result_file"
+      echo "  ERROR: fixture file not found: $diff_path" >&2
+      return
+    fi
+  fi
+
   if $DRY_RUN; then
     echo "DRYRUN  $id" > "$result_file"
     return
@@ -123,36 +166,22 @@ run_agent_eval_case() {
     "" \
     "For each finding, cite its principle id (or 'correctness-scan' for a Stage 1.5 finding) and severity, and name which stage it belongs to. If there are no findings, say so explicitly. End with a one-line aggregate verdict: CLEAN, WARNING, or BLOCKING." )
 
-  if [[ -n "$fixture" && "$fixture" != "null" ]]; then
-    local fixture_dir="$EVAL_ROOT/fixtures/$fixture"
-    local principles_path="$fixture_dir/principles.json"
-    local diff_path="$fixture_dir/diff.patch"
-
-    if [[ -f "$principles_path" ]]; then
-      local principles_content
-      principles_content=$(cat "$principles_path")
-      full_prompt="$full_prompt
+  if [[ -n "$fixture_principles" ]]; then
+    full_prompt="$full_prompt
 
 ## Principles (loaded for Stage 1)
 \`\`\`json
-$principles_content
+$fixture_principles
 \`\`\`"
-    else
-      echo "  WARNING: fixture file not found: $principles_path" >&2
-    fi
+  fi
 
-    if [[ -f "$diff_path" ]]; then
-      local diff_content
-      diff_content=$(cat "$diff_path")
-      full_prompt="$full_prompt
+  if [[ -n "$fixture_diff" ]]; then
+    full_prompt="$full_prompt
 
 ## Diff under review
 \`\`\`diff
-$diff_content
+$fixture_diff
 \`\`\`"
-    else
-      echo "  WARNING: fixture file not found: $diff_path" >&2
-    fi
   fi
 
   local output=""
