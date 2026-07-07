@@ -320,6 +320,45 @@ describe("evaluateCandidate", () => {
       expect(result.ok).toBe(false);
     });
 
+    it("exit code 1 + Errors>0,Total>0 → ToolResult error, not a valid 0-pass score (Codex P1)", async () => {
+      // run-agent-evals.sh's fail-closed missing-fixture path can emit a PARSEABLE summary
+      // (Errors: 1 | Total: 1 | exit 1) that is not a real eval outcome — it's a runner/setup
+      // error that happened to print a total>0 line. The old code only checked
+      // `summary.total === 0` to detect infra errors, so this was misparsed as a valid
+      // 0-pass score — defeating the holistic veto (both sides score 0 → 0>=0 accepts).
+      mockRunShell.mockImplementation((command: string) => {
+        if (hasFlag(command, "--dry-run")) {
+          return {
+            duration_ms: 50,
+            exitCode: 0,
+            ok: true,
+            stderr: "",
+            stdout: "Total: 1 | Passed: 1 | Failed: 0 | Errors: 0 | Skipped: 0",
+            timedOut: false,
+          };
+        }
+        // Exit 1 with a PARSEABLE summary reporting a runner error, not a failed eval case.
+        return {
+          duration_ms: 100,
+          exitCode: 1,
+          ok: false,
+          stderr: "fixture not found",
+          stdout: "Total: 1 | Passed: 0 | Failed: 0 | Errors: 1 | Skipped: 0",
+          timedOut: false,
+        };
+      });
+
+      const result = await evaluateCandidate({
+        candidate_text: "some text",
+        project_dir: tmpDir,
+        splits: ["holdout"],
+        target_path: "skills/canon/evals/eval-set.json",
+      });
+
+      // Must be an error — a runner error must never be scored as a valid 0-pass result.
+      expect(result.ok).toBe(false);
+    });
+
     it("timeout is still fail-closed even if stdout has a summary (P1-BUG-1 timeout invariant)", async () => {
       // Even if timedOut=true with a valid summary in stdout, must be a ToolResult error.
       mockRunShell.mockImplementation((command: string) => {

@@ -5,7 +5,7 @@
  * NEVER imports node:child_process directly.
  *
  * Exports:
- * - parseSummary(stdout): { passed, failed, total } — pure, last-line scan
+ * - parseSummary(stdout): { passed, failed, total, errors } — pure, last-line scan
  * - decideGate(perSplit): { accepted, regressed } — pure, HOLDOUT ONLY (§7)
  * - decideCompositeGate(perStage, holistic): { accepted, regressed } — pure, ANDs decideGate's
  *   strict per-stage `>` with a holistic non-regression veto (`>=`) — the Goodhart guard (G4,
@@ -24,9 +24,9 @@ import type { ProcessResult } from "@shared/lib/tool-result.ts";
 /** Explicit timeout for eval runs — 10 minutes. The default 30s is too short. */
 const EVAL_TIMEOUT_MS = 600_000;
 
-/** Summary regex — captures Total, Passed, Failed counts from run-evals.sh output. */
+/** Summary regex — captures Total, Passed, Failed, Errors counts from run-evals.sh output. */
 const SUMMARY_RE =
-  /Total:\s*(\d+)\s*\|\s*Passed:\s*(\d+)\s*\|\s*Failed:\s*(\d+)\s*\|\s*Errors:\s*\d+\s*\|\s*Skipped:\s*\d+/g;
+  /Total:\s*(\d+)\s*\|\s*Passed:\s*(\d+)\s*\|\s*Failed:\s*(\d+)\s*\|\s*Errors:\s*(\d+)\s*\|\s*Skipped:\s*\d+/g;
 
 /** Per-split scoring record. */
 type SplitScore = {
@@ -83,9 +83,14 @@ type RunSplitOpts = {
  * line from run-evals.sh stdout. Scans from the END to tolerate 512KB truncation
  * (the last summary line is the authoritative one).
  *
- * Returns { passed: 0, failed: 0, total: 0 } for malformed or empty input.
+ * Returns { passed: 0, failed: 0, total: 0, errors: 0 } for malformed or empty input.
  */
-export function parseSummary(stdout: string): { passed: number; failed: number; total: number } {
+export function parseSummary(stdout: string): {
+  passed: number;
+  failed: number;
+  total: number;
+  errors: number;
+} {
   // Reset lastIndex before scanning (regex has global flag)
   SUMMARY_RE.lastIndex = 0;
 
@@ -99,10 +104,11 @@ export function parseSummary(stdout: string): { passed: number; failed: number; 
   }
 
   if (!lastMatch) {
-    return { failed: 0, passed: 0, total: 0 };
+    return { errors: 0, failed: 0, passed: 0, total: 0 };
   }
 
   return {
+    errors: parseInt(lastMatch[4], 10),
     failed: parseInt(lastMatch[3], 10),
     passed: parseInt(lastMatch[2], 10),
     total: parseInt(lastMatch[1], 10),

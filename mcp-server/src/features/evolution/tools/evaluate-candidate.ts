@@ -100,7 +100,7 @@ export type EvaluateCandidateResult = {
 const HOLDOUT_JUDGE_VOTES = 3;
 
 /** One scored run (parse result from stdout). */
-type SummaryScore = { passed: number; failed: number; total: number };
+type SummaryScore = { passed: number; failed: number; total: number; errors: number };
 
 /** One split's per-stage score plus (when a holistic suite exists) its holistic score. */
 type SplitScoreWithHolistic = { perStage: SummaryScore; holistic: SummaryScore | null };
@@ -110,9 +110,14 @@ type RawSplitRun = { perStage: ProcessResult; holistic: ProcessResult | null };
 
 /**
  * scoreRun — apply the shared fail-closed timeout/error/summary-parse contract to one
- * raw ProcessResult. Timeout is always fail-closed. A nonzero exit is only an infra error
- * when there's no parseable summary line (run-evals.sh exits 1 whenever FAILED>0||ERRORS>0,
- * which is a valid eval result, not a crash).
+ * raw ProcessResult. Timeout is always fail-closed. A nonzero exit is an infra error when
+ * there's no parseable summary line (run-evals.sh exits 1 whenever FAILED>0||ERRORS>0,
+ * which is a valid eval result, not a crash) OR when the summary itself reports runner
+ * errors (`errors > 0`) — a summary line can appear even when the harness never actually
+ * ran (e.g. run-agent-evals.sh's fail-closed missing-fixture path prints
+ * `Errors: 1 | Total: 1 | Passed: 0`), which must not be scored as a valid 0-pass result.
+ * A nonzero exit that is purely FAILED eval cases (`errors === 0, total > 0`) remains a
+ * valid result and is still scored.
  */
 function scoreRun(result: ProcessResult, label: string): ToolResult<SummaryScore> {
   if (result.timedOut) {
@@ -125,7 +130,7 @@ function scoreRun(result: ProcessResult, label: string): ToolResult<SummaryScore
   }
 
   const summary = parseSummary(result.stdout);
-  if (!result.ok && summary.total === 0) {
+  if (!result.ok && (summary.total === 0 || summary.errors > 0)) {
     return toolError(
       "UNEXPECTED",
       `Eval script failed during ${label} run with no parseable summary: ${result.stderr || result.stdout}`,
@@ -303,8 +308,8 @@ function buildPerSplit(
   baseline: Partial<Record<"train" | "val" | "holdout", SplitScoreWithHolistic>>,
   candidate: Partial<Record<"train" | "val" | "holdout", SplitScoreWithHolistic>>,
 ): PerSplit {
-  const bHoldout = baseline.holdout?.perStage ?? { failed: 0, passed: 0, total: 0 };
-  const cHoldout = candidate.holdout?.perStage ?? { failed: 0, passed: 0, total: 0 };
+  const bHoldout = baseline.holdout?.perStage ?? { errors: 0, failed: 0, passed: 0, total: 0 };
+  const cHoldout = candidate.holdout?.perStage ?? { errors: 0, failed: 0, passed: 0, total: 0 };
   return {
     holdout: {
       baseline_passed: bHoldout.passed,
