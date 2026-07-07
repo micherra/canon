@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.19.0](https://github.com/micherra/canon/compare/v2.18.0...v2.19.0) (2026-07-07)
+
+
+### Features
+
+* **corpus:** 3 corpus-drift enforcement gates + PR [#462](https://github.com/micherra/canon/issues/462) follow-up cleanups ([#471](https://github.com/micherra/canon/issues/471)) ([8c2add2](https://github.com/micherra/canon/commit/8c2add27a7dc7981157cb0b5532dd1165fbd62d2))
+* **eve:** measured-step reviewer runtime — Increment 0 (per-agent eval suites + composite holistic gate) ([#473](https://github.com/micherra/canon/issues/473)) ([d4fb159](https://github.com/micherra/canon/commit/d4fb15948ffee822841bcc9053e6089afab8b8c2))
+* **orchestration:** fail-closed write-receipt completion gate (ADR-0042) ([#472](https://github.com/micherra/canon/issues/472)) ([fe8608a](https://github.com/micherra/canon/commit/fe8608a2f854922ccd549f0e56de1412d3eb8c05))
+
+
+### Bug Fixes
+
+* **hooks:** stop SessionStart doc-staleness hook emitting a phantom stale count ([#467](https://github.com/micherra/canon/issues/467)) ([cf95bf0](https://github.com/micherra/canon/commit/cf95bf09021c84ae2f684f334b4610aae3f22488))
+
 ## [2.18.0](https://github.com/micherra/canon/compare/v2.17.0...v2.18.0) (2026-07-06)
 
 
