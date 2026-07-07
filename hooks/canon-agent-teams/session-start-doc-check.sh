@@ -2,11 +2,14 @@
 # session-start-doc-check.sh — SessionStart hook that nudges the lead when
 # documentation may be stale.
 #
-# Compares the current HEAD commit against the SHA recorded in
-# .canon/last-scribe-commit (written by the scribe agent after it
-# last synced CLAUDE.md / docs / agents). If they diverge, emit an
-# informational hint on stdout for the lead to consider running the
-# scribe before relying on agent-facing docs.
+# Derives the reference commit from git history: the most recent
+# HEAD-reachable commit whose subject starts with "docs(context-sync)" or
+# whose message carries a "Canon-Agent: scribe" trailer (a real scribe sync).
+# .canon/last-scribe-commit (written once at seed time and never updated
+# since — nothing else writes it) is a fallback only, used when git yields
+# no such commit. If the reference commit diverges from HEAD, emit an
+# informational hint on stdout for the lead to consider running the scribe
+# before relying on agent-facing docs.
 #
 # Never blocks: this is an advisory nudge, exit 0 regardless.
 
@@ -19,8 +22,27 @@ if [[ ! -d "$CANON_DIR" ]]; then
 fi
 
 LAST_SCRIBE_FILE="${CANON_DIR}/last-scribe-commit"
+GIT_C=(-C "${CANON_PROJECT_DIR:-.}")
 
-if [[ ! -f "$LAST_SCRIBE_FILE" ]]; then
+# Prefer the git-derived reference over the dead marker file. A single `git
+# log` call with two --grep patterns is OR'd together by git by default
+# (no --all-match), and -n1 returns the match nearest HEAD.
+# DOCUMENTED FAIL-OPEN -- a git failure (shallow clone, corrupt repo) yields
+# an empty DERIVED_SHA, which falls through to the marker-file fallback below.
+DERIVED_SHA=$(git "${GIT_C[@]}" log -E \
+  --grep='^docs\(context-sync\)' \
+  --grep='^Canon-Agent: scribe[[:space:]]*$' \
+  --format='%H' -n1 2>/dev/null || true)
+
+if [[ -n "$DERIVED_SHA" ]]; then
+  LAST_SCRIBE_SHA="$DERIVED_SHA"
+elif [[ -f "$LAST_SCRIBE_FILE" ]]; then
+  # DOCUMENTED FAIL-OPEN -- empty/‹?› result falls through to exit 0
+  LAST_SCRIBE_SHA=$(tr -d '[:space:]' < "$LAST_SCRIBE_FILE" 2>/dev/null || true)
+  if [[ -z "$LAST_SCRIBE_SHA" ]]; then
+    exit 0
+  fi
+else
   cat <<'EOF'
 CANON NOTE: No scribe checkpoint recorded yet (.canon/last-scribe-commit missing).
 Agent-facing docs (CLAUDE.md files, references/) may not reflect
@@ -30,13 +52,8 @@ EOF
   exit 0
 fi
 
-LAST_SCRIBE_SHA=$(tr -d '[:space:]' < "$LAST_SCRIBE_FILE" 2>/dev/null || true)
-
-if [[ -z "$LAST_SCRIBE_SHA" ]]; then
-  exit 0
-fi
-
-HEAD_SHA=$(git rev-parse HEAD 2>/dev/null || true)
+# DOCUMENTED FAIL-OPEN -- empty result falls through to the blank-HEAD_SHA exit-0 check below
+HEAD_SHA=$(git "${GIT_C[@]}" rev-parse HEAD 2>/dev/null || true)
 
 if [[ -z "$HEAD_SHA" || "$HEAD_SHA" == "$LAST_SCRIBE_SHA" ]]; then
   exit 0
@@ -44,7 +61,8 @@ fi
 
 # Report commits since the last scribe run. Cap at 20 lines to keep the
 # nudge terse.
-CHANGED_COUNT=$(git rev-list --count "${LAST_SCRIBE_SHA}..HEAD" 2>/dev/null || echo "?")
+# DOCUMENTED FAIL-OPEN -- empty/‹?› result falls through to exit 0
+CHANGED_COUNT=$(git "${GIT_C[@]}" rev-list --count "${LAST_SCRIBE_SHA}..HEAD" 2>/dev/null || echo "?")
 
 cat <<EOF
 CANON NOTE: Docs may be stale.

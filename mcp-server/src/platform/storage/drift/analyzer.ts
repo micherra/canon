@@ -78,8 +78,8 @@ function initStats(id: string): PrincipleStats {
 
 /**
  * Returns true for violations that should be excluded from principle-keyed analytics.
- * correctness-scan is a human-presentation annotation stored for present_review
- * but must never appear in most_violated, compliance_rate, or violation_directories.
+ * correctness-scan is a human-presentation annotation stored for show_pr_impact
+ * human presentation but must never appear in most_violated, compliance_rate, or violation_directories.
  */
 function isAnalyticsViolation(v: { principle_id: string }): boolean {
   return v.principle_id !== CORRECTNESS_SCAN_PRINCIPLE_ID;

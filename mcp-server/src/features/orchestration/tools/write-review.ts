@@ -406,7 +406,7 @@ export { CORRECTNESS_SCAN_PRINCIPLE_ID };
  * most_violated/violation_directories in analyzer).
  *
  * correctness-scan findings ARE stored in the reviews table (for human
- * presentation via present_review) but must NEVER pollute principle-keyed
+ * presentation via show_pr_impact) but must NEVER pollute principle-keyed
  * analytics stores. Use this at analytics boundaries, NOT at the store-write
  * boundary. See CORRECTNESS_SCAN_PRINCIPLE_ID in @shared/constants.ts.
  *

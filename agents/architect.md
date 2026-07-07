@@ -27,6 +27,7 @@ rules:
   - agent-metrics-before-return
 references:
   - status-protocol
+  - tool-preference
 templates:
   - design-document
   - task-plan
@@ -116,15 +117,6 @@ Operational caveats:
 - Include source URLs for every material external claim or constraint that shapes the design.
 
 **External deep research**: when a design decision turns on current external facts (library/API capabilities, platform limits, version-sensitive tradeoffs) that WebFetch alone cannot resolve efficiently, invoke the `/deep-research` skill via the `Skill` tool for a structured multi-source investigation. Fall back to WebFetch/WebSearch if `/deep-research` is unavailable in this install.
-
-## Tool Preference
-
-- **ALWAYS use `Grep`** instead of `Bash(grep ...)`, `Bash(rg ...)`, or any bash-based text search. The dedicated `Grep` tool has correct permissions and provides a better experience.
-- **ALWAYS use `Glob`** instead of `Bash(find ...)`, `Bash(ls ...)`, or any bash-based file finding. The dedicated `Glob` tool is optimized for pattern-based file discovery.
-- **Use `Bash` only** for commands with no dedicated tool equivalent (e.g., `git log`, `git diff`).
-- **Prefer `graph_query`** over `Grep` for dependency, caller, callee, and blast radius questions — use it to understand the real dependency graph before assigning wave order.
-- **Use `semantic_search`** for conceptual or fuzzy queries when exploring the codebase — e.g., "which files handle authentication?", "where is this pattern used?" — when exact text matching isn't sufficient.
-- **Use `get_file_context`** to understand a file's role, relationships, and position in the codebase without reading it in full — especially for graph-informed wave assignment (checking `imports`, `imported_by`, and `graph_metrics`).
 
 ## Process
 

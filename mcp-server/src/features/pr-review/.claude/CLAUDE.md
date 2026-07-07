@@ -3,7 +3,7 @@
 <!-- Managed by Canon. Manual edits are preserved. -->
 
 ## Purpose
-PR review tools: unified PR impact analysis, code review surfacing, review persistence, and pre-rendered review artifact presentation.
+PR review tools: unified PR impact analysis, code review surfacing, and review persistence.
 
 ## Architecture
 <!-- last-updated: 2026-06-06 -->
@@ -15,7 +15,6 @@ PR review tools: unified PR impact analysis, code review surfacing, review persi
 | `show-pr-impact.ts` | `show_pr_impact` | Unified PR analysis; returns `UnifiedPrOutput` with `has_review` boolean; `status` always `"ok"`; resource URI: `ui://canon/pr-review`; optional `worktree_path` scopes diff cwd (KG/DriftStore remain on projectDir; invalid path returns `error` field, never throws) |
 | `review-code.ts` | `review_code` | Surface principles for code review + code content |
 | `store-pr-review.ts` | `store_pr_review` | Persist PR review result; accepts optional `craft_profile` |
-| `present-review.ts` | `present_review` | `showPrImpact` → read pre-rendered `review.html` → `presentArtifact`; returns `{ url: string }`; `INVALID_INPUT` when `review.html` missing or `has_review === false` |
 | `pr-review-data.ts` | (service, not tool) | `getPrReviewData` — top-level assembler; returns `{ error }` for invalid `pr_number` (never throws) |
 | `pr-review-data-helpers.ts` | (service, not tool) | Pure helper functions; see Contracts below |
 

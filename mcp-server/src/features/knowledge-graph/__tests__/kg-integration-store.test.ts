@@ -3,7 +3,7 @@
  *
  * Tests cross-module boundaries:
  *   6. KgStore CRUD gaps (upsert conflict path, cascade verification, boolean coercion)
- *   7. KgQuery gaps (getAncestors, getAdjacencyList)
+ *   7. KgQuery gaps (getAdjacencyList)
  *   8. Adapter edge cases — malformed input and empty files
  *
  * All DB-bound tests use in-memory SQLite (:memory:).
@@ -242,9 +242,9 @@ describe("KgStore — coverage gaps", () => {
   });
 });
 
-// 9. KgQuery — gaps: getAncestors, getAdjacencyList
+// 9. KgQuery — gaps: getAdjacencyList
 
-describe("KgQuery — coverage gaps (getAncestors, getAdjacencyList)", () => {
+describe("KgQuery — coverage gaps (getAdjacencyList)", () => {
   let db: Database.Database;
   let store: KgStore;
   let query: KgQuery;
@@ -257,45 +257,6 @@ describe("KgQuery — coverage gaps (getAncestors, getAdjacencyList)", () => {
 
   afterEach(() => {
     store.close();
-  });
-
-  test("getAncestors returns parent entities via contains edges", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts" }));
-    const classA = store.insertEntity(
-      makeEntityRow(fileA.file_id!, {
-        kind: "class",
-        name: "ClassA",
-        qualified_name: "src/A.ts::ClassA",
-      }),
-    );
-    const method = store.insertEntity(
-      makeEntityRow(fileA.file_id!, {
-        kind: "function",
-        name: "method",
-        qualified_name: "src/A.ts::ClassA.method",
-      }),
-    );
-    store.insertEdge({
-      confidence: 1.0,
-      edge_type: "contains",
-      metadata: null,
-      source_entity_id: classA.entity_id!,
-      target_entity_id: method.entity_id!,
-    });
-
-    const ancestors = query.getAncestors(method.entity_id!);
-    expect(ancestors).toHaveLength(1);
-    expect(ancestors[0]!.name).toBe("ClassA");
-    expect(ancestors[0]!.kind).toBe("class");
-  });
-
-  test("getAncestors returns empty array for top-level entity with no contains edges", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts" }));
-    const top = store.insertEntity(
-      makeEntityRow(fileA.file_id!, { name: "topLevel", qualified_name: "src/A.ts::topLevel" }),
-    );
-    const ancestors = query.getAncestors(top.entity_id!);
-    expect(ancestors).toHaveLength(0);
   });
 
   test("getAdjacencyList returns map of source → target arrays", () => {

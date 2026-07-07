@@ -5,6 +5,7 @@ severity: rule
 tags: [agent-behavior, context, self-serve]
 scope:
   agents: all
+  exclude: [evaluator]
 ---
 
 # Verify Context Before Starting Work

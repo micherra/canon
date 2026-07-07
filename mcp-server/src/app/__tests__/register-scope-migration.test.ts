@@ -121,10 +121,6 @@ vi.mock("@features/pr-review/tools/store-pr-review.ts", () => ({
   storePrReview: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
-vi.mock("@features/pr-review/tools/present-review.ts", () => ({
-  presentReview: vi.fn().mockResolvedValue({ ok: true }),
-}));
-
 vi.mock("@features/principles/tools/get-compliance.ts", () => ({
   getCompliance: vi.fn().mockResolvedValue({ ok: true }),
 }));

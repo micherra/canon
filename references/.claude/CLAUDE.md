@@ -49,6 +49,7 @@ references/
 | status-protocol.md |  |
 | team-dispatch-protocol.md | Full three-phase team dispatch protocol for Canon review fan-out. Covers Phase 1 (partition by blast radius), Phase 2 (spawn N reviewers in parallel), and Phase 3 (consolidate with minority-finding verification probes). |
 | tester-report-template.md |  |
+| tool-preference.md |  |
 | workspace-logging.md |  |
 | writer-worked-example.md |  |
 <!-- canon:inventory:end -->
