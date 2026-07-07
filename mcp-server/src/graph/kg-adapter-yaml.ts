@@ -143,24 +143,15 @@ export const yamlAdapter: LanguageAdapter = {
       signature: null,
     };
 
-    // file -> entity "contains" edge
-    const intraFileEdges: AdapterResult["intraFileEdges"] = [
-      {
-        confidence: 1.0,
-        edge_type: "contains",
-        source_qualified: filePath,
-        target_qualified: qualifiedName,
-      },
-    ];
-
     // Only extract import specifiers for flow and flow-fragment kinds
     const importSpecifiers: AdapterResult["importSpecifiers"] =
       kind === "flow" || kind === "flow-fragment" ? extractImportSpecifiers(data) : [];
 
+    // yaml emits no intra-file edges (the file → entity "contains" edge was dead)
     return {
       entities: [entity],
       importSpecifiers,
-      intraFileEdges,
+      intraFileEdges: [],
     };
   },
 };

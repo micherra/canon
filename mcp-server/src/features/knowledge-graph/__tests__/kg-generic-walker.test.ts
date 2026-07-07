@@ -92,15 +92,6 @@ describe("walkTree — TypeScript", () => {
     expect(speak!.kind).toBe("method");
   });
 
-  it("produces contains edges from file to all entities", () => {
-    const result = parseTs("export function foo() {} export function bar() {}");
-    const containsEdges = result.intraFileEdges.filter((e) => e.edge_type === "contains");
-    expect(containsEdges.length).toBeGreaterThanOrEqual(2);
-    for (const edge of containsEdges) {
-      expect(edge.source_qualified).toBe("test.ts");
-    }
-  });
-
   it("produces extends edge for class with superclass", () => {
     const result = parseTs("class Cat extends Animal {}");
     const extendsEdge = result.intraFileEdges.find((e) => e.edge_type === "extends");
@@ -235,12 +226,6 @@ describe("walkTree — Python", () => {
     expect(bark!.qualified_name).toBe("test.py::Dog.bark");
   });
 
-  it("produces contains edges for Python entities", () => {
-    const result = parsePy("def foo():\n    pass\ndef bar():\n    pass");
-    const containsEdges = result.intraFileEdges.filter((e) => e.edge_type === "contains");
-    expect(containsEdges.length).toBeGreaterThanOrEqual(2);
-  });
-
   it("produces extends edge for class with base class", () => {
     const result = parsePy("class Cat(Animal):\n    pass");
     const ext = result.intraFileEdges.find((e) => e.edge_type === "extends");
@@ -352,12 +337,6 @@ describe("walkTree — Bash", () => {
     expect(edge).toBeDefined();
   });
 
-  it("produces contains edges for functions", () => {
-    const result = parseBash("foo() {\n  echo foo\n}\nbar() {\n  echo bar\n}");
-    const containsEdges = result.intraFileEdges.filter((e) => e.edge_type === "contains");
-    expect(containsEdges.length).toBeGreaterThanOrEqual(2);
-  });
-
   it("handles empty source gracefully", () => {
     const result = parseBash("");
     expect(result.entities).toEqual([]);
@@ -369,7 +348,7 @@ describe("walkTree — Bash", () => {
 // Java parity tests
 
 describe("walkTree — Java", () => {
-  it("extracts class with methods — class entity, method entities, contains edges", () => {
+  it("extracts class with methods — class entity, method entities", () => {
     const src = [
       "public class Calculator {",
       "    public int add(int a, int b) { return a + b; }",
@@ -389,9 +368,6 @@ describe("walkTree — Java", () => {
     const add = methods.find((m) => m.name === "add");
     expect(add).toBeDefined();
     expect(add!.qualified_name).toBe("Test.java::Calculator.add");
-
-    const containsEdges = result.intraFileEdges.filter((e) => e.edge_type === "contains");
-    expect(containsEdges.length).toBeGreaterThanOrEqual(1);
   });
 
   it("extracts Java import declaration — ImportSpecifier", () => {

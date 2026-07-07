@@ -287,7 +287,7 @@ function registerGraphQueryTool(server: McpServer): void {
           })
           .optional(),
         query_type: z
-          .enum(["callers", "callees", "blast_radius", "dead_code", "search", "ancestors"])
+          .enum(["callers", "callees", "blast_radius", "dead_code", "search"])
           .describe("Type of query to perform"),
         target: z
           .string()

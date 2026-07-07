@@ -15,7 +15,7 @@
 
 import type { Node, Tree } from "web-tree-sitter";
 import type { LanguageConfig, SyntaxNode, WalkerContext } from "./kg-language-configs.ts";
-import type { AdapterResult, EdgeType, EntityKind, IntraFileEdge } from "./kg-types.ts";
+import type { AdapterResult, EdgeType, EntityKind } from "./kg-types.ts";
 
 /**
  * Walk a parsed syntax tree and extract entities, intra-file edges, and
@@ -49,14 +49,6 @@ export function walkTree(
     visitNode(root, ctx, config);
   }
 
-  // Build file → entity "contains" edges
-  const containsEdges: IntraFileEdge[] = ctx.entities.map((e) => ({
-    confidence: 1.0,
-    edge_type: "contains" as const,
-    source_qualified: filePath,
-    target_qualified: e.qualified_name,
-  }));
-
   // Cast from the looser WalkerContext string types to the strict AdapterResult types.
   // Language configs and hooks use plain string to avoid importing kg-types.ts;
   // the generic walker is the only place that bridges the two type systems.
@@ -66,13 +58,10 @@ export function walkTree(
       kind: e.kind as EntityKind,
     })),
     importSpecifiers: ctx.importSpecifiers,
-    intraFileEdges: [
-      ...containsEdges,
-      ...ctx.intraEdges.map((edge) => ({
-        ...edge,
-        edge_type: edge.edge_type as EdgeType,
-      })),
-    ],
+    intraFileEdges: ctx.intraEdges.map((edge) => ({
+      ...edge,
+      edge_type: edge.edge_type as EdgeType,
+    })),
   };
 }
 

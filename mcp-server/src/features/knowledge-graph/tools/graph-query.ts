@@ -8,13 +8,7 @@ import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 // Input / Output types
 
-export type GraphQueryType =
-  | "callers"
-  | "callees"
-  | "blast_radius"
-  | "dead_code"
-  | "search"
-  | "ancestors";
+export type GraphQueryType = "callers" | "callees" | "blast_radius" | "dead_code" | "search";
 
 export type GraphQueryOptions = {
   max_depth?: number;
@@ -66,7 +60,7 @@ function requireTarget(
   return target;
 }
 
-/** Execute an entity-based query (callers, callees, ancestors, blast_radius). */
+/** Execute an entity-based query (callers, callees, blast_radius). */
 function entityQuery(
   kq: KgQuery,
   queryType: GraphQueryType,
@@ -111,10 +105,10 @@ function dispatchSearch(
   return toolOk({ count: results.length, query_type: "search", results, target });
 }
 
-/** Dispatch entity-based queries (callers, callees, blast_radius, ancestors). */
+/** Dispatch entity-based queries (callers, callees, blast_radius). */
 function dispatchEntityQuery(
   kq: KgQuery,
-  query_type: "callers" | "callees" | "blast_radius" | "ancestors",
+  query_type: "callers" | "callees" | "blast_radius",
   target: string | undefined,
   options: Record<string, unknown>,
 ): ToolResult<GraphQueryOutput> {
@@ -122,7 +116,6 @@ function dispatchEntityQuery(
   if (typeof t !== "string") return t;
 
   const queryFns: Record<string, (id: number) => unknown[]> = {
-    ancestors: (id) => kq.getAncestors(id),
     blast_radius: (id) => kq.getBlastRadius([id], (options.max_depth as number | undefined) ?? 3),
     callees: (id) => kq.getCallees(id),
     callers: (id) => kq.getCallers(id),
@@ -149,7 +142,6 @@ function dispatchQuery(
     case "callers":
     case "callees":
     case "blast_radius":
-    case "ancestors":
       return dispatchEntityQuery(kq, query_type, target, options);
     default: {
       const exhaustive: never = query_type;
