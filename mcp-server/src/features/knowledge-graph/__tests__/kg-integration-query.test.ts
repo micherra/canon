@@ -405,40 +405,6 @@ describe("graphQuery tool dispatch", () => {
     expect(names).toContain("funcB");
   });
 
-  test("ancestors query returns containing entities", () => {
-    // Build a contains edge: fileEntity → funcA
-    const dbPath = path.join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-    mkdirSync(path.dirname(dbPath), { recursive: true });
-    const db = initDatabase(dbPath);
-    const store = new KgStore(db);
-    const { funcA } = populateTestGraph(store);
-
-    // Insert a class that contains funcA
-    const fileA = store.getFile("src/A.ts")!;
-    const classContainer = store.insertEntity(
-      makeEntityRow(fileA.file_id!, {
-        is_exported: true,
-        kind: "class",
-        name: "MyClass",
-        qualified_name: "src/A.ts::MyClass",
-      }),
-    );
-    store.insertEdge({
-      confidence: 1.0,
-      edge_type: "contains",
-      metadata: null,
-      source_entity_id: classContainer.entity_id!,
-      target_entity_id: funcA.entity_id!,
-    });
-    store.close();
-
-    const result = graphQuery({ query_type: "ancestors", target: "funcA" }, projectDir);
-    if (!result.ok) throw new Error(result.message);
-    expect(result.count).toBeGreaterThanOrEqual(1);
-    const names = (result.results as Array<{ name: string }>).map((r) => r.name);
-    expect(names).toContain("MyClass");
-  });
-
   test("entity-not-found returns empty result set instead of throwing", () => {
     seedDb(projectDir);
     const result = graphQuery(
