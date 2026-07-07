@@ -443,8 +443,8 @@ Example recommendations array:
 [
   {
     "file_path": "src/tools/handler.ts",
-    "title": "thin-handlers",
-    "message": "Business logic in the handler should move to a service layer. Makes it untestable and couples routing to domain logic.",
+    "title": "consistent-abstraction-levels",
+    "message": "The handler mixes routing with business logic — extract the domain logic into a service layer so the handler stays at one abstraction level. Makes it untestable and couples routing to domain logic.",
     "source": "principle"
   },
   {
