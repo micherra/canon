@@ -5,12 +5,13 @@
 #
 # All tests use isolated temp git repos. No hard-coded paths; safe for CI.
 #
-# ANTI-RECURSION INVARIANT: shell-test-gate.sh enumerates `find hooks -type f
-# -name '*.test.sh'` relative to CWD. Every invocation of the gate in this
-# suite MUST `cd` into a temp fixture repo — NEVER run the gate against the
-# real repo root. Fixture repos contain only tiny stub *.test.sh files, so the
-# gate's find scopes to stubs only, terminating at recursion depth 2
-# (real gate → this test → fixture gate → fixture stub). See DESIGN §Anti-recursion.
+# ANTI-RECURSION INVARIANT: shell-test-gate.sh enumerates `find hooks agents
+# skills -type f -name '*.test.sh'` (restricted to whichever of those roots
+# exist) relative to CWD. Every invocation of the gate in this suite MUST
+# `cd` into a temp fixture repo — NEVER run the gate against the real repo
+# root. Fixture repos contain only tiny stub *.test.sh files, so the gate's
+# find scopes to stubs only, terminating at recursion depth 2 (real gate →
+# this test → fixture gate → fixture stub). See DESIGN §Anti-recursion.
 
 set -euo pipefail
 
@@ -560,6 +561,87 @@ else
 fi
 
 git -C "$CASEP_MAIN" worktree remove --force "$CASEP_LINKED" >/dev/null 2>&1 || true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case q: agents/*.sh change (no hooks/ change at all) fires the gate and
+# enumerates a suite under agents/ (CI-parity widening — shell-test-gate
+# now mirrors CI's agents/**/*.test.sh set, not just hooks/).
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case q: agents/*.sh-only change → gate fires, finds agents/*.test.sh suite --"
+
+CASEQ_REPO="$MASTER_TMP/caseq"
+init_fixture_repo "$CASEQ_REPO"
+
+mkdir -p "$CASEQ_REPO/agents/__tests__"
+printf '#!/bin/bash\nexit 0\n' > "$CASEQ_REPO/agents/__tests__/stub-pass.test.sh"
+git -C "$CASEQ_REPO" add agents/__tests__/stub-pass.test.sh
+git -C "$CASEQ_REPO" commit -q -m "add passing agents stub suite"
+CASEQ_BASE=$(git -C "$CASEQ_REPO" rev-parse HEAD)
+
+# In-scope change: an agents/ .sh file, no hooks/ file touched at all
+printf '#!/bin/bash\n# no-op\n' > "$CASEQ_REPO/agents/foo.sh"
+git -C "$CASEQ_REPO" add agents/foo.sh
+git -C "$CASEQ_REPO" commit -q -m "add agents/foo.sh (in-scope change)"
+
+run_gate_with_output \
+  "agents/*.sh-only change → gate fires + finds agents/__tests__ suite" \
+  "=== agents/__tests__/stub-pass.test.sh ===" \
+  "$CASEQ_REPO" "$CASEQ_BASE"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case r: skills/*.sh change (no hooks/ or agents/ change) fires the gate and
+# enumerates a suite under skills/.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case r: skills/*.sh-only change → gate fires, finds skills/*.test.sh suite --"
+
+CASER_REPO="$MASTER_TMP/caser"
+init_fixture_repo "$CASER_REPO"
+
+mkdir -p "$CASER_REPO/skills/__tests__"
+printf '#!/bin/bash\nexit 0\n' > "$CASER_REPO/skills/__tests__/stub-pass.test.sh"
+git -C "$CASER_REPO" add skills/__tests__/stub-pass.test.sh
+git -C "$CASER_REPO" commit -q -m "add passing skills stub suite"
+CASER_BASE=$(git -C "$CASER_REPO" rev-parse HEAD)
+
+# In-scope change: a skills/ .sh file, no hooks/ or agents/ file touched
+printf '#!/bin/bash\n# no-op\n' > "$CASER_REPO/skills/bar.sh"
+git -C "$CASER_REPO" add skills/bar.sh
+git -C "$CASER_REPO" commit -q -m "add skills/bar.sh (in-scope change)"
+
+run_gate_with_output \
+  "skills/*.sh-only change → gate fires + finds skills/__tests__ suite" \
+  "=== skills/__tests__/stub-pass.test.sh ===" \
+  "$CASER_REPO" "$CASER_BASE"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case s: repo with hooks/ only (no agents/ or skills/ dirs at all) behaves
+# exactly as before the widening — SEARCH_ROOTS falls back to hooks/ alone,
+# no error from `find` on nonexistent agents/skills roots. This is the
+# backward-compat guard for the directory-existence guard added alongside
+# the agents/skills widening.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case s: no agents/ or skills/ dirs present → find still succeeds, hooks-only scope --"
+
+CASES_REPO="$MASTER_TMP/cases"
+init_fixture_repo "$CASES_REPO"
+
+mkdir -p "$CASES_REPO/hooks"
+printf '#!/bin/bash\nexit 0\n' > "$CASES_REPO/hooks/stub-pass.test.sh"
+git -C "$CASES_REPO" add hooks/stub-pass.test.sh
+git -C "$CASES_REPO" commit -q -m "add passing stub suite"
+CASES_BASE=$(git -C "$CASES_REPO" rev-parse HEAD)
+
+printf '#!/bin/bash\n# no-op\n' > "$CASES_REPO/hooks/foo.sh"
+git -C "$CASES_REPO" add hooks/foo.sh
+git -C "$CASES_REPO" commit -q -m "add foo.sh (in-scope change)"
+
+run_gate_with_output \
+  "no agents/ or skills/ dirs → gate still fires and scopes to hooks/ only" \
+  "=== hooks/stub-pass.test.sh ===" \
+  "$CASES_REPO" "$CASES_BASE"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summary
