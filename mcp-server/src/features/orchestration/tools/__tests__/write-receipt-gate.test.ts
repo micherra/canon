@@ -2,7 +2,7 @@
  * write-receipt-gate — integration tests for the fail-closed write-receipt
  * completion gate (`enforceWriteReceipt`) wired into `logStep` and
  * `batchLogSteps`. Covers the DESIGN.md False-Close table rows and the
- * enforce-always (no mode knob) posture. See ADR-0042.
+ * enforce-always (no mode knob) posture. See ADR-0043.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";

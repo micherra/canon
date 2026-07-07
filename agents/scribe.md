@@ -100,7 +100,7 @@ itself (the context-sync template's own status field — see
 `## Context Sync` body using the template's section headings, then refine it
 in place as Steps 3–7 complete. Persisting through `write_context_sync` (rather
 than raw `Write`) is what makes the skeleton receipt-backed for the
-write-receipt completion gate (ADR-0042) — see Step 8.
+write-receipt completion gate (ADR-0043) — see Step 8.
 
 The scribe was previously the only heavy single-artifact agent whose declared
 artifact was written dead last (after the Step 7 commit) — any stall in

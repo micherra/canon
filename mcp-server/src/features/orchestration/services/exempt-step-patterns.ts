@@ -18,7 +18,7 @@
  * reserved step_id prefix or the write-receipt gate will false-close it. The
  * real full-scan security-assessment step uses a plain `security`/
  * `security-assessment` step_id and is NOT covered by this pattern — the
- * receipt guarantee (ADR-0042) stays intact for it.
+ * receipt guarantee (ADR-0043) stays intact for it.
  *
  * Mirrored verbatim (one pattern source per line) in `exempt-step-patterns.txt`
  * for grep-parity, the same convention as `hooks/lib/accepted-skip-reasons.txt`.

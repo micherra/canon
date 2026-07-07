@@ -202,7 +202,7 @@ function registerWriteImplementationSummaryTool(server: McpServer): void {
 }
 
 /**
- * Registers the three write-receipt-gate dedicated write tools (ADR-0042):
+ * Registers the three write-receipt-gate dedicated write tools (ADR-0043):
  * write_design, write_context_sync, write_security_assessment. Each is a thin
  * persist-and-receipt wrapper — the agent still authors the markdown; these
  * tools own the canonical path and emit the artifact's `write_receipt` event.

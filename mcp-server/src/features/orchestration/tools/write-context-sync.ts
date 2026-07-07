@@ -10,7 +10,7 @@ import { emitWriteReceipt } from "../services/write-receipt.ts";
  * The scribe still authors the markdown (see `templates/context-sync.md`);
  * this tool owns the canonical path (`plans/{slug}/CONTEXT-SYNC.md`) and
  * emits the `context_sync` write receipt the write-receipt completion gate
- * requires (ADR-0042). Emits on BOTH `status` values — a NO_UPDATES sync
+ * requires (ADR-0043). Emits on BOTH `status` values — a NO_UPDATES sync
  * still produces the file, so it must still receipt (no false-close).
  */
 export type WriteContextSyncInput = {

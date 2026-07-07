@@ -59,7 +59,7 @@ export type ReconcileWorkspaceResult = {
 
 // Skeleton-marker regex list moved to services/partial-markers.ts (single
 // source of truth shared with write-receipt.ts's WR-02 gate fallback — see
-// docs/adr/0042-fail-closed-write-receipt-completion-gate.md). Re-exported
+// docs/adr/0043-fail-closed-write-receipt-completion-gate.md). Re-exported
 // here for backward compatibility with any existing import of this module.
 export { PARTIAL_MARKERS };
 

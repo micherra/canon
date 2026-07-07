@@ -1,6 +1,6 @@
 /**
  * agent-tool-wiring — parity guard for the write-receipt gate's three new
- * dedicated write tools (wrgate-04, ADR-0042). Each of architect/scribe/
+ * dedicated write tools (wrgate-04, ADR-0043). Each of architect/scribe/
  * security must BOTH grant its new tool in frontmatter AND call it in the
  * agent body — a grant without a body call is a dead grant that would
  * produce an un-receipted artifact (WR-02 weak-pass every time).

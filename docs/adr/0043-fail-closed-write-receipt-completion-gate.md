@@ -1,12 +1,12 @@
 ---
-adr: "0042"
+adr: "0043"
 title: "Fail-closed write-receipt completion gate (RCA Option C)"
 status: accepted
 date: "2026-07-06"
 build: "design-spike-fail-closed-logstepcompleted-write-receipt-gate-so-an"
 ---
 
-# ADR-0042: Fail-closed write-receipt completion gate (RCA Option C)
+# ADR-0043: Fail-closed write-receipt completion gate (RCA Option C)
 
 ## Context
 

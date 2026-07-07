@@ -9,7 +9,7 @@ import { emitWriteReceipt } from "../services/write-receipt.ts";
  * The architect still authors the markdown (this tool does not move template
  * logic server-side — see `templates/design-document.md`); this tool owns the
  * canonical path (`plans/{slug}/DESIGN.md`) and emits the `design` write
- * receipt the write-receipt completion gate requires (wrgate-06/ADR-0042).
+ * receipt the write-receipt completion gate requires (wrgate-06/ADR-0043).
  */
 export type WriteDesignInput = {
   workspace: string;

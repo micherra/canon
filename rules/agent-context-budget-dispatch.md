@@ -22,6 +22,7 @@ Any one of the following is sufficient to trigger team dispatch consideration:
 - Multiple independent bugs or fixes with separate file contexts (3+ independent sub-tasks)
 - Task requires reading a large codebase surface area before acting (estimated 30+ file reads)
 - Combination of expensive setup (merge, scan, migration) plus independent follow-up work
+- Compound rebase+fix — a rebase ≥5 commits OR ≥2 upstream merges combined with code fixes → split into two sequential spawns (rebase-only, then fixes-only); observed 2/3 spawns failed to complete both on a 12-commit rebase+2-fix.
 
 ## Estimation Heuristic
 

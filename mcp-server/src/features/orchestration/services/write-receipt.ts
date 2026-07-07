@@ -10,7 +10,7 @@
  * from `orchestration-journal.ts` (`logStep` + `processEntries`) immediately
  * after `enforceArtifacts`.
  *
- * See docs/adr/0042-fail-closed-write-receipt-completion-gate.md.
+ * See docs/adr/0043-fail-closed-write-receipt-completion-gate.md.
  */
 
 import { globSync, readFileSync } from "node:fs";

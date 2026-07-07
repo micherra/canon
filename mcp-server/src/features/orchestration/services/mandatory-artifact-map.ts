@@ -1,7 +1,7 @@
 /**
  * mandatory-artifact-map — the fail-closed write-receipt completion gate's
  * agent_type -> required-artifact allowlist (RCA Option C, see
- * docs/adr/0042-fail-closed-write-receipt-completion-gate.md).
+ * docs/adr/0043-fail-closed-write-receipt-completion-gate.md).
  *
  * This is the single source of truth for which `agent_type` values must
  * produce a receipt-backed artifact before `log_step`/`batch_log_steps` will

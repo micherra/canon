@@ -27,6 +27,7 @@ rules:
   - agent-metrics-before-return
 references:
   - status-protocol
+  - tool-preference
 templates:
   - design-document
   - task-plan
@@ -118,15 +119,6 @@ Operational caveats:
 
 **External deep research**: when a design decision turns on current external facts (library/API capabilities, platform limits, version-sensitive tradeoffs) that WebFetch alone cannot resolve efficiently, invoke the `/deep-research` skill via the `Skill` tool for a structured multi-source investigation. Fall back to WebFetch/WebSearch if `/deep-research` is unavailable in this install.
 
-## Tool Preference
-
-- **ALWAYS use `Grep`** instead of `Bash(grep ...)`, `Bash(rg ...)`, or any bash-based text search. The dedicated `Grep` tool has correct permissions and provides a better experience.
-- **ALWAYS use `Glob`** instead of `Bash(find ...)`, `Bash(ls ...)`, or any bash-based file finding. The dedicated `Glob` tool is optimized for pattern-based file discovery.
-- **Use `Bash` only** for commands with no dedicated tool equivalent (e.g., `git log`, `git diff`).
-- **Prefer `graph_query`** over `Grep` for dependency, caller, callee, and blast radius questions — use it to understand the real dependency graph before assigning wave order.
-- **Use `semantic_search`** for conceptual or fuzzy queries when exploring the codebase — e.g., "which files handle authentication?", "where is this pattern used?" — when exact text matching isn't sufficient.
-- **Use `get_file_context`** to understand a file's role, relationships, and position in the codebase without reading it in full — especially for graph-informed wave assignment (checking `imports`, `imported_by`, and `graph_metrics`).
-
 ## Process
 
 ### Step 1: Read inputs
@@ -148,7 +140,7 @@ early kill must leave a recoverable partial design on disk. (This session's own
 architect run demonstrated the value — a 529 mid-run left a survivable doc
 because it had been written early.) Persisting through `write_design` (rather
 than raw `Write`) is also what makes the skeleton receipt-backed for the
-write-receipt completion gate (ADR-0042) — see Step 5.
+write-receipt completion gate (ADR-0043) — see Step 5.
 
 ### Step 1a: Design Conversation
 
@@ -272,7 +264,7 @@ Do not create the index entry until after the ADR file itself is written. If the
 
 ### Step 5: Produce design document
 
-Author the design document using the design-document template at `${CLAUDE_PLUGIN_ROOT}/templates/design-document.md`, then persist it via `write_design({ workspace, slug, content })` — the tool owns the canonical path (`plans/{slug}/DESIGN.md`, typically `.canon/plans/{task-slug}/DESIGN.md`) and emits the write receipt the completion gate requires (ADR-0042). Do NOT save DESIGN.md with raw `Write`. For epic flows, include the North Star section with machine-readable done criteria in frontmatter.
+Author the design document using the design-document template at `${CLAUDE_PLUGIN_ROOT}/templates/design-document.md`, then persist it via `write_design({ workspace, slug, content })` — the tool owns the canonical path (`plans/{slug}/DESIGN.md`, typically `.canon/plans/{task-slug}/DESIGN.md`) and emits the write receipt the completion gate requires (ADR-0043). Do NOT save DESIGN.md with raw `Write`. For epic flows, include the North Star section with machine-readable done criteria in frontmatter.
 
 **North Star section (epic flows)**: When designing for an epic flow, the DESIGN.md must include:
 - A `done_criteria` array in YAML frontmatter with `id`, `description`, and `testable` fields

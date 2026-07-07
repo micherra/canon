@@ -10,7 +10,7 @@ import { emitWriteReceipt } from "../services/write-receipt.ts";
  * The security agent still authors the markdown (see
  * `templates/security-assessment.md`); this tool owns the canonical path
  * (`plans/{slug}/SECURITY.md`) and emits the `security_assessment` write
- * receipt the write-receipt completion gate requires (ADR-0042).
+ * receipt the write-receipt completion gate requires (ADR-0043).
  */
 export type WriteSecurityAssessmentInput = {
   workspace: string;
