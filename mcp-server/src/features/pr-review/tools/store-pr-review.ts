@@ -46,7 +46,7 @@ export async function storePrReview(
   const timestamp = new Date().toISOString();
 
   // Store the FULL violations list (including correctness-scan) so that
-  // present_review can show all findings to humans.
+  // show_pr_impact can surface all findings to humans.
   // correctness-scan is excluded from analytics at aggregation time (analyzer.ts)
   // and at signal-write time (updateFileViolationHistory, extractAndStoreAreaObservations).
   await store.appendReview({

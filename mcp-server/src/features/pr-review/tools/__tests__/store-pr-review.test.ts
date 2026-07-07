@@ -444,7 +444,7 @@ describe("storePrReview", () => {
   // ---- correctness-scan: stored for presentation, excluded from analytics ----
 
   it("stores correctness-scan violations in the review record (for human presentation)", async () => {
-    // correctness-scan findings must be stored so present_review can show them to humans.
+    // correctness-scan findings must be stored so show_pr_impact can surface them to humans.
     await storePrReview(
       {
         files: ["src/a.ts"],
@@ -464,7 +464,7 @@ describe("storePrReview", () => {
     const reviews = await store.getReviews();
     expect(reviews).toHaveLength(1);
     const stored = reviews[0];
-    // correctness-scan IS stored — present_review reads from this record
+    // correctness-scan IS stored — show_pr_impact reads from this record
     expect(stored.violations.map((v) => v.principle_id)).toContain(CORRECTNESS_SCAN_PRINCIPLE_ID);
     expect(stored.violations).toHaveLength(1);
   });

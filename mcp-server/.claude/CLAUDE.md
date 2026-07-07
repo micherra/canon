@@ -28,7 +28,7 @@ src/
 │   ├── knowledge-graph/  # graph_query, semantic_search, search_knowledge, codebase_graph, git-intel
 │   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader + read-only-shell carve-out (Phase C current)
 │   ├── orchestration/    # Orchestration runtime: init_workspace, finalize_workspace, log_step, record_agent_metrics, all orchestration tools
-│   ├── pr-review/        # show_pr_impact, review_code, store_pr_review, present_review
+│   ├── pr-review/        # show_pr_impact, review_code, store_pr_review
 │   ├── principles/       # get_principles, list_principles, get_compliance
 │   └── routines/         # list_routines, get_routine, sync_routines — managed routine artifact class (shared/routine.ts loader, services/, tools/, registered via register-routines.ts)
 ├── graph/                # Legacy graph scanner — import/export parsing (being migrated to features/knowledge-graph)
@@ -105,12 +105,6 @@ src/
 **`get_drift_report`** — `pr_reviews` field uses `ReviewEntry[]`; renders `### Documentation freshness` section (omitted when empty), sorted by staleness descending with `[confidence: TIER]` per doc.
 
 **`get_compliance` tool** — returns `confidence: ConfidenceAnnotation`; uses per-principle confidence from `analyzeDrift` when available, falls back to drift confidence adapter.
-
-**`presentArtifact` function** — canonical implementation lives in `src/app/artifact-presentation.ts` (moved from `features/orchestration/tools/present-artifact.ts`, ADR-0006); `features/orchestration/tools/present-artifact.ts` is now a thin re-export shim; `features/pr-review` and `app/register-present-artifact.ts` import from `@app/artifact-presentation.ts` directly.
-
-**`present_artifact` MCP tool** — `html` parameter required; serves HTML via HTTP server; returns `{ url: string }` fire-and-forget.
-
-**`present_review` MCP tool** — `showPrImpact` → read pre-rendered `review.html` → `presentArtifact`; `INVALID_INPUT` when `review.html` missing or `has_review === false`.
 
 **`store-summaries`** — DB-only write path (JSON removed ADR-005); `inferLanguageFromExtension` maps extensions to language strings.
 
