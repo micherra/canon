@@ -19,7 +19,6 @@ Rules are organized into behavioral categories:
 - **Design rules** — govern pre-code planning (`agent-design-before-code`, `agent-plans-are-prompts`, `agent-document-decisions`)
 - **Testing rules** — govern test quality (`agent-test-sad-paths`, `agent-test-the-contract`)
 - **Coordination rules** — govern agent collaboration (`agent-fresh-context`, `agent-workspace-scoping`, `agent-conflict-detection`, `agent-context-sync`, `agent-convergence-discipline`, `agent-worktree-orientation`, `agent-working-environment`, `agent-budget-checkpoint`)
-- **Dispatch rules** — govern orchestrator dispatch behavior (`agent-compound-task-decomposition`)
 - **Efficiency rules** — govern resource and tool usage (`agent-batch-tools`, `agent-metrics-before-return`)
 - **Review rules** — govern review behavior (`agent-cold-review`, `agent-assume-hostile-input`)
 - **Security/behavior rules** — govern agent trust posture (`agent-never-trust-overlay-tier`)
@@ -34,7 +33,6 @@ Rules are organized into behavioral categories:
 | agent-batch-tools.md | Prefer Batch MCP Tools for Multi-File Operations |
 | agent-budget-checkpoint.md | Budget-Aware Checkpointing |
 | agent-cold-review.md | Cold Review, Two Stages |
-| agent-compound-task-decomposition.md | Decompose Compound Rebase+Fix Tasks |
 | agent-conflict-detection.md | Detect Principle Conflicts Before Saving |
 | agent-context-budget-dispatch.md | Architect Must Estimate Input Complexity for Dispatch Decisions |
 | agent-context-check.md | Verify Context Before Starting Work |

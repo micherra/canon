@@ -5,6 +5,7 @@ severity: rule
 tags: [agent-behavior, metrics, observability]
 scope:
   agents: all
+  exclude: [evaluator]
 ---
 
 Before reporting your terminal status, call `record_agent_metrics` with at minimum the `turns` field populated. This creates the data foundation for efficiency analysis, cognitive load scoring, and process health monitoring.

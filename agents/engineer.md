@@ -31,6 +31,7 @@ rules:
 references:
   - principle-loading
   - status-protocol
+  - tool-preference
 primers:
   - testing
   - mocking-boundaries
@@ -196,13 +197,10 @@ Populate the `#### Criteria Coverage` table in the Coverage Notes section. Map e
 
 ## Shared Sections
 
-### Tool Preference
+### LSP
 
-- Prefer `Grep` / `Glob` over Bash grep/find — dedicated tools have correct permissions.
-- Prefer `graph_query` over Grep for dependency, caller, blast-radius questions.
-- `semantic_search` for conceptual queries.
-- `get_file_context` before full file reads when scoping is enough.
-- `Bash` only for commands with no dedicated tool equivalent (git, npm, lint).
+Shared tool-selection guidance (Grep/Glob/graph_query/semantic_search/get_file_context) is preloaded from `references/tool-preference.md`. The engineer-specific addition:
+
 - Use `LSP` (`findReferences`, `goToDefinition`) to check call sites and impact before/after editing a `.ts` symbol — e.g. before renaming or deleting a function, confirm all callers. LSP has **no diagnostics operation**; type-checking remains the job of `npm run build` / `tsc`. Caveat: `character` position must be exact, and a `documentSymbol` warm-up call may be needed on a fresh session.
 
 ### Orientation Protocol
