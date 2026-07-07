@@ -16,7 +16,7 @@
 
 **Cascade behavior** — RESTRICT (prevent delete if children exist) is the safe default — it forces the application to handle cleanup explicitly. CASCADE (delete children automatically) is appropriate for true composition relationships where children have no meaning without the parent (order → order_items). SET NULL is appropriate when the relationship is optional and the child should survive the parent's deletion. Choose deliberately rather than accepting the database default.
 
-**When to denormalize** — Only after you have a measured performance problem with the normalized form. Denormalization trades write complexity (keeping copies in sync) for read performance (avoiding joins). Common candidates: caching computed aggregates (order totals), embedding lookup values that never change (country names), materializing frequently-joined data for read-heavy paths. Always maintain the normalized source of truth alongside the denormalized copy.
+**When to denormalize** — Denormalization trades write complexity (keeping copies in sync) for read performance (avoiding joins); see `normalize-first-denormalize-intentionally` for the justification constraint. Common candidates: caching computed aggregates (order totals), embedding lookup values that never change (country names), materializing frequently-joined data for read-heavy paths.
 
 ## Failure Modes
 

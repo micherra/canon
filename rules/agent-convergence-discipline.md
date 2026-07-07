@@ -7,26 +7,24 @@ scope:
 tags: [agent-behavior, orchestrator, flow]
 ---
 
-Flow state machines with cycles (e.g., `fix-violations → review → fix-violations`) must enforce convergence discipline to prevent infinite loops and wasted compute.
+Bounded fix/review loops (e.g., `implement → review → fix → review`) must enforce convergence discipline to prevent infinite loops and wasted compute.
 
 ## Rationale
 
-Without convergence guards, a refactor→review cycle can oscillate forever: fixing one violation introduces another, or the same violation gets "fixed" the same way repeatedly. The flow must detect these patterns and stop early.
+Without convergence guards, a fix→review cycle can oscillate forever: fixing one violation introduces another, or the same violation gets "fixed" the same way repeatedly. The orchestrator must detect these patterns and escalate before compute is wasted on a non-converging loop.
 
 ## Rules
 
-1. **Max iterations enforced**: Every state with `max_iterations` has a hard cap. The orchestrator MUST transition to `hitl` at this limit regardless of the agent's result. Track iteration count in `board.json` under `iterations.{state_id}.count`.
+1. **Escalate through the strategy cascade, not a blind retry.** On agent failure or a stuck condition (`isStuck` returns true, agent returns error, or retry fails), call `get_next_escalation_strategy({ workspace, step_id, flow_config? })` BEFORE escalating to HITL. Apply the returned strategy (`add_primer`, `increase_budget`, `escalate_model`, `narrow_scope`, or `hitl`) per `references/escalation-protocol.md`.
 
-2. **Duplicate fix detection**: The orchestrator uses the `stuck_when` strategy on the state to detect duplicate work. For `same_violations`, this compares the set of `{principle_id, file_path}` pairs between consecutive iterations. If the sets are identical, the orchestrator transitions to `hitl` — the fix is not converging. The refactorer itself does not need to track this; the orchestrator parses it from the reviewer's REVIEW.md violations table each cycle.
+2. **Bounded retries per step.** On subsequent failures of the same step, call `get_next_escalation_strategy` again — it tracks state and returns the next strategy. When the tool returns `is_terminal: true`, escalate to HITL. The bounded eval-fix and review-fix loops (see root `CLAUDE.md` § Post-Step Effects) cap at 3 iterations before HITL.
 
-3. **CANNOT_FIX exclusion**: When a refactorer returns CANNOT_FIX for a violation, the orchestrator records it in `iterations.{state_id}.cannot_fix` as a list of `{principle_id, file_path}` pairs. On the next cycle through `parallel-per`, the orchestrator excludes these items from the `iterate_on` fan-out. If all remaining items are in the cannot_fix list, transition to `hitl`.
+3. **Cumulative timeout.** The escalation tool enforces a 2-minute cumulative timeout across the cascade. If the cascade has been running for 2+ minutes, it returns `hitl` regardless of remaining strategies — the orchestrator does not track time separately.
 
-4. **Stuck detection**: Use the `stuck_when` strategy defined on the state (see SCHEMA.md for history entry schemas). If stuck is detected, override the normal transition and go to `hitl`. The HITL message includes: stuck strategy, iteration count, and the repeated pattern.
+4. **Adversarial-surface rethink signal.** When a fix loop or a security re-review loop runs 3+ rounds AND every finding in those rounds is a confirmed true positive on a NEW, distinct bypass or failure class (not a regression introduced by a prior fix, not noise or churn), surface the rethink signal to the user before spawning another patch engineer: the surface likely needs a structural or authoritative-primitive design change rather than another patch iteration. See `references/escalation-protocol.md` for the exact discriminator and corroborating instances.
 
-5. **Progress reporting**: After each cycle through a looping state, update `board.json` with: iteration number, result, and history entry matching the `stuck_when` schema. This feeds resumability and enables stuck detection across context resets.
-
-6. **Gate retry on ambiguous failure**: When a wave gate fails, the orchestrator re-runs it once before transitioning to `blocked`. If the second run passes, the gate is considered passed and the next wave proceeds. If it fails again with the same error, transition to `blocked` as normal. This handles flaky tests without masking real failures. The retry is logged in `wave_results.{N}.gate_retried: true`.
+5. **Log the escalation, not just the outcome.** When a loop reaches its terminal iteration and HITL is required, call `log_decision({ workspace, decision_type: "gate_escalation", ... })` so the escalation is part of the durable decisions ledger, not just an in-context event.
 
 ## Exceptions
 
-None. These guards exist to prevent runaway loops. If a task genuinely needs more iterations, the user can increase `max_iterations` in the flow template.
+None. These guards exist to prevent runaway loops. If a task genuinely needs more iterations, the user decides at the HITL gate the terminal escalation surfaces.

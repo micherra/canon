@@ -16,6 +16,8 @@ rules:
   - agent-artifact-write-before-return
   - agent-batch-tools
   - agent-budget-checkpoint
+  - agent-never-trust-overlay-tier
+  - agent-metrics-before-return
 references:
   - status-protocol
   - content-flow
@@ -42,6 +44,7 @@ tools:
   - mcp__canon__get_context
   - mcp__canon__get_transcript
   - mcp__canon__select_mutation_targets
+  - mcp__canon__record_agent_metrics
   - mcp__canon__evaluate_candidate
 ---
 

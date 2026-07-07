@@ -74,21 +74,6 @@ Changing the format (e.g., to JSON) requires editing one file.
 
 Some information is intentionally shared as a contract — API schemas, database migration definitions, and protocol buffer definitions exist to be the single source of truth that multiple modules read from. The key distinction: a shared schema *is* the encapsulation point. The problem is when the knowledge is duplicated rather than referenced.
 
-## Anti-Rationalization
-
-| Excuse | Why It's Wrong | Correct Action |
-|--------|---------------|----------------|
-| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
-| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
-| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
-| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
-
-## Verification
-
-- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
-- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
-- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
-
 ## Related
 
 - [[deep-modules]] — information-hiding is the mechanism by which a module becomes "deep": hiding the decision behind a small interface is what creates the depth.

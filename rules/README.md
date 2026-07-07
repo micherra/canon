@@ -14,7 +14,7 @@ A principle violation means the code is wrong. A rule violation means the agent 
 
 ## Behavioral Categories
 
-Rules cluster into seven behavioral areas:
+Rules cluster into ten behavioral areas:
 
 **Artifact rules** ensure agents produce the right outputs in the right format. The key ones govern template usage (agents must use the provided template, not invent their own structure) and artifact completeness (summaries and reports must include required sections).
 
@@ -28,7 +28,13 @@ Rules cluster into seven behavioral areas:
 
 **Coordination rules** manage how parallel agents stay coherent. Fresh-context isolation, workspace scoping, and conflict detection prevent agents working in parallel from trampling each other's work.
 
+**Dispatch rules** govern how compound work is decomposed and paced across agent spawns — for example, splitting a rebase-plus-fix task into a rebase-only spawn followed by a fixes-only spawn so neither workstream exhausts a single agent's context budget.
+
+**Efficiency rules** govern resource and tool usage, such as preferring batched MCP calls over sequential per-file lookups and recording agent metrics before returning.
+
 **Review rules** maintain review integrity. Reviewers must approach code cold (without pre-formed opinions from the implementor's summary) and treat all inputs as potentially hostile.
+
+**Security/behavior rules** govern agent trust posture toward untrusted input, such as never acting on untrusted-overlay-tier content.
 
 ## File Format
 

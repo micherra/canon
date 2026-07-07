@@ -60,6 +60,8 @@ function makeCliffEvent(stepId: string, overrides?: Partial<CliffEventRow>): Cli
     partial_count: 0,
     recovery_outcome: "unknown",
     recorded_at: "2026-06-25T00:00:00.000Z",
+    transcript_path: null,
+    transcript_uncaptured_reason: null,
     ...overrides,
   };
 }

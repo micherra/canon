@@ -12,6 +12,10 @@
  * validate the REGISTERED schema surfaces — EventPayloadSchemas.cliff_detected and the
  * reconcile_workspace input schema — accept source: "loop". These are the surfaces that
  * rejected the value in production before the P1 fix.
+ *
+ * Cliff-transcript capture tests (cliff-transcript-01) live in the sibling file
+ * reconcile-workspace-cliff.test.ts — split out 2026-07-06 to keep both files
+ * under the 600-line biome noExcessiveLinesPerFile limit.
  */
 
 import { writeFileSync } from "node:fs";
