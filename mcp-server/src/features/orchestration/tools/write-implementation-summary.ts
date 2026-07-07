@@ -3,6 +3,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { emitWriteReceipt } from "../services/write-receipt.ts";
 import type { AreaMemoryWriter } from "./write-review.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
@@ -234,6 +235,14 @@ export async function writeImplementationSummary(
 
   await writeFile(summaryPath, summaryMarkdown, "utf-8");
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+
+  emitWriteReceipt(input.workspace, {
+    artifact_kind: "implementation_summary",
+    artifact_path: summaryPath,
+    content: summaryMarkdown,
+    slug: input.slug,
+    task_id: input.task_id,
+  });
 
   logDecisionEvents(input);
 

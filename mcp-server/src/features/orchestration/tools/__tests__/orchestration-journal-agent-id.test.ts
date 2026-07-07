@@ -99,8 +99,10 @@ describe("logStep — agent_id enforcement", () => {
     process.env.HOME = fakeHome;
 
     try {
+      // No agent_type — this test exercises the transcript-capture pipeline
+      // only, not the write-receipt gate (a mapped agent_type like "engineer"
+      // would reject this completion since the fixture writes no artifact).
       await logStep({
-        agent_type: "engineer",
         status: "planned",
         step_id: "enforce-step",
         workspace,
@@ -166,8 +168,8 @@ describe("logStep — agent_id enforcement", () => {
     process.env.HOME = fakeHome;
 
     try {
+      // No agent_type — same rationale as the pipeline test above.
       await logStep({
-        agent_type: "engineer",
         status: "planned",
         step_id: "bogus-step",
         workspace,

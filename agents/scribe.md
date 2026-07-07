@@ -39,6 +39,7 @@ tools:
   - mcp__canon__graph_query
   - mcp__canon__get_context
   - mcp__canon__sync_indexes
+  - mcp__canon__write_context_sync
   - mcp__canon__record_agent_metrics
 ---
 
@@ -91,12 +92,15 @@ If a FIX-SUMMARY.md exists (from fix-impl), read that too.
 
 Per `agent-artifact-write-before-return` (Single-Artifact Agents: Mandatory
 Step-1 Skeleton), immediately after Steps 1–2 — before any doc edit or
-commit — write a template-conformant skeleton to
-`${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md`: frontmatter `status: "IN_PROGRESS"`
-(the context-sync template's own status field — see `agent-template-required`
-and Rule 9 in `templates/context-sync.md`) plus the `## Context Sync` body
-using the template's section headings, then refine it in place as Steps 3–7
-complete.
+commit — persist a template-conformant skeleton via
+`write_context_sync({ workspace, slug, content, status: "UPDATED" })` (do NOT
+use raw `Write`): frontmatter `status: "IN_PROGRESS"` in the body content
+itself (the context-sync template's own status field — see
+`agent-template-required` and Rule 9 in `templates/context-sync.md`) plus the
+`## Context Sync` body using the template's section headings, then refine it
+in place as Steps 3–7 complete. Persisting through `write_context_sync` (rather
+than raw `Write`) is what makes the skeleton receipt-backed for the
+write-receipt completion gate (ADR-0043) — see Step 8.
 
 The scribe was previously the only heavy single-artifact agent whose declared
 artifact was written dead last (after the Step 7 commit) — any stall in

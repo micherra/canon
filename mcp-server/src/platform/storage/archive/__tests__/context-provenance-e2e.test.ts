@@ -152,10 +152,12 @@ describe("end-to-end provenance chain: emit → back-fill → summary join", () 
     expect(emittedRecord.assembled_artifacts).toHaveLength(2);
     expect(emittedRecord.assembled_artifacts[0].id).toBe("agent-tdd");
 
-    // PIECE 2: BACK-FILL — logStep completed with agent_id writes back-fill event
+    // PIECE 2: BACK-FILL — logStep completed with agent_id writes back-fill event.
+    // No agent_type here — this test exercises the provenance chain only, not
+    // the write-receipt gate (a mapped agent_type like "engineer" would reject
+    // this completion since the fixture writes no artifact/receipt).
     const logResult = await logStep({
       agent_id: AGENT_ID,
-      agent_type: "engineer",
       artifacts_expected: [],
       projectDir: workspace,
       status: "completed",

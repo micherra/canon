@@ -90,6 +90,16 @@ describe("logStep", () => {
       projectDir,
     });
     await logStep({ projectDir, status: "started", step_id: "step-a", workspace });
+
+    // engineer is a mandatory-artifact agent_type — plant its SUMMARY so the
+    // write-receipt gate's WR-02 fallback passes (this test is about the
+    // status-transition mechanics, not the write-receipt gate itself).
+    mkdirSync(join(workspace, "plans", "step-a"), { recursive: true });
+    writeFileSync(
+      join(workspace, "plans", "step-a", "step-a-SUMMARY.md"),
+      "## Implementation Summary: step-a\n\nDone.\n",
+    );
+
     await logStep({
       projectDir,
       agent_id: "test-agent-01",
@@ -430,8 +440,10 @@ describe("logStep — transcript capture via agent_id", () => {
     process.env.HOME = fakeHome;
 
     try {
+      // No agent_type — this test exercises transcript capture only, not the
+      // write-receipt gate (a mapped agent_type would reject this completion
+      // since the fixture writes no artifact/receipt).
       await logStep({
-        agent_type: "engineer",
         status: "planned",
         step_id: "implement",
         workspace,
@@ -482,8 +494,8 @@ describe("logStep — transcript capture via agent_id", () => {
     process.env.HOME = fakeHome;
 
     try {
+      // No agent_type — same rationale as the capture test above.
       await logStep({
-        agent_type: "engineer",
         status: "planned",
         step_id: "implement-no-source",
         workspace,
@@ -516,8 +528,8 @@ describe("logStep — transcript capture via agent_id", () => {
     process.env.HOME = fakeHome;
 
     try {
+      // No agent_type — same rationale as the capture test above.
       await logStep({
-        agent_type: "tester",
         status: "planned",
         step_id: "test-step",
         workspace,

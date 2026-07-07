@@ -240,6 +240,7 @@ Read `references/team-dispatch-protocol.md` BEFORE spawning a team-dispatched re
 
 - Before spawn: `log_step({ workspace, step_id, agent_type, artifacts_expected, status: "started" })`
 - After spawn: `log_step({ workspace, step_id, ..., status: "completed", agent_id: "<from Agent tool result>", artifacts_actual: [...] })`
+- **Fail-closed write-receipt gate (ADR-0043)**: `log_step`/`batch_log_steps` reject a `status:"completed"` for a mandatory-artifact `agent_type` (architect/engineer/reviewer/scribe/security/tester) unless a durable write receipt or a real non-skeleton canonical file proves the artifact exists — independent of whether `artifacts_expected` was declared. Enforced unconditionally, every tier, not skippable. A rejection here usually means the agent wrote its artifact via raw `Write` instead of its granted `write_design`/`write_context_sync`/`write_security_assessment`/etc. tool — re-spawn with that correction rather than retrying as-is.
 - `finalize_workspace` verifies the journal.
 - Skipped tail steps require `skip_reason`:
 

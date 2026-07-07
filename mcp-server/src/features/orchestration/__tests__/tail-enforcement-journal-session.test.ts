@@ -146,9 +146,11 @@ describe("journal.json session_id persistence (tail-gate-codex-fix P1)", { timeo
     );
     expect(result.created).toBe(true);
 
+    // No agent_type — this test exercises session_id persistence only, not
+    // the write-receipt gate (a mapped agent_type would reject this
+    // completion since the fixture writes no artifact/receipt).
     await logStep({
       agent_id: "test-agent",
-      agent_type: "engineer",
       artifacts_expected: [],
       projectDir,
       status: "completed",
@@ -177,9 +179,9 @@ describe("journal.json session_id persistence (tail-gate-codex-fix P1)", { timeo
     const first = await initWorkspaceFlow(input, projectDir, "/fake/plugin");
     expect(first.created).toBe(true);
 
+    // No agent_type — same rationale as the round-trip test above.
     await logStep({
       agent_id: "test-agent",
-      agent_type: "architect",
       artifacts_expected: [],
       projectDir,
       status: "completed",

@@ -5,6 +5,7 @@ import { atomicWritePair } from "@shared/lib/atomic-write.ts";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { emitWriteReceipt } from "../services/write-receipt.ts";
 
 /**
  * Structural interface for signal persistence — describes only the 4 methods
@@ -546,6 +547,13 @@ export async function writeReview(
     JSON.stringify(meta, null, 2),
     input.step_id,
   );
+
+  emitWriteReceipt(input.workspace, {
+    artifact_kind: "review",
+    artifact_path: reviewPath,
+    content: markdown,
+    slug: input.slug,
+  });
 
   // Exclude correctness-scan from analytics/signal paths only.
   // The human-facing REVIEW output (markdown + meta JSON) keeps the full list.
