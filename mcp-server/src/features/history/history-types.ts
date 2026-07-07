@@ -90,6 +90,14 @@ export type AgentPerformanceTrend = {
   avg_spawns: number;
   run_count: number;
   trend: "improving" | "stable" | "degrading";
+  /**
+   * Averages of recorded per-step counters (record_agent_metrics), computed over
+   * the points that carried them. Optional — omitted entirely (never NaN or a
+   * misleading 0) when no point in the flow's window carried recorded metrics.
+   */
+  avg_tool_calls?: number;
+  avg_turns?: number;
+  avg_orientation_calls?: number;
 };
 
 /** Analysis of planner patterns across runs. */
