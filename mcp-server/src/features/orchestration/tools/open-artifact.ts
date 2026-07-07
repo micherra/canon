@@ -3,7 +3,7 @@
  *
  * Reads an HTML file from `${workspace}/artifacts/${artifact_name}` and
  * opens it in the default browser via the Canon HTTP server. Returns
- * immediately — fire-and-forget, same pattern as present_artifact.
+ * immediately — fire-and-forget.
  *
  * ## Lifecycle
  * 1. Validate path traversal (artifact_name must stay within artifacts/).

@@ -193,7 +193,6 @@ When all implementation steps complete:
 | `record_agent_metrics` | engineer, tester |
 | `get_transcript` | reviewer |
 | `show_pr_impact` / `review_code` / `get_drift_report` | reviewer, security |
-| `present_artifact` | reviewer, architect |
 
 ## Current Agent Roster
 

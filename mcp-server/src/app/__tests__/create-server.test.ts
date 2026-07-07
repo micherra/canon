@@ -57,7 +57,7 @@ function getToolNames(server: McpServer): Set<string> {
 //   +1 tail_messages              (this build, registerMessagingTools — event-backbone Inc 0)
 //   +1 list_active_workspaces     (this build, registerMessagingTools — event-backbone Inc 0)
 //   +1 forecast_base_advance     (this build, registerConfidenceTools — anticipatory-canon Inc-0)
-//   New total: 64 tools (computed from a live run, not hand-counted)
+//   −2 present_artifact + present_review (retired — dead serving Layer 2, PR #459 follow-up #7)  → New total: 63
 //
 // To recount: run this test — the received value in the failure message is authoritative.
 //
@@ -79,9 +79,9 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
     resetForTesting();
   });
 
-  it("factory produces a server with exactly 64 registered tools", () => {
+  it("factory produces a server with exactly 63 registered tools", () => {
     const server = createCanonServer();
-    expect(getToolCount(server)).toBe(65);
+    expect(getToolCount(server)).toBe(63);
   });
 
   it("tool names include a stable known subset", () => {
@@ -107,7 +107,6 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
       "write_implementation_summary",
       "write_plan_index",
       "write_test_report",
-      "present_artifact",
       "open_artifact",
       "capture_transcript",
       "record_agent_metrics",
@@ -137,7 +136,6 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
       "get_compliance",
       "report",
       "store_pr_review",
-      "present_review",
       // loops
       "list_loops",
       "get_loop_definition",
@@ -177,8 +175,8 @@ describe("createCanonServer(): factory independence", () => {
   it("each instance has the full tool count independently", () => {
     const s1 = createCanonServer();
     const s2 = createCanonServer();
-    expect(getToolCount(s1)).toBe(65);
-    expect(getToolCount(s2)).toBe(65);
+    expect(getToolCount(s1)).toBe(63);
+    expect(getToolCount(s2)).toBe(63);
   });
 });
 
