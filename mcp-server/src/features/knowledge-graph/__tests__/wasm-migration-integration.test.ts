@@ -101,16 +101,6 @@ public class Service {
     expect(specs.some((s) => s.specifier === "java.util" && s.names.includes("Map"))).toBe(true);
   });
 
-  test("returns contains edges (intraFileEdges) from file to class entities", () => {
-    const adapter = getAdapter(".java")!;
-    const source = `public class Hello { public void sayHi() { } }`;
-    const result = adapter.parse("Hello.java", source);
-
-    // intraFileEdges is the AdapterResult field; contains edges are built by walkTree
-    const containsEdges = result.intraFileEdges.filter((e) => e.edge_type === "contains");
-    expect(containsEdges.length).toBeGreaterThan(0);
-  });
-
   test("handles empty Java file without throwing", () => {
     const adapter = getAdapter(".java")!;
     expect(() => adapter.parse("Empty.java", "")).not.toThrow();

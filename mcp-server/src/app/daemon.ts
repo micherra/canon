@@ -521,7 +521,7 @@ export async function startDaemon(opts: DaemonOptions = {}): Promise<void> {
 
   // DEC-05: Signal to the http-server module that the daemon is actively serving
   // artifacts on its port. This makes isHttpServerRunning() return true and
-  // getHttpPort() return the daemon port, so present_artifact / open_artifact
+  // getHttpPort() return the daemon port, so open_artifact
   // can resolve artifact URLs to the daemon instead of returning UNEXPECTED.
   // The daemon already calls handleArtifactRoutes and shares the in-process
   // artifacts Map — only the port/running signal was missing.

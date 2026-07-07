@@ -82,8 +82,8 @@ let resolvedProjectDir: string | null = null;
 // DEC-05: daemon artifact-serving signal.
 // When the HTTP daemon (daemon.ts) is running and serving artifacts, it calls
 // markDaemonArtifactActive() and setHttpPort(daemonPort) so that isHttpServerRunning()
-// returns true and getHttpPort() returns the daemon's port. This lets present_artifact
-// and open_artifact resolve URLs to the daemon rather than refusing with UNEXPECTED.
+// returns true and getHttpPort() returns the daemon's port. This lets
+// open_artifact resolve URLs to the daemon rather than refusing with UNEXPECTED.
 // Cleared by resetStateForTesting() for test isolation.
 let daemonArtifactActive = false;
 
@@ -109,7 +109,7 @@ export function setHttpPort(port: number): void {
 /**
  * Marks that the HTTP daemon is actively serving artifacts on the daemon port.
  * Called by daemon.ts startDaemon() so that isHttpServerRunning() returns true
- * in daemon mode, enabling present_artifact / open_artifact to resolve URLs.
+ * in daemon mode, enabling open_artifact to resolve URLs.
  *
  * DEC-05: the daemon serves artifacts via the same in-process artifacts Map as
  * the sidecar, but because it starts its own HTTP server (daemon.ts → createServer),
@@ -256,7 +256,7 @@ export async function removePidFile(
  *
  * DEC-05: In daemon mode, `httpServer` stays null (the sidecar never starts),
  * but `daemonArtifactActive` is set by `markDaemonArtifactActive()` from
- * `daemon.ts startDaemon()`. This enables present_artifact / open_artifact
+ * `daemon.ts startDaemon()`. This enables open_artifact
  * to resolve artifact URLs without returning UNEXPECTED.
  */
 export function isHttpServerRunning(): boolean {
@@ -394,7 +394,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   // browser navigation (http://127.0.0.1:<port>/artifact/...), not cross-origin
   // fetch. Setting ACAO: * would allow malicious pages to read sensitive artifact
   // content (review HTML, file paths, architecture details) cross-origin.
-  // Confirmed: open_artifact and present_artifact use direct URL navigation only.
+  // Confirmed: open_artifact uses direct URL navigation only.
 
   if (req.method === "OPTIONS") {
     res.writeHead(204);
