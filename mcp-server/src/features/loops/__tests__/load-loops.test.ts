@@ -325,7 +325,7 @@ describe("loadLoopsFromDir — session-watch staleness auto-refresh directives",
 
   it("body declares the commits-since-scribe (15) and KG-age (24h/86400) thresholds, not the runner (AC6)", async () => {
     const { validBodies } = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
-    const body = validBodies["session-watch"];
+    const body = validBodies?.["session-watch"];
     expect(body).toBeDefined();
     expect(body).toMatch(/commits-since-scribe.*15|>= 15/i);
     expect(body).toMatch(/24h/i);
