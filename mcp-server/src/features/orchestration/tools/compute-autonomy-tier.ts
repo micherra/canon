@@ -7,6 +7,11 @@
  * Logs an auto_decision event to the execution store's event log for audit.
  *
  * Fail-safe: any signal-gathering error returns supervised tier — never fails closed.
+ *
+ * Sensitive-path deny-list floor (ADR-0044): the floor is evaluated in BOTH the success
+ * path (via confidence.floor from computeConfidence) and the fail-safe catch branch
+ * (recomputed from the pure file_paths input) so it survives total signal-gathering
+ * failure — see floorFields().
  */
 
 import { isAbsolute } from "node:path";
@@ -17,7 +22,10 @@ import { toolOk } from "@shared/lib/tool-result.ts";
 import {
   type AutonomyTier,
   computeConfidence,
+  type DenyCategory,
+  type DenyListMatch,
   gatherSignals,
+  matchSensitivePath,
 } from "../services/confidence-scorer.ts";
 
 // ---- Types ----
@@ -35,11 +43,45 @@ export type ComputeAutonomyTierResult = {
   score: number;
   reasoning: string;
   signals_used: string[];
+  floor_engaged: boolean;
+  floor_category?: DenyCategory;
+  floor_matched_path?: string;
+  require_security: boolean;
+  require_adversarial: boolean;
 };
+
+/**
+ * Derive the 5 machine-readable deny-list floor fields from a match (or its absence).
+ * Pure. Applied in BOTH the success branch and the fail-safe catch branch so the floor
+ * survives total signal-gathering failure (ADR-0044).
+ */
+function floorFields(
+  match: DenyListMatch | null,
+): Pick<
+  ComputeAutonomyTierResult,
+  | "floor_engaged"
+  | "floor_category"
+  | "floor_matched_path"
+  | "require_security"
+  | "require_adversarial"
+> {
+  return match
+    ? {
+        floor_category: match.category,
+        floor_engaged: true,
+        floor_matched_path: match.matched_path,
+        require_adversarial: true,
+        require_security: true,
+      }
+    : { floor_engaged: false, require_adversarial: false, require_security: false };
+}
 
 // Fail-safe response used when signal gathering fails entirely.
 const FAIL_SAFE_RESULT: ComputeAutonomyTierResult = {
+  floor_engaged: false,
   reasoning: "signal gathering failed — defaulting to supervised",
+  require_adversarial: false,
+  require_security: false,
   score: 0,
   signals_used: [],
   tier: "supervised",
@@ -69,6 +111,7 @@ async function computeTierResult(
     score: confidence.score,
     signals_used: confidence.signals_used,
     tier: confidence.tier,
+    ...floorFields(confidence.floor ?? null),
   };
 }
 
@@ -87,7 +130,12 @@ function logAutonomyTierDecision(
     store.appendEvent("auto_decision", {
       decision_type: "tier_assignment",
       file_paths,
+      floor_category: result.floor_category,
+      floor_engaged: result.floor_engaged,
+      floor_matched_path: result.floor_matched_path,
       reasoning: result.reasoning,
+      require_adversarial: result.require_adversarial,
+      require_security: result.require_security,
       score: result.score,
       signals_used: result.signals_used,
       tier: result.tier,
@@ -120,7 +168,14 @@ export async function computeAutonomyTier(
       "[canon] compute-autonomy-tier: signal gathering failed, defaulting to supervised:",
       err instanceof Error ? err.message : err,
     );
-    result = FAIL_SAFE_RESULT;
+    // Fail-CLOSED half of the deny-list floor (ADR-0044): recompute from the pure
+    // file_paths input (no I/O dependency) so the floor survives total signal-gathering
+    // failure — it must never weaken to "unfloored" just because drift.db/KG failed.
+    const floor = matchSensitivePath(file_paths);
+    result = { ...FAIL_SAFE_RESULT, ...floorFields(floor) };
+    if (floor) {
+      result.reasoning = `${FAIL_SAFE_RESULT.reasoning}; sensitive-path deny-list floor engaged — category "${floor.category}" matched pattern "${floor.pattern}" on "${floor.matched_path}"`;
+    }
   }
 
   logAutonomyTierDecision(workspace, file_paths, result);

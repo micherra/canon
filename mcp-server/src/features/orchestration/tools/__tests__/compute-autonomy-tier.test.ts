@@ -6,6 +6,10 @@
  *  2. Fail-safe: returns supervised when gatherSignals throws (getDriftDb or graphQuery fails)
  *  3. auto_decision event is logged to execution store on success
  *  4. override_tier is passed through to signals and respected
+ *  5. Sensitive-path deny-list floor: machine-readable result fields (floor_engaged,
+ *     floor_category, floor_matched_path, require_security, require_adversarial)
+ *  6. Deny-list floor survives total signal-gathering failure (fail-safe + floor overlay)
+ *  7. auto_decision payload carries the floor fields when engaged
  *
  * Mock strategy:
  *  - Mock getDriftDb to return a controlled DriftDbAdapter (no real DB file)
@@ -135,6 +139,12 @@ describe("computeAutonomyTier — happy path", () => {
     expect(typeof result.score).toBe("number");
     expect(typeof result.reasoning).toBe("string");
     expect(Array.isArray(result.signals_used)).toBe(true);
+    // non-floored path — machine-readable fields all clear
+    expect(result.floor_engaged).toBe(false);
+    expect(result.floor_category).toBeUndefined();
+    expect(result.floor_matched_path).toBeUndefined();
+    expect(result.require_security).toBe(false);
+    expect(result.require_adversarial).toBe(false);
   });
 });
 
@@ -156,6 +166,9 @@ describe("computeAutonomyTier — fail-safe", () => {
     expect(result.tier).toBe("supervised");
     expect(result.score).toBe(0);
     expect(result.reasoning).toContain("signal gathering failed");
+    expect(result.floor_engaged).toBe(false);
+    expect(result.require_security).toBe(false);
+    expect(result.require_adversarial).toBe(false);
   });
 
   it("returns supervised when graphQuery throws for all files", async () => {
@@ -176,6 +189,84 @@ describe("computeAutonomyTier — fail-safe", () => {
     if (!result.ok) throw new Error("expected ok");
     // tier is determined without blast radius data (defaults to 0)
     expect(["autonomous", "light-touch", "supervised"]).toContain(result.tier);
+  });
+
+  it("total signal-gathering failure + sensitive file → supervised with floor fields set (floor survives fail-safe)", async () => {
+    vi.mocked(getDriftDb).mockImplementation(() => {
+      throw new Error("DB connection failure");
+    });
+
+    const result = await computeAutonomyTier({
+      file_paths: ["hooks/pre-commit.sh"],
+      workspace: MOCK_WORKSPACE,
+
+      projectDir: process.cwd(),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.tier).toBe("supervised");
+    expect(result.floor_engaged).toBe(true);
+    expect(result.floor_category).toBe("canon-safety-hooks");
+    expect(result.floor_matched_path).toBe("hooks/pre-commit.sh");
+    expect(result.require_security).toBe(true);
+    expect(result.require_adversarial).toBe(true);
+  });
+});
+
+describe("computeAutonomyTier — deny-list floor (success path)", () => {
+  it("sensitive file_paths → tier supervised with all floor/require fields set", async () => {
+    // Perfect build history — would otherwise score autonomous
+    vi.mocked(getDriftDb).mockReturnValue(
+      makeDriftDbMock({
+        flowRuns: Array.from({ length: 10 }, () => ({
+          gate_pass_rate: 1.0,
+          state_iterations: { implement: 1 },
+        })),
+      }),
+    );
+
+    const result = await computeAutonomyTier({
+      file_paths: ["mcp-server/src/app/daemon.ts"],
+      workspace: MOCK_WORKSPACE,
+
+      projectDir: process.cwd(),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.tier).toBe("supervised");
+    expect(result.floor_engaged).toBe(true);
+    expect(result.floor_category).toBe("auth");
+    expect(result.floor_matched_path).toBe("mcp-server/src/app/daemon.ts");
+    expect(result.require_security).toBe(true);
+    expect(result.require_adversarial).toBe(true);
+  });
+
+  it("floor beats override_tier: override_tier:autonomous + sensitive path → supervised", async () => {
+    vi.mocked(getDriftDb).mockReturnValue(
+      makeDriftDbMock({
+        flowRuns: Array.from({ length: 10 }, () => ({
+          gate_pass_rate: 1.0,
+          state_iterations: { implement: 1 },
+        })),
+      }),
+    );
+
+    const result = await computeAutonomyTier({
+      file_paths: ["hooks/lint.sh"],
+      override_tier: "autonomous",
+      workspace: MOCK_WORKSPACE,
+
+      projectDir: process.cwd(),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.tier).toBe("supervised");
+    expect(result.floor_engaged).toBe(true);
+    expect(result.require_security).toBe(true);
+    expect(result.require_adversarial).toBe(true);
   });
 });
 
@@ -216,6 +307,28 @@ describe("computeAutonomyTier — auto_decision event logging", () => {
     // No store was hit — we can't easily assert absence without a separate store spy,
     // but the lack of error is the contract: best-effort never blocks the response.
   });
+
+  it("records the floor fields in the auto_decision payload when the floor is engaged", async () => {
+    const result = await computeAutonomyTier({
+      file_paths: ["hooks/x.sh"],
+      workspace: MOCK_WORKSPACE,
+
+      projectDir: process.cwd(),
+    });
+
+    expect(result.ok).toBe(true);
+
+    const store = getExecutionStore(MOCK_WORKSPACE);
+    const events = store.getEvents({ type: "auto_decision" });
+    expect(events).toHaveLength(1);
+
+    const payload = events[0].payload as Record<string, unknown>;
+    expect(payload.floor_engaged).toBe(true);
+    expect(payload.floor_category).toBe("canon-safety-hooks");
+    expect(payload.floor_matched_path).toBe("hooks/x.sh");
+    expect(payload.require_security).toBe(true);
+    expect(payload.require_adversarial).toBe(true);
+  });
 });
 
 describe("computeAutonomyTier — override_tier passthrough", () => {
@@ -245,7 +358,7 @@ describe("computeAutonomyTier — override_tier passthrough", () => {
     expect(result.signals_used).toContain("override_tier");
   });
 
-  it("override_tier = autonomous is respected even with poor signals", async () => {
+  it("override_tier = autonomous is respected even with poor signals (non-sensitive)", async () => {
     // No build history — worst-case defaults
     vi.mocked(getDriftDb).mockReturnValue(makeDriftDbMock());
 
