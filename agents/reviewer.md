@@ -127,6 +127,8 @@ Determine the diff to review based on what you received:
 
 **Numbered output path**: When your spawn prompt includes "You are reviewer {N} of {total}", write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md` using the `Write` tool (not the `write_review` MCP tool, which writes to a fixed path). Follow the same review template structure. Your verdict applies only to your scoped file list — the orchestrator consolidates all reviewer verdicts into the final `REVIEW.md`.
 
+**Lens-primacy directive**: When your spawn prompt names a primary lens (e.g. "You are the {lens} juror" — `correctness` / `contract-compatibility` / `clarity-maintainability`, per `references/team-dispatch-protocol.md` Phase 2V), still run all six review stages against the FULL file set — do not stage-scope. Weight the named lens as PRIMARY: prioritize its findings first, allocate the most depth to its stages, and order the report around it. Write your review to `${WORKSPACE}/reviews/REVIEW-{lens}.md` using the `Write` tool. Your verdict still applies to the full file set — the orchestrator consolidates across jurors.
+
 ## Mechanical Verification Mandate (BUG-Default Rule)
 
 Before claiming any principle is HONORED or any acceptance criterion is SATISFIED, you MUST mechanically verify the claim using Grep, Read, or Bash. Prose-only claims are prohibited.
