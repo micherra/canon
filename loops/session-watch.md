@@ -22,11 +22,20 @@ state:
     - surfaced_cliff_signatures   # de-dupe ledger key set (mirrors .cliff-surfaced.json)
     - kg_stale                    # boolean: KG mtime older than threshold
     - open_drift_crossed          # boolean: open-drift count crossed threshold this tick
+    - docs_stale_crossed          # boolean: commits-since-scribe crossed threshold this tick
+    - kg_age_crossed              # boolean: KG DB mtime age crossed threshold this tick
+    - staleness_refresh_signatures # de-dupe ledger key set (mirrors .staleness-refreshed.json)
 observe:
-  tools: []
+  tools:
+    - Bash
   mcp:
     - reconcile_workspace
-  shell_commands: []
+  shell_commands:
+    - "git log"
+    - "git rev-list"
+    - "git rev-parse"
+    - "stat"
+    - "date"
 surface:
   on_transition:
     - field: surfaced_cliff_signatures
@@ -38,6 +47,14 @@ surface:
     - field: open_drift_crossed
       to: "true"
       message: "Open drift / partially-finished work accumulating — surfacing the staleness digest."
+    - field: docs_stale_crossed
+      to: "true"
+      orchestrator_action: auto-staleness-refresh
+      message: "Docs stale (N commits since last scribe) — auto-refresh directive emitted."
+    - field: kg_age_crossed
+      to: "true"
+      orchestrator_action: auto-staleness-refresh
+      message: "Knowledge graph over age threshold — auto-refresh directive emitted."
 terminate:
   when:
     - at_finalize
@@ -55,7 +72,8 @@ guardrails:
 
 `session-watch` is a self-paced loop that consolidates two concerns: cliff detection
 (long/backgrounded dispatched steps that may have died) and staleness detection (stale KG,
-accumulating drift). Both concerns are observe+surface only — no build mutations.
+accumulating drift, and — the auto-refresh sub-concern below — doc/KG staleness against a
+declared threshold). Both concerns are observe+surface only — no build mutations.
 
 **dc-06 note:** The orchestrator's session-start tap starts this loop by calling
 `ScheduleWakeup`. Authoring this file only registers the definition. Do not call
@@ -86,15 +104,54 @@ the field accumulates signatures across ticks as a record of what was surfaced).
 On the `idle` cadence only (skip on active tick to reduce overhead):
 
 - Check KG mtime: read the knowledge graph DB's `graph_head_commit` meta field and compare
-  to the current `git rev-parse HEAD` output. Set `kg_stale: true` if the KG is >3 commits
-  behind HEAD. Use `reconcile_workspace` output (already called above) to infer activity — if
-  recent steps are active, KG staleness is more likely relevant.
+  to the current `git rev-parse HEAD` output (now backed by the `observe.shell_commands`
+  allowlist below — no behavior change to this check). Set `kg_stale: true` if the KG is >3
+  commits behind HEAD. Use `reconcile_workspace` output (already called above) to infer
+  activity — if recent steps are active, KG staleness is more likely relevant.
 - Check open-drift count: from the `reconcile_workspace` result, if `needs_recovery: true`
   and the same cliff has been in the ledger for >2 ticks without resolution, set
   `open_drift_crossed: true`.
 
 Both staleness reads are best-effort (fail-open). If the KG DB is unavailable, skip and
 leave `kg_stale` unchanged.
+
+### Staleness Thresholds
+
+Declared here in the loop definition — not hard-coded in runner logic (AC6). Tune by
+editing this block, not by editing the observe steps below.
+
+- **KG age**: `24h` (honors the `CANON_KG_STALE_SECONDS` env var, default `86400` seconds —
+  the same threshold and env var `hooks/canon-agent-teams/session-start-kg-check.sh` uses).
+- **Commits-since-scribe**: `15` (a net-new *action* threshold — the sibling hook,
+  `hooks/canon-agent-teams/session-start-doc-check.sh`, nudges on any divergence with no
+  numeric threshold of its own; auto-dispatching a scribe→PR flow needs a higher bar than a
+  passive nudge).
+
+**Staleness auto-refresh sub-concern (idle cadence only, mirrors the cliff ledger above):**
+
+- **Observe commits-since-scribe**: run
+  `git log -E --grep='^docs\(context-sync\)' --grep='^Canon-Agent: scribe[[:space:]]*$' --format='%H' -n1`
+  to find the last-scribe SHA — the identical computation `session-start-doc-check.sh` uses
+  (single source of truth, no second detection path) — then run
+  `git rev-list --count <LAST_SHA>..HEAD` for the commit count. Set `docs_stale_crossed: true`
+  when the count is `>= 15` (the commits-since-scribe threshold above); otherwise `false`.
+- **Observe KG age**: run `stat -f %m .canon/knowledge-graph.db` (BSD/macOS) or
+  `stat -c %Y .canon/knowledge-graph.db` (GNU) for the DB's mtime, and `date +%s` for "now".
+  Compute `age = now - mtime`. Set `kg_age_crossed: true` when
+  `age > CANON_KG_STALE_SECONDS` (default `86400`, the KG-age threshold above); otherwise
+  `false`. Best-effort fail-open: if the DB is absent or `stat` fails, leave
+  `kg_age_crossed` unchanged (mirrors the existing `kg_stale` fail-open behavior).
+- **De-dupe ledger** (mirrors `.cliff-surfaced.json`): read
+  `${WORKSPACE}/.staleness-refreshed.json` — a JSON array of episode signatures. Compute the
+  episode signature for each crossed signal this tick: `docs:<last_scribe_sha_short>` for
+  `docs_stale_crossed`, `kg:<kg_db_mtime_epoch>` for `kg_age_crossed`. Keep only signatures
+  NOT already in the ledger — these are new staleness episodes unrefreshed this session.
+  Update the `staleness_refresh_signatures` snapshot field with the new signatures (append
+  semantics, same as `surfaced_cliff_signatures`).
+- **Silent no-op (AC5)**: when neither signal crosses its threshold, there are no new
+  signatures this tick — nothing is appended to the ledger or to
+  `staleness_refresh_signatures`, and nothing is emitted in Surface-once below. Only the
+  snapshot write happens.
 
 ### Diff against snapshot
 
@@ -109,9 +166,21 @@ After the diff determines which rules fire:
    transition rule).
 2. Append the new signatures to the de-dupe ledger (`${WORKSPACE}/.cliff-surfaced.json`)
    using the cliff-ledger `appendLedger` pattern: read → surface → append.
+3. For each new staleness signature computed in Observe (docs_stale and/or kg_age), emit the
+   directive line — `ORCHESTRATOR_ACTION: auto-staleness-refresh field=docs_stale
+   loop=session-watch` and/or `ORCHESTRATOR_ACTION: auto-staleness-refresh field=kg_age
+   loop=session-watch` — then append the new signature(s) to the de-dupe ledger
+   (`${WORKSPACE}/.staleness-refreshed.json`) using the same read → surface → append pattern.
+   This is what makes the directive tick-1 capable (fires on an already-stale-at-session-start
+   condition, which a pure `on_transition` rule would miss — ADR-0002 first-tick guard); the
+   `on_transition` rules on `docs_stale_crossed`/`kg_age_crossed` above cover the
+   observability/tick-2+ human-facing message for a later mid-session transition.
 
 This prevents double-HITL collisions with the resume/post_subagent cliff passes: once a
-signature is in the ledger, session-watch suppresses it on subsequent ticks.
+signature is in the ledger, session-watch suppresses it on subsequent ticks. The same
+suppression applies to the staleness ledger: once an episode signature is recorded, it is
+not re-surfaced until the underlying value changes (a refresh advances the last-scribe SHA
+or the KG mtime, producing a new signature).
 
 ### Write snapshot
 
@@ -122,6 +191,9 @@ Write the updated snapshot atomically to `${WORKSPACE}/session-watch-state.json`
   "surfaced_cliff_signatures": ["<sig1>", "<sig2>"],
   "kg_stale": false,
   "open_drift_crossed": false,
+  "docs_stale_crossed": false,
+  "kg_age_crossed": false,
+  "staleness_refresh_signatures": ["<sig1>", "<sig2>"],
   "last_tick": "<ISO-8601 timestamp>"
 }
 ```
