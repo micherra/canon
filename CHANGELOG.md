@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.20.0](https://github.com/micherra/canon/compare/v2.19.0...v2.20.0) (2026-07-10)
+
+
+### Features
+
+* **loops:** session-watch observes doc/KG staleness, auto-dispatches refresh (ADR-0045) ([#483](https://github.com/micherra/canon/issues/483)) ([9ce4c21](https://github.com/micherra/canon/commit/9ce4c219f66c21f5abc5a4d3f65a1bdfed860360))
+* **orchestration:** sensitive-path deny-list floor on autonomy tier (ADR-0044, PostHog H1) ([#480](https://github.com/micherra/canon/issues/480)) ([beeb37b](https://github.com/micherra/canon/commit/beeb37b864f1b80e7159a95ef85390ee51d9517a))
+* **recall:** fused recall MCP tool over 5 stores via RRF (Unified Agent Memory M1) ([#478](https://github.com/micherra/canon/issues/478)) ([4a64665](https://github.com/micherra/canon/commit/4a6466543187448539e65d2fcd8d21d44ca5ad7d))
+
+
+### Bug Fixes
+
+* **diagnostics:** persist record_agent_metrics durably + carry recorded metrics to the learner ([#474](https://github.com/micherra/canon/issues/474)) ([f8b0af4](https://github.com/micherra/canon/commit/f8b0af4b28b81faf72c77e05263cbf9ad9be53ab))
+* **orchestration:** narrow reconcile_workspace cliff telemetry to dispatched steps only ([#476](https://github.com/micherra/canon/issues/476)) ([6969abb](https://github.com/micherra/canon/commit/6969abbc4982045979661b6f6d64320e108f3571))
+
 ## [2.19.0](https://github.com/micherra/canon/compare/v2.18.0...v2.19.0) (2026-07-07)
 
 
