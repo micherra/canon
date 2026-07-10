@@ -1,0 +1,62 @@
+# Orchestrator-only and internal MCP tools — legitimately NOT granted in any agents/*.md
+# tools: block. Authoritative classifier for hooks/tool-surfacing-check.sh (ADR-0046).
+# Every registered tool must be EITHER granted to an agent OR listed here OR carry an
+# inline // canon:allow-unsurfaced marker. Adding a tool here asserts "orchestrator-mediated
+# / internal, no subagent calls it."
+
+# Workspace lifecycle & journal (orchestrator-only)
+init_workspace
+finalize_workspace
+log_step
+batch_log_steps
+reconcile_workspace
+resolve_agent_skills
+capture_transcript
+
+# Decisions & checkpoint (orchestrator-only)
+log_decision
+get_decisions
+get_decisions_corpus
+write_orchestrator_checkpoint
+
+# Autonomy / gates / escalation (orchestrator-only)
+compute_autonomy_tier
+evaluate_step
+forecast_base_advance
+get_next_escalation_strategy
+categorize_failures
+
+# Evolution & attribution (orchestrator/learner-driven, not agent-called)
+record_applied_evolution
+get_evolution_outcomes
+attribute_failure
+
+# History / archive (orchestrator-only)
+get_historical_artifacts
+
+# Loops (loop-tick runner / orchestrator)
+list_loops
+get_loop_definition
+
+# Routines (slash-command / orchestrator)
+list_routines
+get_routine
+sync_routines
+
+# Artifacts (orchestrator-only)
+open_artifact
+
+# Activity logging (internal)
+post_event
+
+# Diagnostics / meta-lint (slash-command / orchestrator)
+wiki_lint
+check_context_staleness
+report
+invoke_janitor
+
+# Composite retrieval — NOT yet agent-granted. To make agent-facing: add
+# mcp__canon__<tool> to an agent's tools: block AND delete the line here.
+# Classified today because no agent grants them.
+search_knowledge
+recall
