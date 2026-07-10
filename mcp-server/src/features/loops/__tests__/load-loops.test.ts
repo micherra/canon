@@ -282,6 +282,57 @@ describe("loadLoopsFromDir — real loops/ directory (session-watch smoke test)"
   });
 });
 
+// ── Phase G: session-watch staleness auto-refresh directives (ADR-0045, AC1/AC2/AC6) ──
+// Mirrors the ship-watch orchestrator_action pinning tests below — proves the
+// docs_stale_crossed/kg_age_crossed transitions on session-watch carry the new
+// auto-staleness-refresh directive, not just that the enum value exists somewhere.
+describe("loadLoopsFromDir — session-watch staleness auto-refresh directives", () => {
+  it("docs_stale_crossed transition carries orchestrator_action: auto-staleness-refresh (AC2)", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const sw = result.valid.find((d) => d.id === "session-watch");
+    expect(sw).toBeDefined();
+    if (!sw) return;
+    const rule = sw.surface.on_transition.find((r) => r.field === "docs_stale_crossed");
+    expect(rule).toBeDefined();
+    expect(rule?.to).toBe("true");
+    expect(rule?.orchestrator_action).toBe("auto-staleness-refresh");
+  });
+
+  it("kg_age_crossed transition carries orchestrator_action: auto-staleness-refresh (AC2)", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const sw = result.valid.find((d) => d.id === "session-watch");
+    expect(sw).toBeDefined();
+    if (!sw) return;
+    const rule = sw.surface.on_transition.find((r) => r.field === "kg_age_crossed");
+    expect(rule).toBeDefined();
+    expect(rule?.to).toBe("true");
+    expect(rule?.orchestrator_action).toBe("auto-staleness-refresh");
+  });
+
+  it("state.snapshot declares both staleness fields + the de-dupe ledger field (AC1)", async () => {
+    const result = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const sw = result.valid.find((d) => d.id === "session-watch");
+    expect(sw).toBeDefined();
+    if (!sw) return;
+    expect(sw.state.snapshot).toEqual(
+      expect.arrayContaining([
+        "docs_stale_crossed",
+        "kg_age_crossed",
+        "staleness_refresh_signatures",
+      ]),
+    );
+  });
+
+  it("body declares the commits-since-scribe (15) and KG-age (24h/86400) thresholds, not the runner (AC6)", async () => {
+    const { validBodies } = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const body = validBodies["session-watch"];
+    expect(body).toBeDefined();
+    expect(body).toMatch(/commits-since-scribe.*15|>= 15/i);
+    expect(body).toMatch(/24h/i);
+    expect(body).toMatch(/86400/);
+  });
+});
+
 // ── Phase B+: ship-watch orchestrator_action directives (AC3) ────────────────
 describe("loadLoopsFromDir — ship-watch orchestrator_action directives", () => {
   it("external_review_comment_ids transition carries orchestrator_action: auto-triage-fix", async () => {
