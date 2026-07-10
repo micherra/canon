@@ -7,6 +7,7 @@ import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts"
  * `setupWorkspace` fixture. Shared across all `write_*` tool test files so
  * each doesn't hand-roll its own copy.
  */
+// canon:allow-unwired: test-only helper imported exclusively from *.test.ts files, which the dead-wire reachability grep excludes by design
 export function seedExecution(workspace: string, stateId = "build"): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
