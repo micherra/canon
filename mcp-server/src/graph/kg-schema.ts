@@ -10,7 +10,7 @@ import * as sqliteVec from "sqlite-vec";
 
 // Schema version — increment when DDL changes require a migration
 
-export const SCHEMA_VERSION = "6";
+export const SCHEMA_VERSION = "7";
 
 // DDL statements (v1+v2 base schema)
 
@@ -21,8 +21,8 @@ const DDL_STATEMENTS = [
     value TEXT NOT NULL
   )`,
 
-  // Note: schema_version is set to '6' for new databases.
-  // runMigrations() will upgrade existing v1–v5 databases.
+  // Note: schema_version is set to '7' for new databases.
+  // runMigrations() will upgrade existing v1–v6 databases.
   `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`,
 
   // Files table
@@ -231,6 +231,37 @@ const DDL_STATEMENTS = [
     model_id    TEXT NOT NULL,
     updated_at  TEXT NOT NULL
   )`,
+
+  // ── v7: decisions/ADRs as a separate KG context table-pair (ADR-0046) ───────
+
+  // context_nodes — one row per decision/ADR/build, discriminated by record_kind.
+  // Separate from `files`/`entities`: a decision is not a code entity.
+  `CREATE TABLE IF NOT EXISTS context_nodes (
+    node_id          TEXT PRIMARY KEY,
+    record_kind      TEXT NOT NULL,
+    title            TEXT,
+    ref_slug         TEXT,
+    source_event_id  INTEGER,
+    adr_number       TEXT,
+    status           TEXT,
+    body_excerpt     TEXT,
+    updated_at       TEXT NOT NULL
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_context_nodes_kind ON context_nodes(record_kind)`,
+
+  // context_edges — typed causal edges between context_nodes (and file paths,
+  // by string reference — no FK, since a target may be a file path or principle id).
+  `CREATE TABLE IF NOT EXISTS context_edges (
+    src        TEXT NOT NULL,
+    dst        TEXT NOT NULL,
+    edge_type  TEXT NOT NULL,
+    evidence   TEXT,
+    PRIMARY KEY (src, dst, edge_type)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_context_edges_src ON context_edges(src)`,
+  `CREATE INDEX IF NOT EXISTS idx_context_edges_dst ON context_edges(dst)`,
 ];
 
 // Migration definitions
@@ -364,6 +395,33 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
     },
     version: "6",
+  },
+  {
+    up: (db) => {
+      db.exec(`CREATE TABLE IF NOT EXISTS context_nodes (
+        node_id          TEXT PRIMARY KEY,
+        record_kind      TEXT NOT NULL,
+        title            TEXT,
+        ref_slug         TEXT,
+        source_event_id  INTEGER,
+        adr_number       TEXT,
+        status           TEXT,
+        body_excerpt     TEXT,
+        updated_at       TEXT NOT NULL
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_context_nodes_kind ON context_nodes(record_kind)`);
+      db.exec(`CREATE TABLE IF NOT EXISTS context_edges (
+        src        TEXT NOT NULL,
+        dst        TEXT NOT NULL,
+        edge_type  TEXT NOT NULL,
+        evidence   TEXT,
+        PRIMARY KEY (src, dst, edge_type)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_context_edges_src ON context_edges(src)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_context_edges_dst ON context_edges(dst)`);
+      db.exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`);
+    },
+    version: "7",
   },
 ];
 

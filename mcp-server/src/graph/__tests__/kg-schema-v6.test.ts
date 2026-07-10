@@ -48,7 +48,7 @@ describe("migration v6 — doc_chunks, doc_vectors, doc_chunk_meta", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("6");
+    expect(row.value).toBe("7");
     db.close();
   });
 
@@ -79,7 +79,7 @@ describe("migration v6 — doc_chunks, doc_vectors, doc_chunk_meta", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("6");
+    expect(row.value).toBe("7");
     expect(tableExists(db, "doc_chunks")).toBe(true);
     expect(tableExists(db, "doc_vectors")).toBe(true);
     expect(tableExists(db, "doc_chunk_meta")).toBe(true);
