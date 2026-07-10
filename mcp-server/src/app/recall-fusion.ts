@@ -104,3 +104,29 @@ export function rrfFuse(
 
   return opts.limit !== undefined ? hits.slice(0, opts.limit) : hits;
 }
+
+const MIN_OVERLAP_TOKEN_LEN = 3;
+
+function overlapTokens(text: string): string[] {
+  return (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
+    (t) => t.length >= MIN_OVERLAP_TOKEN_LEN,
+  );
+}
+
+/**
+ * Count of distinct `query` tokens (length ≥ 3, case-insensitive) that appear in
+ * `text`. Shared lexical scorer for the `decisions` and `build_history` recall
+ * adapters (`recall-handler.ts`) — both rank a store with no native vector score
+ * by the same simple, deterministic overlap measure.
+ *
+ * Pure and total: never throws; no overlap or empty input returns `0`.
+ */
+export function tokenOverlap(query: string, text: string): number {
+  const queryTokens = new Set(overlapTokens(query));
+  const textTokens = new Set(overlapTokens(text));
+  let score = 0;
+  for (const token of queryTokens) {
+    if (textTokens.has(token)) score += 1;
+  }
+  return score;
+}

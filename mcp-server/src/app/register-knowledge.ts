@@ -29,11 +29,12 @@ import {
   handleGetContext,
   type SlimmedDriftOutput,
 } from "./get-context-handler.ts";
+import { handleRecall, type RecallOutput, recallInputSchema } from "./recall-handler.ts";
 import { gatedWrapHandler, pluginDir, registerToolWithUi, resolveScope } from "./server-state.ts";
 
 // Re-export for test compatibility — existing tests import these from register-knowledge.ts
-export type { GetContextOutput, SlimmedDriftOutput };
-export { buildSlimmedOutput, handleGetContext };
+export type { GetContextOutput, RecallOutput, SlimmedDriftOutput };
+export { buildSlimmedOutput, handleGetContext, handleRecall };
 
 /**
  * Canonical list of all valid wiki_lint check names.
@@ -67,6 +68,18 @@ function registerCompositeContextTool(server: McpServer): void {
       inputSchema: getContextInputSchema,
     },
     gatedWrapHandler(handleGetContext),
+  );
+}
+
+function registerRecallTool(server: McpServer): void {
+  server.registerTool(
+    "recall",
+    {
+      description:
+        "Unified recall — one natural-language query, one RRF-fused ranked result set across code, knowledge/docs, decisions, ADRs, and build history, each hit source-tagged.",
+      inputSchema: recallInputSchema,
+    },
+    gatedWrapHandler(handleRecall),
   );
 }
 
@@ -447,4 +460,5 @@ export function registerKnowledgeTools(server: McpServer): void {
   registerSearchKnowledgeTool(server);
   registerGraphJobTools(server);
   registerCompositeContextTool(server);
+  registerRecallTool(server);
 }

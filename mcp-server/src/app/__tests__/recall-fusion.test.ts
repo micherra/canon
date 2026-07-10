@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RecallCandidate } from "../recall-fusion.ts";
-import { rrfFuse } from "../recall-fusion.ts";
+import { rrfFuse, tokenOverlap } from "../recall-fusion.ts";
 
 function candidate(overrides: Partial<RecallCandidate> = {}): RecallCandidate {
   return {
@@ -90,5 +90,21 @@ describe("rrfFuse", () => {
   it("never throws on degenerate input", () => {
     expect(() => rrfFuse({})).not.toThrow();
     expect(() => rrfFuse({ code_kg: [] })).not.toThrow();
+  });
+});
+
+describe("tokenOverlap", () => {
+  it("counts distinct query tokens (length >= 3) found in text", () => {
+    expect(tokenOverlap("durable decisions corpus", "a durable corpus of decisions")).toBe(3);
+  });
+
+  it("ignores short tokens and is case-insensitive", () => {
+    expect(tokenOverlap("to a Durable fix", "DURABLE fix applied")).toBe(2);
+  });
+
+  it("returns 0 for no overlap or empty input", () => {
+    expect(tokenOverlap("durable decisions", "nothing related here")).toBe(0);
+    expect(tokenOverlap("", "durable decisions")).toBe(0);
+    expect(tokenOverlap("durable decisions", "")).toBe(0);
   });
 });
