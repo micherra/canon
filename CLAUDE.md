@@ -126,10 +126,11 @@ evaluated even when signal-gathering otherwise fails (fail-safe branch), so it s
 outage. The authoritative deny-list is `SENSITIVE_PATH_DENY_LIST` in
 `mcp-server/src/features/orchestration/services/confidence-scorer.ts`.
 Categories: `canon-safety-hooks`, `ci-config`, `secrets-credentials`, `auth`, `drift-store-schema`, `mcp-tool-contract`, `principles-rules-config`, `settings-permissions`, `autonomy-tier-control`.
-The `autonomy-tier-control` category floors the deny-list's own source files
-(`confidence-scorer.ts`, `compute-autonomy-tier.ts`) — the control governs its own
-modification, so a build that weakens the deny-list is itself supervised + adversarially
-re-reviewed.
+The `autonomy-tier-control` category floors the self-governance TRIPOD — the three
+co-dependent files a build could edit to silently weaken the floor: the deny-list's own
+source (`confidence-scorer.ts`), the floor-application logic (`compute-autonomy-tier.ts`),
+and the `matchGlob` matcher every pattern above is evaluated through (`glob-matcher.ts`) —
+so a build touching any leg of the control is itself supervised + adversarially re-reviewed.
 
 ### Per-Message Re-Classification (L1)
 

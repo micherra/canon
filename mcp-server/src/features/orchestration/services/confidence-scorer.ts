@@ -129,11 +129,14 @@ export const SENSITIVE_PATH_DENY_LIST: readonly DenyListEntry[] = [
   { category: "principles-rules-config", pattern: ".canon/config.json" },
   { category: "settings-permissions", pattern: ".claude/settings*.json" },
   { category: "settings-permissions", pattern: "**/.claude/settings*.json" },
-  // Self-governance floor (H1, security review of ADR-0044): the deny-list SOURCE
-  // and the floor-APPLICATION logic must themselves be floored, or a build that
-  // silently weakens the list (deletes an entry, reorders the floor after the
-  // override short-circuit) would be scored normally and could skip the mandatory
-  // canon:security + adversarial review the floor exists to force.
+  // Self-governance TRIPOD (H1 + H1', security review of ADR-0044): the floor governs
+  // its own modification via three co-dependent files — (a) the deny-list SOURCE, (b)
+  // the floor-APPLICATION logic, (c) the matchGlob MATCHER every pattern above is
+  // evaluated through. A build silently weakening any one of the three (deletes an
+  // entry, reorders the floor after the override short-circuit, or mis-matches inside
+  // matchGlob) would be scored normally and could skip the mandatory canon:security +
+  // adversarial review the floor exists to force. A future maintainer adding a new hard
+  // dependency of the floor should extend this set too.
   {
     category: "autonomy-tier-control",
     pattern: "mcp-server/src/features/orchestration/services/confidence-scorer.ts",
@@ -141,6 +144,10 @@ export const SENSITIVE_PATH_DENY_LIST: readonly DenyListEntry[] = [
   {
     category: "autonomy-tier-control",
     pattern: "mcp-server/src/features/orchestration/tools/compute-autonomy-tier.ts",
+  },
+  {
+    category: "autonomy-tier-control",
+    pattern: "mcp-server/src/shared/lib/glob-matcher.ts",
   },
 ];
 

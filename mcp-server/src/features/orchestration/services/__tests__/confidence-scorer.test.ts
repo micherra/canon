@@ -380,8 +380,19 @@ describe("matchSensitivePath", () => {
         ?.category,
     ).toBe("autonomy-tier-control");
     // An unrelated orchestration file must NOT match — the floor is pinned tightly
-    // to the two control files, not the whole orchestration feature.
+    // to the control files, not the whole orchestration feature.
     expect(matchSensitivePath(["src/foo.ts"])).toBeNull();
+  });
+
+  it("matches the deny-list's own matcher — autonomy-tier-control (self-governance, H1')", () => {
+    // The tripod's third leg: matchGlob is the sole predicate every pattern above is
+    // evaluated through. A silent weakening of it would disengage the entire floor.
+    expect(matchSensitivePath(["mcp-server/src/shared/lib/glob-matcher.ts"])?.category).toBe(
+      "autonomy-tier-control",
+    );
+    // An unrelated shared-lib file must NOT match — pinned to the matcher, not
+    // the whole shared/lib surface.
+    expect(matchSensitivePath(["mcp-server/src/shared/lib/config.ts"])).toBeNull();
   });
 
   it("returns the first match across files x entries", () => {
