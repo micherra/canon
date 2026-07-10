@@ -45,6 +45,10 @@ export type StepOutcome = {
   completed_at: string | null;
   duration_ms: number | null;
   artifacts_expected: string[];
+  /** Recorded execution_states.metrics for this step (tool_calls/orientation_calls/turns,
+   *  orchestrator fields, and #473 stage_metrics), joined at archive time by step_id.
+   *  Optional — absent for steps with no recorded metrics or pre-existing archives. */
+  metrics?: Record<string, number | string | Record<string, Record<string, number>>>;
 };
 
 /** A single violation from a review file. */
