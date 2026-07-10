@@ -1,12 +1,12 @@
 ---
-adr: "0045"
+adr: "0046"
 title: "Diverse-lens review jury triggers on the ADR-0044 floor and inverts consolidation semantics on the vertical axis"
 status: accepted
 date: "2026-07-10"
 build: "h2-posthog-program-add-a-diverse-lens-review-jury-for-high-stakes"
 ---
 
-# ADR-0045: Diverse-lens review jury triggers on the ADR-0044 floor and inverts consolidation semantics on the vertical axis
+# ADR-0046: Diverse-lens review jury triggers on the ADR-0044 floor and inverts consolidation semantics on the vertical axis
 
 ## Context
 

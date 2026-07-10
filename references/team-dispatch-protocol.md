@@ -76,7 +76,7 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and consolidate int
 
 ## Vertical Diverse-Lens Jury
 
-Fires when `compute_autonomy_tier` returns the ADR-0044 sensitive-path floor (`require_security: true` + `require_adversarial: true` — see ADR-0044 and ADR-0045). The **same** full changed-file set goes to every juror; jurors differ by concern **lens**, not by file scope. This composes with ADR-0044: the same trigger already forces supervised tier + a mandatory `canon:security` pass + a fresh adversarial re-review; the jury slots in alongside them.
+Fires when `compute_autonomy_tier` returns the ADR-0044 sensitive-path floor (`require_security: true` + `require_adversarial: true` — see ADR-0044 and ADR-0046). The **same** full changed-file set goes to every juror; jurors differ by concern **lens**, not by file scope. This composes with ADR-0044: the same trigger already forces supervised tier + a mandatory `canon:security` pass + a fresh adversarial re-review; the jury slots in alongside them.
 
 #### Phase 1V — Assign lenses
 
