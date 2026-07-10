@@ -48,6 +48,7 @@ export const ORCHESTRATOR_ACTIONS = [
   "run-evolve",
   "auto-enable-merge",
   "auto-update-branch",
+  "auto-staleness-refresh",
 ] as const;
 export type OrchestratorAction = (typeof ORCHESTRATOR_ACTIONS)[number];
 
@@ -68,6 +69,9 @@ export const READ_ONLY_SHELL_COMMANDS: ReadonlyArray<string> = [
   "git rev-list",
   "git show",
   "git diff",
+  "git rev-parse",
+  "stat",
+  "date",
 ] as const;
 
 // ── Sub-schemas ────────────────────────────────────────────────────────────────
@@ -314,6 +318,34 @@ function checkGhApiMutatingFlags(cmd: string): string | null {
   return null;
 }
 
+// ── date mutating-flag tokens (staleness-01 hardening) ────────────────────────
+// GNU/BSD `date -s`/`--set` sets the system clock — the one mutating form of `date`.
+// The KG-age observe needs bare `date` on the allowlist (dec-06's `date +%s` glues its
+// argument directly onto `+`, with no separating space a narrower prefix could key on),
+// so — mirroring checkGhApiMutatingFlags for `gh api` — this closes the gap at the
+// argument level instead of over-widening the allowlist entry itself.
+const DATE_SET_FLAG_PREFIXES = ["-s", "--set"] as const;
+
+/**
+ * Checks whether a `date` entry uses the mutating set-clock flag.
+ * Returns an error string if mutating, null if read-only.
+ *
+ * Admitted: `date +%s`, `date -u +%s`, `date` (no args).
+ * Rejected: `-s`/`--set` and their glued forms (`-s2026-01-01`, `--set=2026-01-01`).
+ */
+function checkDateMutatingFlags(cmd: string): string | null {
+  const tokens = cmd.trim().split(/\s+/).slice(1); // skip the leading "date" token
+  for (const token of tokens) {
+    if (DATE_SET_FLAG_PREFIXES.some((prefix) => token === prefix || token.startsWith(prefix))) {
+      return (
+        `date shell_command '${cmd}' uses flag '${token}' which sets the system clock ` +
+        `(only read-only forms like 'date +%s' are allowed under mutates_build:false)`
+      );
+    }
+  }
+  return null;
+}
+
 /**
  * Validates a single shell_command entry for read-only safety (Codex P1 hardening).
  *
@@ -321,6 +353,7 @@ function checkGhApiMutatingFlags(cmd: string): string | null {
  * 1. Shell metacharacter rejection (;, &, |, <, >, `, $, (, ), \n, \r)
  * 2. Prefix allowlist — must be on READ_ONLY_SHELL_COMMANDS
  * 3. gh api mutating-flag rejection (only for 'gh api' entries)
+ * 4. date mutating-flag rejection (only for 'date' entries, staleness-01)
  *
  * Returns an error string on violation, null when safe.
  * Extracted from checkReadOnlyShell to keep both functions below complexity 12.
@@ -350,6 +383,11 @@ function checkSingleShellCommand(cmd: string): string | null {
   // Codex P1 check 2: gh api mutating-flag rejection
   if (cmd === "gh api" || cmd.startsWith("gh api ")) {
     return checkGhApiMutatingFlags(cmd);
+  }
+
+  // staleness-01 check: date mutating-flag rejection
+  if (cmd === "date" || cmd.startsWith("date ")) {
+    return checkDateMutatingFlags(cmd);
   }
 
   return null;
