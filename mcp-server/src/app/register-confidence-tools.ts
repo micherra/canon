@@ -17,7 +17,7 @@ export function registerConfidenceTools(server: McpServer): void {
     "compute_autonomy_tier",
     {
       description:
-        "Compute autonomy tier (autonomous/light-touch/supervised) from build history, blast radius, and compliance signals. Returns tier, score, reasoning, and signals_used. Fail-safe: defaults to supervised on any signal-gathering error. Logs an auto_decision event to the execution store.",
+        "Compute autonomy tier (autonomous/light-touch/supervised) from build history, blast radius, and compliance signals. Returns tier, score, reasoning, and signals_used. A sensitive-path deny-list floor forces supervised and sets require_security/require_adversarial on the result when file_paths intersects Canon's security-critical surfaces — uncircumventable by override_tier; the orchestrator MUST honor those fields (mandatory canon:security review + adversarial re-review). Fail-safe: defaults to supervised on any signal-gathering error, and the deny-list floor is still evaluated in that fail-safe path. Logs an auto_decision event to the execution store.",
       inputSchema: {
         file_paths: z.array(z.string()).describe("Files in the build scope"),
         override_tier: z

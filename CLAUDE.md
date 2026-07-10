@@ -116,6 +116,22 @@ After `init_workspace` returns, call `compute_autonomy_tier({ workspace, file_pa
 
 **User override**: Pass `override_tier: "supervised"` to force full supervision ("supervised mode" or "full supervision").
 
+**Sensitive-path deny-list floor (uncircumventable):** When `file_paths` intersects the sensitive-path
+deny-list, `compute_autonomy_tier` floors the effective tier to `supervised` and sets
+`require_security: true` + `require_adversarial: true` on the result — regardless of the computed score
+or any `override_tier` (the floor beats override, ADR-0044). When these fields are set, the orchestrator
+MUST run a `canon:security` review and a FRESH (non-author) adversarial re-review before ship (generalizes
+the security-intent row's post-safety-hook-fix adversarial mandate, watch_CCCCCCCCCCCC1). The floor is
+evaluated even when signal-gathering otherwise fails (fail-safe branch), so it survives total drift.db/KG
+outage. The authoritative deny-list is `SENSITIVE_PATH_DENY_LIST` in
+`mcp-server/src/features/orchestration/services/confidence-scorer.ts`.
+Categories: `canon-safety-hooks`, `ci-config`, `secrets-credentials`, `auth`, `drift-store-schema`, `mcp-tool-contract`, `principles-rules-config`, `settings-permissions`, `autonomy-tier-control`.
+The `autonomy-tier-control` category floors the self-governance TRIPOD — the three
+co-dependent files a build could edit to silently weaken the floor: the deny-list's own
+source (`confidence-scorer.ts`), the floor-application logic (`compute-autonomy-tier.ts`),
+and the `matchGlob` matcher every pattern above is evaluated through (`glob-matcher.ts`) —
+so a build touching any leg of the control is itself supervised + adversarially re-reviewed.
+
 ### Per-Message Re-Classification (L1)
 
 **Re-classify every user message.** Intent is per message, not session. Chat/question history does not make a subsequent build request "chat."
