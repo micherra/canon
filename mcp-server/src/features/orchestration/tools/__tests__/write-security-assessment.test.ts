@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
+import { seedExecution } from "../../__tests__/seed-execution-test-helper.ts";
 import { writeSecurityAssessment } from "../write-security-assessment.ts";
 
 let tmpDir: string;
@@ -15,6 +16,7 @@ afterEach(async () => {
 describe("writeSecurityAssessment — happy path", () => {
   it("writes SECURITY.md to plans/{slug}/SECURITY.md and emits a write receipt", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-security-test-"));
+    seedExecution(tmpDir);
 
     const result = await writeSecurityAssessment({
       content: "## Security Assessment: full-scan\n\nstatus: CLEAN\n",

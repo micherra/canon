@@ -11,6 +11,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
@@ -27,6 +28,22 @@ describe("writePlanIndex — slug path traversal validation", () => {
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "wpi-pr57-test-"));
+    const now = new Date().toISOString();
+    getExecutionStore(tmpDir).initExecution({
+      base_commit: "abc123",
+      branch: "feat/test",
+      created: now,
+      current_state: "build",
+      entry: "build",
+      flow: "test-flow",
+      flow_name: "test-flow",
+      last_updated: now,
+      sanitized: "feat-test",
+      slug: "test-slug",
+      started: now,
+      task: "test task",
+      tier: "medium",
+    });
   });
 
   afterEach(async () => {

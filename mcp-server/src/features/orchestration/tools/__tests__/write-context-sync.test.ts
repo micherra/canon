@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
+import { seedExecution } from "../../__tests__/seed-execution-test-helper.ts";
 import { writeContextSync } from "../write-context-sync.ts";
 
 let tmpDir: string;
@@ -15,6 +16,7 @@ afterEach(async () => {
 describe("writeContextSync — happy path", () => {
   it("writes CONTEXT-SYNC.md and emits a write receipt on UPDATED", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-context-sync-test-"));
+    seedExecution(tmpDir);
 
     const result = await writeContextSync({
       content: "## Context Sync\n\nUpdated CLAUDE.md.\n",
@@ -37,6 +39,7 @@ describe("writeContextSync — happy path", () => {
 
   it("also emits a write receipt on NO_UPDATES — a no-op sync still receipts", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-context-sync-test-"));
+    seedExecution(tmpDir);
 
     const result = await writeContextSync({
       content: "## Context Sync\n\nNo updates needed.\n",

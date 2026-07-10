@@ -24,6 +24,7 @@ import {
   type WriteReviewInput,
   writeReview,
 } from "../tools/write-review.ts";
+import { seedExecution } from "./seed-execution-test-helper.ts";
 
 // ---- Test setup ----
 
@@ -31,6 +32,7 @@ let tmpDir: string;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), "write-review-path-effects-test-"));
+  seedExecution(tmpDir);
 });
 
 afterEach(async () => {
