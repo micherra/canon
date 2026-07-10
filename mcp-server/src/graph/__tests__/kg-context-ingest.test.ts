@@ -180,4 +180,67 @@ describe("ingestContextGraph", () => {
     expect(result.edge_count).toBe(0);
     db.close();
   });
+
+  test("duplicate ref in a single decision's refs list dedupes to one decision_touches_file edge (review fix)", () => {
+    // context_edges has a composite PK (src, dst, edge_type) — deriving the
+    // same edge twice from one decision's refs must not throw a UNIQUE
+    // violation on the bulk reinsert.
+    const db = initDatabase(":memory:");
+    seedFile(db, "src/foo.ts");
+    const decisions: IngestableDecision[] = [makeDecision({ refs: ["src/foo.ts", "src/foo.ts"] })];
+
+    expect(() => ingestContextGraph(db, decisions, projectDir, pluginDir)).not.toThrow();
+
+    const store = new ContextGraphStore(db);
+    const touchesFileEdges = store
+      .getAllEdges()
+      .filter((e) => e.edge_type === "decision_touches_file");
+    expect(touchesFileEdges.length).toBe(1);
+    expect(touchesFileEdges[0]).toEqual({
+      dst: "src/foo.ts",
+      edge_type: "decision_touches_file",
+      evidence: "refs",
+      src: "decision:build-a#1",
+    });
+
+    db.close();
+  });
+
+  test("duplicate backtick path cited twice in one ADR body dedupes to one edge (review fix)", () => {
+    const db = initDatabase(":memory:");
+    seedFile(db, "src/foo.ts");
+    writeAdr(
+      "0001-first-adr.md",
+      { adr: "0001", status: "accepted", title: "First ADR" },
+      "Touches `src/foo.ts` here and again touches `src/foo.ts` later in the doc.",
+    );
+
+    expect(() => ingestContextGraph(db, [], projectDir, pluginDir)).not.toThrow();
+
+    const store = new ContextGraphStore(db);
+    const touchesFileEdges = store
+      .getAllEdges()
+      .filter((e) => e.edge_type === "decision_touches_file");
+    expect(touchesFileEdges.length).toBe(1);
+
+    db.close();
+  });
+
+  test("duplicate decision node_id across two corpus entries dedupes to one node (review fix)", () => {
+    // A data-quality duplicate upstream (same source_slug#source_event_id
+    // appearing twice) must not throw a UNIQUE violation on context_nodes.
+    const db = initDatabase(":memory:");
+    const decisions: IngestableDecision[] = [
+      makeDecision({ summary: "First copy" }),
+      makeDecision({ summary: "Second copy" }),
+    ];
+
+    expect(() => ingestContextGraph(db, decisions, projectDir, pluginDir)).not.toThrow();
+
+    const store = new ContextGraphStore(db);
+    const nodes = store.getAllNodes().filter((n) => n.node_id === "decision:build-a#1");
+    expect(nodes.length).toBe(1);
+
+    db.close();
+  });
 });

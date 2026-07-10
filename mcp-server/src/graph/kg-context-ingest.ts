@@ -320,6 +320,46 @@ function deriveAdrRecord(
   }
 }
 
+/**
+ * Dedupe nodes by `node_id`, first occurrence wins. `context_nodes.node_id`
+ * is a PRIMARY KEY — a data-quality duplicate upstream (e.g. the same
+ * decision appearing twice in the corpus) must not throw on the bulk
+ * reinsert (review fix, explicit-transaction-boundaries).
+ */
+function dedupeNodes(nodes: ContextNode[]): ContextNode[] {
+  const seen = new Set<string>();
+  const result: ContextNode[] = [];
+  for (const node of nodes) {
+    if (seen.has(node.node_id)) continue;
+    seen.add(node.node_id);
+    result.push(node);
+  }
+  return result;
+}
+
+/**
+ * Dedupe edges by the composite key `(src, dst, edge_type)` — the exact
+ * `context_edges` PRIMARY KEY — first occurrence wins. A single source can
+ * legitimately derive the same edge twice (a duplicate `refs` entry, the
+ * same path cited twice in ADR prose); without this, the bulk reinsert
+ * throws a UNIQUE-constraint error, which `ensureContextGraphFresh`'s
+ * fail-open swallows — silently re-triggering ingest on every context query
+ * instead of a one-time fix (review fix, explicit-transaction-boundaries).
+ */
+function dedupeEdges(edges: ContextEdge[]): ContextEdge[] {
+  const seen = new Set<string>();
+  const result: ContextEdge[] = [];
+  for (const edge of edges) {
+    // NUL-joined — src/dst may be file paths, which can (rarely) contain
+    // spaces; NUL cannot appear in a node_id or a real filesystem path.
+    const key = `${edge.src} ${edge.dst} ${edge.edge_type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(edge);
+  }
+  return result;
+}
+
 function buildBuildNode(slug: string): ContextNode {
   return {
     adr_number: null,
@@ -369,6 +409,14 @@ export function ingestContextGraph(
     nodes.push(buildBuildNode(slug));
   }
 
-  store.replaceAll(nodes, edges);
-  return { edge_count: edges.length, node_count: nodes.length };
+  // Dedupe at the derivation boundary, before the store's strict insert
+  // (review fix): `context_nodes`/`context_edges` have PRIMARY KEYs, and
+  // ContextGraphStore.replaceAll intentionally does NOT use `INSERT OR
+  // IGNORE` — a genuine duplicate elsewhere would then be masked instead of
+  // surfacing as a real bug.
+  const dedupedNodes = dedupeNodes(nodes);
+  const dedupedEdges = dedupeEdges(edges);
+
+  store.replaceAll(dedupedNodes, dedupedEdges);
+  return { edge_count: dedupedEdges.length, node_count: dedupedNodes.length };
 }
