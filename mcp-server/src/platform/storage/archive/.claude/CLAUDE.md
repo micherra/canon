@@ -16,11 +16,13 @@ Platform-level build-archive persistence: copies workspace artifacts to `.canon/
 | `run-summary-extractors.ts` | `parsePlanningBrief`, `parseReviewFile`, `parseRunbookSteps`, `extractNotableResolution` — pure text-parsing helpers; no I/O; never throw; return partial/empty data on parse errors |
 
 ## Contracts
-<!-- last-updated: 2026-07-01 (extractNotableResolution: new pure extractor; extractSectionBody: shared section-body helper, fixes m-flag $ truncation bug) -->
+<!-- last-updated: 2026-07-10 (StepOutcome.metrics: recorded execution_states.metrics joined at archive time) -->
 
 **`archiveWorkspace(input: ArchiveWorkspaceInput)`** → `Promise<ArchiveWorkspaceResult>` — archives workspace to `.canon/history/{slug}/`; fail-open (archive failure must not block workspace pruning); `archived: false` + `error` on any path; `run_summary_generated: false` when summary assembly fails (archive still proceeds).
 
 **`RunSummary`** (`archive-types.ts`) — `version: 1`; `decision_summaries` is always `[]` (retained for backward compat — the `decisions/` workspace dir was removed 2026-05-25); `context_provenance?: ContextProvenanceSummary[]` — optional; populated by `buildRunSummary` by joining `context_provenance` events with `context_provenance_agent_id` back-fill events keyed by `step_id`; absent when workspace has no provenance events; latest-wins when multiple records exist for the same `step_id`.
+
+**`StepOutcome.metrics`** (`archive-types.ts`, added 2026-07-10) — `metrics?: Record<string, number | string | Record<string, Record<string, number>>>`; optional; `buildRunSummary`'s `joinRecordedMetrics` joins recorded `execution_states.metrics` onto each step by `step_id` (tool_calls/orientation_calls/turns, orchestrator fields, and the #473 `stage_metrics` nested shape), filtered through `pickArchivableMetrics` — orchestrator-only structured fields (`gate_results`, `test_results`, `postcondition_results`, `violation_severities`) are dropped; absent for steps with no recorded metrics or pre-existing archives. `joinRecordedMetrics` is fail-open (store-read error leaves `step_outcomes` untouched) and MUST run after `buildArtifactInventory` in `buildRunSummary` — it lazily creates `orchestration.db{,-shm,-wal}` via `getExecutionStore` as a side effect (same ordering constraint `extractContextProvenance` already follows), and running it earlier inflates the artifact inventory's file count.
 
 **`buildRunSummary`** — never throws; each extraction sub-call is independently wrapped; missing files return `null` / empty arrays.
 
