@@ -107,6 +107,18 @@ async function scanPartialArtifacts(
   return candidates.filter((_, i) => partialFlags[i]);
 }
 
+/**
+ * A genuine cliff is a DISPATCHED step that went silent. `started_at` is the
+ * reliable dispatch marker — applyTimestamps() (orchestration-journal.ts)
+ * sets it on the started/completed transition; a `planned` step created by
+ * batch_log_steps via upsertStep never has one. A planned-never-dispatched
+ * step is pending work, not a cliff, and must not emit cliff telemetry
+ * (watch_GGGGGG1). Narrows telemetry ONLY — never `incomplete_steps`.
+ */
+export function isDispatchedCliff(step: IncompleteStep): boolean {
+  return typeof step.started_at === "string" && step.started_at.length > 0;
+}
+
 /** Build an IncompleteStep entry from a journal step, or null if not incomplete. */
 async function toIncompleteStep(
   workspace: string,
@@ -300,20 +312,23 @@ export async function reconcileWorkspace(
     await Promise.all(steps.map((step) => toIncompleteStep(workspace, step)))
   ).filter((s): s is IncompleteStep => s !== null);
 
-  if (input.emit_telemetry && incompleteSteps.length > 0) {
-    const source = input.source ?? "resume";
+  if (input.emit_telemetry) {
+    const cliffSteps = incompleteSteps.filter(isDispatchedCliff);
+    if (cliffSteps.length > 0) {
+      const source = input.source ?? "resume";
 
-    const outcomes = await resolveCliffCaptureOutcomes(
-      workspace,
-      input.projectDir,
-      session_id,
-      incompleteSteps,
-    );
-    mergeCliffCaptureOutcomes(incompleteSteps, outcomes);
+      const outcomes = await resolveCliffCaptureOutcomes(
+        workspace,
+        input.projectDir,
+        session_id,
+        cliffSteps,
+      );
+      mergeCliffCaptureOutcomes(cliffSteps, outcomes);
 
-    emitCliffTelemetry(workspace, incompleteSteps, source);
-    if (input.projectDir) {
-      writeCliffEventsThrough(input.projectDir, workspace, incompleteSteps, source);
+      emitCliffTelemetry(workspace, cliffSteps, source);
+      if (input.projectDir) {
+        writeCliffEventsThrough(input.projectDir, workspace, cliffSteps, source);
+      }
     }
   }
 
