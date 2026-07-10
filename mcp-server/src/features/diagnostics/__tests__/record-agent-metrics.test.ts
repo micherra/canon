@@ -5,7 +5,9 @@
  * - Writes tool_calls and turns to execution_states.metrics
  * - Merges with pre-existing metrics (e.g., duration_ms set by orchestrator)
  * - Returns INVALID_INPUT error when no metric fields provided
- * - Returns appropriate error for non-existent state_id
+ * - Auto-creates the state row and persists metrics when the step has no pre-existing row
+ * - Recorded metrics survive a fresh store load (durability)
+ * - Returns WORKSPACE_NOT_FOUND when the workspace has no execution row
  * - Calling twice overwrites agent fields but preserves orchestrator fields
  * - MCP metrics schema in record_agent_metrics accepts the widened fields
  * - Optional stage dimension: namespaces counters under metrics.stage_metrics[stage],
@@ -48,6 +50,27 @@ function setupWorkspace(workspace: string, stateId = "build"): void {
     tier: "medium",
   });
   store.upsertState(stateId, { entries: 1, status: "in_progress" });
+}
+
+/** Initializes the execution row only — no per-step execution_states row. */
+function setupWorkspaceNoState(workspace: string, stateId = "build"): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    base_commit: "abc123",
+    branch: "feat/test",
+    created: now,
+    current_state: stateId,
+    entry: stateId,
+    flow: "test-flow",
+    flow_name: "test-flow",
+    last_updated: now,
+    sanitized: "feat-test",
+    slug: "test-slug",
+    started: now,
+    task: "test task",
+    tier: "medium",
+  });
 }
 
 afterEach(() => {
@@ -208,19 +231,59 @@ describe("recordAgentMetrics — validation errors", () => {
     }
   });
 
-  it("returns INVALID_INPUT for non-existent state_id", async () => {
+  it("auto-creates the state row and persists metrics when the step has no pre-existing row", async () => {
     const workspace = makeTmpWorkspace();
-    setupWorkspace(workspace, "build");
+    setupWorkspaceNoState(workspace, "implement");
 
     const result = await recordAgentMetrics({
-      state_id: "nonexistent_state",
+      state_id: "implement",
+      tool_calls: 4,
+      turns: 2,
+      workspace,
+    });
+
+    assertOk(result);
+    expect(result.recorded).toEqual({ tool_calls: 4, turns: 2 });
+
+    const store = getExecutionStore(workspace);
+    const state = store.getState("implement");
+    expect(state).not.toBeNull();
+    expect(state!.metrics!.tool_calls).toBe(4);
+    expect(state!.metrics!.turns).toBe(2);
+  });
+
+  it("recorded metrics survive a fresh store load (durability)", async () => {
+    const workspace = makeTmpWorkspace();
+    setupWorkspaceNoState(workspace, "implement");
+
+    const result = await recordAgentMetrics({
+      state_id: "implement",
+      tool_calls: 4,
+      turns: 2,
+      workspace,
+    });
+    assertOk(result);
+
+    clearStoreCache();
+    const reloaded = getExecutionStore(workspace);
+    const state = reloaded.getState("implement");
+    expect(state).not.toBeNull();
+    expect(state!.metrics!.tool_calls).toBe(4);
+    expect(state!.metrics!.turns).toBe(2);
+  });
+
+  it("returns WORKSPACE_NOT_FOUND when the workspace has no execution row", async () => {
+    const workspace = makeTmpWorkspace();
+
+    const result = await recordAgentMetrics({
+      state_id: "build",
       tool_calls: 5,
       workspace,
     });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
     }
   });
 });
