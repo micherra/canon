@@ -8,12 +8,16 @@
  * Design:
  *  - computeConfidence is a pure function; all I/O is isolated in gatherSignals
  *  - gatherSignals wraps each signal source in try/catch; failure sets worst-case value
- *  - Security file pattern match: principles/, rules/, hooks/, .canon/config.json
+ *  - Sensitive-path deny-list floor (ADR-0044): SENSITIVE_PATH_DENY_LIST + matchSensitivePath
+ *    is the sole authoritative path floor; checked FIRST in computeConfidence, ahead of the
+ *    override_tier short-circuit — the floor beats override, a safety invariant over
+ *    user preference. Folds in and replaces the old SECURITY_PATTERNS/hasSecurityFiles.
  *  - Scoring algorithm produces 0-100 score; tier = score >= 80 → autonomous,
  *    score >= 40 → light-touch, else → supervised
  */
 
 import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
+import { matchGlob } from "@shared/lib/glob-matcher.ts";
 
 // ---- Types ----
 
@@ -36,7 +40,7 @@ export type ConfidenceSignals = {
     max_violation_streak: number;
     has_clean_streak: boolean; // any file with clean_streak >= 3
   };
-  has_security_files: boolean;
+  deny_list_match: DenyListMatch | null;
   override_tier?: AutonomyTier; // user-forced tier
 };
 
@@ -61,25 +65,105 @@ export type DriftDbAdapter = {
 
 export type ConfidenceResult = {
   tier: AutonomyTier;
-  score: number; // 0-100, or -1 for override
+  score: number; // 0-100, or -1 for override, or 0 for deny-list floor
   reasoning: string;
   signals_used: string[];
+  floor?: DenyListMatch;
 };
 
-// ---- Security file pattern matching ----
+// ---- Sensitive-path deny-list (ADR-0044) ----
 
-// Security file patterns — must be an anchored top-level directory or specific path.
-// principles/, rules/, hooks/ must appear at the start of the path (not nested under src/).
-// .canon/config.json must be the exact path from the repo root.
-const SECURITY_PATTERNS = [/^principles\//, /^rules\//, /^hooks\//, /^\.canon\/config\.json$/];
+export type DenyCategory =
+  | "canon-safety-hooks"
+  | "ci-config"
+  | "secrets-credentials"
+  | "auth"
+  | "drift-store-schema"
+  | "mcp-tool-contract"
+  | "principles-rules-config"
+  | "settings-permissions"
+  | "autonomy-tier-control";
+
+export type DenyListEntry = { category: DenyCategory; pattern: string };
+export type DenyListMatch = { category: DenyCategory; pattern: string; matched_path: string };
+
+// Authoritative sensitive-path deny-list. Repo-root-relative POSIX patterns, Canon glob dialect.
+// Category names are prose↔code-parity-checked against root CLAUDE.md (deny-list-parity.test.ts).
+// Folds in and replaces the old SECURITY_PATTERNS regex list under "principles-rules-config".
+export const SENSITIVE_PATH_DENY_LIST: readonly DenyListEntry[] = [
+  { category: "canon-safety-hooks", pattern: "hooks/**" },
+  // Broadened from ".github/workflows/**" to cover the full CI-adjacent config
+  // surface: composite actions under .github/actions/** run with the same
+  // workflow privileges, and root .github/*.yml config (e.g. dependabot.yml)
+  // influences the supply chain — both are equivalent CI-compromise vectors
+  // to a malicious workflow file (H2, security review of ADR-0044).
+  { category: "ci-config", pattern: ".github/**" },
+  { category: "secrets-credentials", pattern: ".env" },
+  { category: "secrets-credentials", pattern: "**/.env" },
+  { category: "secrets-credentials", pattern: "**/*.env" },
+  // Dotenv-variant coverage (.env.local, .env.production, etc. — the dominant
+  // dotenv convention, not covered by the exact ".env" literal above). Root
+  // literal + "**/" nested pair mirrors the convention used by every other
+  // entry in this list; matchGlob("**/.env*", ...) requires a "/" to precede
+  // the match, so a root-level file like ".env.local" needs the unprefixed
+  // literal too.
+  { category: "secrets-credentials", pattern: ".env*" },
+  { category: "secrets-credentials", pattern: "**/.env*" },
+  // Bare root-level env files (secrets.env, database.env, app.env — anything
+  // ending in ".env" that isn't a dotenv-prefixed name). "**/*.env" above
+  // already covers the nested case; this closes the same "** needs a
+  // preceding /" gap for a root-level bare filename.
+  { category: "secrets-credentials", pattern: "*.env" },
+  { category: "auth", pattern: "mcp-server/src/app/mcp-http/**" },
+  { category: "auth", pattern: "mcp-server/src/app/daemon.ts" },
+  {
+    category: "drift-store-schema",
+    pattern: "mcp-server/src/domains/workspaces/execution-schema.ts",
+  },
+  { category: "drift-store-schema", pattern: "mcp-server/src/platform/storage/**" },
+  { category: "drift-store-schema", pattern: "mcp-server/src/graph/kg-schema.ts" },
+  { category: "mcp-tool-contract", pattern: "mcp-server/src/app/register-*.ts" },
+  { category: "mcp-tool-contract", pattern: "mcp-server/src/shared/lib/tool-result.ts" },
+  { category: "principles-rules-config", pattern: "principles/**" },
+  { category: "principles-rules-config", pattern: "rules/**" },
+  { category: "principles-rules-config", pattern: ".canon/config.json" },
+  { category: "settings-permissions", pattern: ".claude/settings*.json" },
+  { category: "settings-permissions", pattern: "**/.claude/settings*.json" },
+  // Self-governance TRIPOD (H1 + H1', security review of ADR-0044): the floor governs
+  // its own modification via three co-dependent files — (a) the deny-list SOURCE, (b)
+  // the floor-APPLICATION logic, (c) the matchGlob MATCHER every pattern above is
+  // evaluated through. A build silently weakening any one of the three (deletes an
+  // entry, reorders the floor after the override short-circuit, or mis-matches inside
+  // matchGlob) would be scored normally and could skip the mandatory canon:security +
+  // adversarial review the floor exists to force. A future maintainer adding a new hard
+  // dependency of the floor should extend this set too.
+  {
+    category: "autonomy-tier-control",
+    pattern: "mcp-server/src/features/orchestration/services/confidence-scorer.ts",
+  },
+  {
+    category: "autonomy-tier-control",
+    pattern: "mcp-server/src/features/orchestration/tools/compute-autonomy-tier.ts",
+  },
+  {
+    category: "autonomy-tier-control",
+    pattern: "mcp-server/src/shared/lib/glob-matcher.ts",
+  },
+];
 
 /**
- * Returns true when any file path matches a security-sensitive pattern.
- * Positive: hooks/pre-commit.sh — matches
- * Negative: src/hooks-utils.ts — does NOT match
+ * First deny-list match across files x entries, else null.
+ * Deterministic, linear-time (matchGlob is O(m·n) DP, no RegExp on the match path).
  */
-export function hasSecurityFiles(filePaths: string[]): boolean {
-  return filePaths.some((fp) => SECURITY_PATTERNS.some((pattern) => pattern.test(fp)));
+export function matchSensitivePath(filePaths: string[]): DenyListMatch | null {
+  for (const fp of filePaths) {
+    for (const entry of SENSITIVE_PATH_DENY_LIST) {
+      if (matchGlob(entry.pattern, fp)) {
+        return { category: entry.category, matched_path: fp, pattern: entry.pattern };
+      }
+    }
+  }
+  return null;
 }
 
 // ---- Scoring helpers ----
@@ -207,23 +291,27 @@ function applyBlastAndCompliancePenalties(
  * Returns tier, score (0-100), reasoning, and signals_used list.
  */
 export function computeConfidence(signals: ConfidenceSignals): ConfidenceResult {
-  // Short-circuit: user override takes precedence over all scoring
+  // Floor-first (ADR-0044): the sensitive-path deny-list floor is checked BEFORE the
+  // override_tier short-circuit — a safety invariant beats a user preference. The floor
+  // only ever returns supervised; it never lowers a tier.
+  const floor = signals.deny_list_match;
+  if (floor) {
+    return {
+      floor,
+      reasoning: `sensitive-path deny-list floor engaged — category "${floor.category}" matched pattern "${floor.pattern}" on "${floor.matched_path}"; supervised tier + mandatory canon:security review + adversarial re-review required (uncircumventable by override_tier)`,
+      score: 0,
+      signals_used: ["deny_list_floor"],
+      tier: "supervised",
+    };
+  }
+
+  // Short-circuit: user override takes precedence over all scoring (but not the floor above)
   if (signals.override_tier !== undefined) {
     return {
       reasoning: `user override to ${signals.override_tier}`,
       score: -1,
       signals_used: ["override_tier"],
       tier: signals.override_tier,
-    };
-  }
-
-  // Short-circuit: security files always produce supervised tier
-  if (signals.has_security_files) {
-    return {
-      reasoning: "security-sensitive files present — supervised tier required",
-      score: 0,
-      signals_used: ["has_security_files"],
-      tier: "supervised",
     };
   }
 
@@ -412,7 +500,7 @@ export async function gatherSignals(
     blast_radius: blastRadius,
     build_history: buildHistory,
     compliance,
+    deny_list_match: matchSensitivePath(filePaths),
     file_paths: filePaths,
-    has_security_files: hasSecurityFiles(filePaths),
   };
 }
