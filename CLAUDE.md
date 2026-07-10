@@ -125,7 +125,11 @@ the security-intent row's post-safety-hook-fix adversarial mandate, watch_CCCCCC
 evaluated even when signal-gathering otherwise fails (fail-safe branch), so it survives total drift.db/KG
 outage. The authoritative deny-list is `SENSITIVE_PATH_DENY_LIST` in
 `mcp-server/src/features/orchestration/services/confidence-scorer.ts`.
-Categories: `canon-safety-hooks`, `ci-config`, `secrets-credentials`, `auth`, `drift-store-schema`, `mcp-tool-contract`, `principles-rules-config`, `settings-permissions`.
+Categories: `canon-safety-hooks`, `ci-config`, `secrets-credentials`, `auth`, `drift-store-schema`, `mcp-tool-contract`, `principles-rules-config`, `settings-permissions`, `autonomy-tier-control`.
+The `autonomy-tier-control` category floors the deny-list's own source files
+(`confidence-scorer.ts`, `compute-autonomy-tier.ts`) — the control governs its own
+modification, so a build that weakens the deny-list is itself supervised + adversarially
+re-reviewed.
 
 ### Per-Message Re-Classification (L1)
 

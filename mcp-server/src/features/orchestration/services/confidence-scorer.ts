@@ -81,7 +81,8 @@ export type DenyCategory =
   | "drift-store-schema"
   | "mcp-tool-contract"
   | "principles-rules-config"
-  | "settings-permissions";
+  | "settings-permissions"
+  | "autonomy-tier-control";
 
 export type DenyListEntry = { category: DenyCategory; pattern: string };
 export type DenyListMatch = { category: DenyCategory; pattern: string; matched_path: string };
@@ -91,7 +92,12 @@ export type DenyListMatch = { category: DenyCategory; pattern: string; matched_p
 // Folds in and replaces the old SECURITY_PATTERNS regex list under "principles-rules-config".
 export const SENSITIVE_PATH_DENY_LIST: readonly DenyListEntry[] = [
   { category: "canon-safety-hooks", pattern: "hooks/**" },
-  { category: "ci-config", pattern: ".github/workflows/**" },
+  // Broadened from ".github/workflows/**" to cover the full CI-adjacent config
+  // surface: composite actions under .github/actions/** run with the same
+  // workflow privileges, and root .github/*.yml config (e.g. dependabot.yml)
+  // influences the supply chain — both are equivalent CI-compromise vectors
+  // to a malicious workflow file (H2, security review of ADR-0044).
+  { category: "ci-config", pattern: ".github/**" },
   { category: "secrets-credentials", pattern: ".env" },
   { category: "secrets-credentials", pattern: "**/.env" },
   { category: "secrets-credentials", pattern: "**/*.env" },
@@ -123,6 +129,19 @@ export const SENSITIVE_PATH_DENY_LIST: readonly DenyListEntry[] = [
   { category: "principles-rules-config", pattern: ".canon/config.json" },
   { category: "settings-permissions", pattern: ".claude/settings*.json" },
   { category: "settings-permissions", pattern: "**/.claude/settings*.json" },
+  // Self-governance floor (H1, security review of ADR-0044): the deny-list SOURCE
+  // and the floor-APPLICATION logic must themselves be floored, or a build that
+  // silently weakens the list (deletes an entry, reorders the floor after the
+  // override short-circuit) would be scored normally and could skip the mandatory
+  // canon:security + adversarial review the floor exists to force.
+  {
+    category: "autonomy-tier-control",
+    pattern: "mcp-server/src/features/orchestration/services/confidence-scorer.ts",
+  },
+  {
+    category: "autonomy-tier-control",
+    pattern: "mcp-server/src/features/orchestration/tools/compute-autonomy-tier.ts",
+  },
 ];
 
 /**

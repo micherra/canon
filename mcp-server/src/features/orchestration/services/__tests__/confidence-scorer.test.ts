@@ -302,9 +302,10 @@ describe("matchSensitivePath", () => {
     );
   });
 
-  it("matches .github/workflows/** — ci-config", () => {
+  it("matches .github/** — ci-config (workflows, composite actions, root CI config)", () => {
     expect(matchSensitivePath([".github/workflows/ci.yml"])?.category).toBe("ci-config");
-    expect(matchSensitivePath([".github/dependabot.yml"])).toBeNull();
+    expect(matchSensitivePath([".github/actions/foo/action.yml"])?.category).toBe("ci-config");
+    expect(matchSensitivePath([".github/dependabot.yml"])?.category).toBe("ci-config");
   });
 
   it("matches .env (root literal) and **/.env (nested) — secrets-credentials", () => {
@@ -365,14 +366,22 @@ describe("matchSensitivePath", () => {
 
   it("returns null for ordinary source files", () => {
     expect(
-      matchSensitivePath([
-        "src/foo.ts",
-        "mcp-server/src/features/orchestration/services/confidence-scorer.ts",
-        "templates/prd.md",
-        "README.md",
-        "docs/x.md",
-      ]),
+      matchSensitivePath(["src/foo.ts", "templates/prd.md", "README.md", "docs/x.md"]),
     ).toBeNull();
+  });
+
+  it("matches the deny-list's own source files — autonomy-tier-control (self-governance, H1)", () => {
+    expect(
+      matchSensitivePath(["mcp-server/src/features/orchestration/services/confidence-scorer.ts"])
+        ?.category,
+    ).toBe("autonomy-tier-control");
+    expect(
+      matchSensitivePath(["mcp-server/src/features/orchestration/tools/compute-autonomy-tier.ts"])
+        ?.category,
+    ).toBe("autonomy-tier-control");
+    // An unrelated orchestration file must NOT match — the floor is pinned tightly
+    // to the two control files, not the whole orchestration feature.
+    expect(matchSensitivePath(["src/foo.ts"])).toBeNull();
   });
 
   it("returns the first match across files x entries", () => {
@@ -385,9 +394,9 @@ describe("matchSensitivePath", () => {
     expect(matchSensitivePath([])).toBeNull();
   });
 
-  it("SENSITIVE_PATH_DENY_LIST has exactly 8 categories", () => {
+  it("SENSITIVE_PATH_DENY_LIST has exactly 9 categories", () => {
     const categories = new Set(SENSITIVE_PATH_DENY_LIST.map((e) => e.category));
-    expect(categories.size).toBe(8);
+    expect(categories.size).toBe(9);
   });
 });
 

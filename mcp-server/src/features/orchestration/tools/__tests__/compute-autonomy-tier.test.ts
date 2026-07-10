@@ -243,6 +243,38 @@ describe("computeAutonomyTier — deny-list floor (success path)", () => {
     expect(result.require_adversarial).toBe(true);
   });
 
+  it("self-governance: editing the deny-list's own source file floors to supervised (H1 regression)", async () => {
+    // Perfect build history — would otherwise score autonomous. Asserts the control
+    // governs its own modification: a build editing confidence-scorer.ts (where
+    // SENSITIVE_PATH_DENY_LIST lives) cannot silently weaken the list unsupervised.
+    vi.mocked(getDriftDb).mockReturnValue(
+      makeDriftDbMock({
+        flowRuns: Array.from({ length: 10 }, () => ({
+          gate_pass_rate: 1.0,
+          state_iterations: { implement: 1 },
+        })),
+      }),
+    );
+
+    const result = await computeAutonomyTier({
+      file_paths: ["mcp-server/src/features/orchestration/services/confidence-scorer.ts"],
+      workspace: MOCK_WORKSPACE,
+
+      projectDir: process.cwd(),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.tier).toBe("supervised");
+    expect(result.floor_engaged).toBe(true);
+    expect(result.floor_category).toBe("autonomy-tier-control");
+    expect(result.floor_matched_path).toBe(
+      "mcp-server/src/features/orchestration/services/confidence-scorer.ts",
+    );
+    expect(result.require_security).toBe(true);
+    expect(result.require_adversarial).toBe(true);
+  });
+
   it("floor beats override_tier: override_tier:autonomous + sensitive path → supervised", async () => {
     vi.mocked(getDriftDb).mockReturnValue(
       makeDriftDbMock({
