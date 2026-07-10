@@ -30,9 +30,35 @@ type DataPoint = {
 };
 
 /**
+ * Sum a single counter key across a step's staged metrics — every
+ * metrics.stage_metrics[stage][key] value (the #473 staged path via
+ * record_agent_metrics' `stage` param). Returns undefined when no stage
+ * carried that key as a number.
+ */
+function sumStagedCounter(
+  stageMetrics:
+    | NonNullable<RunSummary["step_outcomes"][number]["metrics"]>["stage_metrics"]
+    | undefined,
+  key: "tool_calls" | "turns" | "orientation_calls",
+): number | undefined {
+  if (typeof stageMetrics !== "object" || stageMetrics === null) return undefined;
+  let sum: number | undefined;
+  for (const stageCounters of Object.values(stageMetrics)) {
+    const stageValue = stageCounters[key];
+    if (typeof stageValue === "number") {
+      sum = (sum ?? 0) + stageValue;
+    }
+  }
+  return sum;
+}
+
+/**
  * Sum a single recorded counter key across a summary's step_outcomes.metrics.
- * Returns undefined when no step_outcome carries that key as a number — a summary
- * with zero recorded metrics must not report a misleading summed 0.
+ * Reads both the top-level counter (metrics[key]) and, when present, every
+ * staged counter (see sumStagedCounter) so a run recorded entirely through the
+ * staged path still contributes. Returns undefined when no step_outcome carries
+ * that key as a number anywhere — a summary with zero recorded metrics must not
+ * report a misleading summed 0.
  */
 function sumRecordedCounter(
   stepOutcomes: RunSummary["step_outcomes"],
@@ -43,6 +69,11 @@ function sumRecordedCounter(
     const value = step.metrics?.[key];
     if (typeof value === "number") {
       sum = (sum ?? 0) + value;
+    }
+
+    const stagedSum = sumStagedCounter(step.metrics?.stage_metrics, key);
+    if (stagedSum !== undefined) {
+      sum = (sum ?? 0) + stagedSum;
     }
   }
   return sum;

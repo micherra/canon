@@ -157,6 +157,49 @@ describe("computePerformanceTrends — recorded metrics aggregation", () => {
     expect(trend?.avg_tool_calls).toBe(10);
   });
 
+  test("sums staged counters (stage_metrics[stage][key]) when no top-level counter is present", () => {
+    // #473's staged path (record_agent_metrics with a `stage`) nests counters under
+    // metrics.stage_metrics[stage][key] instead of metrics[key]. sumRecordedCounter
+    // must read that nested shape too, or staged runs contribute 0/omitted.
+    const summaries: RunSummary[] = [
+      makeRunSummary({
+        step_outcomes: [
+          makeStepOutcome({
+            step_id: "review",
+            metrics: { stage_metrics: { review: { tool_calls: 5, turns: 3 } } },
+          }),
+        ],
+      }),
+    ];
+
+    const result = computePerformanceTrends(summaries, []);
+    const trend = result.find((t) => t.flow === "feature");
+
+    expect(trend?.avg_tool_calls).toBe(5);
+    expect(trend?.avg_turns).toBe(3);
+  });
+
+  test("sums both a top-level counter and a staged counter for the same key", () => {
+    const summaries: RunSummary[] = [
+      makeRunSummary({
+        step_outcomes: [
+          makeStepOutcome({
+            step_id: "review",
+            metrics: {
+              tool_calls: 10,
+              stage_metrics: { design: { tool_calls: 4 }, review: { tool_calls: 6 } },
+            },
+          }),
+        ],
+      }),
+    ];
+
+    const result = computePerformanceTrends(summaries, []);
+    const trend = result.find((t) => t.flow === "feature");
+
+    expect(trend?.avg_tool_calls).toBe(20); // 10 top-level + 4 + 6 staged
+  });
+
   test("FlowRunEntry-fallback points never carry avg_* — omitted when only fallback data exists", () => {
     const runs: FlowRunEntry[] = [
       {
