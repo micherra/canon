@@ -198,12 +198,12 @@ Append the matching enrichment text from `references/engineer-spawn-enrichment.m
 ### DAG Execution Protocol
 
 Full protocol in `references/dag-execution-protocol.md`. Covers DAG validation,
-Task Queue Setup (TeamCreate/TaskCreate), Worker Dispatch, Merge Protocol,
+Task Queue Setup (TaskCreate task queue), Worker Dispatch, Merge Protocol,
 Post-DAG Tail, and Failure Handling.
 
 Read `references/dag-execution-protocol.md` BEFORE executing any build where
 `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, and before any
-TeamCreate/merge/cleanup operation.
+task-queue/merge/cleanup operation.
 
 ### Resume Protocol
 
@@ -392,7 +392,7 @@ The three co-located `*.test.sh` suites (`boilerplate-span-check.test.sh`, `prin
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
    - **GitHub release**: release-please (`release-please.yml`) is the primary tag/release mechanism — it runs automatically on push to `main` and cuts `vX.Y.Z` tags + GitHub releases when the release PR merges. The shipper does NOT create tags or run `gh release create`.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
-4. **Fire `PushNotification` at build-complete** (after ship / PR created): call `PushNotification({ title: "Canon: Build Complete", message: "Build '{slug}' is done — PR created and ready for review." })`. This is the OS-push channel for HITL gates and build-complete signals (per channel split in `docs/supervised-build-quality.md:250`). Terminal digests (nightly digest, learner surfacing) remain terminal — do NOT convert them to push.
+4. **Fire `PushNotification` at build-complete** (after ship / PR created): call `PushNotification({ message: "Canon: Build Complete — build '{slug}' is done; PR created and ready for review.", status: "proactive" })`. This is the OS-push channel for HITL gates and build-complete signals (per channel split in `docs/supervised-build-quality.md:250`). Terminal digests (nightly digest, learner surfacing) remain terminal — do NOT convert them to push.
    - **One-time user setup**: Desktop push works by default. Phone push requires **Remote Control** (optional). Not available on Bedrock/Vertex/Foundry.
    - **LSP prerequisite**: The `LSP` tool requires `typescript-language-server` globally: `npm install -g typescript-language-server typescript`.
 5. Verify file claims released.
@@ -503,6 +503,7 @@ initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named life
 - `run-evolve`: fires on the `evolve` loop's `evolve_due`; supervised → ask user first; autonomous/light-touch → auto-spawn after a cost-visibility `PushNotification`. Proposals are HITL-gated regardless of tier.
 - `auto-enable-merge`: fires on `ci_conclusion` pending→success while PR OPEN & not-already-armed → orchestrator runs `gh pr merge --auto --squash`; autonomous/light-touch unattended, supervised ASK-FIRST; runner read-only (dc-06).
 - `auto-update-branch`: fires on `merge_state` transitioning to `BEHIND`/`DIRTY` while PR OPEN → orchestrator merges `origin/main` into the PR branch and pushes; generated-artifact-only conflicts auto-resolved by regeneration, SOURCE conflicts always HITL; unattended in all tiers for the clean/generated-only path; runner read-only (dc-06).
+- `auto-staleness-refresh`: fires on `session-watch` docs/KG staleness episodes (`field=docs_stale|kg_age`, ADR-0045) — `kg_age` runs a local `codebase_graph` refresh (no PR); `docs_stale` dispatches an ephemeral `init_workspace` → scribe → shipper → PR (dec-03, no direct-push-to-main). Both fields unattended in ALL tiers — autonomous, light-touch, AND supervised — per an explicit plan-approval user override of the architect's ask-first-under-supervised recommendation (dec-04); the PR remains the human review gate regardless of tier. Notifies what was refreshed after completion. Runner read-only (dc-06).
 
 Read `references/loop-framework.md` BEFORE dispatching any loop or consuming an `ORCHESTRATOR_ACTION` line.
 

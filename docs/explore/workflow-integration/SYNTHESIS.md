@@ -5,6 +5,10 @@
 > decision-making; the proposals remain as appendices. Sources: all three proposals,
 > all three judge reports, CAPABILITY-REVIEW.md, workflow-tool-spec.md.
 
+> **Superseded re: agent teams (2026-07-10).** `TeamCreate`/`TeamDelete` were removed at
+> harness v2.1.178; this exploration set predates that and its TeamCreate references are
+> historical. Live dispatch is the implicit-team model — see `references/dag-execution-protocol.md`.
+
 ## 1. Verdict
 
 **Final ranking: B > C > A.** Two judges (richness, shippability) rank B first; the
