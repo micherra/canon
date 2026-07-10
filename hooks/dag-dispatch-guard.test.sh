@@ -192,8 +192,8 @@ WARN_WS=$(setup_workspace "warn-ws" "implement" "active" "true")
 run_test "warns when implement state + DAG present (exit 0 — advisory)" 0 "{}" \
   "CANON_PROJECT_DIR=${TMPDIR_BASE}"
 
-run_test_with_output "warning message mentions TeamCreate/TaskCreate" \
-  "TeamCreate" "{}" \
+run_test_with_output "warning message mentions task queue + named teammate" \
+  "TaskCreate/TaskUpdate" "{}" \
   "CANON_PROJECT_DIR=${TMPDIR_BASE}"
 
 run_test_with_output "warning message mentions DAG execution" \

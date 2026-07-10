@@ -156,9 +156,13 @@ Also terminate if any fired transition rule has `terminate: true`.
 
 **If terminal condition is met:**
 - Report: `[loop: <id>] Loop terminated after tick <N>. Reason: <condition>.`
-- Do NOT reschedule. For interval loops, the CronCreate schedule is exhausted or the loop
-  exits early by its own rules. For self-paced loops, simply OMIT the ScheduleWakeup call
-  to terminate — no auto-re-fire occurs. Done.
+- Do NOT reschedule. For interval loops, the recurring CronCreate schedule does NOT self-exhaust
+  (the `max` param is gone; a `recurring: true` cron fires until session exit / 7-day expiry /
+  explicit delete) — so the orchestrator MUST stop it with an explicit `CronDelete({ id })` at
+  the terminal moment (`id` = the job id returned by the initial `CronCreate`). This is
+  orchestrator-initiated per dc-06; the read-only tick runner only surfaces the terminal signal.
+  For self-paced loops, simply OMIT the ScheduleWakeup call to terminate — no auto-re-fire
+  occurs. Done.
 
 **If NOT terminal:**
 - **interval mode**: Report `[loop: <id>] Tick <N> complete. Next tick at <interval>.`

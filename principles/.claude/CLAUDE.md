@@ -64,9 +64,11 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | law-of-demeter.md | Talk to Neighbors, Not Strangers |
 | least-privilege-access.md | Grant Only the Minimum Access Required |
 | leave-touched-files-better.md | Leave Touched Files Better Than You Found Them |
+| managed-artifact-class-shape.md | New Artifact Classes and Instances Mirror the Nearest Existing Shape |
 | measure-before-optimizing.md | Measure Before Optimizing |
 | minimize-attack-surface.md | Minimize the Attack Surface |
 | minimize-client-side-state.md | Minimize Client-Side State |
+| naming-reveals-intent.md | Naming Reveals Intent |
 | no-hidden-side-effects.md | No Hidden Side Effects |
 | no-literal-repo-state-counts.md | No Hand-Maintained Literal Repo-State Counts in Long-Lived Docs |
 | normalize-first-denormalize-intentionally.md | Normalize First, Denormalize With Justification |
@@ -78,7 +80,9 @@ Each principle file has YAML frontmatter: `id`, `severity`, `title`, `tags`, `la
 | prefer-browser-native-integration.md | Prefer Browser-Native APIs for Cross-Module Communication |
 | prefer-composition-over-inheritance.md | Prefer Composition Over Inheritance |
 | prefer-constructor-injection.md | Prefer Constructor Injection |
+| prefer-deterministic-gate-over-prose-check.md | Prefer a Deterministic Gate Over a Prose Check for Mechanically-Verifiable Predicates |
 | prefer-immutable-data.md | Prefer Immutable Data by Default |
+| principles-use-id-crosslinks.md | Principles Cross-Link Related Principles by ID |
 | props-are-the-component-contract.md | Props Are the Component Contract |
 | refactoring-integrity.md | Refactoring Must Be Substantive, Not Cosmetic |
 | resilient-frontend-composition.md | A Failing Module Must Not Break the Page |
