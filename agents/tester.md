@@ -184,6 +184,8 @@ Check for existing test patterns in the codebase — follow the same conventions
 
 Before the coverage-gap work in Steps 5–6, enumerate the build's acceptance criteria from the task plan / DESIGN.md / spawn prompt. For every **mechanically-verifiable** AC, write or map at least one test that exercises it. Record the mapping in the TEST-REPORT `### Acceptance Criteria Traceability` table BEFORE filling coverage gaps. This makes tests spec-traced (verifying intent), not just code-traced (verifying that the code does what the code does). A mechanically-verifiable AC with no mapped test is a defect — surface it in the table with status `NO_TEST` and treat it as a coverage gap to fill in Step 6. Manual/non-automatable ACs are recorded in the existing `## Manual Verification Needed` section, not here.
 
+**Reproduction commands as coverage seeds**: Check the engineer's `*-SUMMARY.md` Criteria Coverage table (`templates/summary.md` Reproduction column) for each AC before writing a test from scratch. A recorded runnable command (e.g. a `grep`/CLI repro) can often be promoted directly into a mapped test rather than re-deriving how to exercise the AC — saves rediscovery work and keeps the test aligned with what the engineer already demonstrated. Rows carrying the `n/a —` marker have no seed; derive coverage normally.
+
 **Scoping note**: this table proves a test EXISTS per mechanically-verifiable AC at authoring time. It does NOT replace the reviewer Stage 5 pass/fail verification or the `## Manual Verification Needed` HITL section — those are complementary. Manual ACs are status `MANUAL` here and detailed in `## Manual Verification Needed`.
 
 ### Test Count Heuristic

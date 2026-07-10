@@ -52,9 +52,10 @@ commit: "{hash}"
 #### Criteria Coverage
 <!-- Map every acceptance criterion from the task plan to what was implemented. -->
 <!-- The reviewer checks this section in Stage 3 (compliance cross-check). -->
-| # | Task plan criterion | Disposition | Implementation or rationale |
-|---|---------------------|-------------|----------------------------|
-| 1 | {criterion from task plan} | {covered &#124; descoped &#124; partial} | {what was implemented, or why it's deferred} |
+<!-- Reproduction column: a runnable shell command proving the criterion holds, for every mechanically-verifiable AC (reviewer taxonomy: MCP-tool / Structural; architect: mechanical) — a scoped test, curl against the running app, CLI call, or grep assertion. Non-runnable ACs (manual/non-automatable, or not runtime-observable) carry the sanctioned `n/a — <reason>` marker instead (e.g. `n/a — not runtime-observable (pure refactor)`, `n/a — manual (requires human judgment)`). Never fabricate a command to fill the column. A literal `|` inside a command must be written `&#124;` (the same escape `escapeMdCell` uses), or prefer a pipe-free form (`grep -c X f` over `grep X f | wc -l`) so the table stays parseable. -->
+| # | Task plan criterion | Disposition | Implementation or rationale | Reproduction |
+|---|---------------------|-------------|----------------------------|--------------|
+| 1 | {criterion from task plan} | {covered &#124; descoped &#124; partial} | {what was implemented, or why it's deferred} | `{runnable command}` or `n/a — {reason}` |
 
 #### External Evidence
 <!-- Only include if web research materially informed implementation choices. -->
@@ -87,3 +88,5 @@ commit: "{hash}"
 - Canon compliance section is mandatory — every principle in the plan must appear
 - Concerns and Blockers sections only appear when relevant
 - Include `External Evidence` only when web research materially informed implementation choices
+- Criteria Coverage Reproduction column: every mechanically-verifiable AC MUST carry a runnable command; every non-runnable AC MUST carry an `n/a — <reason>` marker — never a fabricated command
+- A literal `|` in a Reproduction command must be written `&#124;`, or use a pipe-free form

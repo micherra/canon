@@ -715,6 +715,8 @@ When a runbook exists at `${WORKSPACE}/plans/${slug}/runbook.md`, verify the bui
 
    **Non-automatable ACs**: Mark SKIP. State the reason: "requires external service", "requires human judgment", "requires runtime state not available during review".
 
+   **Reproduction commands (SUMMARY Criteria Coverage)**: Before falling back to the classify-and-verify process above for a given AC, check whether the engineer's `*-SUMMARY.md` Criteria Coverage table (`templates/summary.md` Reproduction column) recorded a runnable command for it. If it did, EXECUTE that command and treat its output as the primary verification evidence for the AC — still subject to BUG-Default (below): a clean exit / matching output upgrades the row to PASS, a failing command is a FAIL. If the row instead carries an `n/a — <reason>` marker, that is NOT an auto-pass — fall back to the normal classify-and-verify process for that AC. If the Reproduction column is absent or empty for a **mechanically-verifiable** AC, add an ADVISORY (WARNING-tier) note that the SUMMARY is missing a reproduction command — never a BLOCKING finding on absence alone — and continue with the normal classify-and-verify process.
+
 4. **Report results** in the review checklist under the `### Acceptance Criteria Verification` section (see review template). For each AC:
    - PASS: the tool response or command output confirms the criterion
    - FAIL: the tool response or command output contradicts the criterion — include the relevant excerpt
