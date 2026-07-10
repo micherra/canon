@@ -18,7 +18,7 @@ Rules are organized into behavioral categories:
 - **Implementation rules** — govern how agents write code (`agent-tdd-required`, `agent-minimal-fix`, `agent-simplify-before-extending`, `agent-structured-triage`, `agent-document-public-apis`)
 - **Design rules** — govern pre-code planning (`agent-design-before-code`, `agent-plans-are-prompts`, `agent-document-decisions`)
 - **Testing rules** — govern test quality (`agent-test-sad-paths`, `agent-test-the-contract`)
-- **Coordination rules** — govern agent collaboration (`agent-fresh-context`, `agent-workspace-scoping`, `agent-conflict-detection`, `agent-context-sync`, `agent-convergence-discipline`, `agent-worktree-orientation`, `agent-working-environment`, `agent-budget-checkpoint`)
+- **Coordination rules** — govern agent collaboration (`agent-fresh-context`, `agent-workspace-scoping`, `agent-conflict-detection`, `agent-context-sync`, `agent-convergence-discipline`, `agent-worktree-orientation`, `agent-working-environment`, `agent-budget-checkpoint`, `agent-cross-session-chatter`)
 - **Efficiency rules** — govern resource and tool usage (`agent-batch-tools`, `agent-metrics-before-return`)
 - **Review rules** — govern review behavior (`agent-cold-review`, `agent-assume-hostile-input`)
 - **Security/behavior rules** — govern agent trust posture (`agent-never-trust-overlay-tier`)

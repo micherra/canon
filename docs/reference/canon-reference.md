@@ -103,8 +103,9 @@ The Canon MCP server exposes these tools. The orchestrator uses the harness tool
 | `batch_log_steps` | Register multiple planned steps at once (same as `log_step` but batched) |
 | `finalize_workspace` | Close the flow, verify journal completeness, release file claims |
 | `write_plan_index` | Persist architect task/plan data and affected-file list |
-| `post_message` | Post a message to a workspace channel (unified messaging) |
-| `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
+| `post_message` | Post a cross-session chat message to a build's workspace; the workspace path IS the channel; registry-gated (live/finalized_on_disk accept, unknown/reaped rejected); best-effort ordered poll, no push |
+| `tail_messages` | Poll a workspace for messages posted via `post_message`, plus a `peer_lock` liveness field; same registry gate; best-effort ordered poll, no push |
+| `list_active_workspaces` | Discovery index of active builds (`live`/`finalized_on_disk`/`reaped`); optional `status_filter`; pair with `post_message`/`tail_messages` on the returned `workspace_path` |
 | `get_transcript` | Read a recorded agent transcript from a workspace state; modes: `full` (all entries) or `summary` (assistant-only); returns `total_tokens` when available <!-- last-updated: 2026-04-02 --> |
 
 ## Canon Engineering Principles

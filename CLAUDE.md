@@ -415,13 +415,20 @@ The PostCommit hook validates `Canon-Workflow` trailer presence.
 
 See Agent Spawn Error Handling below. For transient errors (429, auth, TTL), retry up to 3 times with exponential backoff (4s, 8s, 16s). For agent failures and stuck conditions, use the Auto-Escalation Protocol instead of immediate HITL.
 
-### Multi-Session Concurrency <!-- last-updated: 2026-06-24 -->
+### Multi-Session Concurrency <!-- last-updated: 2026-07-10 -->
 
 Canon runs as a shared HTTP daemon. Multiple Claude sessions may run concurrently — each is a separate orchestrator instance sharing one server process.
 
 **Session-unique identity**: Pass `session_id` (`CLAUDE_CODE_SESSION_ID`) and `job_id` (first 8 chars of `basename($CLAUDE_JOB_DIR)`) to every `init_workspace` and `finalize_workspace` call. On `lock_gated: true` → surface the foreign-lock HITL (never delete `.lock` — TTL reclaim is automatic).
 
 Read `references/multi-session-concurrency.md` BEFORE handling a lock-gated init or mutating a shared artifact.
+
+**Cross-session chatter (Inc-0):** engineer and reviewer agents may:
+- `list_active_workspaces` to discover concurrent builds before editing a shared hotspot (root `CLAUDE.md`, `mcp-server/**`, `hooks/**`).
+- `post_message` a heads-up before/after editing a file a peer session may also be touching — the workspace path IS the channel.
+- `tail_messages` (poll, not push) to read peer notes + `peer_lock` liveness; no delivery guarantee.
+
+Workspace-path-as-channel; poll-not-push; advisory only, never a substitute for the `.lock` mutex. See `references/multi-session-concurrency.md` § Cross-session chatter and the `agent-cross-session-chatter` rule.
 
 ## Specialist Agents
 
