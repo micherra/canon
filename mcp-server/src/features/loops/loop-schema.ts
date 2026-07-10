@@ -319,28 +319,107 @@ function checkGhApiMutatingFlags(cmd: string): string | null {
 }
 
 // ── date mutating-flag tokens (staleness-01 hardening) ────────────────────────
-// GNU/BSD `date -s`/`--set` sets the system clock — the one mutating form of `date`.
-// The KG-age observe needs bare `date` on the allowlist (dec-06's `date +%s` glues its
-// argument directly onto `+`, with no separating space a narrower prefix could key on),
-// so — mirroring checkGhApiMutatingFlags for `gh api` — this closes the gap at the
-// argument level instead of over-widening the allowlist entry itself.
+// GNU/BSD `date -s`/`--set` sets the system clock. On BSD/macOS `/bin/date` (the runner's
+// platform), a bare positional operand ALSO sets the clock with no flag at all —
+// `date [[[[[cc]yy]mm]dd]HH]MM[.ss]`. The KG-age observe needs bare `date`/`date +%s` on
+// the allowlist, so — mirroring checkGhApiMutatingFlags for `gh api` — this closes both
+// gaps at the argument level instead of over-widening the allowlist entry itself.
 const DATE_SET_FLAG_PREFIXES = ["-s", "--set"] as const;
 
+// Read-only value-taking flags whose operand must NOT be mistaken for the BSD positional
+// clock-set form: `-r <epoch>` (BSD: print given epoch), `-d`/`--date <str>` (GNU: print
+// given date). Each consumes a following space-separated token as its value.
+const DATE_READ_VALUE_FLAG_TOKENS = ["-r", "-d", "--date"] as const;
+
+// Matches the BSD positional clock-set operand shape: `[[[[[cc]yy]mm]dd]HH]MM[.ss]`.
+const DATE_POSITIONAL_SET_OPERAND = /^\d+(\.\d{2})?$/;
+
 /**
- * Checks whether a `date` entry uses the mutating set-clock flag.
+ * Returns an error string when `token` is a mutating `date` set-clock flag
+ * (`-s`/`--set` or a glued form), null otherwise. Extracted to keep
+ * checkDateMutatingFlags under the cognitive-complexity limit.
+ */
+function checkDateSetFlag(cmd: string, token: string): string | null {
+  if (!DATE_SET_FLAG_PREFIXES.some((prefix) => token === prefix || token.startsWith(prefix))) {
+    return null;
+  }
+  return (
+    `date shell_command '${cmd}' uses flag '${token}' which sets the system clock ` +
+    `(only read-only forms like 'date +%s' are allowed under mutates_build:false)`
+  );
+}
+
+/**
+ * Returns true when `token` is a read-only value-taking flag (`-r`, `-d`, `--date`,
+ * or their `=`-glued forms) whose operand must not be mistaken for the BSD positional
+ * clock-set form.
+ */
+function isDateReadValueFlagToken(token: string): boolean {
+  return DATE_READ_VALUE_FLAG_TOKENS.some((f) => token === f || token.startsWith(`${f}=`));
+}
+
+/**
+ * Builds the rejection message for a bare BSD positional clock-set operand.
+ */
+function buildDatePositionalSetError(cmd: string, token: string): string {
+  return (
+    `date shell_command '${cmd}' has positional operand '${token}' which sets the system clock ` +
+    `(BSD 'date [[[[[cc]yy]mm]dd]HH]MM[.ss]' form — only read-only forms are allowed under mutates_build:false)`
+  );
+}
+
+/** Per-token classification result for `checkDateMutatingFlags`'s loop. */
+type DateTokenVerdict =
+  | { kind: "reject"; message: string }
+  | { kind: "consume-next" }
+  | { kind: "skip" };
+
+/**
+ * Classifies a single `date` argument token. Extracted so the loop in
+ * checkDateMutatingFlags stays a flat dispatch — keeps both functions under the
+ * cognitive-complexity limit.
+ */
+function classifyDateToken(cmd: string, token: string): DateTokenVerdict {
+  const setFlagError = checkDateSetFlag(cmd, token);
+  if (setFlagError !== null) {
+    return { kind: "reject", message: setFlagError };
+  }
+  if (token.startsWith("+")) {
+    return { kind: "skip" }; // +FORMAT — read-only output, never a clock-set operand
+  }
+  if (isDateReadValueFlagToken(token)) {
+    // -r <epoch> / -d <str> / --date <str> / --date=<str> — read-only; a space-separated
+    // form must consume its value token so it's never examined as a positional operand.
+    return token.includes("=") ? { kind: "skip" } : { kind: "consume-next" };
+  }
+  if (token.startsWith("-")) {
+    return { kind: "skip" }; // any other flag (-u, -j, -R, -Iseconds, ...) — read-only/no-op
+  }
+  if (DATE_POSITIONAL_SET_OPERAND.test(token)) {
+    return { kind: "reject", message: buildDatePositionalSetError(cmd, token) };
+  }
+  return { kind: "skip" };
+}
+
+/**
+ * Checks whether a `date` entry uses a mutating set-clock form.
  * Returns an error string if mutating, null if read-only.
  *
- * Admitted: `date +%s`, `date -u +%s`, `date` (no args).
- * Rejected: `-s`/`--set` and their glued forms (`-s2026-01-01`, `--set=2026-01-01`).
+ * Admitted: `date +%s`, `date -u +%s`, `date` (no args), `date -r 1234567890`
+ * (BSD read-given-epoch — the digit operand is guarded, not a clock-set), `date -d "..."`.
+ * Rejected: `-s`/`--set` and their glued forms; a bare all-digits positional operand
+ * (optionally `.ss`) with no guarding flag — the BSD positional clock-set form.
  */
 function checkDateMutatingFlags(cmd: string): string | null {
   const tokens = cmd.trim().split(/\s+/).slice(1); // skip the leading "date" token
-  for (const token of tokens) {
-    if (DATE_SET_FLAG_PREFIXES.some((prefix) => token === prefix || token.startsWith(prefix))) {
-      return (
-        `date shell_command '${cmd}' uses flag '${token}' which sets the system clock ` +
-        `(only read-only forms like 'date +%s' are allowed under mutates_build:false)`
-      );
+
+  for (let i = 0; i < tokens.length; i++) {
+    const verdict = classifyDateToken(cmd, tokens[i]);
+    if (verdict.kind === "reject") {
+      return verdict.message;
+    }
+    if (verdict.kind === "consume-next" && tokens[i + 1] !== undefined) {
+      i++;
     }
   }
   return null;

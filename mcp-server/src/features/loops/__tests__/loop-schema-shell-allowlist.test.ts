@@ -174,4 +174,135 @@ describe("parseLoopDefinition — READ_ONLY_SHELL_COMMANDS extension (staleness-
     const result = parseLoopDefinition(good, {});
     expect(result.ok).toBe(true);
   });
+
+  // ── BSD positional clock-set gap (Finding 1, review + security fix) ──────────
+  // `/bin/date` on BSD/macOS (the runner's platform) sets the system clock via a bare
+  // positional operand — no flag at all. The prior `-s`/`--set` guard admitted this
+  // unconditionally. These assertions prove the gap is closed without over-rejecting
+  // the legitimate read-only forms security flagged (`-r <epoch>` in particular).
+
+  it("[NEGATIVE 'date <digits>']: BSD positional clock-set operand → rejected", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: ["date 202601010000"],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/date|clock/i);
+    }
+  });
+
+  it("[NEGATIVE 'date <digits>.<ss>']: BSD positional clock-set operand with seconds → rejected", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: ["date 1231235926.59"],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/date|clock/i);
+    }
+  });
+
+  it("[REGRESSION] 'date +%s' still admitted (format token, not a clock-set operand)", () => {
+    const good = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: ["date +%s"],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+  });
+
+  it("[REGRESSION] 'date -u' still admitted", () => {
+    const good = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: ["date -u"],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+  });
+
+  it("[REGRESSION] 'date -r 1234567890' still admitted (BSD read-given-epoch, digit operand is NOT a clock-set — the false-reject trap)", () => {
+    const good = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: ["date -r 1234567890"],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+  });
+
+  it("[REGRESSION] 'date -d \"2020-01-01\"' still admitted (GNU read-given-date)", () => {
+    const good = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: ['date -d "2020-01-01"'],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+  });
+
+  it("[REGRESSION] 'date -Iseconds' still admitted (BSD do-not-set / ISO-output style flag)", () => {
+    const good = {
+      ...validIntervalFrontmatter,
+      observe: {
+        tools: ["Bash"],
+        mcp: [],
+        shell_commands: ["date -Iseconds"],
+      },
+      guardrails: {
+        mutates_build: false,
+        forbidden_tools: [],
+      },
+    };
+    const result = parseLoopDefinition(good, {});
+    expect(result.ok).toBe(true);
+  });
 });
