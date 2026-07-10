@@ -1,0 +1,21 @@
+extensions:
+  - addsTo:
+      pack: codeql/javascript-all
+      extensible: barrierGuardModel
+    data:
+      # columns: [type, path, acceptingValue, kind]
+      # isSafeProjectDirInput(dir): returning `true` ⇒ Argument[0] (dir) is a safe path.
+      # Guards every fs sink in validateAndNormalizeDir (session-manager.ts) — see docs/adr/0030.
+      #
+      # `type` is the module-import specifier of the FIRST-PARTY module that defines the guard,
+      # exactly as written at the call site: `import { isSafeProjectDirInput } from "@shared/lib/safe-project-dir.ts"`.
+      # The specifier is wrapped in SINGLE QUOTES ('...') on purpose: CodeQL's JS models-as-data
+      # `parseTypeString` splits an unquoted `type` on '.' into <package>.<qualifiedName>, so the
+      # ".ts" suffix would be mis-parsed as a type name. Single-quoting makes the whole dotted
+      # specifier a literal package root. Verified locally (CodeQL 2.26.0, javascript-all 2.8.0):
+      # baseline 3 js/path-injection alerts on validateAndNormalizeDir → 0 with this model loaded.
+      # This applies ONLY via an explicit CLI invocation (`--extension-packs`/`--model-packs`);
+      # GitHub code-scanning does NOT apply JS/TS model packs, so this model does not run at scan
+      # time — the alerts are handled by manual false-positive dismissal (ADR-0030).
+      # `"global"` and the unquoted specifier were tried first and did NOT clear the flow.
+      - ["'@shared/lib/safe-project-dir.ts'", "Member[isSafeProjectDirInput].Argument[0]", "true", "path-injection"]

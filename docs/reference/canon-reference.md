@@ -73,6 +73,7 @@ The Canon MCP server exposes these tools. The orchestrator uses the harness tool
 | Tool | Purpose |
 |------|---------|
 | `get_context` | Batch context for multiple files — composes principles, file context, drift, and graph in one call; `include` param gates sections |
+| `recall` | Composite retrieval tool — one natural-language `query` fanned out to 5 stores (code KG semantic search, knowledge/docs, decisions corpus, ADR lexical search, build history), fused via Reciprocal Rank Fusion (`k=60`); per-store fail-open (errors degrade to `[]` + a `skipped[]` entry, never fail the whole call); returns `{ query, hits, stores_queried, skipped }`; optional `stores[]`/`limit`/`per_store_limit` |
 
 **Principle & review tools:**
 

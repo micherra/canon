@@ -1,0 +1,7 @@
+name: canon/path-injection-barriers
+version: 0.0.1
+library: true
+extensionTargets:
+  codeql/javascript-all: '*'
+dataExtensions:
+  - models/**/*.yml
