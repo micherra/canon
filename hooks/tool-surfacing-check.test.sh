@@ -248,6 +248,24 @@ echo "-- (i) allowlist comment/blank lines are ignored --"
   rm -rf "$FIX"
 }
 
+echo "-- (j) empty REG_FILES (no register-*.ts, no create-server.ts) -> fail-closed exit 2, not bash-3.2 unbound-variable crash --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_agent "$FIX" engineer ""
+  run_gate_out 2 "no MCP registration files found" "empty REG_FILES -> exit 2 with CANON diagnostic" "$FIX"
+  rm -rf "$FIX"
+}
+
+echo "-- (k) empty AGENT_FILES (no agents/*.md) -> fail-closed exit 2, not bash-3.2 unbound-variable crash --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_single "$FIX" register-k.ts some_tool
+  run_gate_out 2 "no agents/*.md files found" "empty AGENT_FILES -> exit 2 with CANON diagnostic" "$FIX"
+  rm -rf "$FIX"
+}
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 if [[ "$FAIL" -gt 0 ]]; then

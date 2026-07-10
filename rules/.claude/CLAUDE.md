@@ -38,6 +38,7 @@ Rules are organized into behavioral categories:
 | agent-context-check.md | Verify Context Before Starting Work |
 | agent-context-sync.md | Diff-Driven, Contract-Scoped Updates |
 | agent-convergence-discipline.md | Flow Convergence Discipline |
+| agent-cross-session-chatter.md | Coordinate Across Concurrent Sessions via Chatter |
 | agent-design-before-code.md | Design Before Code |
 | agent-document-decisions.md | Two-Tier Decision Record System |
 | agent-document-public-apis.md | Document Public APIs with JSDoc/TSDoc |

@@ -82,7 +82,12 @@ REG_FILES=("$ROOT"/mcp-server/src/app/register-*.ts)
 shopt -u nullglob
 [[ -f "$ROOT/mcp-server/src/app/create-server.ts" ]] && REG_FILES+=("$ROOT/mcp-server/src/app/create-server.ts")
 
-for f in "${REG_FILES[@]}"; do
+if [[ "${#REG_FILES[@]}" -eq 0 ]]; then
+  echo "CANON: tool-surfacing-check — no MCP registration files found under mcp-server/src/app (wrong CWD?)" >&2
+  exit 2
+fi
+
+for f in "${REG_FILES[@]+"${REG_FILES[@]}"}"; do
   awk -v marker="$MARKER_TEXT" '
     BEGIN { expecting = 0 }
     {
@@ -135,7 +140,12 @@ shopt -s nullglob
 AGENT_FILES=("$ROOT"/agents/*.md)
 shopt -u nullglob
 
-for f in "${AGENT_FILES[@]}"; do
+if [[ "${#AGENT_FILES[@]}" -eq 0 ]]; then
+  echo "CANON: tool-surfacing-check — no agents/*.md files found under agents (wrong CWD?)" >&2
+  exit 2
+fi
+
+for f in "${AGENT_FILES[@]+"${AGENT_FILES[@]}"}"; do
   awk '
     NR == 1 { if ($0 != "---") exit; next }
     $0 == "---" { exit }
