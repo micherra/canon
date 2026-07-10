@@ -118,4 +118,35 @@ describe("rankAdrs", () => {
     writeAdr("0001-x.md", ["---", 'adr: "0001"', 'title: "Something"', "---", "body"].join("\n"));
     expect(rankAdrs("to a", dir, 10)).toEqual([]);
   });
+
+  it("excludes the non-ADR TEMPLATE.md scaffold from the scan", () => {
+    writeAdr(
+      "TEMPLATE.md",
+      [
+        "---",
+        'adr: "{NNNN}"',
+        'title: "{brief title describing the decision}"',
+        "status: accepted",
+        "---",
+        "",
+        "# ADR-{NNNN}: {title}",
+        "",
+        "## Decision",
+        "",
+        "{decision}",
+      ].join("\n"),
+    );
+    writeAdr(
+      "0040-durable-decisions-corpus.md",
+      ["---", 'adr: "0040"', 'title: "Durable decisions corpus"', "---", "", "decision body"].join(
+        "\n",
+      ),
+    );
+
+    const hits = rankAdrs("decision", dir, 10);
+
+    expect(hits.some((h) => h.id === "adr:ADR-{NNNN}")).toBe(false);
+    expect(hits.some((h) => h.path === "docs/adr/TEMPLATE.md")).toBe(false);
+    expect(hits).toEqual([expect.objectContaining({ id: "adr:ADR-0040" })]);
+  });
 });

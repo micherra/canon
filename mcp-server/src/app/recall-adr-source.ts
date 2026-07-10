@@ -26,6 +26,13 @@ const TITLE_MATCH_BONUS = 0.5;
 /** Max snippet length (chars) after whitespace collapsing. */
 const SNIPPET_LEN = 160;
 
+// Real ADRs follow the `NNNN-slug.md` convention (see docs/adr/0001-adr-template-placement.md
+// "the durable path (architect -> docs/adr/NNNN-slug.md)"). `docs/adr/TEMPLATE.md` is a scaffold,
+// not a real ADR — it carries a literal `adr: "{NNNN}"` placeholder that would otherwise surface
+// as a fabricated `adr:ADR-{NNNN}` hit. Requiring the numeric-prefix filename excludes it (and any
+// other future non-ADR file in the directory) without special-casing the template by name.
+const ADR_FILENAME_RE = /^\d{4}-.+\.md$/;
+
 function tokenize(text: string): string[] {
   return (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((t) => t.length >= MIN_TOKEN_LEN);
 }
@@ -89,7 +96,7 @@ export function rankAdrs(query: string, adrDir: string, limit: number): RecallCa
 
   let filenames: string[];
   try {
-    filenames = readdirSync(adrDir).filter((f) => f.endsWith(".md"));
+    filenames = readdirSync(adrDir).filter((f) => ADR_FILENAME_RE.test(f));
   } catch {
     return [];
   }

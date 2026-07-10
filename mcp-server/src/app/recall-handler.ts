@@ -83,8 +83,14 @@ function firstN(text: string, n: number): string {
 // runStore's try/catch handles every adapter uniformly.
 
 function mapSemanticSearchResult(r: SemanticSearchResult): RecallCandidate {
+  // File-level summary hits carry entity_id: 0 for every file (KgVectorQuery keeps all of
+  // them, undeduped — see kg-vector-query.ts _mergeAndRank). Namespacing on entity_id alone
+  // would collapse every distinct file into the single fused document "entity:0". file_id is
+  // always present (JOIN files, never LEFT JOIN) and uniquely identifies the file instead.
+  const id =
+    r.source === "summary" && r.entity_id === 0 ? `summary:${r.file_id}` : `entity:${r.entity_id}`;
   return {
-    id: `entity:${r.entity_id}`,
+    id,
     native_score: r.distance,
     path: r.file_path,
     snippet: r.summary ? `${r.qualified_name} — ${r.summary}` : `${r.qualified_name} (${r.kind})`,

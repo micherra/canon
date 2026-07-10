@@ -199,4 +199,45 @@ describe("handleRecall", () => {
     const parsed = z.object(recallInputSchema).safeParse({ query: "" });
     expect(parsed.success).toBe(false);
   });
+
+  it("keeps distinct file-level summary hits (entity_id: 0) as distinct fused documents", async () => {
+    vi.mocked(semanticSearch).mockResolvedValue(
+      okSemanticSearch({
+        count: 2,
+        results: [
+          {
+            distance: 0.1,
+            entity_id: 0,
+            file_id: 11,
+            file_path: "src/foo.ts",
+            kind: "file" as const,
+            name: "src/foo.ts",
+            qualified_name: "src/foo.ts",
+            source: "summary" as const,
+            summary: "foo summary",
+          },
+          {
+            distance: 0.2,
+            entity_id: 0,
+            file_id: 22,
+            file_path: "src/bar.ts",
+            kind: "file" as const,
+            name: "src/bar.ts",
+            qualified_name: "src/bar.ts",
+            source: "summary" as const,
+            summary: "bar summary",
+          },
+        ],
+      }),
+    );
+
+    const output = await handleRecall({ query: "durable decisions corpus", stores: ["code_kg"] });
+
+    const codeKgHits = output.hits.filter((h) => h.source_store === "code_kg");
+    expect(codeKgHits).toHaveLength(2);
+    const ids = new Set(codeKgHits.map((h) => h.id));
+    expect(ids.size).toBe(2);
+    const paths = new Set(codeKgHits.map((h) => h.path));
+    expect(paths).toEqual(new Set(["src/foo.ts", "src/bar.ts"]));
+  });
 });
