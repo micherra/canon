@@ -99,7 +99,7 @@ Spawn N `canon:reviewer` (one per lens — currently N=3), each with:
 - A **lens-primacy directive**: "You are the {lens} juror. Run all six review stages, but weight {lens} as PRIMARY for prioritization, depth, and ordering. Write your review to `${WORKSPACE}/reviews/REVIEW-{lens}.md`."
 - No stage-scoping — every juror runs the full six-stage `canon:reviewer` (Stages 1–6), keeping the free correctness scan and cross-requirement coverage; only which stages are weighted primary differs by lens.
 
-Use the reviewer's `M0…MV` module contract table (`agents/reviewer.md:840–889`) as the lens→stage map that the directive names:
+Use the reviewer's `M0…MV` module contract table (`agents/reviewer.md:842–891`) as the lens→stage map that the directive names:
 
 | Lens | Primary-weighted modules |
 |------|---------------------------|
