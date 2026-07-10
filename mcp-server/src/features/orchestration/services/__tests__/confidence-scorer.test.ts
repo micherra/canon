@@ -4,16 +4,19 @@
  * Tests cover:
  *  1. All-clean signals return autonomous tier (score >= 80)
  *  2. High blast radius (>50) returns supervised tier
- *  3. Security files always return supervised regardless of other signals
- *  4. override_tier short-circuits scoring
+ *  3. Sensitive-path deny-list floor always returns supervised regardless of other signals
+ *  4. override_tier short-circuits scoring (non-sensitive diffs only)
  *  5. Insufficient build history (<5 runs) penalizes score
  *  6. Medium signals return light-touch tier (score 40-79)
  *  7. gatherSignals returns correct ConfidenceSignals shape (mocked DriftDbAdapter + graphQuery)
- *  8. Security file pattern matching — positive + negative cases
+ *  8. matchSensitivePath — positive + negative cases across all deny-list categories
  *  9. Boundary: score exactly at 80 → autonomous
  * 10. Boundary: score exactly at 40 → light-touch
  * 11. Boundary: score below 40 → supervised
  * 12. avg_retry_count penalty capped at 20 points
+ * 13. Deny-list floor precedes override_tier (floor beats override)
+ * 14. Non-sensitive diffs still honor override_tier unchanged
+ * 15. Floor never weakens a computed supervised (non-sensitive worst-case signals)
  *
  * Mock strategy:
  *  - confidence-scorer.ts no longer imports drift-db directly; DriftDbAdapter is passed in
@@ -37,7 +40,12 @@ import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 
 // Import subject under test
 import type { ConfidenceSignals, DriftDbAdapter } from "../confidence-scorer.ts";
-import { computeConfidence, gatherSignals, hasSecurityFiles } from "../confidence-scorer.ts";
+import {
+  computeConfidence,
+  gatherSignals,
+  matchSensitivePath,
+  SENSITIVE_PATH_DENY_LIST,
+} from "../confidence-scorer.ts";
 
 // ---- Helpers ----
 
@@ -55,8 +63,8 @@ function makeCleanSignals(overrides: Partial<ConfidenceSignals> = {}): Confidenc
       max_violation_streak: 0,
       total_active_violations: 0,
     },
+    deny_list_match: null,
     file_paths: ["src/foo.ts"],
-    has_security_files: false,
     ...overrides,
   };
 }
@@ -88,17 +96,69 @@ describe("computeConfidence", () => {
     expect(result.signals_used).toContain("blast_radius.total_affected_files");
   });
 
-  it("security files always return supervised regardless of other signals", () => {
+  it("deny-list floor engaged always returns supervised regardless of other signals", () => {
     // Even with perfect build history and zero blast radius
+    const match = {
+      category: "canon-safety-hooks" as const,
+      matched_path: "hooks/x.sh",
+      pattern: "hooks/**",
+    };
     const result = computeConfidence(
       makeCleanSignals({
-        has_security_files: true,
+        deny_list_match: match,
       }),
     );
     expect(result.tier).toBe("supervised");
     expect(result.score).toBe(0);
-    expect(result.signals_used).toEqual(["has_security_files"]);
-    expect(result.reasoning).toContain("security-sensitive");
+    expect(result.signals_used).toEqual(["deny_list_floor"]);
+    expect(result.reasoning).toContain("canon-safety-hooks");
+    expect(result.reasoning).toContain("hooks/**");
+    expect(result.reasoning).toContain("hooks/x.sh");
+    expect(result.floor).toEqual(match);
+  });
+
+  it("deny-list floor precedes override_tier — floor beats override", () => {
+    const match = {
+      category: "auth" as const,
+      matched_path: "mcp-server/src/app/daemon.ts",
+      pattern: "mcp-server/src/app/daemon.ts",
+    };
+    const result = computeConfidence(
+      makeCleanSignals({
+        deny_list_match: match,
+        override_tier: "autonomous",
+      }),
+    );
+    expect(result.tier).toBe("supervised");
+    expect(result.score).toBe(0);
+    expect(result.signals_used).toEqual(["deny_list_floor"]);
+  });
+
+  it("non-sensitive diff still honors override_tier unchanged", () => {
+    const result = computeConfidence(
+      makeCleanSignals({
+        deny_list_match: null,
+        override_tier: "autonomous",
+      }),
+    );
+    expect(result.tier).toBe("autonomous");
+    expect(result.score).toBe(-1);
+  });
+
+  it("floor never weakens a computed supervised (non-sensitive worst-case signals)", () => {
+    const result = computeConfidence(
+      makeCleanSignals({
+        blast_radius: { max_depth: 4, total_affected_files: 100 },
+        build_history: {
+          avg_retry_count: 10,
+          clean_review_rate: 0,
+          recent_failure_rate: 1,
+          recent_runs: 0,
+        },
+        deny_list_match: null,
+      }),
+    );
+    expect(result.tier).toBe("supervised");
   });
 
   it("override_tier short-circuits scoring and returns the forced tier", () => {
@@ -108,11 +168,11 @@ describe("computeConfidence", () => {
     expect(resultSupervised.signals_used).toEqual(["override_tier"]);
     expect(resultSupervised.reasoning).toContain("user override");
 
-    // Override takes effect even over terrible signals
+    // Override takes effect even over terrible signals (non-sensitive)
     const resultAutonomous = computeConfidence(
       makeCleanSignals({
         blast_radius: { max_depth: 4, total_affected_files: 100 },
-        has_security_files: false,
+        deny_list_match: null,
         override_tier: "autonomous",
       }),
     );
@@ -232,45 +292,122 @@ describe("computeConfidence", () => {
   });
 });
 
-// ---- hasSecurityFiles tests ----
+// ---- matchSensitivePath tests ----
 
-describe("hasSecurityFiles", () => {
-  it("matches principles/ path (positive); NOT src/features/principles (negative)", () => {
-    expect(hasSecurityFiles(["principles/my-principle.md"])).toBe(true);
-    expect(hasSecurityFiles(["src/features/principles/tool.ts"])).toBe(false);
+describe("matchSensitivePath", () => {
+  it("matches hooks/** — canon-safety-hooks (incl. nested, segment-anchored)", () => {
+    expect(matchSensitivePath(["hooks/x.sh"])?.category).toBe("canon-safety-hooks");
+    expect(matchSensitivePath(["hooks/lib/canon-hook-lib.sh"])?.category).toBe(
+      "canon-safety-hooks",
+    );
   });
 
-  it("matches rules/ path", () => {
-    expect(hasSecurityFiles(["rules/agent-budget.md"])).toBe(true);
+  it("matches .github/** — ci-config (workflows, composite actions, root CI config)", () => {
+    expect(matchSensitivePath([".github/workflows/ci.yml"])?.category).toBe("ci-config");
+    expect(matchSensitivePath([".github/actions/foo/action.yml"])?.category).toBe("ci-config");
+    expect(matchSensitivePath([".github/dependabot.yml"])?.category).toBe("ci-config");
   });
 
-  it("matches hooks/ path; NOT src/hooks-utils.ts", () => {
-    expect(hasSecurityFiles(["hooks/pre-commit.sh"])).toBe(true);
-    expect(hasSecurityFiles(["src/hooks-utils.ts"])).toBe(false);
+  it("matches .env (root literal) and **/.env (nested) — secrets-credentials", () => {
+    expect(matchSensitivePath([".env"])?.category).toBe("secrets-credentials");
+    expect(matchSensitivePath(["config/.env"])?.category).toBe("secrets-credentials");
   });
 
-  it("matches .canon/config.json exactly; NOT other config files", () => {
-    expect(hasSecurityFiles([".canon/config.json"])).toBe(true);
-    expect(hasSecurityFiles([".canon/config-backup.json"])).toBe(false);
-    expect(hasSecurityFiles(["src/config.json"])).toBe(false);
+  it("matches dotenv variants (.env.local, .env.production, nested) — secrets-credentials", () => {
+    expect(matchSensitivePath([".env.local"])?.category).toBe("secrets-credentials");
+    expect(matchSensitivePath([".env.production"])?.category).toBe("secrets-credentials");
+    expect(matchSensitivePath(["config/.env.local"])?.category).toBe("secrets-credentials");
+    expect(matchSensitivePath(["src/foo.ts"])).toBeNull();
   });
 
-  it("returns false for ordinary source files", () => {
+  it("matches bare root-level env files (secrets.env) — secrets-credentials", () => {
+    expect(matchSensitivePath(["secrets.env"])?.category).toBe("secrets-credentials");
+    expect(matchSensitivePath(["src/foo.ts"])).toBeNull();
+  });
+
+  it("matches mcp-server/src/app/mcp-http/** and daemon.ts — auth", () => {
+    expect(matchSensitivePath(["mcp-server/src/app/mcp-http/auth.ts"])?.category).toBe("auth");
+    expect(matchSensitivePath(["mcp-server/src/app/daemon.ts"])?.category).toBe("auth");
+  });
+
+  it("matches drift-store-schema paths", () => {
     expect(
-      hasSecurityFiles([
-        "src/foo.ts",
-        "mcp-server/src/features/orchestration/services/confidence-scorer.ts",
-        "templates/prd.md",
-      ]),
-    ).toBe(false);
+      matchSensitivePath(["mcp-server/src/domains/workspaces/execution-schema.ts"])?.category,
+    ).toBe("drift-store-schema");
+    expect(
+      matchSensitivePath(["mcp-server/src/platform/storage/drift/drift-db.ts"])?.category,
+    ).toBe("drift-store-schema");
   });
 
-  it("returns true when any file in the list matches", () => {
-    expect(hasSecurityFiles(["src/foo.ts", "hooks/pre-commit.sh"])).toBe(true);
+  it("matches mcp-server/src/app/register-*.ts — mcp-tool-contract", () => {
+    expect(matchSensitivePath(["mcp-server/src/app/register-foo.ts"])?.category).toBe(
+      "mcp-tool-contract",
+    );
+    expect(matchSensitivePath(["mcp-server/src/app/create-server.ts"])).toBeNull();
   });
 
-  it("returns false for empty file list", () => {
-    expect(hasSecurityFiles([])).toBe(false);
+  it("matches principles/** and rules/** — principles-rules-config (folds in old SECURITY_PATTERNS)", () => {
+    expect(matchSensitivePath(["principles/rules/foo.md"])?.category).toBe(
+      "principles-rules-config",
+    );
+    expect(matchSensitivePath(["rules/agent-budget.md"])?.category).toBe("principles-rules-config");
+    expect(matchSensitivePath([".canon/config.json"])?.category).toBe("principles-rules-config");
+  });
+
+  it("matches .claude/settings*.json — settings-permissions", () => {
+    expect(matchSensitivePath([".claude/settings.json"])?.category).toBe("settings-permissions");
+    expect(matchSensitivePath([".claude/settings.local.json"])?.category).toBe(
+      "settings-permissions",
+    );
+    expect(matchSensitivePath(["mcp-server/.claude/settings.json"])?.category).toBe(
+      "settings-permissions",
+    );
+  });
+
+  it("returns null for ordinary source files", () => {
+    expect(
+      matchSensitivePath(["src/foo.ts", "templates/prd.md", "README.md", "docs/x.md"]),
+    ).toBeNull();
+  });
+
+  it("matches the deny-list's own source files — autonomy-tier-control (self-governance, H1)", () => {
+    expect(
+      matchSensitivePath(["mcp-server/src/features/orchestration/services/confidence-scorer.ts"])
+        ?.category,
+    ).toBe("autonomy-tier-control");
+    expect(
+      matchSensitivePath(["mcp-server/src/features/orchestration/tools/compute-autonomy-tier.ts"])
+        ?.category,
+    ).toBe("autonomy-tier-control");
+    // An unrelated orchestration file must NOT match — the floor is pinned tightly
+    // to the control files, not the whole orchestration feature.
+    expect(matchSensitivePath(["src/foo.ts"])).toBeNull();
+  });
+
+  it("matches the deny-list's own matcher — autonomy-tier-control (self-governance, H1')", () => {
+    // The tripod's third leg: matchGlob is the sole predicate every pattern above is
+    // evaluated through. A silent weakening of it would disengage the entire floor.
+    expect(matchSensitivePath(["mcp-server/src/shared/lib/glob-matcher.ts"])?.category).toBe(
+      "autonomy-tier-control",
+    );
+    // An unrelated shared-lib file must NOT match — pinned to the matcher, not
+    // the whole shared/lib surface.
+    expect(matchSensitivePath(["mcp-server/src/shared/lib/config.ts"])).toBeNull();
+  });
+
+  it("returns the first match across files x entries", () => {
+    const match = matchSensitivePath(["src/foo.ts", "hooks/pre-commit.sh"]);
+    expect(match?.category).toBe("canon-safety-hooks");
+    expect(match?.matched_path).toBe("hooks/pre-commit.sh");
+  });
+
+  it("returns null for empty file list", () => {
+    expect(matchSensitivePath([])).toBeNull();
+  });
+
+  it("SENSITIVE_PATH_DENY_LIST has exactly 9 categories", () => {
+    const categories = new Set(SENSITIVE_PATH_DENY_LIST.map((e) => e.category));
+    expect(categories.size).toBe(9);
   });
 });
 
@@ -311,16 +448,16 @@ describe("gatherSignals", () => {
     expect(typeof result.build_history.clean_review_rate).toBe("number");
     expect(typeof result.blast_radius.total_affected_files).toBe("number");
     expect(typeof result.compliance.total_active_violations).toBe("number");
-    expect(typeof result.has_security_files).toBe("boolean");
+    expect(result.deny_list_match).toBeNull();
   });
 
-  it("sets has_security_files based on file path patterns", async () => {
+  it("sets deny_list_match based on file path patterns", async () => {
     const mockDb = makeMockDriftDb();
     const resultSafe = await gatherSignals(["src/foo.ts"], "/mock/project", mockDb);
-    expect(resultSafe.has_security_files).toBe(false);
+    expect(resultSafe.deny_list_match).toBeNull();
 
     const resultSecurity = await gatherSignals(["hooks/pre-commit.sh"], "/mock/project", mockDb);
-    expect(resultSecurity.has_security_files).toBe(true);
+    expect(resultSecurity.deny_list_match?.category).toBe("canon-safety-hooks");
   });
 
   it("aggregates blast radius total and max depth from graphQuery results", async () => {

@@ -49,6 +49,18 @@ export type CliffEventRow = {
 };
 
 /**
+ * Exact-identity spec for the one-shot audited-false-positive cleanup.
+ * (workspace_slug, step_id) is unique per row (the table's UNIQUE key);
+ * detected_at is included so a future genuine re-detection (which upserts a
+ * NEW detected_at) makes the delete a no-op rather than removing a now-live row.
+ */
+export type CliffEventDeleteSpec = {
+  workspace_slug: string;
+  step_id: string;
+  detected_at: string;
+};
+
+/**
  * Input for inserting or updating a cliff event.
  * recovery_outcome defaults to "unknown" when omitted.
  */
@@ -127,6 +139,11 @@ export class CliffEventsDao {
   private readonly stmtGetAll: Database.Statement;
   private readonly stmtGetByWorkspace: Database.Statement;
   private readonly stmtUpdateOutcome: Database.Statement;
+  private readonly stmtDeleteByExactIdentity: Database.Statement;
+  private readonly txDeleteByExactIdentity: (specs: ReadonlyArray<CliffEventDeleteSpec>) => {
+    deleted: number;
+    not_found: number;
+  };
 
   constructor(db: Database.Database) {
     // Upsert on (workspace_slug, step_id):
@@ -191,6 +208,25 @@ export class CliffEventsDao {
       SET recovery_outcome = ?
       WHERE workspace_slug = ? AND step_id = ?
     `);
+
+    this.stmtDeleteByExactIdentity = db.prepare(`
+      DELETE FROM cliff_events
+      WHERE workspace_slug = @workspace_slug AND step_id = @step_id AND detected_at = @detected_at
+    `);
+    const stmtDelete = this.stmtDeleteByExactIdentity;
+    this.txDeleteByExactIdentity = db.transaction((specs: ReadonlyArray<CliffEventDeleteSpec>) => {
+      let deleted = 0;
+      let not_found = 0;
+      for (const spec of specs) {
+        const changes = stmtDelete.run(spec).changes;
+        if (changes > 0) {
+          deleted += changes;
+        } else {
+          not_found += 1;
+        }
+      }
+      return { deleted, not_found };
+    });
   }
 
   /**
@@ -239,5 +275,19 @@ export class CliffEventsDao {
    */
   updateOutcome(workspaceSlug: string, stepId: string, outcome: CliffRecoveryOutcome): void {
     this.stmtUpdateOutcome.run(outcome, workspaceSlug, stepId);
+  }
+
+  /**
+   * Delete cliff_events rows matching exact (workspace_slug, step_id, detected_at)
+   * specs. Idempotent: a second call matches 0 rows → { deleted: 0, not_found: N }.
+   * One prepared DELETE reused per spec inside a single transaction.
+   * Empty specs → { deleted: 0, not_found: 0 } with no DB work.
+   */
+  deleteByExactIdentity(specs: ReadonlyArray<CliffEventDeleteSpec>): {
+    deleted: number;
+    not_found: number;
+  } {
+    if (specs.length === 0) return { deleted: 0, not_found: 0 };
+    return this.txDeleteByExactIdentity(specs);
   }
 }

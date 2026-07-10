@@ -6,7 +6,7 @@
 SQLite-backed drift storage: violation history, path effects, error fixes, area observations, craft profiles, and confidence-decay adapters. All DAO classes are synchronous (better-sqlite3). This layer is imported by `features/diagnostics/` and `features/orchestration/` but must not import from features.
 
 ## Architecture
-<!-- last-updated: 2026-07-06 -->
+<!-- last-updated: 2026-07-10 -->
 
 **Schema / migration:**
 
@@ -25,7 +25,7 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 | `outcome-store.ts` | `OutcomeStore` | `violation_outcomes` | `DriftDb.getOutcomes()` lazy accessor; added 2026-05-25 |
 | `area-memory-dao.ts` | `AreaMemoryDao` | `area_observations` | `DriftDb.getAreaMemory()`; 7-day expiry; uses `deriveSubsystemKey` from `src/shared/lib/subsystem-key.ts` to produce stable keys like `features/orchestration` |
 | `craft-profile-dao.ts` | `CraftProfileDao` | `craft_profiles` | `DriftDb.getCraftProfiles()`; `source` discriminates `"review"` vs `"audit"` profiles |
-| `cliff-events-dao.ts` | `CliffEventsDao` | `cliff_events` | `DriftDb.getCliffEvents()` lazy accessor; upsert semantics (UNIQUE workspace_slug+step_id); exports `CLIFF_RECOVERY_OUTCOMES`, `CliffRecoveryOutcome`, `CliffEventRow`, `UpsertCliffEventInput` |
+| `cliff-events-dao.ts` | `CliffEventsDao` | `cliff_events` | `DriftDb.getCliffEvents()` lazy accessor; upsert semantics (UNIQUE workspace_slug+step_id); exports `CLIFF_RECOVERY_OUTCOMES`, `CliffRecoveryOutcome`, `CliffEventRow`, `UpsertCliffEventInput`, `CliffEventDeleteSpec`; `deleteByExactIdentity(specs)` — transactional, count-returning (`{ deleted, not_found }`), idempotent exact-identity (workspace_slug, step_id, detected_at) delete; empty specs → `{ deleted: 0, not_found: 0 }` with no DB work — added 2026-07-10 |
 | `active-workspaces-dao.ts` | `ActiveWorkspacesDao` | `active_workspaces` | `DriftDb.getActiveWorkspaces()` lazy accessor; `register()` UPSERT (re-register on resume-after-reap), `markFinalized()`/`markReaped()` status transitions (no-op on absent row), `getByPath()` (null on absent), `list()` (DESC order, optional status filter); backs `post_message`/`tail_messages`/`list_active_workspaces` registry gate; lifecycle wiring is fail-open at all three call sites (init/finalize/janitor) |
 | `applied-evolutions-dao.ts` | `AppliedEvolutionsDao` | `applied_evolutions` | `DriftDb.getAppliedEvolutions()` lazy accessor; idempotent upsert (UNIQUE proposal_id, COALESCE preserves back-filled `applying_commit`/`apply_base_commit`); methods `record`, `getByProposalId`, `listAppliedSince`; exports `AppliedEvolutionRow`, `RecordAppliedEvolutionInput` (apply-provenance, ADR-0034) |
 | `violation-closure-dao.ts` | `ViolationClosureDao` | `violations` | `DriftDb.getClosures()` lazy accessor; `supersedeOpenViolations({ files, honored, recordedViolations, reviewId, timestamp })` sets `status='resolved'` for open violations where file ∈ review.files AND principle ∈ honored AND no new violation recorded in this review |
@@ -42,6 +42,7 @@ SQLite-backed drift storage: violation history, path effects, error fixes, area 
 | File | Key export | Notes |
 |------|-----------|-------|
 | `reconcile-violations.ts` | `AUDITED_STALE_2026_06`, `AUDITED_STALE_2026_06_13`, `reconcileStaleViolations` | Two human-audited stale-violation seed sets (epoch 1: 2026-06; epoch 2: 2026-06-13, 20 pairs); `reconcileStaleViolations(db, seed)` closes open rows for each pair — idempotent, run once per epoch; no lifecycle wiring (decision closure-04 Option A) |
+| `reconcile-cliff-events.ts` | `AUDITED_FALSE_CLIFF_CONTEXT_SYNC_2026_07`, `reconcileFalseCliffEvents` | Mirrors `reconcile-violations.ts`: a human-audited seed of 14 exact (workspace_slug, step_id, detected_at) `cliff_events` tuples — false-positive context-sync cliffs from never-dispatched `planned` steps (watch_GGGGGG1's data-side counterpart); `reconcileFalseCliffEvents(projectDir, specs)` is a thin wrapper over `CliffEventsDao.deleteByExactIdentity` — idempotent, run once; no lifecycle wiring (decision closure-04 Option A) — added 2026-07-10 |
 
 **Confidence / analytics:**
 
