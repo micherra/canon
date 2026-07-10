@@ -65,6 +65,16 @@ export type RecordAppliedEvolutionInput = {
   applied_at: string;
 };
 
+/**
+ * One trailer-derived (proposal_id, commit sha) pair to back-fill into
+ * `applied_evolutions.applying_commit` (Inc-3). Sourced from parsed
+ * `Canon-Evolution: {proposal_id}` git trailers.
+ */
+export type BackfillPair = {
+  proposal_id: string;
+  applying_commit: string;
+};
+
 // ---- Raw DB row type ----
 
 type AppliedEvolutionDbRow = {
@@ -115,6 +125,8 @@ export class AppliedEvolutionsDao {
   private readonly stmtRecord: Database.Statement;
   private readonly stmtGetByProposalId: Database.Statement;
   private readonly stmtListSince: Database.Statement;
+  private readonly stmtBackfill: Database.Statement;
+  private readonly txBackfill: (pairs: ReadonlyArray<BackfillPair>) => number;
 
   constructor(db: Database.Database) {
     // Upsert on (proposal_id): re-applying the same proposal UPDATEs in place.
@@ -160,6 +172,24 @@ export class AppliedEvolutionsDao {
       WHERE applied_at >= ?
       ORDER BY applied_at ASC
     `);
+
+    // Null-only guard: `AND applying_commit IS NULL` makes this UPDATE idempotent
+    // and COALESCE-safe by construction — a re-run, or a row already carrying a
+    // non-null applying_commit, changes 0 rows and is never clobbered.
+    this.stmtBackfill = db.prepare(`
+      UPDATE applied_evolutions
+         SET applying_commit = @applying_commit
+       WHERE proposal_id = @proposal_id
+         AND applying_commit IS NULL
+    `);
+    const stmtBackfill = this.stmtBackfill;
+    this.txBackfill = db.transaction((pairs: ReadonlyArray<BackfillPair>) => {
+      let count = 0;
+      for (const pair of pairs) {
+        count += stmtBackfill.run(pair).changes;
+      }
+      return count;
+    });
   }
 
   /**
@@ -203,5 +233,15 @@ export class AppliedEvolutionsDao {
   listAppliedSince(iso: string): AppliedEvolutionRow[] {
     const rows = this.stmtListSince.all(iso) as AppliedEvolutionDbRow[];
     return rows.map(rowToAppliedEvolutionRow);
+  }
+
+  /**
+   * Back-fill applying_commit from Canon-Evolution: trailers for rows still null.
+   * Null-only (never clobbers a non-null value) and idempotent (re-run updates 0).
+   * Wrapped in a single transaction; returns the total number of rows updated.
+   */
+  backfillApplyingCommit(pairs: BackfillPair[]): number {
+    if (pairs.length === 0) return 0;
+    return this.txBackfill(pairs);
   }
 }
