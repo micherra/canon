@@ -29,15 +29,16 @@ references/
 |---|---|
 | canon-artifact-locations.md |  |
 | canon-orchestrator.md | Orchestrator protocol reference for Canon agent-teams mode. Covers PM requirements gate, architect dispatch, runbook execution, journal protocol, and completion checklist. DAG dispatch → references/dag-execution-protocol.md. HITL patterns → references/hitl-patterns.md. |
+| codex-defect-checklist.md |  |
 | competition-debate.md |  |
 | content-flow.md |  |
 | context-isolation.md |  |
-| dag-execution-protocol.md | Full DAG execution protocol for Canon parallel builds. Covers DAG validation, Task Queue Setup, Worker Dispatch (TeamCreate/TaskCreate), Merge Protocol, Post-DAG Tail, and Failure Handling. Read before any build where task-dag.yaml exists or before TeamCreate/merge/cleanup. |
+| dag-execution-protocol.md | Full DAG execution protocol for Canon parallel builds. Covers DAG validation, Task Queue Setup, Worker Dispatch (task queue + named teammates), Merge Protocol, Post-DAG Tail, and Failure Handling. Read before any build where task-dag.yaml exists or before task-queue/merge/cleanup. |
 | engineer-spawn-enrichment.md | Full engineer spawn enrichment texts for the five build-shape triggers: fast-path (4+ files), learner-proposal retroactive grep, dead-code-removal grep sweep, wiring-task tool-allowlist verification, and hook-bypass-fix posture guidance. |
 | escalation-protocol.md | Auto-escalation strategy table and protocol for Canon agent failures and stuck conditions. Covers strategy semantics (add_primer, increase_budget, escalate_model, narrow_scope, hitl), flow-specific config, 2-minute timeout, adversarial-surface rethink signal, stream-idle recovery detail, and architect re-spawn tracking. |
 | hitl-patterns.md | Full HITL checkpoint catalog for the Canon orchestrator. Covers every mandatory and advisory gate: plan approval, review verdict, adversarial re-review, WARNING close-out, manual verification, build-step checkpoint, cliff surfacing, merge conflict, gate failure, and architect design conversation. |
 | learner-dimensions.md |  |
-| loop-framework.md | Full Canon loop dispatch framework. Covers command registration, resilient dispatch, lifecycle-hook vocabulary and code, phase history, post-ship tap, session-start tap, non-declarative invariant, orchestrator_action consumption, and the five named consumers (auto-triage-fix, auto-plugin-update, run-learner, run-evolve, auto-enable-merge). |
+| loop-framework.md | Full Canon loop dispatch framework. Covers command registration, resilient dispatch, lifecycle-hook vocabulary and code, phase history, post-ship tap, session-start tap, non-declarative invariant, orchestrator_action consumption, and the six named consumers (auto-triage-fix, auto-plugin-update, run-learner, run-evolve, auto-enable-merge, auto-update-branch). |
 | multi-session-concurrency.md | Multi-session concurrency protocols for Canon's shared HTTP daemon. Covers workspace mutex mechanics, foreign-lock HITL presentation template, and the Pre-Mutate Re-Read Gate (S7) for preventing stale-write hazards. |
 | plugin-server-boot.md |  |
 | principle-format.md |  |
@@ -50,6 +51,7 @@ references/
 | team-dispatch-protocol.md | Full three-phase team dispatch protocol for Canon review fan-out. Covers Phase 1 (partition by blast radius), Phase 2 (spawn N reviewers in parallel), and Phase 3 (consolidate with minority-finding verification probes). |
 | tester-report-template.md |  |
 | tool-preference.md |  |
+| workflow-probe-matrix.md |  |
 | workspace-logging.md |  |
 | writer-worked-example.md |  |
 <!-- canon:inventory:end -->
