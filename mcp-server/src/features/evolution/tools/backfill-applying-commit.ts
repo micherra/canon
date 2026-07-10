@@ -36,12 +36,19 @@ import { z } from "zod";
 
 const DEFAULT_MAX_COMMITS = 2000;
 
+const MAX_COMMITS_CAP = 100_000;
+
 export const BackfillApplyingCommitInputSchema = z.object({
   max_commits: z
     .number()
     .int()
+    .positive()
+    .max(MAX_COMMITS_CAP)
     .optional()
-    .describe(`git-log scan cap (bounds the history walk). Default ${DEFAULT_MAX_COMMITS}.`),
+    .describe(
+      `git-log scan cap (bounds the history walk). Default ${DEFAULT_MAX_COMMITS}. ` +
+        `Must be positive; capped at ${MAX_COMMITS_CAP}.`,
+    ),
   project_dir: z
     .string()
     .describe("Absolute path to the project root (contains .canon/). Drift.db lives under it."),
@@ -143,7 +150,8 @@ export function parseEvolutionTrailers(logText: string): BackfillPair[] {
  * UPDATE. Never writes when a value is already set (COALESCE-safe by SQL guard).
  *
  * @returns `{ ok: true, updated, scanned }` on success; `INVALID_INPUT` for an
- *   empty `project_dir`; `UNEXPECTED` on a git or storage failure. Never throws.
+ *   empty `project_dir` or a non-positive/oversized `max_commits`; `UNEXPECTED`
+ *   on a git or storage failure. Never throws.
  *   Observable-best-effort: the caller surfaces an error but does not block or
  *   undo an apply on failure — `record_applied_evolution` stays authoritative.
  */
@@ -154,6 +162,19 @@ export async function backfillApplyingCommit(
 
   if (!project_dir) {
     return toolError("INVALID_INPUT", "project_dir must be a non-empty string.", false);
+  }
+
+  if (
+    input.max_commits !== undefined &&
+    (!Number.isInteger(input.max_commits) ||
+      input.max_commits <= 0 ||
+      input.max_commits > MAX_COMMITS_CAP)
+  ) {
+    return toolError(
+      "INVALID_INPUT",
+      `max_commits must be a positive integer no greater than ${MAX_COMMITS_CAP}.`,
+      false,
+    );
   }
 
   const maxCommits = input.max_commits ?? DEFAULT_MAX_COMMITS;

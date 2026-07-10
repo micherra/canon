@@ -194,4 +194,57 @@ describe("backfillApplyingCommit handler", () => {
       expect(result.message).toContain("git log failed");
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // max_commits validation (Codex P2 on #484) — rejected BEFORE git is invoked
+  // ---------------------------------------------------------------------------
+
+  it("rejects max_commits: -1 with INVALID_INPUT, never invoking git", async () => {
+    const result = await backfillApplyingCommit({ max_commits: -1, project_dir: tmpProjectDir });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+    }
+    expect(mockGitExec).not.toHaveBeenCalled();
+  });
+
+  it("rejects max_commits: 0 with INVALID_INPUT, never invoking git", async () => {
+    const result = await backfillApplyingCommit({ max_commits: 0, project_dir: tmpProjectDir });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+    }
+    expect(mockGitExec).not.toHaveBeenCalled();
+  });
+
+  it("rejects a max_commits value beyond the upper cap with INVALID_INPUT, never invoking git", async () => {
+    const result = await backfillApplyingCommit({
+      max_commits: 100_001,
+      project_dir: tmpProjectDir,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+    }
+    expect(mockGitExec).not.toHaveBeenCalled();
+  });
+
+  it("accepts a valid positive max_commits and reaches git", async () => {
+    mockGitExec.mockReturnValue({
+      duration_ms: 5,
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "",
+      timedOut: false,
+    });
+
+    const result = await backfillApplyingCommit({ max_commits: 50, project_dir: tmpProjectDir });
+
+    expect(result.ok).toBe(true);
+    expect(mockGitExec).toHaveBeenCalledWith(expect.arrayContaining(["-n", "50"]), tmpProjectDir);
+  });
 });
