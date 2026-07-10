@@ -498,7 +498,7 @@ canon/
 ├── context-manifest.json # Content-hash manifest of the installed context-artifact corpus; regenerated via `npm run regen:context-manifest`
 ├── agents/               # Specialist agent definitions (markdown + YAML frontmatter)
 ├── .github/
-│   └── codeql/extensions/canon-path-injection-barriers/  # Repo-local CodeQL model pack — registers isSafeProjectDirInput (ADR-0030) as a js/path-injection barrierGuardModel so default-setup scans auto-clear the validateAndNormalizeDir alerts; declarative YAML only, ships its own README
+│   └── codeql/extensions/canon-path-injection-barriers/  # Repo-local CodeQL model pack — registers isSafeProjectDirInput (ADR-0030) as a js/path-injection barrierGuardModel; NOT auto-applied by GitHub code-scanning (JS/TS model packs unsupported) — retained as A/B-proven executable documentation (CLI --extension-packs: 3→0), alerts handled by manual dismissal; declarative YAML only, ships its own README
 ├── docs/
 │   └── adr/              # Tracked Architecture Decision Records — durable "why" for decisions passing the 3-condition gate; written by the architect to docs/adr/NNNN-slug.md
 ├── hooks/                # Pre/post tool-use interceptor scripts (hooks.json + shell scripts)

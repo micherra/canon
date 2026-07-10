@@ -34,8 +34,20 @@ CodeQL default-setup scanning raises `js/path-injection` alerts (#18/#19/#20) on
 `validateAndNormalizeDir` in `mcp-server/src/app/mcp-http/session-manager.ts`. These are
 **true false positives**: every filesystem sink in that function is already routed behind
 the `isSafeProjectDirInput` guard, but CodeQL's built-in library models do not know that
-first-party function is a barrier. This pack makes the existing barrier legible to the
-scanner so those alerts auto-clear on future scans.
+first-party function is a barrier. This pack encodes that barrier as a `barrierGuardModel`
+so the CodeQL engine can see it.
+
+**Important — GitHub code-scanning does NOT apply this pack at scan time.** JavaScript/TypeScript
+model packs are unsupported by GitHub code scanning: default setup's `.github/codeql/extensions/`
+auto-detection is limited to C/C++, C#, Java/Kotlin, Python, Ruby, and Rust (JS/TS excluded at the
+product layer), and advanced-setup `codeql-action` treats a config `packs:` entry as a registry
+download — a repo-local, unpublished pack 403s. So on GitHub, this pack is **inert**. It applies
+**only** via an explicit CodeQL CLI invocation (`--extension-packs` / `--model-packs`), where it was
+A/B-verified to take the three alerts from 3 → 0 on the exact default suite GitHub runs. The three
+alerts (#18/#19/#20) are handled by **manual false-positive dismissal** (ADR-0030), not by this pack.
+The pack is retained as **executable, A/B-verified documentation** of the barrier, and is
+**future-ready** for if/when GitHub adds JS/TS model-pack support (or an explicit direct-CLI CodeQL
+workflow is added to this repo).
 
 ## Trust basis
 
@@ -48,20 +60,24 @@ so the ADR-0030 guard logic and this model must be maintained together.
 
 ## How to verify
 
-The next CodeQL scan applies the barrier:
+The barrier model is verified **only** by an explicit CodeQL CLI invocation — GitHub
+code-scanning scans do NOT apply it (see "Why", and the maintenance note below):
 
-- **Default setup auto-detects this pack.** No `.github/workflows/codeql.yml` is required —
-  default setup scans `.github/codeql/extensions/` automatically.
-- A fresh scan (push to `main`, or a PR scan if PR scanning is enabled) should report
-  **0 `js/path-injection` alerts** on `validateAndNormalizeDir`.
-- Locally, the pack was **A/B-verified** with the CodeQL CLI (2.26.0, `codeql/javascript-all`
-  2.8.0, `codeql/javascript-queries` 2.4.0): the `js/path-injection` query
+- **A/B-verified** with the CodeQL CLI (2.26.0, `codeql/javascript-all` 2.8.0,
+  `codeql/javascript-queries` 2.4.0) against the exact suite GitHub default setup runs
+  (`javascript-code-scanning.qls`): the `js/path-injection` query
   (`Security/CWE-022/TaintedPath.ql`) reports **3 alerts** on `validateAndNormalizeDir`
   (session-manager.ts:245–246) in a baseline analysis and **0** when this pack is loaded via
-  `--additional-packs <extensions-dir> --model-packs canon/path-injection-barriers`, with no
-  other alert suppressed. Local analysis does not auto-detect `.github/codeql/extensions/`
-  (that is a default-setup behavior), so the pack must be passed explicitly when reproducing
-  locally.
+  `--additional-packs <extensions-dir> --model-packs canon/path-injection-barriers` (or the
+  equivalent `--extension-packs`), with no other alert suppressed.
+- **This does NOT translate to GitHub scans.** There is no auto-detection path — default OR
+  advanced — that loads a JavaScript/TypeScript model pack: default-setup `.github/codeql/extensions/`
+  auto-detection excludes JS/TS, and `codeql-action`'s config `packs:` 403s on a repo-local
+  unpublished pack. The empirical proof of both facts is recorded in the build's
+  `PROBE-FINDINGS-advsetup.md`. A GitHub scan therefore still reports the 3 alerts; they are
+  **dismissed as false-positive** on the platform (ADR-0030), which is the closure.
+- To reproduce the 3 → 0 result you must pass the pack explicitly to a local CLI run — the pack
+  is never applied implicitly.
 
 ## Maintenance
 
