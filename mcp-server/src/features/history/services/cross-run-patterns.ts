@@ -16,7 +16,68 @@ import type {
 } from "../history-types.ts";
 
 // DataPoint type for performance trend computation
-type DataPoint = { flow: string; duration_ms: number; spawns: number; started: string };
+type DataPoint = {
+  flow: string;
+  duration_ms: number;
+  spawns: number;
+  started: string;
+  // Recorded per-step counters (record_agent_metrics), summed across a summary's
+  // step_outcomes. Undefined when no step_outcome carried that counter — the
+  // FlowRunEntry-fallback points below never carry these fields.
+  tool_calls?: number;
+  turns?: number;
+  orientation_calls?: number;
+};
+
+/**
+ * Sum a single counter key across a step's staged metrics — every
+ * metrics.stage_metrics[stage][key] value (the #473 staged path via
+ * record_agent_metrics' `stage` param). Returns undefined when no stage
+ * carried that key as a number.
+ */
+function sumStagedCounter(
+  stageMetrics:
+    | NonNullable<RunSummary["step_outcomes"][number]["metrics"]>["stage_metrics"]
+    | undefined,
+  key: "tool_calls" | "turns" | "orientation_calls",
+): number | undefined {
+  if (typeof stageMetrics !== "object" || stageMetrics === null) return undefined;
+  let sum: number | undefined;
+  for (const stageCounters of Object.values(stageMetrics)) {
+    const stageValue = stageCounters[key];
+    if (typeof stageValue === "number") {
+      sum = (sum ?? 0) + stageValue;
+    }
+  }
+  return sum;
+}
+
+/**
+ * Sum a single recorded counter key across a summary's step_outcomes.metrics.
+ * Reads both the top-level counter (metrics[key]) and, when present, every
+ * staged counter (see sumStagedCounter) so a run recorded entirely through the
+ * staged path still contributes. Returns undefined when no step_outcome carries
+ * that key as a number anywhere — a summary with zero recorded metrics must not
+ * report a misleading summed 0.
+ */
+function sumRecordedCounter(
+  stepOutcomes: RunSummary["step_outcomes"],
+  key: "tool_calls" | "turns" | "orientation_calls",
+): number | undefined {
+  let sum: number | undefined;
+  for (const step of stepOutcomes) {
+    const value = step.metrics?.[key];
+    if (typeof value === "number") {
+      sum = (sum ?? 0) + value;
+    }
+
+    const stagedSum = sumStagedCounter(step.metrics?.stage_metrics, key);
+    if (stagedSum !== undefined) {
+      sum = (sum ?? 0) + stagedSum;
+    }
+  }
+  return sum;
+}
 
 /**
  * Build unified data points from summaries (preferred) and flow run entries (fallback).
@@ -32,7 +93,15 @@ function buildUnifiedDataPoints(summaries: RunSummary[], runs: FlowRunEntry[]): 
     const spawns = summary.step_outcomes.length;
     const started = started_at ?? summary.run_metadata.archived_at;
     summaryKeys.add(`${flow}\0${started}`);
-    points.push({ duration_ms: total_duration_ms, flow, spawns, started });
+    points.push({
+      duration_ms: total_duration_ms,
+      flow,
+      orientation_calls: sumRecordedCounter(summary.step_outcomes, "orientation_calls"),
+      spawns,
+      started,
+      tool_calls: sumRecordedCounter(summary.step_outcomes, "tool_calls"),
+      turns: sumRecordedCounter(summary.step_outcomes, "turns"),
+    });
   }
 
   for (const run of runs) {
@@ -84,6 +153,20 @@ function classifyTrend(flowPoints: DataPoint[], n: number): "improving" | "stabl
 }
 
 /**
+ * Average a recorded counter over only the points that carried it.
+ * Returns undefined when no point in the window carried the counter — never
+ * emits NaN (empty-average) or a misleading 0 (points that never reported it).
+ */
+function averageRecordedCounter(
+  flowPoints: DataPoint[],
+  key: "tool_calls" | "turns" | "orientation_calls",
+): number | undefined {
+  const values = flowPoints.map((p) => p[key]).filter((v): v is number => typeof v === "number");
+  if (values.length === 0) return undefined;
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+/**
  * Compute trend classification for a single flow's data points.
  * "improving": recent 5 avg > 10% faster than prior 5.
  * "degrading": recent 5 avg > 10% slower than prior 5.
@@ -105,7 +188,20 @@ function computeFlowTrend(
   const avgSpawns = flowPoints.reduce((sum, p) => sum + p.spawns, 0) / n;
   const trend = classifyTrend(flowPoints, n);
 
-  return { avg_duration_ms: avgDurationMs, avg_spawns: avgSpawns, flow, run_count: n, trend };
+  const avgToolCalls = averageRecordedCounter(flowPoints, "tool_calls");
+  const avgTurns = averageRecordedCounter(flowPoints, "turns");
+  const avgOrientationCalls = averageRecordedCounter(flowPoints, "orientation_calls");
+
+  return {
+    avg_duration_ms: avgDurationMs,
+    avg_spawns: avgSpawns,
+    flow,
+    run_count: n,
+    trend,
+    ...(avgToolCalls !== undefined ? { avg_tool_calls: avgToolCalls } : {}),
+    ...(avgTurns !== undefined ? { avg_turns: avgTurns } : {}),
+    ...(avgOrientationCalls !== undefined ? { avg_orientation_calls: avgOrientationCalls } : {}),
+  };
 }
 
 /**

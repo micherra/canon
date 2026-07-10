@@ -13,6 +13,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import type { StateMetrics } from "../../../domains/flows/board-state-schemas.ts";
 import type {
   AssembledArtifact,
   ContextProvenanceSummary,
@@ -56,7 +57,12 @@ export function buildRunSummary(input: {
   const plannerContext = extractPlannerContext(plansDir, slug);
   const stepOutcomes = extractStepOutcomes(workspacePath);
   const reviewResults = extractReviewResults(workspacePath);
+  // buildArtifactInventory scans the workspace directory tree — it must run before
+  // any getExecutionStore() call (joinRecordedMetrics, extractContextProvenance
+  // below), which lazily creates orchestration.db{,-shm,-wal} as a side effect and
+  // would otherwise inflate the inventory's file count.
   const artifactInventory = buildArtifactInventory(workspacePath);
+  joinRecordedMetrics(workspacePath, stepOutcomes);
   const contextProvenance = extractContextProvenance(workspacePath);
 
   // Compute timing from step outcomes
@@ -159,6 +165,47 @@ function extractStepOutcomes(workspacePath: string): StepOutcome[] {
     return steps.map(stepToOutcome);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Narrow a state's raw metrics down to StepOutcome.metrics' archive-safe shape
+ * (numbers, strings, and the #473 stage_metrics nested-counter shape).
+ * Orchestrator-only structured fields (gate_results, test_results,
+ * postcondition_results, violation_severities) are dropped — StepOutcome.metrics
+ * tracks agent-recorded counters, not gate/test bookkeeping.
+ * Returns undefined when nothing archivable remains.
+ */
+function pickArchivableMetrics(metrics: StateMetrics): StepOutcome["metrics"] | undefined {
+  const picked: NonNullable<StepOutcome["metrics"]> = {};
+  for (const [key, value] of Object.entries(metrics)) {
+    if (typeof value === "number" || typeof value === "string") {
+      picked[key] = value;
+    } else if (key === "stage_metrics" && isObject(value)) {
+      picked[key] = value as Record<string, Record<string, number>>;
+    }
+  }
+  return Object.keys(picked).length > 0 ? picked : undefined;
+}
+
+/**
+ * Join recorded execution_states.metrics onto step_outcomes by step_id, in place.
+ *
+ * fail-open: any store-read error leaves stepOutcomes untouched. buildRunSummary's
+ * never-throws contract is preserved (mirrors extractContextProvenance).
+ */
+function joinRecordedMetrics(workspacePath: string, stepOutcomes: StepOutcome[]): void {
+  try {
+    const store = getExecutionStore(workspacePath);
+    const metricsByState = new Map(store.getAllStates().map((s) => [s.state_id, s.metrics]));
+    for (const step of stepOutcomes) {
+      const raw = metricsByState.get(step.step_id);
+      if (!raw) continue;
+      const picked = pickArchivableMetrics(raw);
+      if (picked) step.metrics = picked;
+    }
+  } catch {
+    // fail-open — buildRunSummary never throws (mirrors extractContextProvenance)
   }
 }
 
