@@ -11,6 +11,13 @@
  * - `stage` present: counters are namespaced under `metrics.stage_metrics[stage]`,
  *   append-merged so a later stage does not clobber an earlier one. Lets a
  *   single-window agent (topology C, G3) emit per-stage metrics without a new tool.
+ *
+ * Durability: `init_workspace` never creates per-step `execution_states` rows, so on
+ * the happy path (no prior escalation) a step's row doesn't exist yet when the agent
+ * first calls this tool. The state row is auto-created (upsert-if-absent) so the write
+ * lands instead of being silently discarded as `INVALID_INPUT`. A workspace with no
+ * execution row at all still fails closed as `WORKSPACE_NOT_FOUND` — the tool never
+ * creates an orphan state row for a workspace that was never initialized.
  */
 
 import type { BoardStateEntry } from "@domains/flows/board-state-schemas.ts";
@@ -76,6 +83,8 @@ function validateProvidedCounters(
  * (unchanged). With `stage`: read-modify-write the `stage_metrics` sub-object
  * so an earlier stage's counters survive a later stage's call —
  * `updateStateMetrics` only shallow-merges top-level keys (see its doc comment).
+ * Returns whatever `updateStateMetrics` returns — `false` means the write did
+ * not land (state row absent), which the caller must treat as a failure.
  */
 function writeProvidedMetrics(opts: {
   store: ReturnType<typeof getExecutionStore>;
@@ -83,14 +92,13 @@ function writeProvidedMetrics(opts: {
   stateId: string;
   stage: string | undefined;
   provided: Record<string, number>;
-}): void {
+}): boolean {
   const { store, state, stateId, stage, provided } = opts;
   if (stage === undefined) {
-    store.updateStateMetrics(stateId, provided);
-    return;
+    return store.updateStateMetrics(stateId, provided);
   }
   const existingStageMetrics = state.metrics?.stage_metrics ?? {};
-  store.updateStateMetrics(stateId, {
+  return store.updateStateMetrics(stateId, {
     stage_metrics: { ...existingStageMetrics, [stage]: provided },
   });
 }
@@ -112,7 +120,7 @@ export async function recordAgentMetrics(
   if ("error" in validated) return validated.error;
   const { provided } = validated;
 
-  // Get the store and check state exists
+  // Get the store and confirm the workspace has been initialized
   let store: ReturnType<typeof getExecutionStore>;
   try {
     store = getExecutionStore(workspace);
@@ -122,15 +130,35 @@ export async function recordAgentMetrics(
       workspace,
     });
   }
-  const state = store.getState(state_id);
+  if (store.getExecution() === null) {
+    return toolError("WORKSPACE_NOT_FOUND", `Workspace has no execution: ${workspace}`, false, {
+      workspace,
+    });
+  }
+
+  // Auto-create the state row when it doesn't exist yet — on the happy path,
+  // init_workspace never creates per-step execution_states rows, so a strict
+  // "must already exist" check silently discards every agent's first metrics
+  // write. Mirrors get-next-escalation-strategy.ts's upsert pattern.
+  let state = store.getState(state_id);
   if (!state) {
-    return toolError("INVALID_INPUT", `State "${state_id}" not found in workspace`, false, {
+    store.upsertState(state_id, { entries: 0, status: "pending" });
+    state = store.getState(state_id);
+  }
+  if (!state) {
+    return toolError("UNEXPECTED", `Failed to create state "${state_id}"`, false, {
       state_id,
       workspace,
     });
   }
 
-  writeProvidedMetrics({ provided, stage, state, stateId: state_id, store });
+  const landed = writeProvidedMetrics({ provided, stage, state, stateId: state_id, store });
+  if (!landed) {
+    return toolError("UNEXPECTED", `Metrics write did not land for state "${state_id}"`, false, {
+      state_id,
+      workspace,
+    });
+  }
 
   return toolOk({ recorded: provided });
 }
