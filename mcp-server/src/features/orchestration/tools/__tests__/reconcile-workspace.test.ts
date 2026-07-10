@@ -256,7 +256,7 @@ describe("reconcileWorkspace — registered schema boundary (loops-phase-c-02 P1
  * resume) stays unfiltered — see DESIGN.md D1/OQ#2.
  */
 /** Typed test fixture factory — fills every required IncompleteStep field so
- * call sites only need to override the fields under test (no `as unknown` escapes). */
+ * call sites only need to override the fields under test (fully typed, no cast escapes). */
 function makeIncompleteStep(overrides: Partial<IncompleteStep> = {}): IncompleteStep {
   return {
     agent_type: "engineer",
