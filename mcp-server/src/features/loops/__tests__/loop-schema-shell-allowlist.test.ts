@@ -306,3 +306,77 @@ describe("parseLoopDefinition — READ_ONLY_SHELL_COMMANDS extension (staleness-
     expect(result.ok).toBe(true);
   });
 });
+
+// ── Read-only ALLOWLIST rethink (adversarial re-review fix — `-f` bypass, review-fix-2) ──
+// Two successive denylist patches each missed a clock-SET shape (positional, then BSD `-f`
+// parse-and-set). The guard was reshaped into a fail-closed allowlist: admit ONLY known
+// read-only shapes, reject everything else (unknown flags AND any bare positional operand).
+// These assertions pin the new adversarial cases plus the closure invariant.
+
+const buildDateLoop = (shellCommand: string) => ({
+  ...validIntervalFrontmatter,
+  observe: {
+    tools: ["Bash"],
+    mcp: [],
+    shell_commands: [shellCommand],
+  },
+  guardrails: {
+    mutates_build: false,
+    forbidden_tools: [],
+  },
+});
+
+describe("parseLoopDefinition — date read-only allowlist (adversarial `-f` bypass, review-fix-2)", () => {
+  // REJECT — the adversarial bypass the denylist admitted.
+  it("[NEGATIVE 'date -f <fmt> <new_date>']: BSD parse-and-set clock form → rejected", () => {
+    const result = parseLoopDefinition(buildDateLoop("date -f %Y-%m-%d 2026-01-01"), {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/date|read-only|clock/i);
+    }
+  });
+
+  it("[NEGATIVE 'date -f <fmt> <ISO>']: BSD parse-and-set with a colon/T operand → rejected", () => {
+    const result = parseLoopDefinition(
+      buildDateLoop('date -f "%Y-%m-%dT%H:%M:%S" 2026-01-01T00:00:00'),
+      {},
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/date|read-only|clock/i);
+    }
+  });
+
+  // REJECT — unknown flag: allowlist is fail-closed, unknown `-`-flags are NOT skipped.
+  it("[NEGATIVE 'date -X']: unknown flag → rejected fail-closed (allowlist, not denylist)", () => {
+    const result = parseLoopDefinition(buildDateLoop("date -X"), {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/date|read-only/i);
+    }
+  });
+
+  // REJECT — glued set flags stay rejected.
+  it("[NEGATIVE 'date -s 2026']: space-separated set flag → rejected", () => {
+    const result = parseLoopDefinition(buildDateLoop("date -s 2026"), {});
+    expect(result.ok).toBe(false);
+  });
+
+  // ADMIT — legitimate read-only display-adjust (BSD -v never sets the clock).
+  it("[REGRESSION] 'date -v +1d' still admitted (BSD display-adjust, read-only)", () => {
+    const result = parseLoopDefinition(buildDateLoop("date -v +1d"), {});
+    expect(result.ok).toBe(true);
+  });
+
+  // REJECT — operand smuggling behind a read flag: the read flag consumes exactly ONE token,
+  // the trailing positional operand is then classified and rejected.
+  it("[NEGATIVE 'date -r now 202601010000']: trailing positional after read flag → rejected", () => {
+    const result = parseLoopDefinition(buildDateLoop("date -r now 202601010000"), {});
+    expect(result.ok).toBe(false);
+  });
+
+  it("[NEGATIVE 'date -d now 202601010000']: trailing positional after read flag → rejected", () => {
+    const result = parseLoopDefinition(buildDateLoop("date -d now 202601010000"), {});
+    expect(result.ok).toBe(false);
+  });
+});

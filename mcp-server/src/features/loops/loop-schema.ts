@@ -318,55 +318,26 @@ function checkGhApiMutatingFlags(cmd: string): string | null {
   return null;
 }
 
-// ── date mutating-flag tokens (staleness-01 hardening) ────────────────────────
-// GNU/BSD `date -s`/`--set` sets the system clock. On BSD/macOS `/bin/date` (the runner's
-// platform), a bare positional operand ALSO sets the clock with no flag at all —
-// `date [[[[[cc]yy]mm]dd]HH]MM[.ss]`. The KG-age observe needs bare `date`/`date +%s` on
-// the allowlist, so — mirroring checkGhApiMutatingFlags for `gh api` — this closes both
-// gaps at the argument level instead of over-widening the allowlist entry itself.
-const DATE_SET_FLAG_PREFIXES = ["-s", "--set"] as const;
+// ── date read-only ALLOWLIST (staleness-01 hardening — allowlist rethink) ──────
+// GNU/BSD `date` has multiple clock-SETTING shapes: `-s`/`--set` (GNU set), `-f <fmt>
+// <new_date>` (BSD parse-and-set), and a bare positional operand `[[[[[cc]yy]mm]dd]HH]MM[.ss]`
+// (BSD set-with-no-flag). Two successive denylist patches each missed one shape (positional,
+// then `-f`), so this guard is a fail-closed ALLOWLIST: a `date` invocation is admitted ONLY
+// when every token after `date` is a known read-only shape; anything else — unknown flags AND
+// any bare positional operand — is rejected. The KG-age observe only ever needs bare `date` /
+// `date +%s`, so a strict read-only allowlist cannot break legitimate use.
 
-// Read-only value-taking flags whose operand must NOT be mistaken for the BSD positional
-// clock-set form: `-r <epoch>` (BSD: print given epoch), `-d`/`--date <str>` (GNU: print
-// given date). Each consumes a following space-separated token as its value.
-const DATE_READ_VALUE_FLAG_TOKENS = ["-r", "-d", "--date"] as const;
+// Read-only flags that take a following value token. Bare form consumes exactly one following
+// token (so its value is never examined as a positional operand); a `=`-glued form
+// (`--date=<str>`) or a directly-glued BSD `-v` adjustment (`-v+1d`) is self-contained.
+//   -r <epoch>       BSD print-given-epoch
+//   -d/--date <str>  GNU print-given-date
+//   -v <adjust>      BSD display-adjust (never sets the clock)
+const DATE_READ_VALUE_FLAGS = ["-r", "-d", "--date", "-v"] as const;
 
-// Matches the BSD positional clock-set operand shape: `[[[[[cc]yy]mm]dd]HH]MM[.ss]`.
-const DATE_POSITIONAL_SET_OPERAND = /^\d+(\.\d{2})?$/;
-
-/**
- * Returns an error string when `token` is a mutating `date` set-clock flag
- * (`-s`/`--set` or a glued form), null otherwise. Extracted to keep
- * checkDateMutatingFlags under the cognitive-complexity limit.
- */
-function checkDateSetFlag(cmd: string, token: string): string | null {
-  if (!DATE_SET_FLAG_PREFIXES.some((prefix) => token === prefix || token.startsWith(prefix))) {
-    return null;
-  }
-  return (
-    `date shell_command '${cmd}' uses flag '${token}' which sets the system clock ` +
-    `(only read-only forms like 'date +%s' are allowed under mutates_build:false)`
-  );
-}
-
-/**
- * Returns true when `token` is a read-only value-taking flag (`-r`, `-d`, `--date`,
- * or their `=`-glued forms) whose operand must not be mistaken for the BSD positional
- * clock-set form.
- */
-function isDateReadValueFlagToken(token: string): boolean {
-  return DATE_READ_VALUE_FLAG_TOKENS.some((f) => token === f || token.startsWith(`${f}=`));
-}
-
-/**
- * Builds the rejection message for a bare BSD positional clock-set operand.
- */
-function buildDatePositionalSetError(cmd: string, token: string): string {
-  return (
-    `date shell_command '${cmd}' has positional operand '${token}' which sets the system clock ` +
-    `(BSD 'date [[[[[cc]yy]mm]dd]HH]MM[.ss]' form — only read-only forms are allowed under mutates_build:false)`
-  );
-}
+// Read-only flags that take NO value: UTC/RFC output selectors and BSD `-j` (do-not-set).
+// `-I`/`-Iseconds`/`-I<spec>` ISO-output selectors are matched by prefix; the rest exactly.
+const DATE_READONLY_NOVALUE_FLAGS = ["-u", "-R", "-j"] as const;
 
 /** Per-token classification result for `checkDateMutatingFlags`'s loop. */
 type DateTokenVerdict =
@@ -375,40 +346,72 @@ type DateTokenVerdict =
   | { kind: "skip" };
 
 /**
- * Classifies a single `date` argument token. Extracted so the loop in
- * checkDateMutatingFlags stays a flat dispatch — keeps both functions under the
- * cognitive-complexity limit.
+ * Classifies a read-value `date` flag token (`-r`, `-d`, `--date`, `-v`). Bare flag →
+ * consume-next (its value token must not be re-examined as a positional operand); a
+ * `=`-glued form (`--date=x`) or directly-glued `-v` adjustment (`-v+1d`) → skip
+ * (self-contained). Returns null when `token` is not a read-value flag.
  */
-function classifyDateToken(cmd: string, token: string): DateTokenVerdict {
-  const setFlagError = checkDateSetFlag(cmd, token);
-  if (setFlagError !== null) {
-    return { kind: "reject", message: setFlagError };
+function classifyDateReadValueFlag(token: string): DateTokenVerdict | null {
+  for (const f of DATE_READ_VALUE_FLAGS) {
+    if (token === f) {
+      return { kind: "consume-next" };
+    }
+    if (token.startsWith(`${f}=`)) {
+      return { kind: "skip" };
+    }
   }
-  if (token.startsWith("+")) {
-    return { kind: "skip" }; // +FORMAT — read-only output, never a clock-set operand
+  // Directly-glued BSD `-v` adjustment: -v+1d, -v-1d, -v1d (value not `=`-separated).
+  if (token.startsWith("-v") && token.length > 2) {
+    return { kind: "skip" };
   }
-  if (isDateReadValueFlagToken(token)) {
-    // -r <epoch> / -d <str> / --date <str> / --date=<str> — read-only; a space-separated
-    // form must consume its value token so it's never examined as a positional operand.
-    return token.includes("=") ? { kind: "skip" } : { kind: "consume-next" };
-  }
-  if (token.startsWith("-")) {
-    return { kind: "skip" }; // any other flag (-u, -j, -R, -Iseconds, ...) — read-only/no-op
-  }
-  if (DATE_POSITIONAL_SET_OPERAND.test(token)) {
-    return { kind: "reject", message: buildDatePositionalSetError(cmd, token) };
-  }
-  return { kind: "skip" };
+  return null;
+}
+
+/** True when `token` is a read-only no-value date flag (`-u`, `-R`, `-j`, or an `-I*` ISO selector). */
+function isDateReadOnlyNoValueFlag(token: string): boolean {
+  return token.startsWith("-I") || DATE_READONLY_NOVALUE_FLAGS.some((f) => token === f);
+}
+
+/** Builds the fail-closed rejection message for a non-allowlisted `date` token. */
+function buildDateRejectError(cmd: string, token: string): string {
+  return (
+    `date shell_command '${cmd}' has non-read-only token '${token}' ` +
+    `(only read-only date forms are allowed under mutates_build:false: bare 'date', '+FORMAT', ` +
+    `-u/-R/-I*/-j, and -r/-d/--date/-v <value>; set-clock flags '-s'/'--set'/'-f' and bare ` +
+    `positional operands set the system clock and are rejected)`
+  );
 }
 
 /**
- * Checks whether a `date` entry uses a mutating set-clock form.
- * Returns an error string if mutating, null if read-only.
+ * Classifies a single `date` argument token against the read-only ALLOWLIST. Admitted:
+ * `+FORMAT`; read-value flags `-r`/`-d`/`--date`/`-v` (and glued forms); no-value flags
+ * `-u`/`-R`/`-j`/`-I*`. Everything else — set-clock flags (`-s`/`--set`/`-f`), unknown
+ * `-`-flags, and any bare positional operand — is rejected fail-closed. Extracted so the
+ * loop in checkDateMutatingFlags stays a flat dispatch under the cognitive-complexity limit.
+ */
+function classifyDateToken(cmd: string, token: string): DateTokenVerdict {
+  if (token.startsWith("+")) {
+    return { kind: "skip" }; // +FORMAT — read-only output selector, never a clock-set operand
+  }
+  const readValueVerdict = classifyDateReadValueFlag(token);
+  if (readValueVerdict !== null) {
+    return readValueVerdict;
+  }
+  if (isDateReadOnlyNoValueFlag(token)) {
+    return { kind: "skip" };
+  }
+  return { kind: "reject", message: buildDateRejectError(cmd, token) };
+}
+
+/**
+ * Checks whether a `date` entry is admitted by the read-only allowlist.
+ * Returns an error string when any token is not a known read-only shape, null when clean.
  *
- * Admitted: `date +%s`, `date -u +%s`, `date` (no args), `date -r 1234567890`
- * (BSD read-given-epoch — the digit operand is guarded, not a clock-set), `date -d "..."`.
- * Rejected: `-s`/`--set` and their glued forms; a bare all-digits positional operand
- * (optionally `.ss`) with no guarding flag — the BSD positional clock-set form.
+ * Admitted: `date` (no args), `date +%s`, `date -u`, `date -Iseconds`, `date -r 1234567890`
+ * (BSD read-given-epoch — the digit operand is consumed by `-r`, not classified), `date -d "..."`,
+ * `date -v +1d` (BSD display-adjust). Rejected fail-closed: `-s`/`--set`/`-f` set-clock flags
+ * and their glued forms; any unknown `-`-prefixed flag; any bare positional operand (the BSD
+ * `[[[[[cc]yy]mm]dd]HH]MM[.ss]` clock-set form) — all-digits or not.
  */
 function checkDateMutatingFlags(cmd: string): string | null {
   const tokens = cmd.trim().split(/\s+/).slice(1); // skip the leading "date" token
