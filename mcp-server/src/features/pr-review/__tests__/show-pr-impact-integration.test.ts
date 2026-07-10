@@ -191,7 +191,7 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
       total_affected: 10,
     });
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     const coreHotspot = result.hotspots.find((h) => h.file === "src/core.ts");
     const utilsHotspot = result.hotspots.find((h) => h.file === "src/utils.ts");
@@ -254,7 +254,7 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
       total_affected: 3,
     });
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     const hotspot = result.hotspots.find((h) => h.file === "src/clean.ts");
     expect(hotspot!.blast_radius_count).toBe(3);
@@ -279,7 +279,7 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
 
     vi.mocked(existsSync).mockReturnValue(false);
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     const aHotspot = result.hotspots.find((h) => h.file === "src/a.ts");
     const bHotspot = result.hotspots.find((h) => h.file === "src/b.ts");
@@ -332,7 +332,7 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
       total_affected: 2,
     });
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     const hotspot = result.hotspots.find((h) => h.file === "src/mixed.ts");
     // blast_count=2, max_severity_weight=3 (rule) → risk_score=6 (not 2×(1+1+3)=10)
@@ -382,7 +382,7 @@ describe("showPrImpact — multiple reviews", () => {
       }),
     );
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     expect(result.status).toBe("ok");
     expect(result.review!.verdict).toBe("CLEAN");
