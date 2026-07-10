@@ -34,6 +34,7 @@ import { getDriftDb } from "./drift-db-cache.ts";
  *                     for the one-time cleanup.
  * @returns Counts of deleted and not-found rows.
  */
+// canon:allow-unwired: one-shot audited-false-positive cleanup wrapper; consumed by a throwaway runner (closure-04 Option A) — no durable caller by design (mirrors reconcileStaleViolations).
 export function reconcileFalseCliffEvents(
   projectDir: string,
   specs: ReadonlyArray<CliffEventDeleteSpec>,
@@ -50,10 +51,8 @@ export function reconcileFalseCliffEvents(
  * join-audit, NOT a programmatic re-check. See PROBE-FINDINGS.md.
  * EXCLUDED (preserved): workflow-integration-epic-increment-0-... (no archive to
  * audit) and all non-context-sync rows (unaudited).
- * canon:allow-unwired: one-shot audited-false-positive cleanup seed; consumed by a
- * throwaway runner (closure-04 Option A) — no durable caller by design (mirrors
- * AUDITED_STALE_2026_06).
  */
+// canon:allow-unwired: one-shot audited-false-positive cleanup seed; consumed by a throwaway runner (closure-04 Option A) — no durable caller by design (mirrors AUDITED_STALE_2026_06).
 export const AUDITED_FALSE_CLIFF_CONTEXT_SYNC_2026_07: ReadonlyArray<CliffEventDeleteSpec> = [
   {
     detected_at: "2026-06-07T18:13:51.696Z",
