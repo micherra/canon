@@ -50,7 +50,7 @@ Both share the same underlying principle — **invocation is the only valid proo
 
 | Instance | Build | Tool granted | What static analysis showed | What runtime invocation revealed |
 |----------|-------|-------------|----------------------------|----------------------------------|
-| 1 | PR #366 | `LSP` added to 3 agents | Tool in allowlist; no `register-*.ts` entry (expected for harness built-ins) | `typescript-language-server` NOT on PATH; `LSP` operation set = `{ listFiles, getReferences, findDefinition }` — no `getDiagnostics`. Grant scoped to navigation-only. |
+| 1 | PR #366 | `LSP` added to 3 agents | Tool in allowlist; no `register-*.ts` entry (expected for harness built-ins) | `typescript-language-server` NOT on PATH; `LSP` operation set = `{ listFiles, getReferences, findDefinition }` — no `getDiagnostics`. Grant scoped to navigation-only. **(PR #366-era op names; superseded — the live 2.1.206 set is goToDefinition, findReferences, hover, documentSymbol, workspaceSymbol, goToImplementation, prepareCallHierarchy, incomingCalls, outgoingCalls — still no diagnostics op.)** |
 | 2 | PR #369 | `Skill` added to architect + learner | Tool in allowlist | `permissions.allow` Self-Modification classifier blocked runtime invocation; agent cannot self-widen. Delivered as guidance-only. |
 
 Both instances were resolved correctly (honest degradation + documented SUMMARY) but only after discovering the gap at implementation time — the probe would have surfaced both before any code shipped.
@@ -78,6 +78,10 @@ Result: typescript-language-server NOT found on PATH
 Alternative: LSP operation set confirmed as { listFiles, getReferences, findDefinition }
 Grant scoped to navigation-only. getDiagnostics removed from usage docs.
 PROBE-FINDINGS.md committed. SUMMARY documents the constraint.
+# Note: listFiles/getReferences/findDefinition are the #366-era snapshot; the
+# current (2.1.206) op set is goToDefinition, findReferences, hover,
+# documentSymbol, workspaceSymbol, goToImplementation, prepareCallHierarchy,
+# incomingCalls, outgoingCalls.
 ```
 
 **Good — honest degradation when probe is structurally impossible:**

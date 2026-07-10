@@ -10,7 +10,7 @@ usage: |
   2. Fill in all required fields (marked with a comment)
   3. Replace [REQUIRED] with your values; remove [PHASE C] lines unless building Phase C
   4. Verify: run `list_loops` — your loop should appear in the valid[] channel
-  5. To invoke: orchestrator calls CronCreate({ schedule: "<interval>", command: "<inline tick prompt for <id> — see CLAUDE.md §Loop Framework 'Resilient dispatch'>", max: <max_ticks> })
+  5. To invoke: orchestrator calls CronCreate({ cron: "<5-field cron expr translated from schedule.interval>", prompt: "<inline tick prompt for <id> — see CLAUDE.md §Loop Framework 'Resilient dispatch'>", recurring: true })
 ---
 
 ```yaml

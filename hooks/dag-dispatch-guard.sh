@@ -2,7 +2,8 @@
 # dag-dispatch-guard.sh — PreToolUse hook on the Agent tool.
 #
 # Warns when the orchestrator spawns raw parallel Agent subagents during DAG
-# execution instead of using the TeamCreate/TaskCreate team dispatch protocol.
+# execution instead of registering the work in the shared task queue (TaskCreate/
+# TaskUpdate) and spawning workers as named teammates (Agent({ name })).
 #
 # Decision logic:
 #   1. Only fires on the "Agent" tool.
@@ -74,8 +75,9 @@ while IFS= read -r db_path; do
   cat <<'EOF'
 CANON WARNING [dag-dispatch-guard]: Raw Agent spawn detected during DAG execution.
 
-When task-dag.yaml exists and the current step is "implement", use TeamCreate/TaskCreate
-for worker dispatch instead of spawning parallel Agent subagents directly.
+When task-dag.yaml exists and the current step is "implement", register each worker's
+work in the shared task queue (TaskCreate/TaskUpdate) and spawn it as a named teammate
+(Agent({ name })) so it is tracked — instead of spawning untracked raw Agent subagents.
 
 Raw Agent spawns bypass dependency tracking and task queue visibility.
 See references/dag-execution-protocol.md > Worker Dispatch for the correct pattern.

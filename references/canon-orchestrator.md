@@ -107,7 +107,7 @@ All code-writing agents (`engineer`, `tester`, `reviewer`, `scribe`, `shipper`) 
 ### DAG Execution
 
 Full protocol in `references/dag-execution-protocol.md`. Read it before executing
-any build where `task-dag.yaml` exists or before any TeamCreate/merge/cleanup
+any build where `task-dag.yaml` exists or before any task-queue/merge/cleanup
 operation.
 
 ### Post-Step Artifact Check <!-- last-updated: 2026-07-02 -->
