@@ -58,7 +58,7 @@ Between May 24–26, a concentrated wave shipped the top-priority roadmap items 
 
 - **Tool-loop detection** (PR #245) — Thread 3 top item. PostToolUse fingerprinting detects stuck loops. (Spawn watchdog removed in PR #276 — false positives on main session; turn budgets and auto-escalation cover the gap.)
 - **Shared hook library** (PR #248) — `hooks/lib/canon-hook-lib.sh` extracted from 5+ hooks. Foundation for all subsequent hook work.
-- **DAG dispatch guard** (PR #253) — Advisory hook warns on raw `Agent` spawns during DAG execution, enforcing `TeamCreate`/`TaskCreate`.
+- **DAG dispatch guard** (PR #253) — Advisory hook warns on raw `Agent` spawns during DAG execution, enforcing the shared task queue (TaskCreate/TaskUpdate) + named-teammate (Agent({ name })) dispatch.
 - **Holistic confidence scoring** (PR #259) — Shared `ConfidenceScore` schema, `computeConfidence()` engine, review + drift adapters. Covers Thread 2 (confidence per violation, confidence decay) and Thread 4 (composite health score).
 - **PostCompact narrative capture** (PR #261) — Thread 3 item. PostCompact hook preserves compaction summaries in workspace journal.
 - **Hook hardening** (PRs #254, #255, #257, #260) — SIGPIPE fixes, session-start guards, shared test helpers, verify ghost state handling.

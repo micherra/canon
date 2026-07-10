@@ -13,7 +13,7 @@ references/
 ├── canon-artifact-locations.md   # Authoritative naming rules for workspace artifacts
 ├── canon-orchestrator.md         # Orchestrator protocol (journal, dispatch) — pointers to DAG + HITL refs
 ├── codex-defect-checklist.md     # Reviewer-preloaded checklist encoding top-7 Codex recurring defect classes as pre-PR checks
-├── dag-execution-protocol.md     # Full DAG parallel build protocol (TeamCreate, merge, failure handling)
+├── dag-execution-protocol.md     # Full DAG parallel build protocol (task queue + named teammates, merge, failure handling)
 ├── hitl-patterns.md              # Full HITL checkpoint catalog (every mandatory and advisory gate)
 ├── content-flow.md               # Principle/writer content authoring flow
 ├── principle-loading.md          # How agents load Canon principles

@@ -34,7 +34,7 @@ At such a moment, the orchestrator calls:
 ```
 list_loops({ lifecycle_hook, tier })
 # → for each interval loop with firing_posture[tier] === "auto":
-CronCreate({ schedule: "<interval>", command: "<inline tick prompt — see Resilient dispatch above>", max: <max_ticks> })
+CronCreate({ cron: "<5-field cron expr — translate schedule.interval, e.g. 5m → */5 * * * *>", prompt: "<inline tick prompt — see Resilient dispatch above>", recurring: true })
 # → for each self-paced loop with firing_posture[tier] === "auto":
 ScheduleWakeup({ delaySeconds: <initial_delay>, reason: "Starting <id>", prompt: "<inline tick prompt — see Resilient dispatch above>" })
 # → for each loop with firing_posture[tier] === "opt-in": ask user, then dispatch
@@ -44,6 +44,23 @@ ScheduleWakeup({ delaySeconds: <initial_delay>, reason: "Starting <id>", prompt:
 initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named lifecycle moment.
 No manifest, hook, or command frontmatter starts a loop — the capability ground truth is that
 a plugin cannot do this.
+
+**Cron job lifecycle (session-scoped; decision `cron-durability`).** `CronCreate` jobs are
+**session-only and in-memory** — gone when Claude exits, auto-expiring after 7 days; the
+`durable` param has no effect (durable persistence is not available on 2.1.206). This is not a
+gap: dc-06 already makes **per-session re-dispatch at named lifecycle hooks the persistence
+mechanism**. The orchestrator re-issues `CronCreate`/`ScheduleWakeup` at each `session-start` /
+`post-ship` moment, so no loop relies on a job surviving a Claude exit. `ScheduleWakeup` is also
+the `/loop` dynamic-mode tool (it carries a `stop` field + autonomous-loop sentinels); the raw
+`CronCreate`/`ScheduleWakeup` tools and the `/loop` + `/schedule` skills front the same
+capability — no migration is forced.
+
+`max_ticks` is RETAINED and bounds interval-loop ticks via loop **self-termination** (the
+`max_ticks_reached` terminate condition), NOT via the now-removed cron `max` param.
+
+**Stopping an interval loop:** the recurring cron does not self-cap — at a terminal condition
+(e.g. `max_ticks_reached`) the orchestrator stops it via `CronDelete({ id })` (`id` from the
+initial `CronCreate`). dc-06: orchestrator-initiated only. (`CronList()` lists active jobs.)
 
 **Phase history:** Phase A shipped the framework spine — schema, registry, MCP tools, `_probe`
 demo; no production loop ran. Phase B ships `loops/ship-watch.md` — the first real loop,
@@ -55,7 +72,7 @@ Discovery: `list_loops`.
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
 `list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop, branch on `loop.mode`:
 - `firing_posture[tier] === "auto"`:
-  - `mode: "interval"` → call `CronCreate({ schedule: loop.schedule.interval, command: "<inline tick prompt for <id> — see Resilient dispatch above>", max: loop.schedule.max_ticks })` immediately.
+  - `mode: "interval"` → call `CronCreate({ cron: <5-field cron expr translated from loop.schedule.interval>, prompt: "<inline tick prompt for <id> — see Resilient dispatch above>", recurring: true })` immediately — translate `schedule.interval` to a 5-field cron expression; do NOT pass the raw interval string.
   - `mode: "self-paced"` → call `ScheduleWakeup({ delaySeconds: <loop initial cadence>, reason: "Starting <id> at post-ship", prompt: "<inline tick prompt for <id> — see Resilient dispatch above>" })` immediately.
 - `firing_posture[tier] === "opt-in"` → offer the watch to the user first; dispatch by mode on confirmation (CronCreate for interval, ScheduleWakeup for self-paced).
 - `firing_posture[tier] === "disabled"` → skip silently.
