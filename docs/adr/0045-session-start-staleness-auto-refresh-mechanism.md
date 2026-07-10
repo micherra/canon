@@ -99,6 +99,24 @@ main (unattended in autonomous/light-touch; ask-first under supervised). Notify 
   (skip if an open `staleness-refresh` PR already exists for the episode) and once-per-episode ledger de-dup.
 - `loop-schema.ts` is sensitive-path (mcp-tool-contract) → build is supervised + adversarially re-reviewed.
 
+## Amendment — Doc-sync unattended in all tiers, not ask-first under supervised (decision dec-04 override)
+
+This ADR was amended during plan approval: the user explicitly overrode dec-04's original tier-posture
+split (KG unattended all tiers; doc-sync ask-first under supervised) so that **both** fields are
+unattended in ALL tiers — autonomous, light-touch, AND supervised. Stated reasoning: the delivered PR
+itself remains a full human review gate regardless of tier, so unattended dispatch only skips the
+pre-dispatch ask, never the merge decision.
+
+This supersedes, for `field=docs_stale`:
+- The Decision section's tier clause ("unattended in autonomous/light-touch; ask-first under
+  supervised") — now unattended in all tiers.
+- The `fail-safe-defaults` row in Canon-Principle Alignment — the ask-first-under-supervised safety
+  net no longer applies to the tracked-write path; the PR review gate is the sole remaining safety
+  net for that path in every tier.
+
+`references/loop-framework.md` and `CLAUDE.md`'s `auto-staleness-refresh` consumer contract document
+the amended (all-tiers-unattended) posture, not the original dec-04 split recorded above.
+
 ## Revisit-If
 
 - The generic loop runner gains a first-class "surface-already-true-at-arm-time" (seed-baseline) capability
