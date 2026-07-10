@@ -1,12 +1,12 @@
 ---
-adr: "0046"
+adr: "0047"
 title: "Decisions and ADRs modeled as a separate KG context table-pair with a record_kind subtype, content-hash-gated"
 status: accepted
 date: "2026-07-10"
 build: "unified-agent-memory-m2-decisionsadrs-as-a-traversable-context-graph-kg"
 ---
 
-# ADR-0046: Decisions/ADRs as a separate KG context table-pair with a record_kind subtype, content-hash-gated
+# ADR-0047: Decisions/ADRs as a separate KG context table-pair with a record_kind subtype, content-hash-gated
 
 ## Context
 

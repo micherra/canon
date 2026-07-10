@@ -6,7 +6,7 @@
  *
  * Decisions and ADRs are promoted into the KG as a dedicated node/edge
  * table-pair, separate from `files`/`entities` (a decision has no `file_id`;
- * see ADR-0046 / DEC-M2-01).
+ * see ADR-0047 / DEC-M2-01).
  *
  * Write strategy: `replaceAll` deletes both tables and bulk-reinserts inside
  * ONE transaction — the context subgraph is small and fully rebuilt on every

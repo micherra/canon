@@ -232,7 +232,7 @@ const DDL_STATEMENTS = [
     updated_at  TEXT NOT NULL
   )`,
 
-  // ── v7: decisions/ADRs as a separate KG context table-pair (ADR-0046) ───────
+  // ── v7: decisions/ADRs as a separate KG context table-pair (ADR-0047) ───────
 
   // context_nodes — one row per decision/ADR/build, discriminated by record_kind.
   // Separate from `files`/`entities`: a decision is not a code entity.
