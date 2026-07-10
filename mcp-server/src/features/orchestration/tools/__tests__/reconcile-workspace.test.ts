@@ -255,21 +255,33 @@ describe("reconcileWorkspace — registered schema boundary (loops-phase-c-02 P1
  * tool's `incomplete_steps`/`needs_recovery` return value (consumed by
  * resume) stays unfiltered — see DESIGN.md D1/OQ#2.
  */
+/** Typed test fixture factory — fills every required IncompleteStep field so
+ * call sites only need to override the fields under test (no `as unknown` escapes). */
+function makeIncompleteStep(overrides: Partial<IncompleteStep> = {}): IncompleteStep {
+  return {
+    agent_type: "engineer",
+    missing_artifacts: [],
+    partial_artifacts: [],
+    status: "planned",
+    step_id: "context-sync",
+    ...overrides,
+  };
+}
+
 describe("reconcileWorkspace — telemetry narrowed to dispatched steps (fix-cliff-telemetry-01)", () => {
   describe("isDispatchedCliff — pure predicate", () => {
     it("false for a step with no started_at (never dispatched)", () => {
-      const step = { step_id: "context-sync", agent_type: "scribe", status: "planned" } as const;
-      expect(isDispatchedCliff(step as unknown as IncompleteStep)).toBe(false);
+      const step = makeIncompleteStep({ status: "planned" });
+      expect(isDispatchedCliff(step)).toBe(false);
     });
 
     it("true for a step with a non-empty started_at (dispatched)", () => {
-      const step = {
-        step_id: "implement",
-        agent_type: "engineer",
-        status: "started",
+      const step = makeIncompleteStep({
         started_at: new Date().toISOString(),
-      } as const;
-      expect(isDispatchedCliff(step as unknown as IncompleteStep)).toBe(true);
+        status: "started",
+        step_id: "implement",
+      });
+      expect(isDispatchedCliff(step)).toBe(true);
     });
   });
 
