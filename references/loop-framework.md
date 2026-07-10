@@ -7,7 +7,7 @@ description: >-
   and the six named consumers (auto-triage-fix, auto-plugin-update, run-learner, run-evolve, auto-enable-merge, auto-update-branch).
 ---
 
-# Loop Framework <!-- last-updated: 2026-07-06 -->
+# Loop Framework <!-- last-updated: 2026-07-10 -->
 
 <!-- Managed by Canon. Manual edits are preserved. -->
 
@@ -33,7 +33,8 @@ contributors must not "simplify" the inline dispatch back to a bare slash call.
 At such a moment, the orchestrator calls:
 ```
 list_loops({ lifecycle_hook, tier })
-# → for each interval loop with firing_posture[tier] === "auto":
+# → CronList() first — skip CronCreate for any loop id already scheduled (resume de-dupe, see below)
+# → for each interval loop with firing_posture[tier] === "auto" AND no existing CronList job for its id:
 CronCreate({ cron: "<5-field cron expr — translate schedule.interval, e.g. 5m → */5 * * * *>", prompt: "<inline tick prompt — see Resilient dispatch above>", recurring: true })
 # → for each self-paced loop with firing_posture[tier] === "auto":
 ScheduleWakeup({ delaySeconds: <initial_delay>, reason: "Starting <id>", prompt: "<inline tick prompt — see Resilient dispatch above>" })
@@ -46,14 +47,25 @@ No manifest, hook, or command frontmatter starts a loop — the capability groun
 a plugin cannot do this.
 
 **Cron job lifecycle (session-scoped; decision `cron-durability`).** `CronCreate` jobs are
-**session-only and in-memory** — gone when Claude exits, auto-expiring after 7 days; the
+**session-only and in-memory** — gone when a session truly ends, auto-expiring after 7 days; the
 `durable` param has no effect (durable persistence is not available on 2.1.206). This is not a
 gap: dc-06 already makes **per-session re-dispatch at named lifecycle hooks the persistence
-mechanism**. The orchestrator re-issues `CronCreate`/`ScheduleWakeup` at each `session-start` /
-`post-ship` moment, so no loop relies on a job surviving a Claude exit. `ScheduleWakeup` is also
-the `/loop` dynamic-mode tool (it carries a `stop` field + autonomous-loop sentinels); the raw
-`CronCreate`/`ScheduleWakeup` tools and the `/loop` + `/schedule` skills front the same
-capability — no migration is forced.
+mechanism**. `ScheduleWakeup` is also the `/loop` dynamic-mode tool (it carries a `stop` field +
+autonomous-loop sentinels); the raw `CronCreate`/`ScheduleWakeup` tools and the `/loop` +
+`/schedule` skills front the same capability — no migration is forced.
+
+**Resume restores unexpired jobs — de-dupe before re-issuing (Codex P2 on PR #482).**
+Per the Claude Code scheduled-tasks docs (`https://code.claude.com/docs/en/scheduled-tasks`,
+Limitations section), `claude --resume`/`--continue` **does** restore unexpired recurring
+`CronCreate` jobs — "recurring tasks within seven days of creation" — this is the same
+`/loop` mechanism Canon's taps use, not a different surface (confirmed: `PROBE-FINDINGS.md`
+for this fix). So blindly re-issuing `CronCreate`/`ScheduleWakeup` for every `auto` loop at
+`session-start`/`post-ship` on a **resumed** session can create a duplicate job alongside one
+`--resume` already restored. Before dispatching, call `CronList()` and skip creating a
+loop whose id is already present in an existing job's prompt — de-dupe by loop id. This
+applies with confidence to `CronCreate`-issued interval loops (`CronList` explicitly
+enumerates them); treat it as a defensive best-effort check for `ScheduleWakeup`-issued
+self-paced loops too, since `CronList`'s coverage of self-paced wakeups is unconfirmed.
 
 `max_ticks` is RETAINED and bounds interval-loop ticks via loop **self-termination** (the
 `max_ticks_reached` terminate condition), NOT via the now-removed cron `max` param.
@@ -70,7 +82,9 @@ Phase E ships evolve — the session-start attribution-signal observer, surfaces
 Discovery: `list_loops`.
 
 **Post-ship tap (Phase B+):** After the shipper creates the PR, the orchestrator calls
-`list_loops({ lifecycle_hook: "post-ship", tier })`. For each returned loop, branch on `loop.mode`:
+`list_loops({ lifecycle_hook: "post-ship", tier })`, then `CronList()` to de-dupe against jobs
+a `--resume`/`--continue` may have already restored (see Resume restores unexpired jobs above).
+For each returned loop, branch on `loop.mode`:
 - `firing_posture[tier] === "auto"`:
   - `mode: "interval"` → call `CronCreate({ cron: <5-field cron expr translated from loop.schedule.interval>, prompt: "<inline tick prompt for <id> — see Resilient dispatch above>", recurring: true })` immediately — translate `schedule.interval` to a 5-field cron expression; do NOT pass the raw interval string.
   - `mode: "self-paced"` → call `ScheduleWakeup({ delaySeconds: <loop initial cadence>, reason: "Starting <id> at post-ship", prompt: "<inline tick prompt for <id> — see Resilient dispatch above>" })` immediately.
@@ -80,7 +94,9 @@ Discovery: `list_loops`.
 `ship-watch` is the first loop this tap fires (autonomous/light-touch → auto, supervised → opt-in). It demonstrates the resilient inline dispatch form (mechanism-ships-first-instance, dc-06). `harness-watch` is a self-paced post-ship loop and is dispatched via `ScheduleWakeup`.
 
 **Session-start tap (Phase C+):** At session start, the orchestrator calls
-`list_loops({ lifecycle_hook: "session-start", tier })`. For each returned loop:
+`list_loops({ lifecycle_hook: "session-start", tier })`, then `CronList()` to de-dupe against
+jobs a `--resume`/`--continue` may have already restored (see Resume restores unexpired jobs
+above) — session-start is the most likely tap to run on a resumed session. For each returned loop:
 - `firing_posture[tier] === "auto"` → start it now via `ScheduleWakeup` (self-paced mode):
   ```
   ScheduleWakeup({ delaySeconds: <initial_active_delay>, reason: "Starting <id> at session-start", prompt: "<inline tick prompt for <id> — see Resilient dispatch above>" })
