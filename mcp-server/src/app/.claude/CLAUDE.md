@@ -6,7 +6,7 @@
 Entry point for the Canon MCP server: tool registration, HTTP server lifecycle, project-directory resolution, and per-connection scope management.
 
 ## Architecture
-<!-- last-updated: 2026-06-11 -->
+<!-- last-updated: 2026-07-10 -->
 
 **Key files:**
 
@@ -20,11 +20,14 @@ Entry point for the Canon MCP server: tool registration, HTTP server lifecycle, 
 | `http-server.ts` | Sidecar HTTP server on `:3141` — `startHttpServer`, `stopHttpServer`, lifecycle management; Host-header guard (F2: rejects non-loopback/missing Host with 403 via `isLoopbackHostRequest`); no `Access-Control-Allow-Origin` header (F2: ACAO `*` removed) |
 | `resolve-project-dir.ts` | `resolveGitRoot(cwd, gitTopLevelFn)` — git root or cwd fallback; never throws |
 | `get-context-handler.ts` | `get_context` composite tool handler; re-exported from `register-knowledge.ts` |
+| `recall-fusion.ts` | Pure Reciprocal Rank Fusion (RRF) core for `recall` — no I/O; `RecallStore`/`RecallCandidate`/`RecallHit` types + `rrfFuse` (`k=60` default, per-store weight 1.0) + `tokenOverlap` lexical scorer; reused by `recall-adr-source.ts` and `recall-handler.ts` |
+| `recall-adr-source.ts` | ADR lexical source reader for `recall` — `rankAdrs(query, adrDir, limit)` reads `docs/adr/*.md`, scores via token overlap (+title-match bonus) since `graph_query search` is entity-FTS and blind to ADR prose |
+| `recall-handler.ts` | `recall` composite tool handler; re-exported from `register-knowledge.ts` — fans a query out to 5 stores (`code_kg`/`knowledge`/`decisions`/`adr`/`build_history`) via per-store adapters, each wrapped in `runStore`'s fail-open try/catch, then fuses via `rrfFuse` |
 | `register-*.ts` | One file per feature boundary — each takes `server: McpServer` as first param and registers its MCP tools via `gatedWrapHandler` |
 | `mcp-http/` | HTTP transport auth + session management subsystem (flag-dark). See `mcp-http/.claude/CLAUDE.md`. |
 
 ## Contracts
-<!-- last-updated: 2026-06-13 -->
+<!-- last-updated: 2026-07-10 -->
 
 **`createCanonServer()`** (`create-server.ts`) — per-session factory; creates and fully-wires a new `McpServer` instance (calls all 16 `register-*.ts` in order); uses `WeakMap<McpServer, Set<string>>` for per-server resource dedup in `registerToolWithUi`. `CANON_SERVER_NAME = "canon"` and `CANON_SERVER_VERSION` (x-release-please-version) exported here (moved from `server-state.ts`).
 
@@ -41,6 +44,8 @@ Entry point for the Canon MCP server: tool registration, HTTP server lifecycle, 
 **`resolveGitRoot(cwd, gitTopLevelFn)`** (`resolve-project-dir.ts`) — returns git repo root for `cwd`; falls back to `cwd` when not in a git repo or git unavailable; errors logged and swallowed (never throws).
 
 **`get_context` tool** (`get-context-handler.ts`) — composite context tool; input: `file_paths[]` + optional `include` (5 sections: `principles`, `file_context`, `drift`, `graph`, `signals`); `file_context` errors fail-closed; graph/signals fail-open; re-exported from `register-knowledge.ts`.
+
+**`recall` tool** (`recall-handler.ts`) — composite retrieval tool; input: `query` (natural-language) + optional `stores[]` (subset of `code_kg`/`knowledge`/`decisions`/`adr`/`build_history`, default all), `limit` (default 20), `per_store_limit` (default 10); fans out to each store's existing tool (`semanticSearch`, `searchKnowledge`, `getDecisionsCorpus`, `rankAdrs`, `getBuildHistory`) via a per-store adapter, fuses the per-store ranked lists with `rrfFuse` (`recall-fusion.ts`, RRF `k=60`, weight 1.0/store); every adapter runs inside `runStore`'s try/catch — a thrown error or `ToolResult` `ok:false` degrades that store to `[]` and adds a `skipped[]` entry rather than failing the whole call (advisory retrieval surface, deliberately fail-open — not a safety gate); returns `{ query, hits, stores_queried, skipped }`; re-exported from `register-knowledge.ts`.
 
 ## Invariants
 <!-- last-updated: 2026-06-11 -->

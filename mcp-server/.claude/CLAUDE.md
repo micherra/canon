@@ -59,7 +59,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; file-pattern matching uses `matchGlob` from `lib/glob-matcher.ts` (linear-time DP, `globToRegex`+RegExp removed, ADR-0026 §Amendment-3)
 
 ## Contracts
-<!-- last-updated: 2026-07-05 -->
+<!-- last-updated: 2026-07-10 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -172,6 +172,7 @@ src/
 | `search_knowledge` | Top-K relevance retrieval over the markdown knowledge corpus (principles, references, `.canon/principles`, `.canon/proposed-learnings`, build digests); calls `ensureDocCorpusFresh` on first call; `corpus` + `trust` filters (default `internal`); returns `content`, `corpus`, `doc_path`, `heading_path`, `distance`; distinct `DOC_CORPUS_NOT_INDEXED` error when DB absent |
 | `store_pr_review` | Store a PR review result; accepts optional `craft_profile` (persists one row per distinct subsystem area to `craft_profiles` with `source:"review"`) |
 | `get_context` | Batch context for multiple files — composes principles, file_context, drift, graph, signals in one call |
+| `recall` | Composite retrieval tool — one natural-language query fanned out to 5 stores (`code_kg`→`semanticSearch`, `knowledge`→`searchKnowledge`, `decisions`→`getDecisionsCorpus`, `adr`→lexical `rankAdrs` over `docs/adr`, `build_history`→`getBuildHistory`), fused via Reciprocal Rank Fusion (`k=60`, per-store weight 1.0); per-store fail-open (a thrown/`ok:false` adapter degrades to `[]` and records a `skipped[]` entry, never drops the whole call); returns `{ query, hits, stores_queried, skipped }`; optional `stores[]` restricts fan-out, `limit`/`per_store_limit` cap result size; registered in `register-knowledge.ts` — see `src/app/.claude/CLAUDE.md` |
 
 **History tools** (`src/features/history/`):
 
