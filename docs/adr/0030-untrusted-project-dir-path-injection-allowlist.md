@@ -79,5 +79,17 @@ second-writer divergence that bit the overlay trust boundary (ADR-0026).
 - A fixed safe root for project dirs is ever introduced (then prefer containment, Option A).
 - CodeQL continues to flag the sites after merge (then the barrier needs a form CodeQL recognizes as a
   sanitizer — e.g. a single regexp `.test()` guard on the raw input).
+  - **Update (issue #475):** rather than reshape the barrier, a repo-local CodeQL model pack
+    documents the *existing* multi-check validator as a barrier — it registers
+    `isSafeProjectDirInput` as a `js/path-injection` `barrierGuardModel`
+    (`.github/codeql/extensions/canon-path-injection-barriers/`). The model is **A/B-proven**
+    (explicit CLI `--extension-packs`: 3 → 0 on the default suite), but **GitHub code-scanning
+    does NOT apply JS/TS model packs** (default-setup auto-detection excludes JS/TS; advanced-setup
+    `codeql-action` 403s on a repo-local unpublished pack — empirically proven in the build's
+    `PROBE-FINDINGS-advsetup.md`). So it does **not** clear the alerts at scan time; the three
+    alerts are handled by **manual false-positive dismissal** on the platform. The pack is retained
+    as executable, A/B-verified documentation of the barrier (and is future-ready for JS/TS
+    model-pack support or a direct-CLI workflow). Collapsing the validator into a single regexp
+    `.test()` remains explicitly forbidden.
 - A second code path begins constructing fs paths from untrusted input without funneling through
   `validateAndNormalizeDir` (re-evaluate the chokepoint assumption).
