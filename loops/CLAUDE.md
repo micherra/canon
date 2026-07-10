@@ -18,13 +18,13 @@ Loops run ONLY because the orchestrator calls `CronCreate` at a named lifecycle 
 ```
 # Orchestrator at a lifecycle_hook moment:
 CronCreate({
-  schedule: "<interval>",
-  command: "<inline tick prompt for <id> — see CLAUDE.md §Loop Framework 'Resilient dispatch'>",
-  max: <max_ticks>,
+  cron: "<5-field cron expr translated from schedule.interval>",
+  prompt: "<inline tick prompt for <id> — see CLAUDE.md §Loop Framework 'Resilient dispatch'>",
+  recurring: true,
 })
 ```
 
-The `command` value is the **self-contained inline tick prompt** (CLAUDE.md §Loop Framework
+The `prompt` value is the **self-contained inline tick prompt** (CLAUDE.md §Loop Framework
 "Resilient dispatch", ADR-0017) — not the `/canon:loop-tick <id>` slash call. The inline
 form depends only on `get_loop_definition` (always-available MCP tool) and works on both
 fresh and stale installs. `/canon:loop-tick` is the registered-install convenience form.

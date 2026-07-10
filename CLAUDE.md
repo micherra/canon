@@ -198,12 +198,12 @@ Append the matching enrichment text from `references/engineer-spawn-enrichment.m
 ### DAG Execution Protocol
 
 Full protocol in `references/dag-execution-protocol.md`. Covers DAG validation,
-Task Queue Setup (TeamCreate/TaskCreate), Worker Dispatch, Merge Protocol,
+Task Queue Setup (TaskCreate task queue), Worker Dispatch, Merge Protocol,
 Post-DAG Tail, and Failure Handling.
 
 Read `references/dag-execution-protocol.md` BEFORE executing any build where
 `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, and before any
-TeamCreate/merge/cleanup operation.
+task-queue/merge/cleanup operation.
 
 ### Resume Protocol
 
@@ -392,7 +392,7 @@ The three co-located `*.test.sh` suites (`boilerplate-span-check.test.sh`, `prin
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
    - **GitHub release**: release-please (`release-please.yml`) is the primary tag/release mechanism — it runs automatically on push to `main` and cuts `vX.Y.Z` tags + GitHub releases when the release PR merges. The shipper does NOT create tags or run `gh release create`.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
-4. **Fire `PushNotification` at build-complete** (after ship / PR created): call `PushNotification({ title: "Canon: Build Complete", message: "Build '{slug}' is done — PR created and ready for review." })`. This is the OS-push channel for HITL gates and build-complete signals (per channel split in `docs/supervised-build-quality.md:250`). Terminal digests (nightly digest, learner surfacing) remain terminal — do NOT convert them to push.
+4. **Fire `PushNotification` at build-complete** (after ship / PR created): call `PushNotification({ message: "Canon: Build Complete — build '{slug}' is done; PR created and ready for review.", status: "proactive" })`. This is the OS-push channel for HITL gates and build-complete signals (per channel split in `docs/supervised-build-quality.md:250`). Terminal digests (nightly digest, learner surfacing) remain terminal — do NOT convert them to push.
    - **One-time user setup**: Desktop push works by default. Phone push requires **Remote Control** (optional). Not available on Bedrock/Vertex/Foundry.
    - **LSP prerequisite**: The `LSP` tool requires `typescript-language-server` globally: `npm install -g typescript-language-server typescript`.
 5. Verify file claims released.

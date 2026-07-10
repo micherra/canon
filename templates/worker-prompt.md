@@ -41,7 +41,7 @@ If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook
 
 1. Call TaskList to find available (unblocked, unclaimed) tasks.
 2. If no tasks are available yet, wait and retry (loop back to step 1). This retry-until-available wait applies only while you are waiting for your FIRST task.
-3. Claim a task: TaskUpdate({ task_id, owner: "${WORKER_NAME}", status: "in_progress" }).
+3. Claim a task: TaskUpdate({ taskId, owner: "${WORKER_NAME}", status: "in_progress" }).
 4. Read the task description — it contains your full instructions, principles, and file context.
 5. Create your worktree (note: {task_id} is sanitized — non-alphanumeric chars except `.`, `_`, `-` become dashes):
    - Path: ${PROJECT_DIR}/.canon/worktrees/{sanitized_task_id}
@@ -53,7 +53,7 @@ If `CANON_PARENT_WORKSPACE` is empty or unset, STOP and report BLOCKED: "L4 hook
    Canon-Agent: engineer
    Canon-State: implement
    Canon-Task: {task_id}
-8. Mark complete: TaskUpdate({ task_id, status: "completed" }).
+8. Mark complete: TaskUpdate({ taskId, status: "completed" }).
 9. Report DONE and exit. Do NOT call TaskList again. Your session is complete.
 
 **Single-task limit**: You may claim and complete AT MOST ONE task per session invocation. After marking your task complete in step 8, stop immediately — report DONE and exit. Remaining tasks in the queue will be claimed by peer workers.
