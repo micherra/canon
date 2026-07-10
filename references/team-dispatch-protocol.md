@@ -19,12 +19,12 @@ description: >-
 
 ## Mode Selection
 
-Pick exactly one mode per team-dispatched review, in this order:
+Pick exactly one mode per team-dispatched review. The four conditions below are mutually exclusive — each one explicitly includes or excludes the ADR-0044 floor and the horizontal blast-radius threshold so exactly one matches (first-match-wins order is preserved for clarity, but no case can fall through to the wrong mode):
 
 1. **Single reviewer** — below the horizontal fan-out threshold (see Phase 1) AND no ADR-0044 sensitive-path floor. Spawn one `canon:reviewer` with the full file list.
-2. **Horizontal** file-partition fan-out — aggregate blast radius > ~50, OR multiple files with `impact_score > 0.7`, OR 3+ layers with cross-layer dependencies (unchanged threshold, see Phase 1). Go to Phase 1–3 below.
-3. **Vertical diverse-lens jury** — `compute_autonomy_tier` returned the ADR-0044 sensitive-path deny-list floor (`require_security: true` + `require_adversarial: true`, ADR-0044). Go to Phase 1V–3V below.
-4. **Capped vertical×horizontal hybrid** — BOTH condition 2 AND condition 3 hold (sensitive-path floor AND blast-radius>50). A bounded escape hatch, not the default: partition files horizontally into K groups AND assign the M lenses, spawning M×K reviewers (each reviewer gets one partition's files and one primary lens). Because vertical does not amortize cost, M×K MUST be hard-capped (e.g. cap total reviewers at a fixed ceiling and fall back to vertical-only, dropping the horizontal partition, if the product would exceed it) — this mode exists for the rare case both triggers fire, not as an upsize of either axis alone.
+2. **Horizontal** file-partition fan-out — (aggregate blast radius > ~50, OR multiple files with `impact_score > 0.7`, OR 3+ layers with cross-layer dependencies) AND no ADR-0044 sensitive-path floor (unchanged threshold, see Phase 1). Go to Phase 1–3 below.
+3. **Vertical diverse-lens jury** — `compute_autonomy_tier` returned the ADR-0044 sensitive-path deny-list floor (`require_security: true` + `require_adversarial: true`, ADR-0044) AND the horizontal fan-out threshold from condition 2 does NOT also hold. Go to Phase 1V–3V below.
+4. **Capped vertical×horizontal hybrid** — BOTH the ADR-0044 sensitive-path floor AND the horizontal fan-out threshold hold simultaneously. A bounded escape hatch, not the default: partition files horizontally into K groups AND assign the M lenses, spawning M×K reviewers (each reviewer gets one partition's files and one primary lens). Because vertical does not amortize cost, M×K MUST be hard-capped (e.g. cap total reviewers at a fixed ceiling and fall back to vertical-only, dropping the horizontal partition, if the product would exceed it) — this mode exists for the rare case both triggers fire, not as an upsize of either axis alone.
 
 ## Horizontal Fan-Out
 
