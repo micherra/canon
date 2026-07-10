@@ -246,11 +246,15 @@ Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include r
 
 ### Team Dispatch Protocol
 
-Three-phase loop: partition → spawn → consolidate. Reviewer is the concrete implementation; other team types follow the same pattern.
+Two fan-out axes, one mode-selection decision. **Horizontal**: three-phase loop — partition (disjoint file groups) → spawn (one reviewer per group, same lens) → consolidate (minority-finding verification probes). **Vertical**: same three-phase shape over the other axis — assign diverse concern lenses → spawn one reviewer per lens over the FULL file set → consolidate with inverted semantics (single-lens findings first-class, overlap = agreement, any-juror-blocks). Reviewer is the concrete implementation; other team types follow the horizontal pattern.
 
-Fan-out threshold: aggregate blast radius > ~50, OR multiple files with `impact_score > 0.7`, OR 3+ layers with cross-layer dependencies. Below threshold: single reviewer, full file list.
+| Mode | Trigger |
+|------|---------|
+| Horizontal fan-out | Aggregate blast radius > ~50, OR multiple files with `impact_score > 0.7`, OR 3+ layers with cross-layer dependencies. Below threshold: single reviewer, full file list. |
+| Vertical diverse-lens jury | `compute_autonomy_tier` returned the ADR-0044 sensitive-path deny-list floor (`require_security: true` + `require_adversarial: true`). |
+| Capped vertical×horizontal hybrid | Both triggers fire — bounded escape hatch (hard-capped M-lenses × K-partitions reviewer count), not the default. |
 
-Read `references/team-dispatch-protocol.md` BEFORE spawning a team-dispatched review.
+Full phases for both axes, the mode-selection preamble, and the hybrid cap: `references/team-dispatch-protocol.md`. Read it BEFORE spawning a team-dispatched review.
 
 ### Journal Protocol
 
