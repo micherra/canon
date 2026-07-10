@@ -4,7 +4,7 @@ description: >-
   Full Canon loop dispatch framework. Covers command registration, resilient
   dispatch, lifecycle-hook vocabulary and code, phase history, post-ship tap,
   session-start tap, non-declarative invariant, orchestrator_action consumption,
-  and the six named consumers (auto-triage-fix, auto-plugin-update, run-learner, run-evolve, auto-enable-merge, auto-update-branch).
+  and the seven named consumers (auto-triage-fix, auto-plugin-update, run-learner, run-evolve, auto-enable-merge, auto-update-branch, auto-staleness-refresh).
 ---
 
 # Loop Framework <!-- last-updated: 2026-07-10 -->
@@ -206,3 +206,51 @@ always routes to HITL regardless of tier. dc-06 holds: `ship-watch` only surface
 `ORCHESTRATOR_ACTION: auto-update-branch field=merge_state loop=ship-watch`;
 `guardrails.mutates_build` stays `false` and no mutating `git`/`gh` command is on the loop's
 `observe.shell_commands` allowlist — the orchestrator does the merge and push, not the runner.
+
+**`auto-staleness-refresh`** (fires on the `session-watch` body emitting
+`ORCHESTRATOR_ACTION: auto-staleness-refresh field=<docs_stale|kg_age> loop=session-watch`,
+per-episode de-duped against `.staleness-refreshed.json` so an already-stale-at-session-start
+condition still fires on tick 1 — see ADR-0045. Thresholds — commits-since-scribe: 15, KG age:
+24h honoring `CANON_KG_STALE_SECONDS` — are declared in `loops/session-watch.md`'s body
+(dec-05), not hardcoded here):
+
+**`field=kg_age`** — regenerates the gitignored `.canon/knowledge-graph.db`; no tracked write,
+trivially reversible:
+1. Call `codebase_graph` to refresh the local knowledge graph.
+2. No worktree, no PR — a plain local mutation.
+Tier gate: **unattended in ALL tiers** (autonomous, light-touch, AND supervised) — a local,
+reversible, gitignored-DB refresh carries none of the tracked-write risk that gates
+`auto-enable-merge`/`auto-update-branch`'s SOURCE-conflict path.
+
+**`field=docs_stale`** — writes tracked `CLAUDE.md` via an ephemeral scribe→PR flow (dec-03):
+a session-start refresh has no build worktree, and direct-push-to-main is forbidden.
+1. Idempotency precheck: `gh pr list` for an already-open `staleness-refresh` PR/branch —
+   no-op if one exists (avoids one PR per session for the same episode).
+2. `init_workspace({ flow_name: "staleness-refresh", base_commit: HEAD, tier: "small",
+   preflight: true, session_id, job_id })`.
+3. Compute `before` = the git-derived last-scribe SHA (same `git log --grep` computation
+   `session-start-doc-check.sh` uses); `after` = `HEAD`.
+4. `resolve_agent_skills({ agent_name: "scribe" })` → spawn `canon:scribe` with
+   `worktree_path` + `before`/`after` — "standalone session-start sync, no build summaries,
+   git-diff-only."
+5. Post-scribe: verify the `docs(context-sync):` commit landed, run
+   `hooks/scribe-scope-guard.sh`, and run the doc-only verify subset (context-manifest-gate +
+   boilerplate/principle-id/rule-scope gates; skip build/lint/test — this is a
+   documentation-only diff).
+6. Spawn `canon:shipper` → PR to main. `finalize_workspace`.
+Tier gate: **unattended in ALL tiers** (autonomous, light-touch, AND supervised) — no
+ask-first, no HITL prompt, in any tier. This intentionally departs from the
+tracked-write-gates-supervised posture every other tracked-file-mutating consumer
+(`auto-enable-merge`, `auto-update-branch`'s SOURCE-conflict path) follows: it reflects an
+explicit user override at this build's plan-approval gate, superseding the architect's
+original ask-first-under-supervised recommendation (dec-04). The delivered PR itself remains
+a full human review gate regardless of tier — unattended dispatch only skips the
+*pre-dispatch* ask, never the merge decision.
+
+**Notify (both fields, AC4):** after the action(s) complete, fire a `PushNotification` naming
+what was refreshed — "KG refreshed (was Nh old)" for `kg_age`, "Docs context-sync PR #NNN
+created (N commits since last scribe)" for `docs_stale`.
+
+dc-06 holds: `session-watch` only surfaces the directive; `guardrails.mutates_build` stays
+`false` and no mutating command is on the loop's `observe.shell_commands` allowlist — the
+orchestrator does the `init_workspace`/scribe/`codebase_graph`/shipper work, not the runner.

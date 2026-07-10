@@ -76,16 +76,18 @@ Loops may attach to these named lifecycle moments:
 | **B** | Ship-watch definition (`loops/ship-watch.md`) — first real loop; dispatched via post-ship tap; command registration fix (`"commands": ["./skills/canon/commands/"]` in plugin.json) enabling `/canon:loop-tick` to resolve as a real harness slash command |
 | **C** | Self-paced mode + ScheduleWakeup + session-watch + de-dupe ledger; session-start tap wired in CLAUDE.md |
 | **D** | `loops/harness-watch.md` added — third real loop (post-ship, self-paced); `run-learner` added to `ORCHESTRATOR_ACTIONS` as the third vocabulary member |
-| **E (current)** | `loops/evolve.md` added — fourth real loop (session-start, self-paced, attribution-signal observer); `run-evolve` added to `ORCHESTRATOR_ACTIONS` as the fourth vocabulary member; `auto-enable-merge` added as the fifth vocabulary member (a second `ci_conclusion` rule on `ship-watch`, `pending → success`) — arms squash auto-merge on CI-green, no new loop |
+| **E** | `loops/evolve.md` added — fourth real loop (session-start, self-paced, attribution-signal observer); `run-evolve` added to `ORCHESTRATOR_ACTIONS` as the fourth vocabulary member; `auto-enable-merge` added as the fifth vocabulary member (a second `ci_conclusion` rule on `ship-watch`, `pending → success`) — arms squash auto-merge on CI-green, no new loop |
+| **F** | `auto-update-branch` added as the sixth vocabulary member (two `merge_state` rules on `ship-watch`, `to: BEHIND`/`to: DIRTY`) — surfaces a stale/conflicting PR branch so the orchestrator can merge `origin/main` in and push; no new loop |
+| **G (current)** | `auto-staleness-refresh` added as the seventh vocabulary member (two new `session-watch` transition rules, `docs_stale_crossed`/`kg_age_crossed`, ADR-0045) — the orchestrator auto-dispatches a scribe context-sync (ephemeral `init_workspace` → scribe → shipper → PR) + a local `codebase_graph` refresh, then notifies; no new loop |
 
 **`orchestrator_action` on a transition rule (Phase B+):** A transition rule may declare an
 optional `orchestrator_action` field (derive-from-const `z.enum(ORCHESTRATOR_ACTIONS)` with
 members `auto-triage-fix`, `auto-plugin-update`, `run-learner`, `run-evolve`,
-`auto-enable-merge`, and `auto-update-branch`). This is an
+`auto-enable-merge`, `auto-update-branch`, and `auto-staleness-refresh`). This is an
 orchestrator-consumed signal — the loop/runner NEVER executes it. The runner surfaces a
 structured `ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>` line when the transition
 fires; the orchestrator reads and acts on it. See CLAUDE.md § Loop Framework, "Consuming
-`orchestrator_action`" for the six consumption contracts. dc-06 is preserved — the loop's
+`orchestrator_action`" for the seven consumption contracts. dc-06 is preserved — the loop's
 `guardrails.mutates_build` stays `false`.
 
 **First tick is baseline-only — transition rules never fire against an empty prior (ADR-0002).**

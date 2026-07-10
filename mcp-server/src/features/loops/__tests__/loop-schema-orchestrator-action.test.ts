@@ -214,6 +214,28 @@ describe("parseLoopDefinition — orchestrator_action field (AC1)", () => {
     }
   });
 
+  it("[orch-action] 'auto-staleness-refresh' is a valid orchestrator_action value", () => {
+    const good = {
+      ...validIntervalFrontmatter,
+      surface: {
+        on_transition: [
+          {
+            field: "tick_count",
+            to: "3",
+            message: "Doc staleness / KG age threshold crossed.",
+            orchestrator_action: "auto-staleness-refresh",
+          },
+        ],
+      },
+    };
+    const result = parseLoopDefinition(good, { idFromFilename: "_probe" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const rule = result.definition.surface.on_transition[0];
+      expect(rule.orchestrator_action).toBe("auto-staleness-refresh");
+    }
+  });
+
   it("[orch-action] omitted orchestrator_action field is accepted (backward compat)", () => {
     // The existing validIntervalFrontmatter has no orchestrator_action — must still parse
     const result = parseLoopDefinition(validIntervalFrontmatter, { idFromFilename: "_probe" });
