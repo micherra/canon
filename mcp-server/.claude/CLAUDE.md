@@ -100,7 +100,7 @@ src/
 
 **`get-file-context`** — surfaces `computed_tags`, `hotspot_score`, `co_change_partners`; calls `ensureGraphFresh`; KG loaders extracted to `get-file-context-kg.ts`, re-exported from `get-file-context.ts`.
 
-**`show_pr_impact`** — returns `UnifiedPrOutput` with `has_review` boolean; `status` always `"ok"`; resource URI: `ui://canon/pr-review`
+**`show_pr_impact`** — returns `UnifiedPrOutput` with `has_review` boolean; `status` always `"ok"`; resource URI: `ui://canon/pr-review`; `findLatestReview`'s no-filter branch (no `branch`/`pr_number` supplied) anchors the top-level `review`/`blastRadius`/`subgraph` fields to `prep.files` via exact path-set equality (`reviewMatchesPrepFiles`) — no global-latest fallback across PRs; a caller-supplied `branch`/`pr_number` filter is unchanged. Fixed 2026-07-10 (was cross-PR contaminated, watch_PRIMPACTSTALE1).
 
 **`get_drift_report`** — `pr_reviews` field uses `ReviewEntry[]`; renders `### Documentation freshness` section (omitted when empty), sorted by staleness descending with `[confidence: TIER]` per doc.
 
