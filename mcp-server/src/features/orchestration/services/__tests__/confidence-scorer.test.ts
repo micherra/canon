@@ -319,6 +319,11 @@ describe("matchSensitivePath", () => {
     expect(matchSensitivePath(["src/foo.ts"])).toBeNull();
   });
 
+  it("matches bare root-level env files (secrets.env) — secrets-credentials", () => {
+    expect(matchSensitivePath(["secrets.env"])?.category).toBe("secrets-credentials");
+    expect(matchSensitivePath(["src/foo.ts"])).toBeNull();
+  });
+
   it("matches mcp-server/src/app/mcp-http/** and daemon.ts — auth", () => {
     expect(matchSensitivePath(["mcp-server/src/app/mcp-http/auth.ts"])?.category).toBe("auth");
     expect(matchSensitivePath(["mcp-server/src/app/daemon.ts"])?.category).toBe("auth");

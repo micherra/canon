@@ -103,6 +103,11 @@ export const SENSITIVE_PATH_DENY_LIST: readonly DenyListEntry[] = [
   // literal too.
   { category: "secrets-credentials", pattern: ".env*" },
   { category: "secrets-credentials", pattern: "**/.env*" },
+  // Bare root-level env files (secrets.env, database.env, app.env — anything
+  // ending in ".env" that isn't a dotenv-prefixed name). "**/*.env" above
+  // already covers the nested case; this closes the same "** needs a
+  // preceding /" gap for a root-level bare filename.
+  { category: "secrets-credentials", pattern: "*.env" },
   { category: "auth", pattern: "mcp-server/src/app/mcp-http/**" },
   { category: "auth", pattern: "mcp-server/src/app/daemon.ts" },
   {
