@@ -95,6 +95,14 @@ export const SENSITIVE_PATH_DENY_LIST: readonly DenyListEntry[] = [
   { category: "secrets-credentials", pattern: ".env" },
   { category: "secrets-credentials", pattern: "**/.env" },
   { category: "secrets-credentials", pattern: "**/*.env" },
+  // Dotenv-variant coverage (.env.local, .env.production, etc. — the dominant
+  // dotenv convention, not covered by the exact ".env" literal above). Root
+  // literal + "**/" nested pair mirrors the convention used by every other
+  // entry in this list; matchGlob("**/.env*", ...) requires a "/" to precede
+  // the match, so a root-level file like ".env.local" needs the unprefixed
+  // literal too.
+  { category: "secrets-credentials", pattern: ".env*" },
+  { category: "secrets-credentials", pattern: "**/.env*" },
   { category: "auth", pattern: "mcp-server/src/app/mcp-http/**" },
   { category: "auth", pattern: "mcp-server/src/app/daemon.ts" },
   {

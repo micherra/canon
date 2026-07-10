@@ -312,6 +312,13 @@ describe("matchSensitivePath", () => {
     expect(matchSensitivePath(["config/.env"])?.category).toBe("secrets-credentials");
   });
 
+  it("matches dotenv variants (.env.local, .env.production, nested) — secrets-credentials", () => {
+    expect(matchSensitivePath([".env.local"])?.category).toBe("secrets-credentials");
+    expect(matchSensitivePath([".env.production"])?.category).toBe("secrets-credentials");
+    expect(matchSensitivePath(["config/.env.local"])?.category).toBe("secrets-credentials");
+    expect(matchSensitivePath(["src/foo.ts"])).toBeNull();
+  });
+
   it("matches mcp-server/src/app/mcp-http/** and daemon.ts — auth", () => {
     expect(matchSensitivePath(["mcp-server/src/app/mcp-http/auth.ts"])?.category).toBe("auth");
     expect(matchSensitivePath(["mcp-server/src/app/daemon.ts"])?.category).toBe("auth");
