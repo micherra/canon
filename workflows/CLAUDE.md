@@ -31,6 +31,17 @@ Every workflow script MUST:
 
 4. **Never use `.claude/workflows/` name-install paths** for Inc 0. Use `scriptPath`.
 
+5. **Parse `args` defensively.** Inside the `Workflow` sandbox, `args` arrives as a
+   **JSON string**, not a parsed object — empirically verified (PR #498; see
+   `docs/explore/dag-workflow-compilation-probe.md`). Reading `args.x` directly
+   yields `undefined`. Every arg-consuming script MUST parse at the top, before
+   any other `args` access:
+   ```js
+   const A = typeof args === 'string' ? JSON.parse(args) : (args || {})
+   ```
+   Read fields off the parsed variable (`A.x`) from then on — never bare
+   `args.x`/`args['x']` or a destructure straight off `args` after this point.
+
 ## Forbidden Constructs (enforced by `hooks/lint.sh`)
 
 The CI lint (`mcp-server/scripts/workflows-lint.mjs`, wired via `hooks/lint.sh`) rejects
@@ -44,6 +55,7 @@ any script containing:
 | `isolation` agent-option key | Canon prohibits the `isolation` KEY in agent option objects (`agent(..., { isolation: ... })`); a bare variable named `isolation` is NOT banned — the boundary is the property key, not the identifier name |
 | TypeScript syntax | Workflow sandbox is plain JS; TS fails to parse |
 | Non-literal `meta` | The harness requires a static, pure-literal meta object |
+| `args` data access without a defensive parse | `args` arrives as a JSON string in the sandbox; unguarded `args.x`/`args['x']`/destructuring off `args` silently reads `undefined` unless a `JSON.parse(args)` guard precedes it |
 | Malformed JS | Scripts that cannot parse are rejected |
 
 Scripts that pass the lint are valid-by-construction for the Workflow sandbox.
