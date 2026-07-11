@@ -54,6 +54,7 @@ import { DriftStore } from "@platform/storage/drift/store.ts";
 import { getPrReviewData } from "../tools/pr-review-data.ts";
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 import {
+  makePrepStub,
   makeSharedReview as makeReview,
   SHARED_SAMPLE_PREP as SAMPLE_PREP,
   SHARED_SAMPLE_SCORE as SAMPLE_SCORE,
@@ -107,6 +108,11 @@ describe("showPrImpact — prReviews filter (no explicit filter given)", () => {
   it("includes reviews with pr_number in prReviews when no explicit filter given", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({ pr_number: 10, verdict: "WARNING" }));
+    // No-filter selection is now anchored to prep.files (fix-prep-anchored-review) —
+    // prep must describe the same change set as the stored review to surface it.
+    vi.mocked(getPrReviewData).mockResolvedValue(
+      makePrepStub([{ path: "src/a.ts", status: "modified" }]) as never,
+    );
 
     const result = await showPrImpact(tmpDir);
 
@@ -118,6 +124,9 @@ describe("showPrImpact — prReviews filter (no explicit filter given)", () => {
   it("includes reviews with branch in prReviews when no explicit filter given", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({ branch: "feat/auth", verdict: "BLOCKING" }));
+    vi.mocked(getPrReviewData).mockResolvedValue(
+      makePrepStub([{ path: "src/a.ts", status: "modified" }]) as never,
+    );
 
     const result = await showPrImpact(tmpDir);
 
@@ -128,7 +137,7 @@ describe("showPrImpact — prReviews filter (no explicit filter given)", () => {
 
   it("uses latest pr-context review when mix of principle-only and PR reviews exist", async () => {
     const store = new DriftStore(tmpDir);
-    // First: principle-only (should be excluded)
+    // First: principle-only, disjoint from prep (excluded on file-set grounds now)
     await store.appendReview({
       files: ["src/bad.ts"],
       honored: [],
@@ -138,9 +147,12 @@ describe("showPrImpact — prReviews filter (no explicit filter given)", () => {
       verdict: "BLOCKING",
       violations: [{ principle_id: "p1", severity: "rule" }],
     });
-    // Second: PR review (should be used)
+    // Second: PR review whose files match prep (should be used)
     await store.appendReview(
       makeReview({ files: ["src/clean.ts"], pr_number: 55, verdict: "CLEAN" }),
+    );
+    vi.mocked(getPrReviewData).mockResolvedValue(
+      makePrepStub([{ path: "src/clean.ts", status: "modified" }]) as never,
     );
 
     const result = await showPrImpact(tmpDir);
@@ -282,6 +294,9 @@ describe("UnifiedPrOutput — has_review field contract", () => {
   it("server output includes has_review: true when review exists", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({ pr_number: 1, verdict: "WARNING" }));
+    vi.mocked(getPrReviewData).mockResolvedValue(
+      makePrepStub([{ path: "src/a.ts", status: "modified" }]) as never,
+    );
 
     const result = await showPrImpact(tmpDir);
 
@@ -325,7 +340,8 @@ describe("showPrImpact — path traversal protection", () => {
       ],
     });
 
-    const result = await showPrImpact(tmpDir);
+    // Explicit pr_number filter — unchanged path, not subject to prep-file anchoring.
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     // Traversal paths must be stripped
     expect(result.review!.files).toContain("src/safe.ts");
@@ -356,7 +372,7 @@ describe("showPrImpact — path traversal protection", () => {
       violations: [],
     });
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     expect(result.review!.files).not.toContain("/etc/passwd");
     expect(result.review!.files).toContain("src/safe.ts");
@@ -386,7 +402,7 @@ describe("showPrImpact — violations without file_path", () => {
       }),
     );
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     // The hotspot for src/a.ts should have no violations assigned to it
     const hotspot = result.hotspots.find((h) => h.file === "src/a.ts");
@@ -407,7 +423,7 @@ describe("showPrImpact — violations without file_path", () => {
       }),
     );
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     const hotspot = result.hotspots.find((h) => h.file === "src/a.ts");
     expect(hotspot).toBeDefined();
@@ -434,7 +450,7 @@ describe("showPrImpact — empty review.files produces zero hotspots", () => {
       }),
     );
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     // review present but no files → no hotspots
     expect(result.review).toBeDefined();

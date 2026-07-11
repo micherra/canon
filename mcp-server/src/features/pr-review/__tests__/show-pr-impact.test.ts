@@ -199,7 +199,7 @@ describe("showPrImpact", () => {
     // KG not present (default mock: existsSync → false)
     vi.mocked(existsSync).mockReturnValue(false);
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 42 });
 
     expect(result.status).toBe("ok");
     // prep is always populated
@@ -235,7 +235,7 @@ describe("showPrImpact", () => {
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
     vi.mocked(analyzeBlastRadius).mockReturnValue(SAMPLE_BLAST_RADIUS);
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 42 });
 
     expect(result.status).toBe("ok");
     expect(result.blastRadius).toBeDefined();
@@ -273,7 +273,7 @@ describe("showPrImpact", () => {
     // No KG — blast radius from review only
     vi.mocked(existsSync).mockReturnValue(false);
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 42 });
 
     expect(result.hotspots.length).toBeGreaterThanOrEqual(3);
 
@@ -296,7 +296,7 @@ describe("showPrImpact", () => {
 
     vi.mocked(existsSync).mockReturnValue(false);
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 42 });
 
     // Both files should be in hotspots
     const files = result.hotspots.map((h) => h.file);
@@ -351,7 +351,7 @@ describe("showPrImpact", () => {
       return { edges, nodes };
     });
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 42 });
 
     // Changed files: foo.ts, bar.ts; Blast radius affected: baz.ts, qux.ts
     const nodeIds = result.subgraph.nodes.map((n) => n.id);
@@ -404,7 +404,7 @@ describe("showPrImpact", () => {
     });
 
     // Should not throw
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 42 });
 
     expect(result.status).toBe("ok");
     expect(result.blastRadius).toBeUndefined();
@@ -453,7 +453,7 @@ describe("showPrImpact", () => {
     await store.appendReview(SAMPLE_REVIEW);
     vi.mocked(existsSync).mockReturnValue(false);
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 42 });
 
     // Both layers present
     expect(result.prep).toBeDefined();
@@ -497,7 +497,7 @@ describe("showPrImpact", () => {
     await store.appendReview(reviewWithRecs);
     vi.mocked(existsSync).mockReturnValue(false);
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 42 });
 
     expect(result.recommendations).toEqual(recommendations);
   });
