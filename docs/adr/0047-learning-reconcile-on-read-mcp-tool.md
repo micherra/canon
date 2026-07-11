@@ -30,12 +30,19 @@ but it is not wired in this increment.
 
 The tool scans **only** the timestamped-dir review surface (not the 471 loose
 CONSOLIDATE-tracked files), matches each **actionable-typed** proposal against a
-resolvable on-disk target, and — only when a conservative evidence predicate holds
-(target file exists **and** a commit touching it post-dates the proposal's creation
-date) — moves the proposal to `applied/` and appends an `accepted` entry citing the
-evidence path + commit. It is **idempotent** (re-runs are no-ops) and **fail-open**
-(any error surfaces a warning and leaves state untouched; it never blocks a build or
-the command).
+resolvable on-disk target (re-contained under `project_dir`), and — only when a
+conservative evidence predicate holds — moves the proposal to `applied/` and appends
+an `accepted` entry citing the evidence path + commit. The predicate has two paths: a
+dedicated `--diff-filter=A` **creation probe** runs first and is sufficient evidence
+on its own (a commit that CREATED the target recovers even after a later, unrelated
+commit churns the same file — the plain most-recent-commit view alone would
+wrongly conclude the target was never created); only when no creation commit is
+found does evaluation fall back to most-recent-commit, which for a modify-only
+pre-existing target additionally requires the commit message to reference the
+proposal or target's principle id (an unrelated churn commit to the same file is not
+evidence). It is **idempotent** (re-runs are no-ops) and **fail-open** (any error
+surfaces a warning and leaves state untouched; it never blocks a build or the
+command).
 
 ## Alternatives considered
 
