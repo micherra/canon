@@ -510,7 +510,7 @@ initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named life
 **Lifecycle-hook vocabulary:** `post-ship` | `on-long-dispatch` | `session-start`. At such a moment, call `list_loops({ lifecycle_hook, tier })` and dispatch per loop `firing_posture[tier]` and `mode`.
 
 **Named consumers (one-line each):**
-- `auto-triage-fix`: CLEAR PR-comment/CI defect → dispatch fix flow without asking; AMBIGUOUS → ask first; NEVER auto-merge (that is `auto-enable-merge`'s job).
+- `auto-triage-fix`: CLEAR PR-comment/CI defect → dispatch fix flow without asking; CI failure is first CLASSIFIED flaky-vs-legit — flaky (infra/timeout/diff-orthogonal) → 1 bounded orchestrator re-run, legit → fix flow (see loop-framework.md); AMBIGUOUS → ask first; NEVER auto-merge (that is `auto-enable-merge`'s job).
 - `auto-plugin-update`: fires on `release_tag` — ASK-FIRST, never unattended before running `plugin-update`.
 - `run-learner`: fires on harness-watch `learner_due`; supervised → ask user first; autonomous/light-touch → auto-spawn.
 - `run-evolve`: fires on the `evolve` loop's `evolve_due`; supervised → ask user first; autonomous/light-touch → auto-spawn after a cost-visibility `PushNotification`. Proposals are HITL-gated regardless of tier.
