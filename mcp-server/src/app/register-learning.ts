@@ -14,7 +14,7 @@ export function registerLearningTools(server: McpServer): void {
     "reconcile_learnings",
     {
       description:
-        "Reconcile-on-read for the .canon/proposed-learnings/{timestamp}/ review surface (ADR-0048). Auto-moves actionable proposals whose target already shipped to applied/ (evidence-cited: target exists on disk + a commit touching it post-dates the proposal), and auto-archives fully-informational stale sets to stale/. Idempotent, fail-open, append-only, move-never-delete. Never touches the loose top-level proposal files.",
+        "Reconcile-on-read for the .canon/proposed-learnings/{timestamp}/ review surface (ADR-0049). Auto-moves actionable proposals whose target already shipped to applied/ (evidence-cited: target exists on disk + a commit touching it post-dates the proposal), and auto-archives fully-informational stale sets to stale/. Idempotent, fail-open, append-only, move-never-delete. Never touches the loose top-level proposal files.",
       inputSchema: {
         dry_run: z
           .boolean()

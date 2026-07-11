@@ -1,5 +1,5 @@
 /**
- * Live end-to-end smoke test for `reconcileLearnings` (ADR-0048).
+ * Live end-to-end smoke test for `reconcileLearnings` (ADR-0049).
  *
  * `reconcile-learnings.test.ts` and `reconcile-learnings-fixes.test.ts` cover
  * the handler exhaustively against FAKE `ReconcileFsSeam`/`ReconcileGitSeam`

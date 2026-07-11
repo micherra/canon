@@ -7,7 +7,7 @@ description: >-
   and the seven named consumers (auto-triage-fix, auto-plugin-update, run-learner, run-evolve, auto-enable-merge, auto-update-branch, auto-staleness-refresh).
 ---
 
-# Loop Framework <!-- last-updated: 2026-07-10 -->
+# Loop Framework <!-- last-updated: 2026-07-11 -->
 
 <!-- Managed by Canon. Manual edits are preserved. -->
 
@@ -122,14 +122,85 @@ orchestrator consumes, NOT something the loop or the loop-tick runner executes. 
 
 **`auto-triage-fix`** (fires on the `external_review_comment_ids` transition and the CI
 `pending → failure` transition):
-1. Reads the trigger source — the new PR comment(s) for the comment transition, or the failing
-   CI job logs (`gh pr checks` / run logs) for the CI transition.
+
+For the `external_review_comment_ids` transition, unchanged:
+1. Reads the new PR comment(s).
 2. If a CLEAR actionable defect → dispatches a fix flow (engineer → re-run verify gates → push
    to the build branch) WITHOUT asking first.
 3. If AMBIGUOUS / a question / design-level pushback → surfaces with a proposed approach and
    ASKS first.
 4. NEVER auto-merges the PR (arming auto-merge is the separate, CI-green-gated
    `auto-enable-merge` consumer's job, not auto-triage-fix's).
+
+For the `ci_conclusion: pending → failure` transition, a flaky-vs-legit **classification
+sub-protocol** runs FIRST, before any fix-flow dispatch decision — a build-introduced failure
+and a flaky one look identical in `ci_conclusion` alone, and dispatching a fix flow against a
+flaky failure wastes an engineer cycle chasing a phantom bug:
+
+1. Read the failing job's logs — `gh pr checks` for the summary, `gh run view <run-id> --log`
+   (or `--log-failed`) for the detail — both READ-only, orchestrator-side (not on the runner's
+   `observe.shell_commands` allowlist; see the dc-06 note below).
+2. Classify in TWO ordered steps — a diff-intersection check FIRST, which OVERRIDES the
+   marker-based check that follows. Marker-based flaky classification never wins against a
+   diff-intersection hit; it only ever applies in the diff-orthogonal remainder.
+   a. **Diff-intersection check (overrides marker-based classification):** does the failing
+      job/test exercise a file the PR diff touched (`git diff {base}..HEAD --name-only`
+      intersected against the failing file/test path)? If YES → **Legit**, unconditionally —
+      even if the failure log ALSO carries an infra-looking marker (timeout, OOM, `ETIMEDOUT`,
+      network 5xx). A build-introduced regression (a resource leak, an infinite loop, a
+      genuinely slow query the diff added) can produce the exact same surface signature as
+      flaky infra; a marker match is not license to skip the diff check. Diff-touched territory
+      always wins over marker appearance — this is what makes the classifier safe-by-design
+      against a build-caused failure disguising itself as "just flaky."
+   b. **Marker-family check (reached only when diff-orthogonal — 2a did not match):** diff-
+      orthogonality is the PRECONDITION for reaching this step, NOT itself a flaky signal — a
+      markerless orthogonal failure can be a legitimate indirect regression (the PR broke a
+      file it didn't touch) just as easily as an intermittent, so orthogonality alone never
+      classifies flaky. Classify **Flaky (known-intermittent/environmental)** ONLY on an actual
+      infra/env/setup marker in the log: network timeout, `ETIMEDOUT`/`ECONNRESET`, runner OOM,
+      registry/`npm ci` 5xx, model-download (HuggingFace/ONNX) failure, `"Test timed out in
+      Nms"`, git-subprocess timeout, tmpdir `ENOTEMPTY`/`EEXIST` races, or an exit-before-tests
+      toolchain/setup failure not attributable to the diff. Cite known families descriptively
+      (init-workspace concurrency-race, embedding/ONNX cold-start, subprocess PATH/CWD
+      non-determinism, tmpdir races — see `project_flaky_integration_tests_hardening`) — never a
+      maintained test-name list or a hardcoded count (`no-literal-repo-state-counts`). A
+      diff-orthogonal failure that matches NONE of these marker families is **Legit** by default
+      (unclassified diff-orthogonal failures are not assumed flaky).
+3. Decision procedure, **retry bound = 1**:
+   a. **Legit via diff-intersection (2a)** → dispatch the fix flow directly (clear → without
+      asking, ambiguous → ask; same tier rule as the comment-transition path above). No re-run —
+      the diff-intersection hit is decisive on its own.
+   b. **Flaky via marker-family (2b)** → the orchestrator runs **exactly one** bounded re-run of
+      the failed job: `gh run rerun --failed <run-id>` (orchestrator-side, CI-only mutation —
+      reversible, source-untouched).
+      - Re-run **green** → flaky confirmed. **Unconditionally surface a note to the human**
+        (the failure was flaky, not fixed — a possibly-real regression must never be silently
+        dropped just because a re-run happened to pass). Take NO fix action. Under
+        **supervised** tier, ASK the user to confirm treating this as resolved before moving
+        on; under autonomous/light-touch, proceed on the note alone (no ask). Critically,
+        **`ship-watch` has already terminated** by this point — the `ci_conclusion: pending →
+        failure` transition that triggered `auto-triage-fix` carries `terminate: true` (see
+        `loops/ship-watch.md`'s `surface.on_transition` and `terminate.when:
+        [..., ci_failure_surfaced, ...]`), so monitoring does NOT resume on its own; do not
+        claim it "continues watching." To resume progression toward merge, the orchestrator
+        must explicitly **re-dispatch `ship-watch` via the post-ship lifecycle tap**
+        (`list_loops({ lifecycle_hook: "post-ship", tier })` → `CronList()` de-dupe → dispatch
+        per `firing_posture[tier]`) — the same per-session re-dispatch mechanism the original
+        post-ship tap used (dc-06; see "Cron job lifecycle" above).
+      - Re-run **red** → reclassify as legit → dispatch the fix flow (clear → without asking,
+        ambiguous → ask).
+   c. No unbounded retry — one re-run, then treat as legit. This bound exists precisely so a
+      genuine regression can't hide behind repeated "maybe it's flaky" re-runs.
+
+**dc-06 preservation**: `loops/ship-watch.md` is untouched by this classification — its
+`observe.shell_commands` allowlist (`gh pr view`, `gh pr checks`, `gh release list`, `gh api`,
+`gh repo view`, all read-only GETs) gains nothing, and `guardrails.mutates_build` stays
+`false`. `gh run view` (read) and `gh run rerun` (the one bounded mutation) are both run by the
+orchestrator consumer, never by the runner — the runner still only ever surfaces
+`ORCHESTRATOR_ACTION: auto-triage-fix field=ci_conclusion loop=ship-watch`. All classification
++ re-run/fix logic above is prose in this consumer contract, executed by the orchestrator
+(which is allowed to mutate), mirroring how `auto-update-branch` runs `git fetch`/merge/push
+itself without adding those commands to the runner's allowlist.
 
 **`auto-plugin-update`** (fires on the `release_tag` transition): **ASK-FIRST, never unattended.**
 On a release tag being cut:

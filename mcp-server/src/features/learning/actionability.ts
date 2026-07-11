@@ -1,5 +1,5 @@
 /**
- * Shared actionability classifier for the learning-resolution flow (ADR-0048,
+ * Shared actionability classifier for the learning-resolution flow (ADR-0049,
  * decision `informational-separation-at-surface`).
  *
  * The single canonical `(type, filename-prefix) -> actionable | informational`

@@ -1,4 +1,4 @@
-# ADR-0048 — Learning-resolution reconcile is an MCP tool invoked reconcile-on-read, not a hook
+# ADR-0049 — Learning-resolution reconcile is an MCP tool invoked reconcile-on-read, not a hook
 
 **Status:** Accepted
 **Date:** 2026-07-10
