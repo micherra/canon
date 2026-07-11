@@ -1,0 +1,532 @@
+/**
+ * `reconcile_learnings` MCP tool — reconcile-on-read primitive for the
+ * learning-resolution flow (ADR-0047).
+ *
+ * Scans ONLY the timestamped-dir review surface (`.canon/proposed-learnings/{ts}/`
+ * — never the loose top-level files, PROBE-FINDINGS P4). For each pending
+ * ACTIONABLE proposal whose target resolves on disk AND a commit touching that
+ * target post-dates the proposal (the conservative evidence predicate,
+ * decision 0047), moves the proposal to `applied/` and appends an accepted
+ * `learning.jsonl` entry. Also computes freshness (decision `freshness-policy`):
+ * a stale, fully-informational set auto-archives to `stale/`; a stale set with
+ * an actionable survivor is flagged only.
+ *
+ * Tension (documented per `fail-closed-by-default` vs `observable-best-effort`):
+ * safety gates fail CLOSED. This is an advisory quality mechanism, not a safety
+ * gate, so it fails OPEN by design — any internal error is caught at the
+ * handler boundary, logged via `console.warn`, and returned as a typed
+ * `ToolResult` error. It never throws past this module and never blocks a
+ * caller (the command treats a non-ok result as "reconcile unavailable,
+ * proceed with the un-reconciled surface").
+ */
+
+import fs from "node:fs/promises";
+import { join } from "node:path";
+import { gitExec } from "@platform/adapters/git-adapter.ts";
+import { isNotFound } from "@shared/lib/errors.ts";
+import { isSafeProjectDirInput } from "@shared/lib/safe-project-dir.ts";
+import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { classifyProposal } from "./actionability.ts";
+
+// ---------------------------------------------------------------------------
+// Seams — injectable fs/git boundaries (interface-design-for-testability).
+// Tests supply fakes; production wiring uses the default* implementations.
+// ---------------------------------------------------------------------------
+
+export type DirEntry = { name: string; isDirectory: boolean };
+
+/** Filesystem operations reconcile needs, as an injectable seam. */
+export type ReconcileFsSeam = {
+  /** Lists directory entries; returns [] when the directory does not exist. */
+  readDir(path: string): Promise<DirEntry[]>;
+  /** Reads a file as utf-8 text; throws when the file does not exist. */
+  readFile(path: string): Promise<string>;
+  /** Returns true when a path exists on disk. */
+  fileExists(path: string): Promise<boolean>;
+  /** Recursively creates a directory; no-op if it already exists. */
+  mkdir(path: string): Promise<void>;
+  /** Moves a file — the ONLY relocation primitive reconcile uses (never a delete). */
+  rename(from: string, to: string): Promise<void>;
+  /** Appends text to a file, creating it if absent. Never rewrites existing content. */
+  appendFile(path: string, data: string): Promise<void>;
+};
+
+/** Git operations reconcile needs, as an injectable seam. */
+export type ReconcileGitSeam = {
+  /**
+   * Returns the short hash of the most recent commit touching `targetPath` at
+   * or after `sinceIso`, or null when no such commit exists. This is the
+   * evidence predicate: a proposal only reconciles when its target both
+   * exists on disk AND has a commit that post-dates the proposal.
+   */
+  latestCommitSince(projectDir: string, targetPath: string, sinceIso: string): string | null;
+};
+
+async function readDirDefault(path: string): Promise<DirEntry[]> {
+  try {
+    const entries = await fs.readdir(path, { withFileTypes: true });
+    return entries.map((e) => ({ isDirectory: e.isDirectory(), name: e.name }));
+  } catch (err) {
+    if (isNotFound(err)) return [];
+    throw err;
+  }
+}
+
+async function fileExistsDefault(path: string): Promise<boolean> {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Default fs seam — real filesystem via node:fs/promises. */
+export const defaultFsSeam: ReconcileFsSeam = {
+  appendFile: (path, data) => fs.appendFile(path, data, "utf-8"),
+  fileExists: fileExistsDefault,
+  mkdir: (path) => fs.mkdir(path, { recursive: true }).then(() => undefined),
+  readDir: readDirDefault,
+  readFile: (path) => fs.readFile(path, "utf-8"),
+  rename: (from, to) => fs.rename(from, to),
+};
+
+/** Default git seam — real `git log` via the shared git adapter. */
+export const defaultGitSeam: ReconcileGitSeam = {
+  latestCommitSince(projectDir, targetPath, sinceIso) {
+    const result = gitExec(
+      ["log", "--since", sinceIso, "-n", "1", "--format=%h", "--", targetPath],
+      projectDir,
+    );
+    if (!result.ok) return null;
+    const hash = result.stdout.trim();
+    return hash.length > 0 ? hash : null;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Input / Output types
+// ---------------------------------------------------------------------------
+
+export type ReconcileLearningsInput = {
+  project_dir: string;
+  freshness_days?: number;
+  dry_run?: boolean;
+};
+
+export type ReconciledItem = {
+  file: string;
+  dir: string;
+  target_path: string;
+  commit: string;
+  reason: string;
+};
+
+export type ArchivedItem = {
+  file: string;
+  dir: string;
+  age_days: number;
+};
+
+export type FlaggedSet = {
+  dir: string;
+  age_days: number;
+  actionable_survivors: string[];
+};
+
+export type SkippedItem = {
+  file: string;
+  reason: string;
+};
+
+export type ReconcileLearningsOutput = {
+  reconciled: ReconciledItem[];
+  archived: ArchivedItem[];
+  flagged_stale: FlaggedSet[];
+  skipped: SkippedItem[];
+};
+
+/** Documented default staleness window (decision `freshness-policy`). Overridable per call. */
+export const FRESHNESS_DAYS = 30;
+
+const PRINCIPLE_SUBDIRS = ["rules", "strong-opinions", "conventions"] as const;
+const PRINCIPLE_BASES = ["principles", ".canon/principles"] as const;
+const TS_DIR_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/;
+
+/** Converts a proposal-dir timestamp (`2026-05-29T22-00-00Z`) into a real ISO instant. */
+function dirTimestampToIso(tsDir: string): string {
+  return tsDir.replace(/T(\d{2})-(\d{2})-(\d{2})Z$/, "T$1:$2:$3Z");
+}
+
+function ageDaysFor(tsDir: string): number {
+  const then = new Date(dirTimestampToIso(tsDir)).getTime();
+  return Math.floor((Date.now() - then) / 86_400_000);
+}
+
+/** Extracts a single `field: value` YAML-style line (quoted or unquoted) from raw file text. */
+function extractYamlField(text: string, field: string): string | null {
+  const re = new RegExp(`^${field}:\\s*["']?([^"'\\n]+?)["']?\\s*$`, "m");
+  const match = text.match(re);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Resolves a proposal's target path: `target_path` -> `target_file` -> (`target`
+ * as a principle id -> first existing of `principles/**\/<id>.md`,
+ * `.canon/principles/**\/<id>.md`). Returns null when nothing resolves — the
+ * proposal is left pending (conservative, PROBE-FINDINGS P6).
+ */
+async function resolveTargetPath(
+  fsSeam: ReconcileFsSeam,
+  projectDir: string,
+  raw: string,
+): Promise<string | null> {
+  const targetPath = extractYamlField(raw, "target_path");
+  if (targetPath) return targetPath;
+
+  const targetFile = extractYamlField(raw, "target_file");
+  if (targetFile) return targetFile;
+
+  const target = extractYamlField(raw, "target");
+  if (target) {
+    for (const base of PRINCIPLE_BASES) {
+      for (const subdir of PRINCIPLE_SUBDIRS) {
+        const candidate = `${base}/${subdir}/${target}.md`;
+        if (await fsSeam.fileExists(join(projectDir, candidate))) return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Plan / apply — read-only planning is fully separated from mutation so a
+// thrown error during planning can never leave a partial mutation behind.
+// ---------------------------------------------------------------------------
+
+type PlannedReconcile = {
+  tsDir: string;
+  file: string;
+  targetPath: string;
+  commit: string;
+  reason: string;
+};
+
+type PlannedArchive = {
+  tsDir: string;
+  file: string;
+  ageDays: number;
+};
+
+type Plan = {
+  reconcileActions: PlannedReconcile[];
+  archiveActions: PlannedArchive[];
+  flagged: FlaggedSet[];
+  skipped: SkippedItem[];
+};
+
+/** Bundles the injected seams + project root so per-proposal helpers stay under the max-params lint. */
+type ReconcileContext = {
+  fs: ReconcileFsSeam;
+  git: ReconcileGitSeam;
+  projectDir: string;
+};
+
+/** Result of evaluating one actionable pending proposal against the evidence predicate. */
+type ProposalOutcome =
+  | { kind: "reconcile"; action: PlannedReconcile }
+  | { kind: "survivor"; skip: SkippedItem };
+
+/**
+ * Evaluates a single actionable proposal: resolves its target, then checks
+ * the conservative evidence predicate (target exists on disk AND a commit
+ * touching it post-dates the proposal). Returns either a planned reconcile
+ * action or a "survivor" outcome (stays pending, with the reason it didn't
+ * reconcile).
+ */
+async function evaluateActionableProposal(
+  ctx: ReconcileContext,
+  tsDir: string,
+  file: string,
+  raw: string,
+): Promise<ProposalOutcome> {
+  const survivor = (reason: string): ProposalOutcome => ({
+    kind: "survivor",
+    skip: { file: `${tsDir}/${file}`, reason },
+  });
+
+  const targetPath = await resolveTargetPath(ctx.fs, ctx.projectDir, raw);
+  if (targetPath === null) return survivor("no resolvable target path");
+
+  const exists = await ctx.fs.fileExists(join(ctx.projectDir, targetPath));
+  if (!exists) return survivor(`target does not exist on disk: ${targetPath}`);
+
+  const proposalDateIso = extractYamlField(raw, "created") ?? dirTimestampToIso(tsDir);
+  const commit = ctx.git.latestCommitSince(ctx.projectDir, targetPath, proposalDateIso);
+  if (commit === null) {
+    return survivor(`no commit touching ${targetPath} post-dates the proposal`);
+  }
+
+  return {
+    action: {
+      commit,
+      file,
+      reason: `reconciled: ${targetPath} shipped in ${commit}`,
+      targetPath,
+      tsDir,
+    },
+    kind: "reconcile",
+  };
+}
+
+/** Result of classifying + evaluating every pending file in one timestamped dir. */
+type EvaluatedDir = {
+  pendingFiles: string[];
+  reconcileActions: PlannedReconcile[];
+  reconciledFiles: Set<string>;
+  survivors: string[];
+  skipped: SkippedItem[];
+};
+
+/** Classifies and evaluates every pending `.md` file directly inside one timestamped dir. */
+async function evaluatePendingFiles(
+  ctx: ReconcileContext,
+  tsDir: string,
+  pendingFiles: string[],
+): Promise<EvaluatedDir> {
+  const tsDirPath = join(ctx.projectDir, ".canon", "proposed-learnings", tsDir);
+  const reconcileActions: PlannedReconcile[] = [];
+  const skipped: SkippedItem[] = [];
+  const survivors: string[] = [];
+  const reconciledFiles = new Set<string>();
+
+  for (const file of pendingFiles) {
+    const raw = await ctx.fs.readFile(join(tsDirPath, file));
+    const classification = classifyProposal({ filename: file, frontmatter: raw });
+    if (classification.actionability === "informational") continue; // never reconciled
+
+    const outcome = await evaluateActionableProposal(ctx, tsDir, file, raw);
+    if (outcome.kind === "reconcile") {
+      reconciledFiles.add(file);
+      reconcileActions.push(outcome.action);
+    } else {
+      survivors.push(file);
+      skipped.push(outcome.skip);
+    }
+  }
+
+  return { pendingFiles, reconcileActions, reconciledFiles, skipped, survivors };
+}
+
+/** Freshness decision for one timestamped dir (decision `freshness-policy`). */
+type FreshnessDecision = { archiveActions: PlannedArchive[]; flagged: FlaggedSet | null };
+
+/**
+ * Applies the freshness decision to an evaluated dir: a stale (age >
+ * freshnessDays) informational-only set (zero actionable survivors)
+ * auto-archives every remaining pending file; a stale set with an actionable
+ * survivor is flagged only, never archived.
+ */
+function decideFreshness(
+  tsDir: string,
+  evaluated: EvaluatedDir,
+  freshnessDays: number,
+): FreshnessDecision {
+  const ageDays = ageDaysFor(tsDir);
+  if (ageDays <= freshnessDays) return { archiveActions: [], flagged: null };
+
+  if (evaluated.survivors.length > 0) {
+    return {
+      archiveActions: [],
+      flagged: { actionable_survivors: evaluated.survivors, age_days: ageDays, dir: tsDir },
+    };
+  }
+
+  const archiveActions = evaluated.pendingFiles
+    .filter((file) => !evaluated.reconciledFiles.has(file))
+    .map((file) => ({ ageDays, file, tsDir }));
+  return { archiveActions, flagged: null };
+}
+
+/** Per-timestamp-dir plan contribution — reconcile/archive actions plus at most one flag. */
+type TsDirPlan = {
+  reconcileActions: PlannedReconcile[];
+  archiveActions: PlannedArchive[];
+  flagged: FlaggedSet | null;
+  skipped: SkippedItem[];
+};
+
+/**
+ * Plans one timestamped dir: classifies each pending `.md` file, evaluates
+ * actionable ones against the evidence predicate, then applies the freshness
+ * decision.
+ */
+async function planTimestampDir(
+  ctx: ReconcileContext,
+  tsDir: string,
+  freshnessDays: number,
+): Promise<TsDirPlan> {
+  const tsDirPath = join(ctx.projectDir, ".canon", "proposed-learnings", tsDir);
+  const dirEntries = await ctx.fs.readDir(tsDirPath);
+  // Pending = a .md file directly in the ts dir. Once resolved, a proposal
+  // lives under a resolution subdir (applied/rejected/dismissed/stale) and is
+  // naturally excluded here — this is what fixes the P1 dir-level bug (the
+  // old computation checked subdir *existence*, not per-file state).
+  const pendingFiles = dirEntries
+    .filter((e) => !e.isDirectory && e.name.endsWith(".md"))
+    .map((e) => e.name);
+
+  const evaluated = await evaluatePendingFiles(ctx, tsDir, pendingFiles);
+  const { archiveActions, flagged } = decideFreshness(tsDir, evaluated, freshnessDays);
+
+  return {
+    archiveActions,
+    flagged,
+    reconcileActions: evaluated.reconcileActions,
+    skipped: evaluated.skipped,
+  };
+}
+
+async function buildPlan(
+  fsSeam: ReconcileFsSeam,
+  gitSeam: ReconcileGitSeam,
+  projectDir: string,
+  freshnessDays: number,
+): Promise<Plan> {
+  const ctx: ReconcileContext = { fs: fsSeam, git: gitSeam, projectDir };
+  const root = join(projectDir, ".canon", "proposed-learnings");
+  const rootEntries = await ctx.fs.readDir(root);
+  const tsDirs = rootEntries
+    .filter((e) => e.isDirectory && TS_DIR_PATTERN.test(e.name))
+    .map((e) => e.name);
+
+  const plan: Plan = { archiveActions: [], flagged: [], reconcileActions: [], skipped: [] };
+  for (const tsDir of tsDirs) {
+    const dirPlan = await planTimestampDir(ctx, tsDir, freshnessDays);
+    plan.reconcileActions.push(...dirPlan.reconcileActions);
+    plan.archiveActions.push(...dirPlan.archiveActions);
+    plan.skipped.push(...dirPlan.skipped);
+    if (dirPlan.flagged) plan.flagged.push(dirPlan.flagged);
+  }
+
+  return plan;
+}
+
+function planToOutput(plan: Plan): ReconcileLearningsOutput {
+  return {
+    archived: plan.archiveActions.map((a) => ({ age_days: a.ageDays, dir: a.tsDir, file: a.file })),
+    flagged_stale: plan.flagged,
+    reconciled: plan.reconcileActions.map((a) => ({
+      commit: a.commit,
+      dir: a.tsDir,
+      file: a.file,
+      reason: a.reason,
+      target_path: a.targetPath,
+    })),
+    skipped: plan.skipped,
+  };
+}
+
+/** Serializes one `learning.jsonl` line. Append-only — never used to rewrite the file. */
+function jsonlLine(entry: Record<string, unknown>): string {
+  return JSON.stringify({ timestamp: new Date().toISOString(), ...entry });
+}
+
+async function applyPlan(
+  fsSeam: ReconcileFsSeam,
+  projectDir: string,
+  freshnessDays: number,
+  plan: Plan,
+): Promise<void> {
+  const root = join(projectDir, ".canon", "proposed-learnings");
+  const jsonlLines: string[] = [];
+
+  for (const action of plan.reconcileActions) {
+    const tsDirPath = join(root, action.tsDir);
+    const appliedDir = join(tsDirPath, "applied");
+    await fsSeam.mkdir(appliedDir);
+    await fsSeam.rename(join(tsDirPath, action.file), join(appliedDir, action.file));
+    jsonlLines.push(
+      jsonlLine({
+        action: "accepted",
+        commit: action.commit,
+        proposal_id: action.file,
+        reason: action.reason,
+        target_path: action.targetPath,
+      }),
+    );
+  }
+
+  for (const action of plan.archiveActions) {
+    const tsDirPath = join(root, action.tsDir);
+    const staleDir = join(tsDirPath, "stale");
+    await fsSeam.mkdir(staleDir);
+    await fsSeam.rename(join(tsDirPath, action.file), join(staleDir, action.file));
+    jsonlLines.push(
+      jsonlLine({
+        action: "archived",
+        age_days: action.ageDays,
+        proposal_id: action.file,
+        reason: `stale > ${freshnessDays}d, informational-only`,
+      }),
+    );
+  }
+
+  if (jsonlLines.length > 0) {
+    const jsonlPath = join(projectDir, ".canon", "learning.jsonl");
+    await fsSeam.appendFile(jsonlPath, `${jsonlLines.join("\n")}\n`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Handler
+// ---------------------------------------------------------------------------
+
+/**
+ * Reconciles the `.canon/proposed-learnings/{ts}/` review surface: auto-moves
+ * shipped actionable proposals to `applied/`, and auto-archives stale
+ * informational-only sets to `stale/`. Idempotent, fail-open, append-only,
+ * move-never-delete.
+ *
+ * Validates `project_dir`/`freshness_days` at this seam before any filesystem
+ * walk (`validate-at-trust-boundaries`). Any internal error — a thrown seam
+ * call, a malformed proposal, anything unexpected — is caught here and
+ * returned as a typed error; it never throws past this function.
+ */
+export async function reconcileLearnings(
+  input: ReconcileLearningsInput,
+  seams: { fs: ReconcileFsSeam; git: ReconcileGitSeam } = {
+    fs: defaultFsSeam,
+    git: defaultGitSeam,
+  },
+): Promise<ToolResult<ReconcileLearningsOutput>> {
+  if (!isSafeProjectDirInput(input.project_dir)) {
+    return toolError("INVALID_INPUT", `Invalid project_dir: ${input.project_dir}`, false);
+  }
+
+  const freshnessDays = input.freshness_days ?? FRESHNESS_DAYS;
+  if (!Number.isFinite(freshnessDays) || freshnessDays <= 0) {
+    return toolError(
+      "INVALID_INPUT",
+      `Invalid freshness_days: ${String(input.freshness_days)} — must be a positive number`,
+      false,
+    );
+  }
+
+  try {
+    const plan = await buildPlan(seams.fs, seams.git, input.project_dir, freshnessDays);
+    if (input.dry_run !== true) {
+      await applyPlan(seams.fs, input.project_dir, freshnessDays, plan);
+    }
+    return toolOk(planToOutput(plan));
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.warn(`[reconcile-learnings] fail-open: reconcile aborted — ${detail}`);
+    return toolError(
+      "UNEXPECTED",
+      `reconcile_learnings failed, proceeding with un-reconciled surface: ${detail}`,
+      true,
+    );
+  }
+}
