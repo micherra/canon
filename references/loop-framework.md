@@ -122,14 +122,59 @@ orchestrator consumes, NOT something the loop or the loop-tick runner executes. 
 
 **`auto-triage-fix`** (fires on the `external_review_comment_ids` transition and the CI
 `pending → failure` transition):
-1. Reads the trigger source — the new PR comment(s) for the comment transition, or the failing
-   CI job logs (`gh pr checks` / run logs) for the CI transition.
+
+For the `external_review_comment_ids` transition, unchanged:
+1. Reads the new PR comment(s).
 2. If a CLEAR actionable defect → dispatches a fix flow (engineer → re-run verify gates → push
    to the build branch) WITHOUT asking first.
 3. If AMBIGUOUS / a question / design-level pushback → surfaces with a proposed approach and
    ASKS first.
 4. NEVER auto-merges the PR (arming auto-merge is the separate, CI-green-gated
    `auto-enable-merge` consumer's job, not auto-triage-fix's).
+
+For the `ci_conclusion: pending → failure` transition, a flaky-vs-legit **classification
+sub-protocol** runs FIRST, before any fix-flow dispatch decision — a build-introduced failure
+and a flaky one look identical in `ci_conclusion` alone, and dispatching a fix flow against a
+flaky failure wastes an engineer cycle chasing a phantom bug:
+
+1. Read the failing job's logs — `gh pr checks` for the summary, `gh run view <run-id> --log`
+   (or `--log-failed`) for the detail — both READ-only, orchestrator-side (not on the runner's
+   `observe.shell_commands` allowlist; see the dc-06 note below).
+2. Classify against two signal classes:
+   - **Legit (build-introduced)**: a compile/type error, lint violation, or failing assertion
+     in a file the PR diff touched (`git diff {base}..HEAD --name-only` intersected with the
+     failing file) — a deterministic failure naming changed-code behavior.
+   - **Flaky (known-intermittent/environmental)**: infra/env markers in the log (network
+     timeout, `ETIMEDOUT`/`ECONNRESET`, runner OOM, registry/`npm ci` 5xx, model-download
+     (HuggingFace/ONNX) failure, `"Test timed out in Nms"`, git-subprocess timeout, tmpdir
+     `ENOTEMPTY`/`EEXIST` races); **diff-orthogonality** (the failing test/job exercises files
+     NOT in the PR diff — a strong flaky signal); or an exit-before-tests toolchain/setup
+     failure. Cite known families descriptively (init-workspace concurrency-race,
+     embedding/ONNX cold-start, subprocess PATH/CWD non-determinism, tmpdir races — see
+     `project_flaky_integration_tests_hardening`) — never a maintained test-name list or a
+     hardcoded count (`no-literal-repo-state-counts`).
+3. Decision procedure, **retry bound = 1**:
+   a. Strong legit signal → dispatch the fix flow directly (clear → without asking, ambiguous
+      → ask; same tier rule as the comment-transition path above).
+   b. Otherwise (flaky signal, or genuinely ambiguous) → the orchestrator runs **exactly one**
+      bounded re-run of the failed job: `gh run rerun --failed <run-id>` (orchestrator-side,
+      CI-only mutation — reversible, source-untouched).
+      - Re-run **green** → flaky confirmed. Note it, take NO fix action, let `ship-watch`
+        continue watching.
+      - Re-run **red** → reclassify as legit → dispatch the fix flow (clear → without asking,
+        ambiguous → ask).
+   c. No unbounded retry — one re-run, then treat as legit. This bound exists precisely so a
+      genuine regression can't hide behind repeated "maybe it's flaky" re-runs.
+
+**dc-06 preservation**: `loops/ship-watch.md` is untouched by this classification — its
+`observe.shell_commands` allowlist (`gh pr view`, `gh pr checks`, `gh release list`, `gh api`,
+`gh repo view`, all read-only GETs) gains nothing, and `guardrails.mutates_build` stays
+`false`. `gh run view` (read) and `gh run rerun` (the one bounded mutation) are both run by the
+orchestrator consumer, never by the runner — the runner still only ever surfaces
+`ORCHESTRATOR_ACTION: auto-triage-fix field=ci_conclusion loop=ship-watch`. All classification
++ re-run/fix logic above is prose in this consumer contract, executed by the orchestrator
+(which is allowed to mutate), mirroring how `auto-update-branch` runs `git fetch`/merge/push
+itself without adding those commands to the runner's allowlist.
 
 **`auto-plugin-update`** (fires on the `release_tag` transition): **ASK-FIRST, never unattended.**
 On a release tag being cut:
