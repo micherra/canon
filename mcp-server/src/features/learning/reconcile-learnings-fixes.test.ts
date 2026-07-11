@@ -1,6 +1,6 @@
 /**
  * Tests for 3 `reconcile_learnings` fix-review round 2 fixes (adversarial
- * review + security assessment on the ADR-0049 tool). Split out from
+ * review + security assessment on the ADR-0050 tool). Split out from
  * `reconcile-learnings.test.ts` to keep that file under the line-count lint
  * budget — see its own top-level comment for the base test suite.
  *

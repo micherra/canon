@@ -1,6 +1,6 @@
 /**
  * `reconcile_learnings` MCP tool — reconcile-on-read primitive for the
- * learning-resolution flow (ADR-0049).
+ * learning-resolution flow (ADR-0050).
  *
  * Scans ONLY the timestamped-dir review surface (`.canon/proposed-learnings/{ts}/`
  * — never the loose top-level files, PROBE-FINDINGS P4). For each pending

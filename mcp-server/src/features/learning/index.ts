@@ -1,6 +1,6 @@
 /**
  * Public surface of the `learning` feature — the shared actionability
- * classifier plus the `reconcile_learnings` MCP tool (ADR-0049).
+ * classifier plus the `reconcile_learnings` MCP tool (ADR-0050).
  *
  * Barrel export so callers (the `app/register-learning.ts` registration and
  * any future command/loop consumer) import from one path rather than reaching

@@ -11,6 +11,7 @@
 import type { FlowRunEntry } from "@platform/storage/drift/drift-analytics-types.ts";
 import type {
   AgentPerformanceTrend,
+  CacheEfficiencyByAgent,
   PlannerPatternAnalysis,
   RunSummary,
 } from "../history-types.ts";
@@ -234,6 +235,102 @@ export function computePerformanceTrends(
     result.push(computeFlowTrend(flow, flowPoints, limit));
   }
   return result;
+}
+
+// Per-agent cache accumulator used only inside computeCacheEfficiencyByAgent.
+type CacheAccumulator = {
+  ratios: number[];
+  totalReadTokens: number;
+  totalCreationTokens: number;
+  sampleCount: number;
+};
+
+/**
+ * Fold a single step's cache metrics into its agent_type's accumulator.
+ * Guards every numeric read with typeof === "number" — metrics values are
+ * loosely typed and a stringified/nested metric must not poison a sum/mean.
+ */
+function accumulateStepCacheMetrics(
+  acc: CacheAccumulator,
+  metrics: RunSummary["step_outcomes"][number]["metrics"],
+): void {
+  const ratio = metrics?.cache_hit_ratio;
+  const readTokens = metrics?.cache_read_tokens;
+  const creationTokens = metrics?.cache_creation_tokens;
+
+  let sampled = false;
+  if (typeof ratio === "number") {
+    acc.ratios.push(ratio);
+    sampled = true;
+  }
+  if (typeof readTokens === "number") {
+    acc.totalReadTokens += readTokens;
+    sampled = true;
+  }
+  if (typeof creationTokens === "number") {
+    acc.totalCreationTokens += creationTokens;
+    sampled = true;
+  }
+  if (sampled) acc.sampleCount++;
+}
+
+/**
+ * Group step_outcomes across all summaries into per-agent-type cache
+ * accumulators (empty agent_type bucketed as "unknown", matching the
+ * CliffEventsDimension convention).
+ */
+function buildCacheAccumulatorsByAgent(summaries: RunSummary[]): Map<string, CacheAccumulator> {
+  const byAgent = new Map<string, CacheAccumulator>();
+  for (const summary of summaries) {
+    for (const step of summary.step_outcomes) {
+      const agentType = step.agent_type === "" ? "unknown" : step.agent_type;
+      let acc = byAgent.get(agentType);
+      if (acc === undefined) {
+        acc = { ratios: [], sampleCount: 0, totalCreationTokens: 0, totalReadTokens: 0 };
+        byAgent.set(agentType, acc);
+      }
+      accumulateStepCacheMetrics(acc, step.metrics);
+    }
+  }
+  return byAgent;
+}
+
+/**
+ * Finalize a single agent_type's accumulator into a CacheEfficiencyByAgent
+ * row. mean_cache_hit_ratio is omitted (never NaN/0) when no step carried a
+ * ratio — matches the spread-conditional omit idiom used throughout this file.
+ */
+function finalizeCacheRow(agent_type: string, acc: CacheAccumulator): CacheEfficiencyByAgent {
+  const meanRatio =
+    acc.ratios.length > 0
+      ? acc.ratios.reduce((sum, r) => sum + r, 0) / acc.ratios.length
+      : undefined;
+  return {
+    agent_type,
+    sample_count: acc.sampleCount,
+    total_cache_creation_tokens: acc.totalCreationTokens,
+    total_cache_read_tokens: acc.totalReadTokens,
+    ...(meanRatio !== undefined ? { mean_cache_hit_ratio: meanRatio } : {}),
+  };
+}
+
+/**
+ * Compute a per-agent-type cache-efficiency rollup over already-archived
+ * step_outcomes.metrics. Pure — no I/O.
+ *
+ * An agent_type with zero sampled steps contributes no row. Result sorted
+ * by agent_type (localeCompare).
+ */
+export function computeCacheEfficiencyByAgent(summaries: RunSummary[]): CacheEfficiencyByAgent[] {
+  const byAgent = buildCacheAccumulatorsByAgent(summaries);
+
+  const result: CacheEfficiencyByAgent[] = [];
+  for (const [agent_type, acc] of byAgent) {
+    if (acc.sampleCount === 0) continue;
+    result.push(finalizeCacheRow(agent_type, acc));
+  }
+
+  return result.sort((a, b) => a.agent_type.localeCompare(b.agent_type));
 }
 
 /**

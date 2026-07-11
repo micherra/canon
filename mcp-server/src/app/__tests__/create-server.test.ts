@@ -61,7 +61,7 @@ function getToolNames(server: McpServer): Set<string> {
 //      registerArtifactTools — write-receipt completion gate, ADR-0043)
 //   −2 present_artifact + present_review (retired — dead serving Layer 2, PR #459 follow-up #7)
 //   +1 recall                     (this build, registerKnowledgeTools — unified-agent-memory M1)
-//   +1 reconcile_learnings        (this build, registerLearningTools — learning-resolution-flow ADR-0049)
+//   +1 reconcile_learnings        (this build, registerLearningTools — learning-resolution-flow ADR-0050)
 //   +1 backfill_applying_commit   (this build, registerEvolutionTools — post-apply-evolution Inc-3)
 //   New total: 69 tools (computed from a live run, not hand-counted)
 //

@@ -548,7 +548,7 @@ canon/
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes, check_context_staleness
 │       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023); record_applied_evolution + get_evolution_outcomes post-apply regression detection — applied_evolutions v12 (ADR-0034); backfill_applying_commit closes the applying_commit seam from Canon-Evolution git trailers (Inc-3)
 │       │   ├── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
-│       │   └── learning/        # reconcile_learnings — reconcile-on-read for .canon/proposed-learnings/{ts}/ (ADR-0049), closes the learning-resolution orphan leak
+│       │   └── learning/        # reconcile_learnings — reconcile-on-read for .canon/proposed-learnings/{ts}/ (ADR-0050), closes the learning-resolution orphan leak
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs; overlay trust boundary (UntrustedText opaque box, closed-domain validators, linear-time glob matcher — ADR-0026/ADR-0027)
 ├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve + evolution-regression-watch)
