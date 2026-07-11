@@ -217,6 +217,55 @@ advance_origin_main() {
   rm -rf "$temp_clone"
 }
 
+# write_gh_stub <stub_path> <body>
+# Creates an executable stub script at <stub_path> whose body is <body>.
+# Used to point CANON_ADR_GH_BIN at a hermetic, network-free fake gh binary.
+write_gh_stub() {
+  local stub_path="$1"
+  local body="$2"
+  {
+    echo "#!/bin/bash"
+    echo "$body"
+  } > "$stub_path"
+  chmod +x "$stub_path"
+}
+
+# run_test_in_dir_no_pattern <description> <expected_exit> <no_pattern> <repo_dir> <stdin_json>
+# Validates exit code AND that stdout+stderr does NOT contain no_pattern.
+run_test_in_dir_no_pattern() {
+  local description="$1"
+  local expected_exit="$2"
+  local no_pattern="$3"
+  local repo_dir="$4"
+  local stdin_json="$5"
+
+  local tmpout
+  tmpout=$(mktemp)
+
+  local actual_exit=0
+  (cd "$repo_dir" && echo "$stdin_json" | bash "$HOOK" > "$tmpout" 2>&1) || actual_exit=$?
+  local output
+  output=$(cat "$tmpout")
+  rm -f "$tmpout"
+
+  local ok=true
+  [[ "$actual_exit" -eq "$expected_exit" ]] || ok=false
+  if echo "$output" | grep -q "$no_pattern"; then
+    ok=false
+  fi
+
+  if [[ "$ok" == "true" ]]; then
+    echo "  PASS: $description"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: $description"
+    echo "        expected exit=$expected_exit, got exit=$actual_exit"
+    echo "        expected output NOT to contain: '$no_pattern'"
+    echo "        actual output: '$output'"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 echo ""
 echo "=== adr-number-check.sh tests ==="
 echo ""
@@ -724,6 +773,174 @@ add_adr "$CASE28_REPO" "docs/adr/0022-other.md"
 
 run_test_in_dir 'git$IFS push with collision → exit 2' 2 \
   "$CASE28_REPO" '{"command":"git$IFS push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 29 (dc-01): Concurrent open-PR collision found → CANON WARNING, exit 0
+# origin has 0022-existing.md; branch adds 0030-new-unique.md (no committed-main
+# collision). A DIFFERENT open PR (#501, other-branch) also ADDs docs/adr/0030-*.md.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 29 (dc-01): concurrent open-PR collision found → CANON WARNING, exit 0 --"
+
+CASE29_REPO="$MASTER_TMP/case29"
+setup_repo_with_origin "$CASE29_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE29_REPO" "docs/adr/0030-new-unique.md"
+
+CASE29_GH="$MASTER_TMP/case29-gh-stub.sh"
+write_gh_stub "$CASE29_GH" 'cat <<JSON
+[
+  {"number": 501, "headRefName": "other-branch", "files": [
+    {"path": "docs/adr/0030-other-slug.md", "changeType": "ADDED"}
+  ]}
+]
+JSON'
+
+CANON_ADR_GH_BIN="$CASE29_GH" run_test_in_dir_with_output \
+  "dc-01: concurrent open-PR collision → CANON WARNING, exit 0" 0 \
+  "CANON WARNING" "$CASE29_REPO" '{"command":"git push origin feature"}'
+
+CANON_ADR_GH_BIN="$CASE29_GH" run_test_in_dir_with_output \
+  "dc-01: WARNING names the colliding number 0030" 0 \
+  "0030" "$CASE29_REPO" '{"command":"git push origin feature"}'
+
+CANON_ADR_GH_BIN="$CASE29_GH" run_test_in_dir_with_output \
+  "dc-01: WARNING names the other PR (#501)" 0 \
+  "#501" "$CASE29_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 30 (dc-02a): gh binary absent → skip silently, exit 0
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 30 (dc-02a): gh absent → skip, exit 0 --"
+
+CASE30_REPO="$MASTER_TMP/case30"
+setup_repo_with_origin "$CASE30_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE30_REPO" "docs/adr/0023-new-unique.md"
+
+CANON_ADR_GH_BIN="/nonexistent/gh-not-installed-$$" run_test_in_dir_no_pattern \
+  "dc-02a: gh absent → exit 0, no concurrent-claim warning" 0 \
+  "CANON WARNING" "$CASE30_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 31 (dc-02b): gh errors (unauthed/offline/any non-zero) → skip, exit 0
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 31 (dc-02b): gh error stub (exit 1) → skip, exit 0 --"
+
+CASE31_REPO="$MASTER_TMP/case31"
+setup_repo_with_origin "$CASE31_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE31_REPO" "docs/adr/0023-new-unique.md"
+
+CASE31_GH="$MASTER_TMP/case31-gh-stub.sh"
+write_gh_stub "$CASE31_GH" 'echo "HTTP 401: Bad credentials" >&2
+exit 1'
+
+CANON_ADR_GH_BIN="$CASE31_GH" run_test_in_dir_no_pattern \
+  "dc-02b: gh error stub → exit 0, no concurrent-claim warning" 0 \
+  "CANON WARNING" "$CASE31_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 32 (dc-02c): gh returns malformed/non-JSON output → skip, exit 0
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 32 (dc-02c): gh malformed JSON → skip, exit 0 --"
+
+CASE32_REPO="$MASTER_TMP/case32"
+setup_repo_with_origin "$CASE32_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE32_REPO" "docs/adr/0023-new-unique.md"
+
+CASE32_GH="$MASTER_TMP/case32-gh-stub.sh"
+write_gh_stub "$CASE32_GH" 'echo "not json"'
+
+CANON_ADR_GH_BIN="$CASE32_GH" run_test_in_dir_no_pattern \
+  "dc-02c: gh malformed JSON → exit 0, no concurrent-claim warning" 0 \
+  "CANON WARNING" "$CASE32_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 33 (dc-04): gh hangs → timeboxed skip, hook returns promptly, exit 0
+# CANON_ADR_OPENPR_TIMEOUT=1 keeps this test fast; the stub sleeps far longer.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 33 (dc-04): gh hang + timeout=1 → timeboxed skip, exit 0 --"
+
+CASE33_REPO="$MASTER_TMP/case33"
+setup_repo_with_origin "$CASE33_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE33_REPO" "docs/adr/0023-new-unique.md"
+
+CASE33_GH="$MASTER_TMP/case33-gh-stub.sh"
+write_gh_stub "$CASE33_GH" 'sleep 30'
+
+CANON_ADR_GH_BIN="$CASE33_GH" CANON_ADR_OPENPR_TIMEOUT=1 run_test_in_dir_no_pattern \
+  "dc-04: gh hang + timeout=1 → exit 0, no concurrent-claim warning" 0 \
+  "CANON WARNING" "$CASE33_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 34: no-false-positive — another open PR adds a DIFFERENT ADR number →
+# no warning, exit 0
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 34: other open PR adds a different number → no warning, exit 0 --"
+
+CASE34_REPO="$MASTER_TMP/case34"
+setup_repo_with_origin "$CASE34_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE34_REPO" "docs/adr/0023-new-unique.md"
+
+CASE34_GH="$MASTER_TMP/case34-gh-stub.sh"
+write_gh_stub "$CASE34_GH" 'cat <<JSON
+[
+  {"number": 502, "headRefName": "other-branch", "files": [
+    {"path": "docs/adr/0099-unrelated.md", "changeType": "ADDED"}
+  ]}
+]
+JSON'
+
+CANON_ADR_GH_BIN="$CASE34_GH" run_test_in_dir_no_pattern \
+  "no-false-positive: different number on other PR → exit 0, no warning" 0 \
+  "CANON WARNING" "$CASE34_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 35: self-branch exclusion — the "other" PR in the gh listing is actually
+# OUR OWN branch (headRefName == "feature") claiming the same number → excluded
+# from comparison, no warning, exit 0
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 35: self-branch excluded from comparison → no warning, exit 0 --"
+
+CASE35_REPO="$MASTER_TMP/case35"
+setup_repo_with_origin "$CASE35_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE35_REPO" "docs/adr/0030-new-unique.md"
+
+CASE35_GH="$MASTER_TMP/case35-gh-stub.sh"
+write_gh_stub "$CASE35_GH" 'cat <<JSON
+[
+  {"number": 503, "headRefName": "feature", "files": [
+    {"path": "docs/adr/0030-new-unique.md", "changeType": "ADDED"}
+  ]}
+]
+JSON'
+
+CANON_ADR_GH_BIN="$CASE35_GH" run_test_in_dir_no_pattern \
+  "self-branch exclusion: own PR listed → exit 0, no warning" 0 \
+  "CANON WARNING" "$CASE35_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 36: committed-main regression — a real committed-main collision still
+# BLOCKS (exit 2) even with CANON_ADR_GH_BIN pointed at an error stub. Proves
+# the open-PR scan never downgrades or is even reached on the fail-closed path.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 36: committed-main collision still BLOCKS with gh error stub present --"
+
+CASE36_REPO="$MASTER_TMP/case36"
+setup_repo_with_origin "$CASE36_REPO" "docs/adr/0022-candidate-injection.md"
+add_adr "$CASE36_REPO" "docs/adr/0022-other-slug.md"
+
+CASE36_GH="$MASTER_TMP/case36-gh-stub.sh"
+write_gh_stub "$CASE36_GH" 'exit 1'
+
+CANON_ADR_GH_BIN="$CASE36_GH" run_test_in_dir_with_output \
+  "committed-main regression: collision still exit 2 with gh error stub" 2 \
+  "CANON BLOCK" "$CASE36_REPO" '{"command":"git push origin feature"}'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summary
