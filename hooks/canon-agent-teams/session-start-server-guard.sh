@@ -37,7 +37,7 @@ fi
 # Part A: Reaper — validate and optionally kill stale Canon server process
 # ---------------------------------------------------------------------------
 if [[ -f "$PID_FILE" ]]; then
-  STORED_PID=$(head -n 1 "$PID_FILE" 2>/dev/null | tr -d '[:space:]') || true
+  STORED_PID=$(head -n 1 "$PID_FILE" 2>/dev/null | tr -d '[:space:]') || true  # DOCUMENTED FAIL-OPEN -- head/tr failure or empty PID file leaves STORED_PID empty; the subsequent [[ -n "$STORED_PID" ]] && [[ "$STORED_PID" =~ ^[0-9]+$ ]] guard below handles the empty/malformed case, so a read failure must not abort the reaper
 
   if [[ -n "$STORED_PID" ]] && [[ "$STORED_PID" =~ ^[0-9]+$ ]]; then
     # Check if process is alive
