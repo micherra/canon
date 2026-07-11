@@ -40,9 +40,17 @@ tests supply fakes directly rather than mocking modules.
   `target_file` -> `target`-as-principle-id, first existing of
   `principles/**/<id>.md` / `.canon/principles/**/<id>.md`) exists on disk AND
   `git log --since=<proposal date> -- <target>` shows a commit — the
-  conservative evidence predicate (decision 0047; guards against
-  false-positive auto-resolve). INFORMATIONAL proposals are never reconciled
-  — they have no apply-mapping.
+  evidence predicate (decision 0047; guards against false-positive
+  auto-resolve). A commit that CREATED the target is sufficient on its own;
+  a commit that only MODIFIED an already-existing target must additionally
+  reference the proposal (its id, or the target's principle id) in the
+  commit message — an unrelated churn commit to the same (often
+  frequently-edited) file is not evidence. The proposal-date bound uses the
+  frontmatter `created` field when it carries a time component, falling back
+  to the full-precision dir-timestamp when `created` is date-only (a
+  date-only value collapses to an implicit midnight and can falsely count a
+  same-day-earlier commit as post-dating an evening proposal). INFORMATIONAL
+  proposals are never reconciled — they have no apply-mapping.
 - **Freshness** (decision `freshness-policy`): `FRESHNESS_DAYS = 30` default,
   overridable via `freshness_days`. A stale set (`age > freshness_days`) that
   is fully informational (zero actionable survivors after reconcile)
@@ -61,7 +69,11 @@ tests supply fakes directly rather than mocking modules.
   `console.warn` is always emitted on the fail-open branch.
 - **Append-only / move-never-delete**: `learning.jsonl` is only ever appended
   to (new `"accepted"`/`"archived"` lines); a proposal file is only ever
-  `rename`d into a resolution subdir, never `rm`'d.
+  `rename`d into a resolution subdir, never `rm`'d. The append happens
+  immediately after each proposal's own rename (`moveAndAppend`), not batched
+  at the end of the apply loop — so a crash partway through applying a plan
+  never leaves an already-moved file with no audit line
+  (`explicit-transaction-boundaries`).
 - **Idempotent**: reconciled/archived files no longer appear as top-level
   `.md` files in their `{ts}/` dir on the next run, so a second run over
   already-resolved state is a zero-mutation no-op by construction — no

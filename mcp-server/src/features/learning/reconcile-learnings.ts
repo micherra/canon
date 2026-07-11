@@ -5,11 +5,17 @@
  * Scans ONLY the timestamped-dir review surface (`.canon/proposed-learnings/{ts}/`
  * — never the loose top-level files, PROBE-FINDINGS P4). For each pending
  * ACTIONABLE proposal whose target resolves on disk AND a commit touching that
- * target post-dates the proposal (the conservative evidence predicate,
- * decision 0047), moves the proposal to `applied/` and appends an accepted
- * `learning.jsonl` entry. Also computes freshness (decision `freshness-policy`):
- * a stale, fully-informational set auto-archives to `stale/`; a stale set with
- * an actionable survivor is flagged only.
+ * target post-dates the proposal (the evidence predicate, decision 0047),
+ * moves the proposal to `applied/` and appends an accepted `learning.jsonl`
+ * entry immediately after its own move (per-file interleaving — see
+ * `moveAndAppend` — so a crash mid-apply never leaves a moved file with no
+ * audit line). A commit that CREATED the target is sufficient evidence on
+ * its own; a commit that only MODIFIED an already-existing target must
+ * additionally reference the proposal (id or principle id) in its message —
+ * an unrelated churn commit to the same file is not evidence. Also computes
+ * freshness (decision `freshness-policy`): a stale, fully-informational set
+ * auto-archives to `stale/`; a stale set with an actionable survivor is
+ * flagged only.
  *
  * Tension (documented per `fail-closed-by-default` vs `observable-best-effort`):
  * safety gates fail CLOSED. This is an advisory quality mechanism, not a safety
@@ -51,15 +57,39 @@ export type ReconcileFsSeam = {
   appendFile(path: string, data: string): Promise<void>;
 };
 
+/**
+ * Evidence about the most recent commit satisfying the post-proposal-commit
+ * predicate for a target path.
+ */
+export type CommitEvidence = {
+  /** Short commit hash. */
+  hash: string;
+  /**
+   * True when THIS commit's diff created `targetPath` (a genuine new-file
+   * addition). File creation is sufficient evidence on its own — the
+   * relevance check below only applies when this is false (the target
+   * already existed and the commit only modified it).
+   */
+  createdFile: boolean;
+  /** Commit subject + body — used for the content-linkage relevance check. */
+  message: string;
+};
+
 /** Git operations reconcile needs, as an injectable seam. */
 export type ReconcileGitSeam = {
   /**
-   * Returns the short hash of the most recent commit touching `targetPath` at
-   * or after `sinceIso`, or null when no such commit exists. This is the
+   * Returns evidence for the most recent commit touching `targetPath` at or
+   * after `sinceIso`, or null when no such commit exists. This is the base
    * evidence predicate: a proposal only reconciles when its target both
-   * exists on disk AND has a commit that post-dates the proposal.
+   * exists on disk AND has a commit that post-dates the proposal. Whether
+   * that evidence is SUFFICIENT (creation vs. relevance-checked modification)
+   * is decided by the caller — see `evaluateActionableProposal`.
    */
-  latestCommitSince(projectDir: string, targetPath: string, sinceIso: string): string | null;
+  latestCommitSince(
+    projectDir: string,
+    targetPath: string,
+    sinceIso: string,
+  ): CommitEvidence | null;
 };
 
 async function readDirDefault(path: string): Promise<DirEntry[]> {
@@ -91,16 +121,29 @@ export const defaultFsSeam: ReconcileFsSeam = {
   rename: (from, to) => fs.rename(from, to),
 };
 
-/** Default git seam — real `git log` via the shared git adapter. */
+/** Default git seam — real `git log`/`git show` via the shared git adapter. */
 export const defaultGitSeam: ReconcileGitSeam = {
   latestCommitSince(projectDir, targetPath, sinceIso) {
     const result = gitExec(
-      ["log", "--since", sinceIso, "-n", "1", "--format=%h", "--", targetPath],
+      ["log", "--since", sinceIso, "-n", "1", "--format=%h%x00%B", "--", targetPath],
       projectDir,
     );
     if (!result.ok) return null;
-    const hash = result.stdout.trim();
-    return hash.length > 0 ? hash : null;
+    const raw = result.stdout.trim();
+    if (raw.length === 0) return null;
+
+    const sep = raw.indexOf("\0");
+    const hash = sep === -1 ? raw : raw.slice(0, sep);
+    const message = sep === -1 ? "" : raw.slice(sep + 1).trim();
+
+    // Was targetPath ADDED (not just modified) by this specific commit?
+    const statusResult = gitExec(
+      ["show", "--format=", "--name-status", hash, "--", targetPath],
+      projectDir,
+    );
+    const createdFile = statusResult.ok && /^A\s/m.test(statusResult.stdout.trim());
+
+    return { createdFile, hash, message };
   },
 };
 
@@ -156,6 +199,27 @@ const TS_DIR_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/;
 /** Converts a proposal-dir timestamp (`2026-05-29T22-00-00Z`) into a real ISO instant. */
 function dirTimestampToIso(tsDir: string): string {
   return tsDir.replace(/T(\d{2})-(\d{2})-(\d{2})Z$/, "T$1:$2:$3Z");
+}
+
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** True for a bare `YYYY-MM-DD` value with no time component. */
+function isDateOnly(value: string): boolean {
+  return DATE_ONLY_PATTERN.test(value);
+}
+
+/**
+ * Resolves the proposal's real instant for the evidence-predicate `--since`
+ * bound. A date-only frontmatter `created` (e.g. `2026-05-29`) collapses to
+ * an implicit midnight when handed to `git log --since`, which can falsely
+ * count a same-day-earlier commit as post-dating an evening proposal — so
+ * date-only values fall back to the full-precision dir-timestamp instead. A
+ * `created` value that already carries a time component is used verbatim.
+ */
+function resolveProposalDateIso(raw: string, tsDir: string): string {
+  const created = extractYamlField(raw, "created");
+  if (created && !isDateOnly(created)) return created;
+  return dirTimestampToIso(tsDir);
 }
 
 function ageDaysFor(tsDir: string): number {
@@ -239,9 +303,25 @@ type ProposalOutcome =
   | { kind: "survivor"; skip: SkippedItem };
 
 /**
+ * Conservative content-linkage check for a MODIFIED (pre-existing) target: a
+ * commit that only touched an already-existing file is evidence only when
+ * its message references the proposal's own id or the target's principle id
+ * (its filename without extension). File-creation is sufficient evidence on
+ * its own and never reaches this check — see `evaluateActionableProposal`.
+ */
+function isRelevantCommit(message: string, proposalId: string | null, targetPath: string): boolean {
+  const principleId = targetPath.split("/").pop()?.replace(/\.md$/, "") ?? null;
+  const needles = [proposalId, principleId].filter((v): v is string => Boolean(v));
+  return needles.some((needle) => message.includes(needle));
+}
+
+/**
  * Evaluates a single actionable proposal: resolves its target, then checks
- * the conservative evidence predicate (target exists on disk AND a commit
- * touching it post-dates the proposal). Returns either a planned reconcile
+ * the evidence predicate (target exists on disk AND a commit touching it
+ * post-dates the proposal). For a target the commit only MODIFIED (it
+ * already existed), the commit must additionally reference the proposal —
+ * an unrelated churn commit is not evidence. For a target the commit itself
+ * CREATED, creation alone is sufficient. Returns either a planned reconcile
  * action or a "survivor" outcome (stays pending, with the reason it didn't
  * reconcile).
  */
@@ -262,17 +342,26 @@ async function evaluateActionableProposal(
   const exists = await ctx.fs.fileExists(join(ctx.projectDir, targetPath));
   if (!exists) return survivor(`target does not exist on disk: ${targetPath}`);
 
-  const proposalDateIso = extractYamlField(raw, "created") ?? dirTimestampToIso(tsDir);
-  const commit = ctx.git.latestCommitSince(ctx.projectDir, targetPath, proposalDateIso);
-  if (commit === null) {
+  const proposalDateIso = resolveProposalDateIso(raw, tsDir);
+  const evidence = ctx.git.latestCommitSince(ctx.projectDir, targetPath, proposalDateIso);
+  if (evidence === null) {
     return survivor(`no commit touching ${targetPath} post-dates the proposal`);
+  }
+
+  if (!evidence.createdFile) {
+    const proposalId = extractYamlField(raw, "id");
+    if (!isRelevantCommit(evidence.message, proposalId, targetPath)) {
+      return survivor(
+        `commit ${evidence.hash} touches ${targetPath} but does not reference the proposal — no content-linkage evidence`,
+      );
+    }
   }
 
   return {
     action: {
-      commit,
+      commit: evidence.hash,
       file,
-      reason: `reconciled: ${targetPath} shipped in ${commit}`,
+      reason: `reconciled: ${targetPath} shipped in ${evidence.hash}`,
       targetPath,
       tsDir,
     },
@@ -433,6 +522,28 @@ function jsonlLine(entry: Record<string, unknown>): string {
   return JSON.stringify({ timestamp: new Date().toISOString(), ...entry });
 }
 
+/** Bundles the fs seam + jsonl path so `moveAndAppend` stays under the max-params lint. */
+type ApplyContext = { fs: ReconcileFsSeam; jsonlPath: string };
+
+/**
+ * Moves one file into a resolution subdir and appends its audit line
+ * IMMEDIATELY afterward (per-file interleaving, not batched at the end) —
+ * so a crash partway through `applyPlan` never leaves a moved file with no
+ * `learning.jsonl` entry (`explicit-transaction-boundaries`). Rename-then-
+ * append (not append-then-rename) keeps retries idempotency-safe: a retry
+ * re-enumerates only files still pending, so append-first would risk a
+ * duplicate audit line for the same move on retry.
+ */
+async function moveAndAppend(
+  ctx: ApplyContext,
+  from: string,
+  to: string,
+  entry: Record<string, unknown>,
+): Promise<void> {
+  await ctx.fs.rename(from, to);
+  await ctx.fs.appendFile(ctx.jsonlPath, `${jsonlLine(entry)}\n`);
+}
+
 async function applyPlan(
   fsSeam: ReconcileFsSeam,
   projectDir: string,
@@ -440,42 +551,31 @@ async function applyPlan(
   plan: Plan,
 ): Promise<void> {
   const root = join(projectDir, ".canon", "proposed-learnings");
-  const jsonlLines: string[] = [];
+  const ctx: ApplyContext = { fs: fsSeam, jsonlPath: join(projectDir, ".canon", "learning.jsonl") };
 
   for (const action of plan.reconcileActions) {
     const tsDirPath = join(root, action.tsDir);
     const appliedDir = join(tsDirPath, "applied");
     await fsSeam.mkdir(appliedDir);
-    await fsSeam.rename(join(tsDirPath, action.file), join(appliedDir, action.file));
-    jsonlLines.push(
-      jsonlLine({
-        action: "accepted",
-        commit: action.commit,
-        proposal_id: action.file,
-        reason: action.reason,
-        target_path: action.targetPath,
-      }),
-    );
+    await moveAndAppend(ctx, join(tsDirPath, action.file), join(appliedDir, action.file), {
+      action: "accepted",
+      commit: action.commit,
+      proposal_id: action.file,
+      reason: action.reason,
+      target_path: action.targetPath,
+    });
   }
 
   for (const action of plan.archiveActions) {
     const tsDirPath = join(root, action.tsDir);
     const staleDir = join(tsDirPath, "stale");
     await fsSeam.mkdir(staleDir);
-    await fsSeam.rename(join(tsDirPath, action.file), join(staleDir, action.file));
-    jsonlLines.push(
-      jsonlLine({
-        action: "archived",
-        age_days: action.ageDays,
-        proposal_id: action.file,
-        reason: `stale > ${freshnessDays}d, informational-only`,
-      }),
-    );
-  }
-
-  if (jsonlLines.length > 0) {
-    const jsonlPath = join(projectDir, ".canon", "learning.jsonl");
-    await fsSeam.appendFile(jsonlPath, `${jsonlLines.join("\n")}\n`);
+    await moveAndAppend(ctx, join(tsDirPath, action.file), join(staleDir, action.file), {
+      action: "archived",
+      age_days: action.ageDays,
+      proposal_id: action.file,
+      reason: `stale > ${freshnessDays}d, informational-only`,
+    });
   }
 }
 

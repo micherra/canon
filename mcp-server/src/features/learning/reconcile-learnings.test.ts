@@ -55,9 +55,32 @@ function makeFakeFs(opts: {
   };
 }
 
-function makeFakeGit(hasCommit: boolean, commitHash = "abc1234"): ReconcileGitSeam {
+/**
+ * `createdFile: true` models a commit that CREATED targetPath — sufficient
+ * evidence on its own (creation is unambiguous). `createdFile: false` (the
+ * default) models a commit that only MODIFIED an already-existing target —
+ * this requires the relevance check (`message` content-linkage) to reconcile.
+ */
+function makeFakeGit(
+  hasCommit: boolean,
+  opts: { hash?: string; createdFile?: boolean; message?: string } = {},
+): ReconcileGitSeam {
+  const { hash = "abc1234", createdFile = false, message = "" } = opts;
   return {
-    latestCommitSince: vi.fn(() => (hasCommit ? commitHash : null)),
+    latestCommitSince: vi.fn(() => (hasCommit ? { createdFile, hash, message } : null)),
+  };
+}
+
+/**
+ * Time-aware fake for the date-only `created` boundary tests: returns a
+ * commit only when `commitIso` is at-or-after the requested `sinceIso`,
+ * mirroring `git log --since` semantics.
+ */
+function makeTimeAwareFakeGit(commitIso: string, hash = "abc1234"): ReconcileGitSeam {
+  return {
+    latestCommitSince: vi.fn((_projectDir: string, _targetPath: string, sinceIso: string) =>
+      new Date(commitIso) >= new Date(sinceIso) ? { createdFile: true, hash, message: "" } : null,
+    ),
   };
 }
 
@@ -65,11 +88,11 @@ const ROOT = `${PROJECT_DIR}/.canon/proposed-learnings`;
 const TS_DIR = "2026-05-29T22-00-00Z";
 const TS_DIR_PATH = `${ROOT}/${TS_DIR}`;
 
-function actionableProposal(targetPath: string): string {
+function actionableProposal(targetPath: string, type = "new-convention"): string {
   return [
     "---",
     "id: sug_TEST1",
-    "type: new-convention",
+    `type: ${type}`,
     `target_path: "${targetPath}"`,
     "created: 2026-05-29",
     "---",
@@ -95,7 +118,9 @@ describe("reconcileLearnings", () => {
       },
       existingPaths: new Set([`${PROJECT_DIR}/${targetPath}`]),
     });
-    const git = makeFakeGit(true, "deadbeef");
+    // new-convention: the target is CREATED by this commit — creation alone
+    // is sufficient evidence (Fix 3 relevance gate does not apply).
+    const git = makeFakeGit(true, { createdFile: true, hash: "deadbeef" });
 
     const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
 
@@ -133,7 +158,7 @@ describe("reconcileLearnings", () => {
       files: {},
       existingPaths: new Set([`${PROJECT_DIR}/${targetPath}`]),
     });
-    const git = makeFakeGit(true, "deadbeef");
+    const git = makeFakeGit(true, { createdFile: true, hash: "deadbeef" });
 
     const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
 
@@ -268,7 +293,7 @@ describe("reconcileLearnings", () => {
       },
       existingPaths: new Set([`${PROJECT_DIR}/${targetPath}`]),
     });
-    const git = makeFakeGit(true, "deadbeef");
+    const git = makeFakeGit(true, { createdFile: true, hash: "deadbeef" });
 
     const result = await reconcileLearnings(
       { project_dir: PROJECT_DIR, dry_run: true },
@@ -304,7 +329,7 @@ describe("reconcileLearnings", () => {
         [`${ROOT}/sug_LOOSE1-fixture.md`]: actionableProposal("principles/conventions/x.md"),
       },
     });
-    const git = makeFakeGit(true, "deadbeef");
+    const git = makeFakeGit(true, { createdFile: true, hash: "deadbeef" });
 
     const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
 
@@ -316,5 +341,207 @@ describe("reconcileLearnings", () => {
 
   it("exports a documented FRESHNESS_DAYS default of 30", () => {
     expect(FRESHNESS_DAYS).toBe(30);
+  });
+
+  // ---------------------------------------------------------------------
+  // Fix 1 — transaction boundary: the learning.jsonl audit line for a
+  // successfully-moved proposal must exist even if a LATER rename in the
+  // same apply pass throws.
+  // ---------------------------------------------------------------------
+
+  it("(h) transaction boundary — a rename that throws mid-loop still leaves the audit line for the earlier, already-moved proposal", async () => {
+    const targetPath = "principles/conventions/some-convention.md";
+    const fs = makeFakeFs({
+      dirs: {
+        [ROOT]: [{ name: TS_DIR, isDirectory: true }],
+        [TS_DIR_PATH]: [
+          { name: "sug_TEST1-fixture.md", isDirectory: false },
+          { name: "sug_TEST2-fixture.md", isDirectory: false },
+        ],
+      },
+      files: {
+        [`${TS_DIR_PATH}/sug_TEST1-fixture.md`]: actionableProposal(targetPath),
+        [`${TS_DIR_PATH}/sug_TEST2-fixture.md`]: actionableProposal(targetPath),
+      },
+      existingPaths: new Set([`${PROJECT_DIR}/${targetPath}`]),
+    });
+    const git = makeFakeGit(true, { createdFile: true, hash: "deadbeef" });
+
+    // Simulate a crash on the SECOND rename. If append-after-every-rename
+    // (per-file interleaving) is real, the FIRST proposal's audit line must
+    // already be on disk before this throw propagates.
+    const originalRename = fs.rename.bind(fs);
+    let renameCalls = 0;
+    fs.rename = async (from: string, to: string) => {
+      renameCalls += 1;
+      if (renameCalls === 2) throw new Error("simulated crash mid-apply");
+      return originalRename(from, to);
+    };
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+
+    expect(result.ok).toBe(false); // the crash propagates to the fail-open handler
+    expect(fs.renamed).toHaveLength(1); // only the first rename succeeded
+    expect(fs.appended).toHaveLength(1); // its audit line must already be written
+    const parsed = JSON.parse(fs.appended[0].data.trim());
+    expect(parsed.proposal_id).toBe("sug_TEST1-fixture.md");
+    warnSpy.mockRestore();
+  });
+
+  // ---------------------------------------------------------------------
+  // Fix 2 — date-only `created` intra-day boundary: a date-only `created`
+  // must fall back to the full-precision dir-timestamp, not a lossy midnight.
+  // ---------------------------------------------------------------------
+
+  it("(i) date-only created — a same-day-earlier commit does NOT falsely reconcile a date-only-created proposal", async () => {
+    const targetPath = "principles/conventions/some-convention.md";
+    // TS_DIR is 2026-05-29T22-00-00Z (10pm) — the proposal's REAL instant.
+    // Its frontmatter `created` is date-only ("2026-05-29"). A commit landed
+    // earlier the same day (08:00 UTC) — genuinely BEFORE the proposal, but
+    // a lossy midnight-parse of the date-only value would treat it as after.
+    const fs = makeFakeFs({
+      dirs: {
+        [ROOT]: [{ name: TS_DIR, isDirectory: true }],
+        [TS_DIR_PATH]: [{ name: "sug_TEST1-fixture.md", isDirectory: false }],
+      },
+      files: {
+        [`${TS_DIR_PATH}/sug_TEST1-fixture.md`]: actionableProposal(targetPath),
+      },
+      existingPaths: new Set([`${PROJECT_DIR}/${targetPath}`]),
+    });
+    const git = makeTimeAwareFakeGit("2026-05-29T08:00:00Z");
+
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok result");
+    expect(result.reconciled).toHaveLength(0);
+    expect(fs.renamed).toHaveLength(0);
+  });
+
+  it("(j) full-timestamp created is used verbatim, not overridden by the dir-timestamp fallback", async () => {
+    const targetPath = "principles/conventions/some-convention.md";
+    // created carries a full timestamp (23:00) LATER than the dir timestamp
+    // (22:00). A commit at 22:30 is after the dir-timestamp but before the
+    // full `created` value — it must NOT reconcile, proving the literal
+    // `created` timestamp won (not the dir-timestamp fallback).
+    const raw = [
+      "---",
+      "id: sug_TEST1",
+      "type: new-convention",
+      `target_path: "${targetPath}"`,
+      "created: 2026-05-29T23:00:00Z",
+      "---",
+      "",
+      "## Proposal",
+    ].join("\n");
+    const fs = makeFakeFs({
+      dirs: {
+        [ROOT]: [{ name: TS_DIR, isDirectory: true }],
+        [TS_DIR_PATH]: [{ name: "sug_TEST1-fixture.md", isDirectory: false }],
+      },
+      files: { [`${TS_DIR_PATH}/sug_TEST1-fixture.md`]: raw },
+      existingPaths: new Set([`${PROJECT_DIR}/${targetPath}`]),
+    });
+    const git = makeTimeAwareFakeGit("2026-05-29T22:30:00Z");
+
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok result");
+    expect(result.reconciled).toHaveLength(0);
+  });
+
+  // ---------------------------------------------------------------------
+  // Fix 3 — evidence-predicate relevance gap: for a target that already
+  // existed before the proposal (commit only MODIFIED it), an unrelated
+  // commit must not count as evidence. File-CREATION remains sufficient on
+  // its own, regardless of message content.
+  // ---------------------------------------------------------------------
+
+  it("(k) relevance — existing-file target + unrelated commit is NOT reconciled", async () => {
+    const targetPath = "principles/conventions/some-convention.md";
+    const fs = makeFakeFs({
+      dirs: {
+        [ROOT]: [{ name: TS_DIR, isDirectory: true }],
+        [TS_DIR_PATH]: [{ name: "sug_TEST1-fixture.md", isDirectory: false }],
+      },
+      files: {
+        [`${TS_DIR_PATH}/sug_TEST1-fixture.md`]: actionableProposal(targetPath, "severity-change"),
+      },
+      existingPaths: new Set([`${PROJECT_DIR}/${targetPath}`]),
+    });
+    // Commit exists and touches the (pre-existing) target, but its message
+    // has no content-linkage to the proposal or the target — an unrelated
+    // churn commit must not count as evidence.
+    const git = makeFakeGit(true, {
+      createdFile: false,
+      hash: "deadbeef",
+      message: "chore: fix a typo elsewhere in the file",
+    });
+
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok result");
+    expect(result.reconciled).toHaveLength(0);
+    expect(fs.renamed).toHaveLength(0);
+    expect(result.skipped.some((s) => s.file.includes("sug_TEST1-fixture.md"))).toBe(true);
+  });
+
+  it("(l) relevance — existing-file target + a commit referencing the proposal id IS reconciled", async () => {
+    const targetPath = "principles/conventions/some-convention.md";
+    const fs = makeFakeFs({
+      dirs: {
+        [ROOT]: [{ name: TS_DIR, isDirectory: true }],
+        [TS_DIR_PATH]: [{ name: "sug_TEST1-fixture.md", isDirectory: false }],
+      },
+      files: {
+        [`${TS_DIR_PATH}/sug_TEST1-fixture.md`]: actionableProposal(targetPath, "severity-change"),
+      },
+      existingPaths: new Set([`${PROJECT_DIR}/${targetPath}`]),
+    });
+    const git = makeFakeGit(true, {
+      createdFile: false,
+      hash: "deadbeef",
+      message: "docs(principles): apply sug_TEST1 severity change",
+    });
+
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok result");
+    expect(result.reconciled).toHaveLength(1);
+    expect(result.reconciled[0].commit).toBe("deadbeef");
+    expect(fs.renamed).toHaveLength(1);
+  });
+
+  it("(m) relevance — a new-file target CREATED by the commit reconciles regardless of message content", async () => {
+    const targetPath = "principles/conventions/some-convention.md";
+    const fs = makeFakeFs({
+      dirs: {
+        [ROOT]: [{ name: TS_DIR, isDirectory: true }],
+        [TS_DIR_PATH]: [{ name: "sug_TEST1-fixture.md", isDirectory: false }],
+      },
+      files: {
+        [`${TS_DIR_PATH}/sug_TEST1-fixture.md`]: actionableProposal(targetPath, "new-convention"),
+      },
+      existingPaths: new Set([`${PROJECT_DIR}/${targetPath}`]),
+    });
+    // File creation is sufficient evidence on its own — no id/principle
+    // reference in the message, yet this still reconciles.
+    const git = makeFakeGit(true, {
+      createdFile: true,
+      hash: "deadbeef",
+      message: "chore: unrelated commit subject",
+    });
+
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok result");
+    expect(result.reconciled).toHaveLength(1);
+    expect(fs.renamed).toHaveLength(1);
   });
 });
