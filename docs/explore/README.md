@@ -12,6 +12,7 @@ This directory holds design explorations, competed proposals, and research docum
 | **[automatic-craft-prerequisites-scoping.md](automatic-craft-prerequisites-scoping.md)** | Analysis of automatic prerequisite scoping for craft audits. |
 | **[orchestrator-scoped-principle-measurement-gap.md](orchestrator-scoped-principle-measurement-gap.md)** | Open: the 23-principle zero-citation measurement gap (decision recorded in ADR-0035) and the deferred orchestration-trace self-review surface (Option B) as its long-term fix. |
 | **[compilation-gradient.md](compilation-gradient.md)** | Open: pressure-tests the "compilation gradient" framing (PAW paper) against Canon's fuzzy→deterministic architecture; recommends a three-tier execution gradient and one probe-build. The recommended probe ran (see `docs/t2-probe-results.md` — INCONCLUSIVE, 0/96 retrievable). |
+| **[dag-workflow-compilation-probe.md](dag-workflow-compilation-probe.md)** | Resolved: compiles a real Canon build DAG into a `Workflow`-tool script (`workflows/dag-compile-probe.js`) and runs both a tail pipeline and a parallel implement+merge DAG green. Verdict: THESIS HOLDS — no blocker; generates the "merge-agent validated" evidence `workflow-integration/SYNTHESIS.md` §3.4 gates `canon-waves` (Inc 5) on, ~6 increments early. |
 
 ## Using these documents
 
