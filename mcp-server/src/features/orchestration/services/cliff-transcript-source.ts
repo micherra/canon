@@ -1,18 +1,25 @@
 /**
- * cliff-transcript-source — session-scoped resolver for a cliffed step's
- * Claude Code subagent transcript source file.
+ * cliff-transcript-source — session-scoped resolver for a subagent's Claude
+ * Code transcript source file, keyed by its spawn-name filename convention.
  *
- * A cliffed (started/planned) step never carries an `agent_id` anywhere in
- * durable state (see PROBE-FINDINGS.md Probe 0), so the existing
- * `captureTranscript` agent_id glob fallback cannot locate its source. This
- * module resolves the source via the `{agent_type}-{step_id}-{job_suffix}`
+ * Two consumers:
+ *   1. cliff-transcript-capture.ts — a cliffed (started/planned) step never
+ *      carries an `agent_id` anywhere in durable state (see
+ *      PROBE-FINDINGS.md Probe 0), so the existing `captureTranscript`
+ *      agent_id glob fallback cannot locate its source.
+ *   2. transcript-capture-hook.ts — the log_step completion path, as a
+ *      fallback for NAMED agents: the harness composite agent_id
+ *      (`<name>@session-<id>`) can never reconstruct the on-disk filename
+ *      either, so a raw exact-stat miss falls back to this resolver.
+ *
+ * Both resolve the source via the `{agent_type}-{step_id}-{job_suffix}`
  * spawn-name convention (PROBE-FINDINGS.md Probe 1) that Claude Code embeds
  * in each subagent's JSONL filename, scoped to the orchestrator's
  * `session_id` to avoid the wrong-attribution hazard measured in Probe 2
  * (10-38 cross-session candidates when unscoped).
  *
  * Pure-shaped query: filesystem reads only, no writes, no captureTranscript
- * call (that effect lives in cliff-transcript-capture.ts). Fail-open by
+ * call (that effect lives in the two consumers above). Fail-open by
  * construction — every branch returns a typed result, no throw escapes.
  */
 

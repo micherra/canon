@@ -505,7 +505,9 @@ export async function batchLogSteps(
 
   // 6. Run transcript captures in parallel (no await inside a loop).
   await Promise.all(
-    captureTasks.map(({ logInput, result, step }) => tryTranscriptCapture(step, result, logInput)),
+    captureTasks.map(({ logInput, result, step }) =>
+      tryTranscriptCapture(step, result, logInput, journal.session_id),
+    ),
   );
 
   // 7. If any captures added a transcript_path, persist those fields to the journal.
@@ -521,8 +523,9 @@ async function runStepCompletionSideEffects(
   step: JournalStep,
   result: LogStepResult,
   input: LogStepInput,
+  sessionId?: string,
 ): Promise<void> {
-  await tryTranscriptCapture(step, result, input);
+  await tryTranscriptCapture(step, result, input, sessionId);
   if (input.agent_id) {
     backfillContextProvenanceAgentId(input.workspace, input.step_id, input.agent_id);
   }
@@ -591,7 +594,7 @@ export async function logStep(input: LogStepInput): Promise<ToolResult<LogStepRe
   const result: LogStepResult = { status: input.status, step_id: input.step_id };
 
   if (input.status === "completed") {
-    await runStepCompletionSideEffects(step, result, input);
+    await runStepCompletionSideEffects(step, result, input, journal.session_id);
   }
 
   await writeJournal(input.workspace, journal);
