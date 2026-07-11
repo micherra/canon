@@ -246,11 +246,15 @@ Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include r
 
 ### Team Dispatch Protocol
 
-Three-phase loop: partition → spawn → consolidate. Reviewer is the concrete implementation; other team types follow the same pattern.
+Two fan-out axes, one mode-selection decision. **Horizontal**: three-phase loop — partition (disjoint file groups) → spawn (one reviewer per group, same lens) → consolidate (minority-finding verification probes). **Vertical**: same three-phase shape over the other axis — assign diverse concern lenses → spawn one reviewer per lens over the FULL file set → consolidate with inverted semantics (single-lens findings first-class, overlap = agreement, any-juror-blocks). Reviewer is the concrete implementation; other team types follow the horizontal pattern.
 
-Fan-out threshold: aggregate blast radius > ~50, OR multiple files with `impact_score > 0.7`, OR 3+ layers with cross-layer dependencies. Below threshold: single reviewer, full file list.
+| Mode | Trigger |
+|------|---------|
+| Horizontal fan-out | Aggregate blast radius > ~50, OR multiple files with `impact_score > 0.7`, OR 3+ layers with cross-layer dependencies. Below threshold: single reviewer, full file list. |
+| Vertical diverse-lens jury | `compute_autonomy_tier` returned the ADR-0044 sensitive-path deny-list floor (`require_security: true` + `require_adversarial: true`). |
+| Capped vertical×horizontal hybrid | Both triggers fire — bounded escape hatch (hard-capped M-lenses × K-partitions reviewer count), not the default. |
 
-Read `references/team-dispatch-protocol.md` BEFORE spawning a team-dispatched review.
+Full phases for both axes, the mode-selection preamble, and the hybrid cap: `references/team-dispatch-protocol.md`. Read it BEFORE spawning a team-dispatched review.
 
 ### Journal Protocol
 
@@ -503,6 +507,7 @@ initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named life
 - `run-evolve`: fires on the `evolve` loop's `evolve_due`; supervised → ask user first; autonomous/light-touch → auto-spawn after a cost-visibility `PushNotification`. Proposals are HITL-gated regardless of tier.
 - `auto-enable-merge`: fires on `ci_conclusion` pending→success while PR OPEN & not-already-armed → orchestrator runs `gh pr merge --auto --squash`; autonomous/light-touch unattended, supervised ASK-FIRST; runner read-only (dc-06).
 - `auto-update-branch`: fires on `merge_state` transitioning to `BEHIND`/`DIRTY` while PR OPEN → orchestrator merges `origin/main` into the PR branch and pushes; generated-artifact-only conflicts auto-resolved by regeneration, SOURCE conflicts always HITL; unattended in all tiers for the clean/generated-only path; runner read-only (dc-06).
+- `auto-staleness-refresh`: fires on `session-watch` docs/KG staleness episodes (`field=docs_stale|kg_age`, ADR-0045) — `kg_age` runs a local `codebase_graph` refresh (no PR); `docs_stale` dispatches an ephemeral `init_workspace` → scribe → shipper → PR (dec-03, no direct-push-to-main). Both fields unattended in ALL tiers — autonomous, light-touch, AND supervised — per an explicit plan-approval user override of the architect's ask-first-under-supervised recommendation (dec-04); the PR remains the human review gate regardless of tier. Notifies what was refreshed after completion. Runner read-only (dc-06).
 
 Read `references/loop-framework.md` BEFORE dispatching any loop or consuming an `ORCHESTRATOR_ACTION` line.
 
@@ -532,11 +537,11 @@ canon/
 │       │   ├── history/         # get_build_history, get_historical_artifacts, get_cross_run_analysis — cross-run analysis for learner
 │       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase E current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes, check_context_staleness
-│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023); record_applied_evolution + get_evolution_outcomes post-apply regression detection — applied_evolutions v12 (ADR-0034)
+│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023); record_applied_evolution + get_evolution_outcomes post-apply regression detection — applied_evolutions v12 (ADR-0034); backfill_applying_commit closes the applying_commit seam from Canon-Evolution git trailers (Inc-3)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs; overlay trust boundary (UntrustedText opaque box, closed-domain validators, linear-time glob matcher — ADR-0026/ADR-0027)
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve + evolution-regression-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── workflows/            # Managed workflow-script library — Canon's 6th managed-artifact class; plain-JS scripts invoked on-demand via Workflow `scriptPath`; lint enforced by `hooks/workflows-lint.sh`
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)

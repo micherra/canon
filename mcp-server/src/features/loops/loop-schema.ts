@@ -16,6 +16,7 @@
  */
 
 import { z } from "zod";
+import { checkDateMutatingFlags } from "./date-shell-guard.ts";
 
 // ── Built-in mutation denylist (dc-05 / Comment 1 fix) ────────────────────────
 // These tools mutate the build and are ALWAYS forbidden when mutates_build:false,
@@ -48,6 +49,7 @@ export const ORCHESTRATOR_ACTIONS = [
   "run-evolve",
   "auto-enable-merge",
   "auto-update-branch",
+  "auto-staleness-refresh",
 ] as const;
 export type OrchestratorAction = (typeof ORCHESTRATOR_ACTIONS)[number];
 
@@ -68,6 +70,9 @@ export const READ_ONLY_SHELL_COMMANDS: ReadonlyArray<string> = [
   "git rev-list",
   "git show",
   "git diff",
+  "git rev-parse",
+  "stat",
+  "date",
 ] as const;
 
 // ── Sub-schemas ────────────────────────────────────────────────────────────────
@@ -321,6 +326,7 @@ function checkGhApiMutatingFlags(cmd: string): string | null {
  * 1. Shell metacharacter rejection (;, &, |, <, >, `, $, (, ), \n, \r)
  * 2. Prefix allowlist — must be on READ_ONLY_SHELL_COMMANDS
  * 3. gh api mutating-flag rejection (only for 'gh api' entries)
+ * 4. date mutating-flag rejection (only for 'date' entries, staleness-01)
  *
  * Returns an error string on violation, null when safe.
  * Extracted from checkReadOnlyShell to keep both functions below complexity 12.
@@ -350,6 +356,11 @@ function checkSingleShellCommand(cmd: string): string | null {
   // Codex P1 check 2: gh api mutating-flag rejection
   if (cmd === "gh api" || cmd.startsWith("gh api ")) {
     return checkGhApiMutatingFlags(cmd);
+  }
+
+  // staleness-01 check: date mutating-flag rejection
+  if (cmd === "date" || cmd.startsWith("date ")) {
+    return checkDateMutatingFlags(cmd);
   }
 
   return null;

@@ -5,17 +5,26 @@
  *   - evaluate_candidate       — Phase-1 candidate fitness gate tool.
  *   - attribute_failure        — Phase-1 attribution consumer: joins provenance + failures.
  *   - select_mutation_targets  — Phase-1 mutator: selects mutation targets from attributions.
+ *   - record_applied_evolution — ADR-0034 authoritative apply-provenance write.
+ *   - get_evolution_outcomes   — ADR-0034 fail-open regression-hypothesis reader.
+ *   - backfill_applying_commit — Inc-3 best-effort back-fill of applying_commit from
+ *                                Canon-Evolution: git trailers.
  *
  * Lives in features/evolution/ (decisions evaluate-candidate-01, attribute-01, mutator-02).
  *
  * ADR-002: features/evolution/ NEVER imports node:child_process.
- * All subprocess work routes through @platform/adapters/process-adapter.ts.
+ * All subprocess work routes through @platform/adapters/process-adapter.ts or
+ * @platform/adapters/git-adapter.ts.
  */
 
 import {
   AttributeFailureInputSchema,
   attributeFailure,
 } from "@features/evolution/tools/attribute-failure.ts";
+import {
+  BackfillApplyingCommitInputSchema,
+  backfillApplyingCommit,
+} from "@features/evolution/tools/backfill-applying-commit.ts";
 import {
   EvaluateCandidateInputSchema,
   evaluateCandidate,
@@ -44,6 +53,15 @@ const RECORD_APPLIED_EVOLUTION_DESC =
   "this closes. Idempotent on proposal_id (re-apply upserts). Only " +
   "evolution-candidate proposals (carrying holdout scores) are recorded.";
 
+const BACKFILL_APPLYING_COMMIT_DESC =
+  "Back-fill applied_evolutions.applying_commit from Canon-Evolution: {proposal_id} git " +
+  "trailers (Inc-3, ADR-0034). Reads git log for trailer commits, parses id↔sha pairs " +
+  "(charset-guarded), and applies a null-only, idempotent UPDATE — never clobbers an " +
+  "already-set applying_commit. OBSERVABLE-BEST-EFFORT (not fail-closed): a git or " +
+  "storage failure returns a ToolResult error, but the caller surfaces a warning and " +
+  "does not block or undo an apply. record_applied_evolution stays the authoritative " +
+  "write path; this tool only reconciles a nullable column. Returns { updated, scanned }.";
+
 const GET_EVOLUTION_OUTCOMES_DESC =
   "Read a target-scoped, apply-anchored regression HYPOTHESIS for a recorded " +
   "evolution-candidate. Splits the target-scoped signal (reviews⋈violations per " +
@@ -54,7 +72,8 @@ const GET_EVOLUTION_OUTCOMES_DESC =
   "FAIL-OPEN: absent signal rows → insufficient verdict, not an error. " +
   "PROPOSAL_NOT_RECORDED when no applied_evolutions row exists.";
 
-export function registerEvolutionTools(server: McpServer): void {
+/** Phase-1 mutator pipeline: evaluate_candidate, attribute_failure, select_mutation_targets. */
+function registerMutatorPipelineTools(server: McpServer): void {
   server.registerTool(
     "evaluate_candidate",
     {
@@ -104,7 +123,10 @@ export function registerEvolutionTools(server: McpServer): void {
     },
     gatedWrapHandler(async (input) => selectMutationTargetsHandler(input, pluginDir)),
   );
+}
 
+/** ADR-0034 apply-provenance tools + Inc-3's back-fill reconciliation tool. */
+function registerApplyProvenanceTools(server: McpServer): void {
   server.registerTool(
     "record_applied_evolution",
     {
@@ -122,4 +144,18 @@ export function registerEvolutionTools(server: McpServer): void {
     },
     gatedWrapHandler(async (input) => getEvolutionOutcomes(input)),
   );
+
+  server.registerTool(
+    "backfill_applying_commit",
+    {
+      description: BACKFILL_APPLYING_COMMIT_DESC,
+      inputSchema: BackfillApplyingCommitInputSchema.shape,
+    },
+    gatedWrapHandler(async (input) => backfillApplyingCommit(input)),
+  );
+}
+
+export function registerEvolutionTools(server: McpServer): void {
+  registerMutatorPipelineTools(server);
+  registerApplyProvenanceTools(server);
 }
