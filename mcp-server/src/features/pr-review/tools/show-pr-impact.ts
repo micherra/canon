@@ -536,7 +536,14 @@ async function findLatestReview(
   }
   // No explicit filter: anchor the overlay to the requested diff's change set (prep).
   // NEVER fall back to global-latest — that cross-contaminates with unrelated PRs.
-  const matching = reviews.filter((r) => reviewMatchesPrepFiles(r.files, prepFiles));
+  // Also exclude principle-only reviews (the general report() path, which stores
+  // neither pr_number nor branch) — a file-set match alone isn't enough; without
+  // PR context, surfacing one as this PR's overlay is itself a contamination mode.
+  const matching = reviews.filter(
+    (r) =>
+      (r.pr_number !== undefined || r.branch !== undefined) &&
+      reviewMatchesPrepFiles(r.files, prepFiles),
+  );
   return matching.length > 0 ? matching[matching.length - 1] : null;
 }
 

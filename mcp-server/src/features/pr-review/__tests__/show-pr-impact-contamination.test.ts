@@ -98,6 +98,28 @@ describe("showPrImpact — cross-PR top-level contamination (no-filter path)", (
     expect(result.subgraph.nodes).toEqual([]);
   });
 
+  it("excludes a principle-only (report()) review from the no-filter overlay even when its files match prep", async () => {
+    const store = new DriftStore(tmpDir);
+
+    // Principle-only review — mimics the report()/recordReview path, which never
+    // sets pr_number or branch on the stored ReviewEntry. Its files happen to be
+    // an EXACT match for prep.files, so reviewMatchesPrepFiles alone would select
+    // it — but it carries no PR context and must not be surfaced as this PR's
+    // top-level overlay.
+    await store.appendReview(
+      makeReview({ files: ["src/featureB.ts"], review_id: "revPrincipleOnly" }),
+    );
+
+    vi.mocked(getPrReviewData).mockResolvedValue(
+      makePrepStub([{ path: "src/featureB.ts", status: "modified" }]) as never,
+    );
+
+    const result = await showPrImpact(tmpDir, { diff_base: "abc", worktree_path: tmpDir });
+
+    expect(result.has_review).toBe(false);
+    expect(result.review).toBeUndefined();
+  });
+
   it("leaves the explicit pr_number filter path unchanged", async () => {
     const store = new DriftStore(tmpDir);
 
