@@ -4,8 +4,9 @@
 # Runs on every session start (AFTER session-start-deps-install.sh):
 #   1. Reaper: validate + kill stale Canon server processes by PID file,
 #      never by port alone. Validates liveness AND cmdline identity.
-#   2. Zero-tool observability guard: probe /health; print loud WARN if
-#      server is unresponsive so the user knows to run /mcp to reconnect.
+#   2. Zero-tool observability guard: bounded /health poll; print loud WARN
+#      only if the server is still unresponsive after the poll window, so
+#      the user knows to run /mcp to reconnect.
 #
 # NOTE: A SessionStart hook cannot enumerate the live MCP tool list; the
 # health probe is the best-effort signal for connected-but-zero-tools.
