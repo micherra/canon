@@ -143,7 +143,7 @@
     "rules/agent-context-check.md": "896c6420cdcf507ece6a4809999a7883eb2d7162c91d60ce3868c3c08aff80e5",
     "rules/agent-context-sync.md": "60d4f90a8a61eab0b7ab24c405703dcef980f429608f1b055b1f68d1e3215fb4",
     "rules/agent-convergence-discipline.md": "fad156907f47d1f1b905e9d690f99c00c2ab97ca5f911a3a6aded3ce80fb967d",
-    "rules/agent-cross-session-chatter.md": "28cb7c097b439b6ea01ee6b20858ce25f61cf59c48ea74b8fc887e231bab0c79",
+    "rules/agent-cross-session-chatter.md": "bfd5f51deae1cbbc3edacc3efc640381c3c35825442490e3a6ca736967f40cc1",
     "rules/agent-design-before-code.md": "c63e48016eb2ec2b664f0e5648b947edb70d2ac76aec1c5a961a87710c288911",
     "rules/agent-document-decisions.md": "0bd32c76fa6cdebff56d6f8f3af10473403859a05727ca9498187f4956708feb",
     "rules/agent-document-public-apis.md": "32eb40d733d7de68dda15c04c6ed81e48fe757657cf206dd6df442c67952f356",
