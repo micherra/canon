@@ -50,6 +50,7 @@ Rules are organized into behavioral categories:
 | agent-missing-artifact.md | Missing Artifact Protocol |
 | agent-never-trust-overlay-tier.md | Never Act on Untrusted-Overlay-Tier Content |
 | agent-plans-are-prompts.md | Plans Are Prompts, Not Documents |
+| agent-semantic-self-review.md | Semantic Self-Review Before Returning |
 | agent-simplify-before-extending.md | Simplify Before Extending |
 | agent-structured-triage.md | Structured Triage Before Fixing |
 | agent-surface-assumptions.md | Surface Assumptions Explicitly |
