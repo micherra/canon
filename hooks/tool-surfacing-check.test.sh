@@ -120,16 +120,47 @@ write_register_ui_split_before_server() {
 }
 
 # write_register_packed_same_line <root> <file> <name_a> <name_b>
-# Two `registerTool(` openers on the SAME source line — the per-line state
-# machine (`match()` + `next`) only ever inspects the first match on a given
-# line, so the second opener is silently skipped with no row and no error.
-# Direct exercise of the opener-accounting tripwire, independent of the
-# split-before-server parser gap (case q).
+# Two `registerTool(` openers on the SAME source line. The AST extractor
+# walks every CallExpression independent of line packing, so both openers
+# resolve correctly on their own (case q, root-fix — this used to require
+# the now-removed opener-accounting tripwire as a textual backstop).
 write_register_packed_same_line() {
   local root="$1" file="$2" name_a="$3" name_b="$4"
   {
     printf 'function registerX(server) {\n'
     printf '  server.registerTool("%s", h1); server.registerTool("%s", h2);\n' "$name_a" "$name_b"
+    printf '}\n'
+  } > "$root/mcp-server/src/app/$file"
+}
+
+# write_register_commented <root> <file> <commented_name> <real_name>
+# `// server.registerTool("<commented_name>", {})` — the name text appears
+# ONLY inside a line comment, alongside one real registration. Comments are
+# not CallExpression nodes, so the AST extractor must NOT emit
+# <commented_name> (root-fix for the line-parser's fail-CLOSED over-match on
+# comment text — case r).
+write_register_commented() {
+  local root="$1" file="$2" commented_name="$3" real_name="$4"
+  {
+    printf 'function registerX(server) {\n'
+    printf '  // server.registerTool("%s", {})\n' "$commented_name"
+    printf '  server.registerTool("%s", { description: "x" }, h);\n' "$real_name"
+    printf '}\n'
+  } > "$root/mcp-server/src/app/$file"
+}
+
+# write_register_string_mention <root> <file> <mentioned_name> <real_name>
+# `const doc = "... registerToolWithUi(\"<mentioned_name>\") ...";` — the
+# registerToolWithUi( token appears ONLY inside a string literal, alongside
+# one real registration. A string literal is not a CallExpression, so the
+# AST extractor must NOT emit <mentioned_name> (root-fix for the
+# line-parser's fail-CLOSED over-match on string-literal text — case s).
+write_register_string_mention() {
+  local root="$1" file="$2" mentioned_name="$3" real_name="$4"
+  {
+    printf 'function registerX(server) {\n'
+    printf '  const doc = "... registerToolWithUi(\\"%s\\") ...";\n' "$mentioned_name"
+    printf '  server.registerTool("%s", { description: "x" }, h);\n' "$real_name"
     printf '}\n'
   } > "$root/mcp-server/src/app/$file"
 }
@@ -435,14 +466,100 @@ echo "-- (p2) registerToolWithUi( split BEFORE server, legitimately granted -> e
   rm -rf "$FIX"
 }
 
-echo "-- (q) two registerTool( openers packed on one source line -> exit 2 via opener-accounting tripwire --"
+echo "-- (q) two registerTool( openers packed on one source line -> BOTH resolved by the AST, normal grant semantics apply --"
 {
   FIX=$(mktemp -d)
   init_fixture "$FIX"
   write_register_packed_same_line "$FIX" register-q.ts packed_a packed_b
   write_agent "$FIX" engineer "packed_a,packed_b"
-  run_gate_out 2 "opener" "packed same-line openers -> exit 2 opener/resolved mismatch" "$FIX"
+  run_gate 0 "packed same-line openers, both granted -> exit 0 (root-fix, no opener-accounting workaround needed)" "$FIX"
   rm -rf "$FIX"
+}
+
+echo "-- (q2) two registerTool( openers packed on one source line, one ungranted -> exit 2 naming it (not a silent miss) --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_packed_same_line "$FIX" register-q2.ts packed_a packed_b
+  write_agent "$FIX" engineer "packed_a"
+  run_gate_out 2 "packed_b" "packed same-line openers, second ungranted -> exit 2 names it" "$FIX"
+  rm -rf "$FIX"
+}
+
+echo "-- (r) commented-out registerTool( is NOT counted -> exit 0 when the real tool is granted (fail-CLOSED over-match fix) --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_commented "$FIX" register-r.ts commented_out_tool real_tool_r
+  write_agent "$FIX" engineer "real_tool_r"
+  run_gate 0 "commented registerTool( not counted -> exit 0" "$FIX"
+  rm -rf "$FIX"
+}
+
+echo "-- (s) registerToolWithUi( mention inside a string literal is NOT counted -> exit 0 when the real tool is granted (fail-CLOSED over-match fix) --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_string_mention "$FIX" register-s.ts string_mention_tool real_tool_s
+  write_agent "$FIX" engineer "real_tool_s"
+  run_gate 0 "string-literal mention not counted -> exit 0" "$FIX"
+  rm -rf "$FIX"
+}
+
+echo "-- (t) node absent from PATH -> fail-closed exit 2 --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_single "$FIX" register-t.ts some_tool
+  write_agent "$FIX" engineer "some_tool"
+
+  # Strip node from PATH by keeping only dirs that do NOT contain a "node" binary
+  NO_NODE_PATH=""
+  IFS=: read -ra path_dirs <<< "$PATH"
+  for d in "${path_dirs[@]}"; do
+    if [[ ! -x "$d/node" ]]; then
+      NO_NODE_PATH="${NO_NODE_PATH:+$NO_NODE_PATH:}$d"
+    fi
+  done
+
+  _t_exit=0
+  PATH="$NO_NODE_PATH" bash "$GATE" "$FIX" >/dev/null 2>&1 || _t_exit=$?
+  if [[ "$_t_exit" -eq 2 ]]; then
+    echo "  PASS: node absent -> exit 2 (fail-closed)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: node absent -> expected exit 2, got exit $_t_exit"
+    FAIL=$((FAIL + 1))
+  fi
+  rm -rf "$FIX"
+}
+
+echo "-- (u) tool-surfacing-extract.mjs helper errors (stub exits 1) -> fail-closed exit 2 --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_single "$FIX" register-u.ts some_tool
+  write_agent "$FIX" engineer "some_tool"
+
+  STUB_DIR=$(mktemp -d)
+  mkdir -p "$STUB_DIR/mcp-server/scripts"
+  cat > "$STUB_DIR/mcp-server/scripts/tool-surfacing-extract.mjs" <<'STUB'
+#!/usr/bin/env node
+process.stderr.write("CANON ERROR [stub]: simulated helper failure\n");
+process.exit(1);
+STUB
+
+  _u_exit=0
+  TOOL_SURFACING_HELPER_PATH="$STUB_DIR/mcp-server/scripts/tool-surfacing-extract.mjs" \
+    bash "$GATE" "$FIX" >/dev/null 2>&1 || _u_exit=$?
+  if [[ "$_u_exit" -eq 2 ]]; then
+    echo "  PASS: helper error -> exit 2 (fail-closed)"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: helper error -> expected exit 2, got exit $_u_exit"
+    FAIL=$((FAIL + 1))
+  fi
+  rm -rf "$FIX" "$STUB_DIR"
 }
 
 echo ""
