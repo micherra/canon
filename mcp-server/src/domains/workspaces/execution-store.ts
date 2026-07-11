@@ -464,17 +464,6 @@ export class ExecutionStore {
     return getOrientationRatio(this.s.stmtGetState, stateId);
   }
 
-  // Cache prefix (ADR-006a)
-
-  getCachePrefix(): string {
-    const row = this.s.stmtGetCachePrefix.get() as { cache_prefix: string } | undefined;
-    return row?.cache_prefix ?? "";
-  }
-
-  setCachePrefix(prefix: string): void {
-    this.s.stmtSetCachePrefix.run(prefix);
-  }
-
   // Transcript path (ADR-015)
 
   setTranscriptPath(stateId: string, transcriptPath: string): boolean {
