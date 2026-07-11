@@ -1,5 +1,5 @@
 #!/bin/bash
-# Tests for tool-surfacing-check.sh (ADR-0046, dc-05)
+# Tests for tool-surfacing-check.sh (ADR-0048, dc-05)
 # Run with: bash hooks/tool-surfacing-check.test.sh
 # Exit 0 = all tests pass, Exit 1 = one or more failures
 

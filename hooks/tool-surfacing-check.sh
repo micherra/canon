@@ -1,6 +1,6 @@
 #!/bin/bash
 # tool-surfacing-check.sh — Deterministic fail-closed tool-surfacing
-# "dead-affordance" gate. (ADR-0046)
+# "dead-affordance" gate. (ADR-0048)
 #
 # Invoked by the verify contract (not as a hooks.json PreToolUse hook).
 # Signature: bash hooks/tool-surfacing-check.sh [worktree_path]
@@ -18,7 +18,7 @@
 # worktree_path arg (watch_CCCCCCCCCCCC2) — the gate resolves its source tree
 # from that arg (or CWD when absent), not from git.
 #
-# Classification model (DEC-01, ADR-0046) — a registered tool `t` is
+# Classification model (DEC-01, ADR-0048) — a registered tool `t` is
 # surfaced/legitimate if ANY of:
 #   1. `t` appears as `mcp__canon__<t>` in some agents/*.md frontmatter
 #      `tools:` block (granted) — body/prose mentions do NOT count

@@ -16,11 +16,13 @@ import {
   type WriteReviewInput,
   writeReview,
 } from "../tools/write-review.ts";
+import { seedExecution } from "./seed-execution-test-helper.ts";
 
 let tmpDir: string;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), "write-review-area-memory-test-"));
+  seedExecution(tmpDir);
 });
 
 afterEach(async () => {

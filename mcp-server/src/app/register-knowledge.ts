@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import {
   type CheckContextStalenessInput,
   checkContextStalenessGuarded,
@@ -12,15 +13,18 @@ import {
 } from "@features/diagnostics/tools/sync-indexes.ts";
 import { wikiLint } from "@features/diagnostics/tools/wiki-lint.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
+import { ensureContextGraphFresh } from "@features/knowledge-graph/ensure-context-graph-fresh.ts";
 import { ensureGraphFresh } from "@features/knowledge-graph/ensure-graph-fresh.ts";
 import { codebaseGraph, compactGraph } from "@features/knowledge-graph/tools/codebase-graph.ts";
 import { codebaseGraphMaterialize } from "@features/knowledge-graph/tools/codebase-graph-materialize.ts";
 import { codebaseGraphPoll } from "@features/knowledge-graph/tools/codebase-graph-poll.ts";
 import { codebaseGraphSubmit } from "@features/knowledge-graph/tools/codebase-graph-submit.ts";
-import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
+import { type GraphQueryType, graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 import { searchKnowledge } from "@features/knowledge-graph/tools/search-knowledge.ts";
 import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.ts";
+import { buildDecisionsCorpus } from "@features/orchestration/services/decisions-corpus.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import { z } from "zod";
 import {
   buildSlimmedOutput,
@@ -264,6 +268,18 @@ function registerWikiLintTool(server: McpServer): void {
   );
 }
 
+/**
+ * Context-graph traversals (decisions/ADRs) get their own freshness gate —
+ * content-hash, not git-HEAD (DEC-M2-02) — paid only for the two context
+ * query types, never for callers/callees/search/etc.
+ */
+async function maybeRefreshContextGraph(query_type: GraphQueryType, dir: string): Promise<void> {
+  if (query_type !== "context_for_file" && query_type !== "supersedes_chain") return;
+  const dbPath = join(dir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+  const { decisions } = buildDecisionsCorpus(dir);
+  await ensureContextGraphFresh(dbPath, decisions, dir, pluginDir);
+}
+
 function registerGraphQueryTool(server: McpServer): void {
   server.registerTool(
     "graph_query",
@@ -300,12 +316,22 @@ function registerGraphQueryTool(server: McpServer): void {
           })
           .optional(),
         query_type: z
-          .enum(["callers", "callees", "blast_radius", "dead_code", "search"])
+          .enum([
+            "callers",
+            "callees",
+            "blast_radius",
+            "dead_code",
+            "search",
+            "context_for_file",
+            "supersedes_chain",
+          ])
           .describe("Type of query to perform"),
         target: z
           .string()
           .optional()
-          .describe("Target entity name or file path (not needed for dead_code)"),
+          .describe(
+            "Target entity name, file path, or ADR id (e.g. 'adr:ADR-0001'); not needed for dead_code",
+          ),
       },
     },
     gatedWrapHandler(async (input, extra) => {
@@ -313,6 +339,7 @@ function registerGraphQueryTool(server: McpServer): void {
       // Lazily refresh the structural KG when HEAD moved before reading.
       // graphQuery stays synchronous — gate at this async handler boundary.
       await ensureGraphFresh(dir);
+      await maybeRefreshContextGraph(input.query_type, dir);
       return graphQuery(input, dir);
     }),
   );

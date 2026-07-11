@@ -1,7 +1,7 @@
 ---
 description: Review and act on proposed learnings from auto-triggered analysis
 argument-hint: [--all] [--pending]
-allowed-tools: [Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__canon__record_applied_evolution]
+allowed-tools: [Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__canon__record_applied_evolution, mcp__canon__backfill_applying_commit]
 model: sonnet
 ---
 
@@ -110,8 +110,21 @@ For each accepted proposal:
 2. Spawn the writer agent with: `"Mode: apply-proposal. PROPOSAL=${proposal_file_path}"`. If a workspace is active, include `WORKSPACE=<path>` and `SLUG=<slug>`.
 3. The writer reads the proposal, maps the type to the appropriate action (create, edit severity, revise, graduate, archive, **retire** for `prune-candidate`), runs its quality pipeline, and saves. For `prune-candidate` proposals, the writer follows Mode: retire in the `canon:write-principle` skill.
 4. **Apply-provenance — record (evolution-candidate only).** If and only if `frontmatter.type == "evolution-candidate"`: after the writer completes and BEFORE moving the proposal to `applied/`, compute `after_hash = $(shasum -a 256 "{target_path}" | cut -d' ' -f1)` from the post-edit on-disk content, then call the `record_applied_evolution` MCP tool with `proposal_id` (the resolved id), `target_path`, `artifact_class`, `principle_id` (all from frontmatter), `before_hash` and `after_hash` (captured above), `holdout_baseline` and `holdout_candidate` (from frontmatter), `apply_base_commit` (captured in step 1), `applied_at` (current millisecond-precision ISO-8601 timestamp, e.g. `date -u +%Y-%m-%dT%H:%M:%S.000Z` — a seconds-only stamp is normalized by the recorder but ms precision is preferred), and `project_dir` (the project root). This call is BEST-EFFORT-VISIBLE at the command layer: the tool is authoritative/fail-closed and returns an error on failure — if it errors, surface a warning to the user (`"apply-provenance record failed: {error}"`) but do NOT block or undo the apply that already happened.
-5. After the writer completes, move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` (create subdirectory if needed).
-6. Append an entry to `.canon/learning.jsonl`:
+5. **Apply-provenance — producer commit (evolution-candidate only).** If and only if `frontmatter.type == "evolution-candidate"`, immediately after the `record_applied_evolution` call above and BEFORE moving the proposal to `applied/`:
+   - **Charset guard (dc-05):** validate `proposal_id` matches `^[A-Za-z0-9._-]+$`. If it does not, surface a warning (`"proposal_id '{proposal_id}' fails the trailer charset guard — skipping the provenance commit."`) and SKIP the rest of this step (no commit, and the backfill in Step 4's Summary simply finds nothing for this proposal). Never interpolate a non-matching value into a commit message.
+   - **Main-branch guard:** check the current branch — `git rev-parse --abbrev-ref HEAD`. If it is `main` or `master`, do NOT create the commit. Instead surface: `"On {branch}: skipping the Canon-Evolution provenance commit (no auto-commit on main/master). The applied change is staged in your working tree; create a branch and commit it (keeping the Canon-Evolution: {proposal_id} trailer) so backfill can populate applying_commit."` The working-tree edit and the `record_applied_evolution` write above still stand — only the commit is skipped, and `applying_commit` stays null until backfilled from a proper branch commit.
+   - Otherwise, stage the edited target: `git add {target_path}`. Create ONE commit:
+     ```
+     chore(evolution): apply {proposal_id} to {target_path}
+
+     Canon-Workflow: evolution-apply
+     Canon-Agent: writer
+     Canon-State: apply
+     Canon-Evolution: {proposal_id}
+     ```
+     This lands on the current branch (local only — push/PR stays a manual, unchanged step). The full Canon trailer block keeps `post-commit-trailers.sh` quiet.
+6. After the writer completes, move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` (create subdirectory if needed).
+7. Append an entry to `.canon/learning.jsonl`:
    ```json
    {"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"..."}
    ```
@@ -132,6 +145,19 @@ For each accepted proposal:
 
    - **Accept**: Write the candidate body to `target_path` (full-file replace). Then call the `sync_indexes` MCP tool to refresh the index inventory row for this artifact class. Advise: `"Change applied to {target_path}. Run /canon:check to verify."`
      - **Apply-provenance — record (evolution-candidate only).** If and only if `frontmatter.type == "evolution-candidate"`: after the write above and BEFORE moving the proposal to `applied/`, call the `record_applied_evolution` MCP tool with `proposal_id`, `target_path`, `artifact_class`, `principle_id` (from frontmatter; `principle_id` may be null for an agent-def target), `before_hash` = sha256 hex of the CURRENT on-disk content you already read in step 3 for the diff (do not re-read — that pre-write content is the before-state), `after_hash` = sha256 hex of the candidate body you just wrote, `holdout_baseline` and `holdout_candidate` (from frontmatter), `apply_base_commit = $(git rev-parse HEAD)`, `applied_at` (current millisecond-precision ISO-8601 timestamp, e.g. `date -u +%Y-%m-%dT%H:%M:%S.000Z` — a seconds-only stamp is normalized by the recorder but ms precision is preferred), and `project_dir` (the project root). Compute each sha256 hex as `printf '%s' "<content>" | shasum -a 256 | cut -d' ' -f1`. BEST-EFFORT-VISIBLE: the tool is authoritative/fail-closed; on error surface `"apply-provenance record failed: {error}"` to the user but do NOT undo the apply. For any other `type`, do NOT record.
+     - **Apply-provenance — producer commit (evolution-candidate only).** If and only if `frontmatter.type == "evolution-candidate"`, immediately after the `record_applied_evolution` call above and BEFORE moving the proposal to `applied/`:
+       - **Charset guard (dc-05):** validate `proposal_id` matches `^[A-Za-z0-9._-]+$`. If it does not, surface a warning (`"proposal_id '{proposal_id}' fails the trailer charset guard — skipping the provenance commit."`) and SKIP the rest of this step. Never interpolate a non-matching value into a commit message.
+       - **Main-branch guard:** check the current branch — `git rev-parse --abbrev-ref HEAD`. If it is `main` or `master`, do NOT create the commit. Instead surface: `"On {branch}: skipping the Canon-Evolution provenance commit (no auto-commit on main/master). The applied change is staged in your working tree; create a branch and commit it (keeping the Canon-Evolution: {proposal_id} trailer) so backfill can populate applying_commit."` The write above and the `record_applied_evolution` write still stand — only the commit is skipped, and `applying_commit` stays null until backfilled from a proper branch commit.
+       - Otherwise, stage the write: `git add {target_path}`. Create ONE commit:
+         ```
+         chore(evolution): apply {proposal_id} to {target_path}
+
+         Canon-Workflow: evolution-apply
+         Canon-Agent: review-learnings
+         Canon-State: apply
+         Canon-Evolution: {proposal_id}
+         ```
+         This lands on the current branch (local only — push/PR stays a manual, unchanged step). The full Canon trailer block keeps `post-commit-trailers.sh` quiet.
      - Then move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl` with `artifact_class` and `apply_channel` included:
      ```json
      {"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"...","artifact_class":"...","apply_channel":"engineer-build-flow"}
@@ -192,6 +218,8 @@ After processing all proposals:
 Accepted: N | Rejected: M | Dismissed: K | Skipped: L
 ```
 
+If any `evolution-candidate` proposal was accepted and produced a provenance commit (Writer arm step 5 or Arm M's producer-commit bullet), invoke the backfill once: call the `backfill_applying_commit` MCP tool with `project_dir` (the project root). This is BEST-EFFORT-VISIBLE: on a `ToolResult` error, surface `"applying_commit backfill failed: {error}"` but do NOT block or undo any apply that already happened.
+
 If any proposals were accepted, suggest the user run `/canon:check` to verify the changes.
 
 ### Constraints
@@ -208,3 +236,4 @@ If any proposals were accepted, suggest the user run `/canon:check` to verify th
 - Never retire security-tagged or never-pruneable artifacts (`fail-closed-by-default`, `hooks-fail-closed`, `least-privilege-access`, `secrets-never-in-code`, `validate-at-trust-boundaries`, `agent-artifact-write-before-return`, `agent-template-required`); show a rule-tier CAUTION confirmation for any rule-tier `prune-candidate`; rule-tier retirement requires a non-null `superseded_by`
 - If a target principle or convention no longer exists, inform the user and skip rather than failing silently
 - Apply-provenance is recorded (via `record_applied_evolution`) ONLY for accepted `type: evolution-candidate` proposals, and ONLY from the two write arms (Writer arm + Arm M) after the target file is actually edited; legacy proposal types (new-convention, severity-change, prune-candidate, prune-watch) carry no holdout scores and never record. Arm T and Arm F never write and never record. The record only writes a drift.db row — it never reverts, quarantines, or merges anything.
+- Apply-provenance is also committed: the Writer arm and Arm M each create ONE git commit per accepted `evolution-candidate` apply, carrying a `Canon-Evolution: {proposal_id}` trailer — guarded by the proposal_id charset check (dc-05) and skipped (with a surfaced warning, apply left standing) when the current branch is `main`/`master` (no auto-commit on main/master). After all applies, `backfill_applying_commit` is invoked once to populate `applied_evolutions.applying_commit` from those trailers — best-effort-visible, never blocking. Legacy proposal types never commit and never trigger the backfill call on their own.

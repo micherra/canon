@@ -51,7 +51,7 @@ so future authors cannot bypass it by omission.
 ## `orchestrator_action` on `TransitionRuleSchema` (Phase B+)
 
 `orchestrator_action` — optional `z.enum(ORCHESTRATOR_ACTIONS)` field on a transition rule.
-Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-update", "run-learner", "run-evolve", "auto-enable-merge", "auto-update-branch"] as const`
+Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-update", "run-learner", "run-evolve", "auto-enable-merge", "auto-update-branch", "auto-staleness-refresh"] as const`
 (exported from `loop-schema.ts`). `OrchestratorAction` type derived from the same const.
 
 - **Omitted** → `undefined` (backward compat; existing loops parse unchanged)
@@ -59,7 +59,7 @@ Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-upda
 - **Orchestrator-consumed signal** — the loop/runner NEVER executes the action; the runner
   surfaces a structured `ORCHESTRATOR_ACTION: <action> field=<field> loop=<id>` line in Step 6
   when the transition fires; the orchestrator reads and acts on it
-- See CLAUDE.md § Loop Framework, "Consuming `orchestrator_action`" for the six consumption contracts
+- See CLAUDE.md § Loop Framework, "Consuming `orchestrator_action`" for the seven consumption contracts
 
 ## Phase Boundary
 
@@ -68,7 +68,8 @@ Phase B: `loops/ship-watch.md` added — first real loop, dispatched post-ship; 
 Phase C: self-paced mode + ScheduleWakeup + `loops/session-watch.md`; `BUILTIN_FORBIDDEN_MCP` denylist + `max_wall` schedule field added to schema (ADR-0002 first-tick-baseline invariant formalised).
 Phase D: `loops/harness-watch.md` added — third real loop (post-ship, self-paced); `run-learner` added to `ORCHESTRATOR_ACTIONS` as the third vocabulary member.
 Phase E: `loops/evolve.md` added — fourth real loop (session-start, self-paced, attribution-signal observer); `run-evolve` added to `ORCHESTRATOR_ACTIONS` as the fourth vocabulary member; `auto-enable-merge` added as the fifth vocabulary member (a second `ci_conclusion` rule on `ship-watch`, `pending → success`) — arms squash auto-merge on CI-green, no new loop.
-Phase F (current): `auto-update-branch` added as the sixth vocabulary member (two new `merge_state` rules on `ship-watch`, `to: BEHIND` and `to: DIRTY`) — surfaces a stale/conflicting PR branch so the orchestrator can merge `origin/main` in and push; no new loop.
+Phase F: `auto-update-branch` added as the sixth vocabulary member (two new `merge_state` rules on `ship-watch`, `to: BEHIND` and `to: DIRTY`) — surfaces a stale/conflicting PR branch so the orchestrator can merge `origin/main` in and push; no new loop.
+Phase G (current): `auto-staleness-refresh` added as the seventh vocabulary member (two new `session-watch` transition rules, `docs_stale_crossed`/`kg_age_crossed`, plus a body-emitted per-episode directive against a de-dupe ledger so an already-stale-at-session-start condition still fires on tick 1 — ADR-0045) — the orchestrator auto-dispatches a scribe context-sync (ephemeral `init_workspace` → scribe → shipper → PR, dec-03) for docs staleness and a local `codebase_graph` refresh for KG age, then notifies; both unattended in all tiers per a plan-approval user override of the ask-first-under-supervised posture that gates other tracked-write consumers; no new loop.
 
 ## Non-Declarative Constraint (dc-06)
 

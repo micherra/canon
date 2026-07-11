@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { assertWorkspaceInitialized } from "../services/validate-workspace-initialized.ts";
 
 export type WritePlanIndexInput = {
   workspace: string;
@@ -22,10 +23,8 @@ export type WritePlanIndexResult = {
 
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
-export async function writePlanIndex(
-  input: WritePlanIndexInput,
-): Promise<ToolResult<WritePlanIndexResult>> {
-  // Validate workspace is absolute
+/** Validate input fields and resolve the plans directory. Returns error or plansDir. */
+function validatePlanIndexInput(input: WritePlanIndexInput): ToolResult<{ plansDir: string }> {
   if (!isAbsolute(input.workspace)) {
     return toolError(
       "INVALID_INPUT",
@@ -33,7 +32,6 @@ export async function writePlanIndex(
     );
   }
 
-  // Validate slug
   if (!SLUG_PATTERN.test(input.slug)) {
     return toolError(
       "INVALID_INPUT",
@@ -41,7 +39,6 @@ export async function writePlanIndex(
     );
   }
 
-  // Validate task IDs and wave numbers
   for (const task of input.tasks) {
     if (!SLUG_PATTERN.test(task.task_id)) {
       return toolError(
@@ -57,25 +54,11 @@ export async function writePlanIndex(
     }
   }
 
-  // Check for duplicate task IDs
   const ids = input.tasks.map((t) => t.task_id);
   const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
   if (dupes.length > 0) {
     return toolError("INVALID_INPUT", `Duplicate task IDs: ${[...new Set(dupes)].join(", ")}`);
   }
-
-  // Build normalized markdown table
-  const header = "| Task | Wave | Depends on | Files | Principles |";
-  const separator = "|------|------|------------|-------|------------|";
-  const rows = input.tasks.map((t) => {
-    const deps = t.depends_on?.join(", ") ?? "—";
-    const files = t.files?.join(", ") ?? "";
-    const principles = t.principles?.join(", ") ?? "";
-    return `| ${t.task_id} | ${t.wave} | ${deps} | ${files} | ${principles} |`;
-  });
-
-  const waveCount = new Set(input.tasks.map((t) => t.wave)).size;
-  const content = `## Plan Index: ${input.slug}\n\n${header}\n${separator}\n${rows.join("\n")}\n`;
 
   const plansDir = resolve(join(input.workspace, "plans", input.slug));
   const plansRoot = resolve(join(input.workspace, "plans"));
@@ -85,6 +68,36 @@ export async function writePlanIndex(
       `Slug "${input.slug}" resolves outside workspace plans directory`,
     );
   }
+
+  return toolOk({ plansDir });
+}
+
+/** Build the normalized markdown table content for the plan index. */
+function generatePlanIndexMarkdown(input: WritePlanIndexInput): string {
+  const header = "| Task | Wave | Depends on | Files | Principles |";
+  const separator = "|------|------|------------|-------|------------|";
+  const rows = input.tasks.map((t) => {
+    const deps = t.depends_on?.join(", ") ?? "—";
+    const files = t.files?.join(", ") ?? "";
+    const principles = t.principles?.join(", ") ?? "";
+    return `| ${t.task_id} | ${t.wave} | ${deps} | ${files} | ${principles} |`;
+  });
+  return `## Plan Index: ${input.slug}\n\n${header}\n${separator}\n${rows.join("\n")}\n`;
+}
+
+export async function writePlanIndex(
+  input: WritePlanIndexInput,
+): Promise<ToolResult<WritePlanIndexResult>> {
+  const validation = validatePlanIndexInput(input);
+  if (!validation.ok) return validation;
+  const { plansDir } = validation;
+
+  const wsErr = assertWorkspaceInitialized(input.workspace);
+  if (wsErr) return wsErr;
+
+  const content = generatePlanIndexMarkdown(input);
+  const waveCount = new Set(input.tasks.map((t) => t.wave)).size;
+
   await mkdir(plansDir, { recursive: true });
   const indexPath = join(plansDir, "INDEX.md");
   await writeFile(indexPath, content, "utf-8");

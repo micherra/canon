@@ -510,10 +510,19 @@ function buildStatusMap(files: Array<{ path: string; status: string }>): Map<str
   return statusMap;
 }
 
+/** True when a stored review's file set exactly equals the live-diff (prep) file set. */
+function reviewMatchesPrepFiles(reviewFiles: string[], prepFiles: Set<string>): boolean {
+  if (prepFiles.size === 0) return false;
+  if (reviewFiles.length !== prepFiles.size) return false;
+  for (const f of reviewFiles) if (!prepFiles.has(f)) return false;
+  return true;
+}
+
 /** Find the latest matching PR review from drift store. */
 async function findLatestReview(
   projectDir: string,
-  options?: { branch?: string; pr_number?: number },
+  options: { branch?: string; pr_number?: number } | undefined,
+  prepFiles: Set<string>,
 ): Promise<Awaited<ReturnType<DriftStore["getReviews"]>>[number] | null> {
   const driftStore = new DriftStore(projectDir);
   const hasFilter = options?.branch !== undefined || options?.pr_number !== undefined;
@@ -521,10 +530,21 @@ async function findLatestReview(
     branch: options?.branch,
     prNumber: options?.pr_number,
   });
-  const prReviews = hasFilter
-    ? reviews
-    : reviews.filter((r) => r.pr_number !== undefined || r.branch !== undefined);
-  return prReviews.length > 0 ? prReviews[prReviews.length - 1] : null;
+  if (hasFilter) {
+    // Caller-scoped — already correctly filtered; unchanged.
+    return reviews.length > 0 ? reviews[reviews.length - 1] : null;
+  }
+  // No explicit filter: anchor the overlay to the requested diff's change set (prep).
+  // NEVER fall back to global-latest — that cross-contaminates with unrelated PRs.
+  // Also exclude principle-only reviews (the general report() path, which stores
+  // neither pr_number nor branch) — a file-set match alone isn't enough; without
+  // PR context, surfacing one as this PR's overlay is itself a contamination mode.
+  const matching = reviews.filter(
+    (r) =>
+      (r.pr_number !== undefined || r.branch !== undefined) &&
+      reviewMatchesPrepFiles(r.files, prepFiles),
+  );
+  return matching.length > 0 ? matching[matching.length - 1] : null;
 }
 
 /** Build the review-enriched output when a stored review exists. */
@@ -599,7 +619,8 @@ export async function showPrImpact(
     projectDir,
   );
 
-  const latestReview = await findLatestReview(projectDir, options);
+  const prepFiles = new Set(prepResult.files.map((f) => f.path));
+  const latestReview = await findLatestReview(projectDir, options, prepFiles);
 
   if (!latestReview) {
     return {

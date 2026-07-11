@@ -1,4 +1,4 @@
-# ADR-0046: Tool-surfacing gate classifies agent-facing vs orchestrator-only via a central allowlist
+# ADR-0048: Tool-surfacing gate classifies agent-facing vs orchestrator-only via a central allowlist
 
 - **Status:** Accepted
 - **Date:** 2026-07-10

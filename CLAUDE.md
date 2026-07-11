@@ -198,12 +198,12 @@ Append the matching enrichment text from `references/engineer-spawn-enrichment.m
 ### DAG Execution Protocol
 
 Full protocol in `references/dag-execution-protocol.md`. Covers DAG validation,
-Task Queue Setup (TeamCreate/TaskCreate), Worker Dispatch, Merge Protocol,
+Task Queue Setup (TaskCreate task queue), Worker Dispatch, Merge Protocol,
 Post-DAG Tail, and Failure Handling.
 
 Read `references/dag-execution-protocol.md` BEFORE executing any build where
 `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, and before any
-TeamCreate/merge/cleanup operation.
+task-queue/merge/cleanup operation.
 
 ### Resume Protocol
 
@@ -246,11 +246,15 @@ Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include r
 
 ### Team Dispatch Protocol
 
-Three-phase loop: partition → spawn → consolidate. Reviewer is the concrete implementation; other team types follow the same pattern.
+Two fan-out axes, one mode-selection decision. **Horizontal**: three-phase loop — partition (disjoint file groups) → spawn (one reviewer per group, same lens) → consolidate (minority-finding verification probes). **Vertical**: same three-phase shape over the other axis — assign diverse concern lenses → spawn one reviewer per lens over the FULL file set → consolidate with inverted semantics (single-lens findings first-class, overlap = agreement, any-juror-blocks). Reviewer is the concrete implementation; other team types follow the horizontal pattern.
 
-Fan-out threshold: aggregate blast radius > ~50, OR multiple files with `impact_score > 0.7`, OR 3+ layers with cross-layer dependencies. Below threshold: single reviewer, full file list.
+| Mode | Trigger |
+|------|---------|
+| Horizontal fan-out | Aggregate blast radius > ~50, OR multiple files with `impact_score > 0.7`, OR 3+ layers with cross-layer dependencies. Below threshold: single reviewer, full file list. |
+| Vertical diverse-lens jury | `compute_autonomy_tier` returned the ADR-0044 sensitive-path deny-list floor (`require_security: true` + `require_adversarial: true`). |
+| Capped vertical×horizontal hybrid | Both triggers fire — bounded escape hatch (hard-capped M-lenses × K-partitions reviewer count), not the default. |
 
-Read `references/team-dispatch-protocol.md` BEFORE spawning a team-dispatched review.
+Full phases for both axes, the mode-selection preamble, and the hybrid cap: `references/team-dispatch-protocol.md`. Read it BEFORE spawning a team-dispatched review.
 
 ### Journal Protocol
 
@@ -373,7 +377,7 @@ When the review step completes and a tester step follows: extract Stage 5 "Accep
 
 `→ bash hooks/rule-scope-parity-check.sh [worktree_path]` — rule↔agent wiring-parity gate (sug_RULEPARITY1). Must exit 0. Fails closed (exit 2) when a `rules/*.md` whose frontmatter `scope.agents` is `all` (or an explicit list) is missing from any required agent's frontmatter `rules:` array. Agent set = every `agents/*.md` with a `name:` in its leading frontmatter (excludes `README.md`, `.claude/CLAUDE.md`); rules with no `scope.agents` are ignored. Offline (pure awk). Takes only `[worktree_path]` — no `base_commit`. **EXEMPT from the doc-only verify-skip** (agent/rule frontmatter are `.md`).
 
-`→ bash hooks/tool-surfacing-check.sh [worktree_path]` — fail-closed tool-surfacing "dead-affordance" gate (ADR-0046). Must exit 0. Fails closed (exit 2) when any registered agent-facing MCP tool is surfaced in no `agents/*.md` grant and not classified in `hooks/lib/orchestrator-only-tools.txt` (or marked `// canon:allow-unsurfaced:` on its registration line). A registered tool is legitimate when granted in some agent's frontmatter `tools:` block (`mcp__canon__<name>`; body/prose mentions do not count), listed in the allowlist, or inline-marked. Scans both registration idioms (`registerTool(` and `registerToolWithUi(server, ...)`). Offline (pure awk/grep). Takes only `[worktree_path]` — no `base_commit` (surfacing is whole-tree, not diff-scoped). **EXEMPT from the doc-only verify-skip** (grant removal is a `.md`-only drift class).
+`→ bash hooks/tool-surfacing-check.sh [worktree_path]` — fail-closed tool-surfacing "dead-affordance" gate (ADR-0048). Must exit 0. Fails closed (exit 2) when any registered agent-facing MCP tool is surfaced in no `agents/*.md` grant and not classified in `hooks/lib/orchestrator-only-tools.txt` (or marked `// canon:allow-unsurfaced:` on its registration line). A registered tool is legitimate when granted in some agent's frontmatter `tools:` block (`mcp__canon__<name>`; body/prose mentions do not count), listed in the allowlist, or inline-marked. Scans both registration idioms (`registerTool(` and `registerToolWithUi(server, ...)`). Offline (pure awk/grep). Takes only `[worktree_path]` — no `base_commit` (surfacing is whole-tree, not diff-scoped). **EXEMPT from the doc-only verify-skip** (grant removal is a `.md`-only drift class).
 
 The three co-located `*.test.sh` suites (`boilerplate-span-check.test.sh`, `principle-id-citation-check.test.sh`, `rule-scope-parity-check.test.sh`) are auto-run by `hooks/shell-test-gate.sh` and CI's `shell` job — no `ci.yml` edit is needed. `tool-surfacing-check.test.sh` is likewise auto-discovered.
 
@@ -394,7 +398,7 @@ The three co-located `*.test.sh` suites (`boilerplate-span-check.test.sh`, `prin
    - **Default**: spawn shipper → push branch, create PR to main. Shipper must NOT run `git worktree remove`. Do NOT delete build branch.
    - **GitHub release**: release-please (`release-please.yml`) is the primary tag/release mechanism — it runs automatically on push to `main` and cuts `vX.Y.Z` tags + GitHub releases when the release PR merges. The shipper does NOT create tags or run `gh release create`.
    - **Direct merge** (user explicitly requests): `git checkout main && git merge canon/{slug} --no-edit`. Conflicts → HITL (no force-push). Clean → `git branch -d canon/{slug}`. Do NOT `git worktree remove`.
-4. **Fire `PushNotification` at build-complete** (after ship / PR created): call `PushNotification({ title: "Canon: Build Complete", message: "Build '{slug}' is done — PR created and ready for review." })`. This is the OS-push channel for HITL gates and build-complete signals (per channel split in `docs/supervised-build-quality.md:250`). Terminal digests (nightly digest, learner surfacing) remain terminal — do NOT convert them to push.
+4. **Fire `PushNotification` at build-complete** (after ship / PR created): call `PushNotification({ message: "Canon: Build Complete — build '{slug}' is done; PR created and ready for review.", status: "proactive" })`. This is the OS-push channel for HITL gates and build-complete signals (per channel split in `docs/supervised-build-quality.md:250`). Terminal digests (nightly digest, learner surfacing) remain terminal — do NOT convert them to push.
    - **One-time user setup**: Desktop push works by default. Phone push requires **Remote Control** (optional). Not available on Bedrock/Vertex/Foundry.
    - **LSP prerequisite**: The `LSP` tool requires `typescript-language-server` globally: `npm install -g typescript-language-server typescript`.
 5. Verify file claims released.
@@ -512,6 +516,7 @@ initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named life
 - `run-evolve`: fires on the `evolve` loop's `evolve_due`; supervised → ask user first; autonomous/light-touch → auto-spawn after a cost-visibility `PushNotification`. Proposals are HITL-gated regardless of tier.
 - `auto-enable-merge`: fires on `ci_conclusion` pending→success while PR OPEN & not-already-armed → orchestrator runs `gh pr merge --auto --squash`; autonomous/light-touch unattended, supervised ASK-FIRST; runner read-only (dc-06).
 - `auto-update-branch`: fires on `merge_state` transitioning to `BEHIND`/`DIRTY` while PR OPEN → orchestrator merges `origin/main` into the PR branch and pushes; generated-artifact-only conflicts auto-resolved by regeneration, SOURCE conflicts always HITL; unattended in all tiers for the clean/generated-only path; runner read-only (dc-06).
+- `auto-staleness-refresh`: fires on `session-watch` docs/KG staleness episodes (`field=docs_stale|kg_age`, ADR-0045) — `kg_age` runs a local `codebase_graph` refresh (no PR); `docs_stale` dispatches an ephemeral `init_workspace` → scribe → shipper → PR (dec-03, no direct-push-to-main). Both fields unattended in ALL tiers — autonomous, light-touch, AND supervised — per an explicit plan-approval user override of the architect's ask-first-under-supervised recommendation (dec-04); the PR remains the human review gate regardless of tier. Notifies what was refreshed after completion. Runner read-only (dc-06).
 
 Read `references/loop-framework.md` BEFORE dispatching any loop or consuming an `ORCHESTRATOR_ACTION` line.
 
@@ -535,17 +540,17 @@ canon/
 │       ├── features/     # Tool implementations grouped by feature
 │       │   ├── orchestration/   # Orchestration runtime: init_workspace, finalize_workspace, log_step, batch_log_steps, record_agent_metrics, etc.; get_decisions_corpus — offline cross-workspace decisions reader/aggregator unioning live workspaces with the durable drift.db `orchestrator_decisions` table (ADR-0040)
 │       │   ├── principles/      # get_principles, list_principles, get_compliance
-│       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
+│       │   ├── knowledge-graph/ # codebase_graph, graph_query (incl. context_for_file/supersedes_chain over a decisions/ADR context graph, ADR-0047), semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
 │       │   ├── history/         # get_build_history, get_historical_artifacts, get_cross_run_analysis — cross-run analysis for learner
 │       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase E current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes, check_context_staleness
-│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023); record_applied_evolution + get_evolution_outcomes post-apply regression detection — applied_evolutions v12 (ADR-0034)
+│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023); record_applied_evolution + get_evolution_outcomes post-apply regression detection — applied_evolutions v12 (ADR-0034); backfill_applying_commit closes the applying_commit seam from Canon-Evolution git trailers (Inc-3)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs; overlay trust boundary (UntrustedText opaque box, closed-domain validators, linear-time glob matcher — ADR-0026/ADR-0027)
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve + evolution-regression-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── workflows/            # Managed workflow-script library — Canon's 6th managed-artifact class; plain-JS scripts invoked on-demand via Workflow `scriptPath`; lint enforced by `hooks/workflows-lint.sh`
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)

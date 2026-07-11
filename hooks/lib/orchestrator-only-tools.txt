@@ -1,5 +1,5 @@
 # Orchestrator-only and internal MCP tools — legitimately NOT granted in any agents/*.md
-# tools: block. Authoritative classifier for hooks/tool-surfacing-check.sh (ADR-0046).
+# tools: block. Authoritative classifier for hooks/tool-surfacing-check.sh (ADR-0048).
 # Every registered tool must be EITHER granted to an agent OR listed here OR carry an
 # inline // canon:allow-unsurfaced marker. Adding a tool here asserts "orchestrator-mediated
 # / internal, no subagent calls it."
