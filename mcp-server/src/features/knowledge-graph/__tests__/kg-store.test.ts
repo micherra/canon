@@ -78,7 +78,7 @@ describe("Knowledge Graph Store", () => {
         | undefined;
       expect(row).toBeDefined();
       expect(row!.value).toBe(SCHEMA_VERSION);
-      expect(row!.value).toBe("6");
+      expect(row!.value).toBe("7");
     });
 
     test("WAL mode pragma is applied (in-memory uses memory mode)", () => {
@@ -130,11 +130,11 @@ describe("Knowledge Graph Store", () => {
       expect(colNames).toContain("updated_at");
     });
 
-    test('SCHEMA_VERSION is "6" after initDatabase', () => {
+    test('SCHEMA_VERSION is "7" after initDatabase', () => {
       const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
         | { value: string }
         | undefined;
-      expect(row?.value).toBe("6");
+      expect(row?.value).toBe("7");
     });
 
     test("inserting a summary row with valid file_id succeeds", () => {

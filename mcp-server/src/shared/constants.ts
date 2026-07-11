@@ -42,6 +42,12 @@ export const GRAPH_HEAD_COMMIT_KEY = "graph_head_commit";
 /** Meta-table key for the content-hash of the doc corpus (not git HEAD). */
 export const DOC_CORPUS_HASH_KEY = "doc_corpus_hash";
 
+/**
+ * Meta-table key for the content-hash of the context graph (decisions/ADRs).
+ * Content-hash, not git-HEAD — decisions mutate without git commits (DEC-M2-02).
+ */
+export const CONTEXT_GRAPH_HASH_KEY = "context_graph_hash";
+
 /** Maximum characters per doc chunk (heading-section chunker). */
 export const DOC_CORPUS_MAX_CHUNK_CHARS = 1200;
 
