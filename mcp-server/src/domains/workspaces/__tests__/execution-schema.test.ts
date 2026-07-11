@@ -112,7 +112,6 @@ function buildV5Db(): Database.Database {
       UNIQUE(state_id, iteration)
     )
   `);
-  db.exec(`ALTER TABLE execution ADD COLUMN cache_prefix TEXT DEFAULT ''`);
   db.exec(`ALTER TABLE execution_states ADD COLUMN transcript_path TEXT`);
   db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
 
@@ -193,6 +192,13 @@ describe("fresh DB — required columns", () => {
   test("has worktree_branch column on execution table", () => {
     const db = initExecutionDb(":memory:");
     expect(columnExists(db, "execution", "worktree_branch")).toBe(true);
+    db.close();
+  });
+
+  test("does not have the retired cache_prefix column on execution table (ADR-0049)", () => {
+    const db = initExecutionDb(":memory:");
+    expect(columnExists(db, "execution", "cache_prefix")).toBe(false);
+    expect(getSchemaVersion(db)).toBe(SCHEMA_VERSION);
     db.close();
   });
 });

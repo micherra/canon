@@ -36,8 +36,6 @@ export type ExecutionStoreStatements = {
   stmtGetLastTwoIterationResults: Database.Statement;
   // Misc
   stmtUpdateStateMetrics: Database.Statement;
-  stmtGetCachePrefix: Database.Statement;
-  stmtSetCachePrefix: Database.Statement;
   stmtSetTranscriptPath: Database.Statement;
   stmtGetTranscriptPath: Database.Statement;
   stmtUpdateAgentSession: Database.Statement;
@@ -190,8 +188,6 @@ function prepareMiscStmts(db: Database.Database) {
   const stmtUpdateStateMetrics = db.prepare(
     `UPDATE execution_states SET metrics = ? WHERE state_id = ?`,
   );
-  const stmtGetCachePrefix = db.prepare(`SELECT cache_prefix FROM execution WHERE id = 1`);
-  const stmtSetCachePrefix = db.prepare(`UPDATE execution SET cache_prefix = ? WHERE id = 1`);
   const stmtSetTranscriptPath = db.prepare(
     `INSERT INTO execution_states (state_id, status, entries, transcript_path)
      VALUES (?, 'pending', 0, ?)
@@ -208,11 +204,9 @@ function prepareMiscStmts(db: Database.Database) {
   );
   return {
     stmtGetAgentSession,
-    stmtGetCachePrefix,
     stmtGetLastTwoIterationResults,
     stmtGetTranscriptPath,
     stmtRecordIterationResult,
-    stmtSetCachePrefix,
     stmtSetTranscriptPath,
     stmtUpdateAgentSession,
     stmtUpdateStateMetrics,
