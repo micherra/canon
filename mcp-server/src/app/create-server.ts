@@ -3,6 +3,7 @@ import { installFuzzyValidation } from "@shared/lib/fuzzy-field-validation.ts";
 import { registerArtifactTools } from "./register-artifacts.ts";
 import { registerEvolutionTools } from "./register-evolution.ts";
 import { registerKnowledgeTools } from "./register-knowledge.ts";
+import { registerLearningTools } from "./register-learning.ts";
 import { registerLoopTools } from "./register-loops.ts";
 import { registerOrchestrationTools } from "./register-orchestration.ts";
 import { registerPrincipleTools } from "./register-principles.ts";
@@ -31,7 +32,7 @@ export function createCanonServer(): McpServer {
   // Patch validation to detect unknown fields with fuzzy "did you mean?" suggestions.
   installFuzzyValidation(server);
 
-  // Register all tool groups — 7 groups (evolution added).
+  // Register all tool groups — 8 groups (learning added).
   registerOrchestrationTools(server);
   registerKnowledgeTools(server);
   registerArtifactTools(server);
@@ -39,6 +40,7 @@ export function createCanonServer(): McpServer {
   registerLoopTools(server);
   registerRoutineTools(server);
   registerEvolutionTools(server);
+  registerLearningTools(server);
 
   return server;
 }

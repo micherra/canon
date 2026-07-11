@@ -61,3 +61,4 @@ invoke_janitor
 # Classified today because no agent grants them.
 search_knowledge
 recall
+reconcile_learnings
