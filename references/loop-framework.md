@@ -152,19 +152,20 @@ flaky failure wastes an engineer cycle chasing a phantom bug:
       flaky infra; a marker match is not license to skip the diff check. Diff-touched territory
       always wins over marker appearance — this is what makes the classifier safe-by-design
       against a build-caused failure disguising itself as "just flaky."
-   b. **Marker-family check (reached only when diff-orthogonal — 2a did not match):** classify
-      **Flaky (known-intermittent/environmental)** on infra/env markers in the log (network
-      timeout, `ETIMEDOUT`/`ECONNRESET`, runner OOM, registry/`npm ci` 5xx, model-download
-      (HuggingFace/ONNX) failure, `"Test timed out in Nms"`, git-subprocess timeout, tmpdir
-      `ENOTEMPTY`/`EEXIST` races); the fact of diff-orthogonality itself (the failing test/job
-      exercises files NOT in the PR diff, reached this step precisely because 2a already found
-      no intersection); or an exit-before-tests toolchain/setup failure not attributable to the
-      diff. Cite known families descriptively (init-workspace concurrency-race, embedding/ONNX
-      cold-start, subprocess PATH/CWD non-determinism, tmpdir races — see
-      `project_flaky_integration_tests_hardening`) — never a maintained test-name list or a
-      hardcoded count (`no-literal-repo-state-counts`). Anything reaching 2b that matches none
-      of these families is **Legit** by default (unclassified diff-orthogonal failures are not
-      assumed flaky).
+   b. **Marker-family check (reached only when diff-orthogonal — 2a did not match):** diff-
+      orthogonality is the PRECONDITION for reaching this step, NOT itself a flaky signal — a
+      markerless orthogonal failure can be a legitimate indirect regression (the PR broke a
+      file it didn't touch) just as easily as an intermittent, so orthogonality alone never
+      classifies flaky. Classify **Flaky (known-intermittent/environmental)** ONLY on an actual
+      infra/env/setup marker in the log: network timeout, `ETIMEDOUT`/`ECONNRESET`, runner OOM,
+      registry/`npm ci` 5xx, model-download (HuggingFace/ONNX) failure, `"Test timed out in
+      Nms"`, git-subprocess timeout, tmpdir `ENOTEMPTY`/`EEXIST` races, or an exit-before-tests
+      toolchain/setup failure not attributable to the diff. Cite known families descriptively
+      (init-workspace concurrency-race, embedding/ONNX cold-start, subprocess PATH/CWD
+      non-determinism, tmpdir races — see `project_flaky_integration_tests_hardening`) — never a
+      maintained test-name list or a hardcoded count (`no-literal-repo-state-counts`). A
+      diff-orthogonal failure that matches NONE of these marker families is **Legit** by default
+      (unclassified diff-orthogonal failures are not assumed flaky).
 3. Decision procedure, **retry bound = 1**:
    a. **Legit via diff-intersection (2a)** → dispatch the fix flow directly (clear → without
       asking, ambiguous → ask; same tier rule as the comment-transition path above). No re-run —
