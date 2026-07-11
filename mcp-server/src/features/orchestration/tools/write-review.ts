@@ -5,6 +5,7 @@ import { atomicWritePair } from "@shared/lib/atomic-write.ts";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { assertWorkspaceInitialized } from "../services/validate-workspace-initialized.ts";
 import { emitWriteReceipt } from "../services/write-receipt.ts";
 
 /**
@@ -508,6 +509,50 @@ async function writeReviewArtifacts(
   return { metaPath, reviewPath };
 }
 
+/**
+ * Populate missing confidence annotations server-side when an adapter is
+ * provided. Mutates `violations` in place; runs before generateMarkdown so
+ * the Confidence column reflects computed values.
+ */
+function applyConfidenceAdapter(
+  violations: WriteReviewInput["violations"],
+  confidenceAdapter: ConfidenceAdapter | undefined,
+): void {
+  if (!confidenceAdapter) return;
+  for (const violation of violations) {
+    if (!violation.confidence) {
+      violation.confidence = confidenceAdapter.computeViolationConfidence(violation);
+    }
+  }
+}
+
+/**
+ * Persist post-write signals: file_violation_history/path_effects (via
+ * `signals`) and area observations (via `areaMemoryWriter`). Both are
+ * best-effort — errors never surface to the caller (the review is already
+ * written by the time this runs).
+ */
+function persistReviewSignals(opts: {
+  input: WriteReviewInput;
+  mappedVerdict: "BLOCKING" | "WARNING" | "CLEAN" | "IN_PROGRESS";
+  analyticsViolations: WriteReviewInput["violations"];
+  signals: SignalWriter | undefined;
+  areaMemoryWriter: AreaMemoryWriter | undefined;
+}): void {
+  const { input, mappedVerdict, analyticsViolations, signals, areaMemoryWriter } = opts;
+  if (signals) {
+    updateFileViolationHistory(signals, input.files, analyticsViolations, mappedVerdict);
+  }
+  try {
+    extractAndStoreAreaObservations(input, mappedVerdict, areaMemoryWriter, analyticsViolations);
+  } catch (err) {
+    console.warn(
+      "[write-review] area observation extraction failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 export async function writeReview(
   input: WriteReviewInput,
   signals?: SignalWriter,
@@ -518,15 +563,10 @@ export async function writeReview(
   if ("ok" in validated && !validated.ok) return validated;
   const { reviewsDir } = validated as { reviewsDir: string };
 
-  // Populate missing confidence annotations server-side when adapter is provided.
-  // Runs before generateMarkdown so the Confidence column reflects computed values.
-  if (confidenceAdapter) {
-    for (const violation of input.violations) {
-      if (!violation.confidence) {
-        violation.confidence = confidenceAdapter.computeViolationConfidence(violation);
-      }
-    }
-  }
+  const wsErr = assertWorkspaceInitialized(input.workspace);
+  if (wsErr) return wsErr;
+
+  applyConfidenceAdapter(input.violations, confidenceAdapter);
 
   const mappedVerdict = VERDICT_MAP[input.verdict];
   const markdown = generateMarkdown(input, mappedVerdict);
@@ -562,18 +602,7 @@ export async function writeReview(
     (v) => v.principle_id !== CORRECTNESS_SCAN_PRINCIPLE_ID,
   );
 
-  if (signals) {
-    updateFileViolationHistory(signals, input.files, analyticsViolations, mappedVerdict);
-  }
-
-  try {
-    extractAndStoreAreaObservations(input, mappedVerdict, areaMemoryWriter, analyticsViolations);
-  } catch (err) {
-    console.warn(
-      "[write-review] area observation extraction failed:",
-      err instanceof Error ? err.message : err,
-    );
-  }
+  persistReviewSignals({ analyticsViolations, areaMemoryWriter, input, mappedVerdict, signals });
 
   return toolOk({
     meta_path: metaPath,

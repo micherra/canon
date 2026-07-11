@@ -108,12 +108,12 @@ describe("Schema v3 — vector tables", () => {
     expect(colNames).toContain("updated_at");
   });
 
-  test("schema_version is '6' for new databases", () => {
+  test("schema_version is '7' for new databases", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
       | { value: string }
       | undefined;
-    expect(row?.value).toBe("6");
-    expect(SCHEMA_VERSION).toBe("6");
+    expect(row?.value).toBe("7");
+    expect(SCHEMA_VERSION).toBe("7");
   });
 
   test("entity_vectors accepts insert with valid embedding", () => {
@@ -145,7 +145,7 @@ describe("Schema v3 — migration from v2", () => {
     const before = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(before.value).toBe("6");
+    expect(before.value).toBe("7");
 
     // Simulate a v2 DB: downgrade schema_version to "2" and drop v3 tables
     db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
@@ -161,7 +161,7 @@ describe("Schema v3 — migration from v2", () => {
     const after = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(after.value).toBe("6");
+    expect(after.value).toBe("7");
 
     // entity_vector_meta should exist
     const metaTable = db
@@ -179,7 +179,7 @@ describe("Schema v3 — migration from v2", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
       value: string;
     };
-    expect(row.value).toBe("6");
+    expect(row.value).toBe("7");
     db.close();
   });
 });

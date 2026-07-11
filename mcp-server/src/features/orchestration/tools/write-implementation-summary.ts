@@ -3,6 +3,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { deriveSubsystemKey } from "@shared/lib/subsystem-key.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { assertWorkspaceInitialized } from "../services/validate-workspace-initialized.ts";
 import { emitWriteReceipt } from "../services/write-receipt.ts";
 import type { AreaMemoryWriter } from "./write-review.ts";
 
@@ -224,6 +225,9 @@ export async function writeImplementationSummary(
   }
   const validationError = validateSlugAndTaskId(input);
   if (validationError) return validationError;
+
+  const wsErr = assertWorkspaceInitialized(input.workspace);
+  if (wsErr) return wsErr;
 
   const plansDir = resolve(join(input.workspace, "plans", input.slug));
   const summaryMarkdown = buildSummaryMarkdown(input);

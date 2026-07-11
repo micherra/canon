@@ -8,7 +8,14 @@ import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 // Input / Output types
 
-export type GraphQueryType = "callers" | "callees" | "blast_radius" | "dead_code" | "search";
+export type GraphQueryType =
+  | "callers"
+  | "callees"
+  | "blast_radius"
+  | "dead_code"
+  | "search"
+  | "context_for_file"
+  | "supersedes_chain";
 
 export type GraphQueryOptions = {
   max_depth?: number;
@@ -123,6 +130,18 @@ function dispatchEntityQuery(
   return entityQuery(kq, query_type, t, queryFns[query_type]);
 }
 
+/** Dispatch a context-graph traversal (context_for_file, supersedes_chain). */
+function dispatchContextQuery(
+  query_type: "context_for_file" | "supersedes_chain",
+  target: string | undefined,
+  queryFn: (id: string) => unknown[],
+): ToolResult<GraphQueryOutput> {
+  const t = requireTarget(query_type, target);
+  if (typeof t !== "string") return t;
+  const results = queryFn(t);
+  return toolOk({ count: results.length, query_type, results, target: t });
+}
+
 /** Dispatch the query based on type. */
 function dispatchQuery(
   kq: KgQuery,
@@ -143,6 +162,10 @@ function dispatchQuery(
     case "callees":
     case "blast_radius":
       return dispatchEntityQuery(kq, query_type, target, options);
+    case "context_for_file":
+      return dispatchContextQuery(query_type, target, (path) => kq.getContextForFile(path));
+    case "supersedes_chain":
+      return dispatchContextQuery(query_type, target, (adrId) => kq.getSupersedesChain(adrId));
     default: {
       const exhaustive: never = query_type;
       throw new Error(`Unknown query_type: ${String(exhaustive)}`);

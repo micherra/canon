@@ -164,7 +164,7 @@ describe("showPrImpact — subgraph building gaps", () => {
     });
     mockKgSubgraph([{ layer: "custom-exotic-layer", path: "src/exotic.ts" }]);
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     // The node is included (it's a changed file)
     expect(result.subgraph.nodes).toHaveLength(1);
@@ -202,7 +202,7 @@ describe("showPrImpact — subgraph building gaps", () => {
       { layer: "utils", path: "src/utils/bar.ts" },
     ]);
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     const toolsLayer = result.subgraph.layers.find((l) => l.name === "tools");
     const utilsLayer = result.subgraph.layers.find((l) => l.name === "utils");
@@ -245,7 +245,7 @@ describe("showPrImpact — subgraph building gaps", () => {
       { layer: "tools", path: "src/affected.ts" },
     ]);
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     const changedNode = result.subgraph.nodes.find((n) => n.id === "src/changed.ts");
     const affectedNode = result.subgraph.nodes.find((n) => n.id === "src/affected.ts");
@@ -346,7 +346,7 @@ describe("showPrImpact — subgraph building gaps", () => {
       { layer: "utils", path: "src/c.ts" },
     ]);
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     const toolsLayer = result.subgraph.layers.find((l) => l.name === "tools");
     const utilsLayer = result.subgraph.layers.find((l) => l.name === "utils");
@@ -468,7 +468,7 @@ describe("showPrImpact — UnifiedPrOutput contract", () => {
       }),
     );
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     // status field
     expect(result.status).toBe("ok");
@@ -527,7 +527,7 @@ describe("showPrImpact — UnifiedPrOutput contract", () => {
       }),
     );
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     const hotspot = result.hotspots.find((h) => h.file === "src/foo.ts")!;
     expect(hotspot.violations[0].message).toBe("Specific reason here");
@@ -545,7 +545,7 @@ describe("showPrImpact — UnifiedPrOutput contract", () => {
       }),
     );
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
     const hotspot = result.hotspots.find((h) => h.file === "src/foo.ts")!;
     expect(hotspot.violations[0].message).toBeUndefined();

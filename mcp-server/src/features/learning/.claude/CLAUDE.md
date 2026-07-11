@@ -1,7 +1,7 @@
 # learning/ — Learning-Resolution Flow
 
 ## Purpose
-Closes the learning-resolution leak (ADR-0047): proposals under
+Closes the learning-resolution leak (ADR-0048): proposals under
 `.canon/proposed-learnings/{timestamp}/` orphan in "pending" state when their
 learning ships out-of-band (batch-promotion PRs, direct writer
 `apply-proposal`, manual edits). `/canon:review-learnings` previously computed

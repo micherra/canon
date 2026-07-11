@@ -1,7 +1,7 @@
 # learning/
 
 Closes the leak where a shipped learning proposal orphans in "pending" state
-forever (ADR-0047). Two pieces:
+forever (ADR-0048). Two pieces:
 
 - **`actionability.ts`** — the shared classifier that decides whether a
   proposal is actionable backlog work or a passive tracking/observation

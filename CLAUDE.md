@@ -531,18 +531,18 @@ canon/
 │       ├── features/     # Tool implementations grouped by feature
 │       │   ├── orchestration/   # Orchestration runtime: init_workspace, finalize_workspace, log_step, batch_log_steps, record_agent_metrics, etc.; get_decisions_corpus — offline cross-workspace decisions reader/aggregator unioning live workspaces with the durable drift.db `orchestrator_decisions` table (ADR-0040)
 │       │   ├── principles/      # get_principles, list_principles, get_compliance
-│       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
+│       │   ├── knowledge-graph/ # codebase_graph, graph_query (incl. context_for_file/supersedes_chain over a decisions/ADR context graph, ADR-0047), semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
 │       │   ├── history/         # get_build_history, get_historical_artifacts, get_cross_run_analysis — cross-run analysis for learner
 │       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase E current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes, check_context_staleness
-│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023); record_applied_evolution + get_evolution_outcomes post-apply regression detection — applied_evolutions v12 (ADR-0034)
+│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023); record_applied_evolution + get_evolution_outcomes post-apply regression detection — applied_evolutions v12 (ADR-0034); backfill_applying_commit closes the applying_commit seam from Canon-Evolution git trailers (Inc-3)
 │       │   ├── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
-│       │   └── learning/        # reconcile_learnings — reconcile-on-read for .canon/proposed-learnings/{ts}/ (ADR-0047), closes the learning-resolution orphan leak
+│       │   └── learning/        # reconcile_learnings — reconcile-on-read for .canon/proposed-learnings/{ts}/ (ADR-0048), closes the learning-resolution orphan leak
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs; overlay trust boundary (UntrustedText opaque box, closed-domain validators, linear-time glob matcher — ADR-0026/ADR-0027)
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve + evolution-regression-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── workflows/            # Managed workflow-script library — Canon's 6th managed-artifact class; plain-JS scripts invoked on-demand via Workflow `scriptPath`; lint enforced by `hooks/workflows-lint.sh`
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)

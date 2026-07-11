@@ -18,7 +18,7 @@ Each template is a markdown file with placeholder sections that agents fill in.
 | `design-decision.md` | architect | Architecture decisions with tradeoffs — ephemeral record written to `${WORKSPACE}/decisions/` mid-build; consumed by engineer |
 
 **ADR template coexistence (ADR-0001):** `design-decision.md` and `docs/adr/TEMPLATE.md` serve different lifecycles. `design-decision.md` is ephemeral — the architect writes it to `${WORKSPACE}/decisions/` during a build and it is consumed mid-build. `docs/adr/TEMPLATE.md` is the durable tracked promotion template written only when the conjunctive 3-condition ADR gate passes (hard-to-reverse AND surprising-without-context AND genuine-trade-off — all three, or no ADR). Durable ADRs land in `docs/adr/NNNN-slug.md` in the worktree and are committed to the repo.
-| `summary.md` | engineer | Task implementation summary — required `#### Criteria Coverage` table maps every task-plan acceptance criterion to a disposition (`covered`, `descoped`, `partial`); reviewer checks this in Stage 3 compliance cross-check |
+| `summary.md` | engineer | Task implementation summary — required `#### Criteria Coverage` table maps every task-plan acceptance criterion to a disposition (`covered`, `descoped`, `partial`) plus a `Reproduction` column (a runnable command per mechanically-verifiable AC, or the sanctioned `n/a — <reason>` marker); reviewer checks this in Stage 3 compliance cross-check and executes recorded commands in Stage 5 AC verification; tester consumes them as coverage seeds |
 | `review.md` | reviewer | Code review output with violations |
 | `security-assessment.md` | security | Vulnerability findings and remediation |
 | `session-context.md` | orchestrator | Session-level context and blockers |

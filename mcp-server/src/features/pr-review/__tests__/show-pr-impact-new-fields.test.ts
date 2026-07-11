@@ -368,7 +368,7 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
       total_affected: 4,
     });
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 99 });
 
     expect(result.blast_radius_by_file).toHaveLength(2);
     const depA = result.blast_radius_by_file.find((e) => e.file === "src/dep-a.ts");
@@ -441,7 +441,7 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
       total_affected: 6,
     });
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 99 });
 
     expect(result.blast_radius_by_file[0].file).toBe("src/dep-high.ts");
     expect(result.blast_radius_by_file[0].dep_count).toBe(3);
@@ -480,7 +480,7 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
       total_affected: 20,
     });
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 99 });
 
     expect(result.blast_radius_by_file).toHaveLength(15);
   });
@@ -512,7 +512,7 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
       total_affected: 1,
     });
 
-    const result = await showPrImpact(tmpDir);
+    const result = await showPrImpact(tmpDir, { pr_number: 99 });
 
     expect(result.blast_radius_by_file).toHaveLength(1);
     const entry = result.blast_radius_by_file[0];
