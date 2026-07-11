@@ -90,9 +90,28 @@ Routine mode authors a new Canon routine artifact using `templates/routine.md` a
 - Lint rules applied: guardrail floor + binding-override coherence (not principle conflict detection or severity checks).
 - No `mcp__canon__*` tools needed — authoring is filesystem-based via the template.
 
+## Apply-Proposal Loop Closure
+
+When the writer is spawned in `apply-proposal` mode — for **any** type (new-principle, new-agent-rule, edit, or retire) — it takes on an **idempotent** loop-closure responsibility after the principle/rule edit succeeds: move the originating proposal file to `applied/` and append a `learning.jsonl` `accepted` entry. This closes the leak documented in PROBE-FINDINGS P2: before this obligation existed, a writer spawned directly — outside `/canon:review-learnings` (a batch-promotion PR, a manual build-flow promotion) — edited the principle but never moved the proposal, orphaning it as permanently "pending."
+
+**Ownership boundary (read before touching `review-learnings.md`):** this writer-side move covers **writer-driven promotions** — any path where the writer agent itself is spawned in `apply-proposal` mode, regardless of caller. It is orthogonal to the **reconcile detector** (`reconcile_learnings` MCP tool, Increment 1 / ADR-0050), which covers **out-of-band promotions with no writer invocation at all** — a human hand-editing a principle file directly, or a batch-promotion PR that hand-edits without ever spawning the writer. Two mechanisms for two distinct gaps; neither supersedes the other.
+
+### Steps (run after the principle/rule edit is saved, before reporting terminal status)
+
+1. Resolve the originating proposal path from the `PROPOSAL=<path>` token in the spawn prompt.
+2. **Idempotent check**: if the proposal file's parent directory is already named `applied/`, `rejected/`, `dismissed/`, or `stale/` — or the file no longer exists at that path (something else already moved it) — the proposal is already resolved. Do nothing further; do not append to `learning.jsonl` again.
+3. Otherwise, move it: create the `applied/` subdirectory alongside the proposal if needed, then move the file into it (e.g. `mkdir -p "{proposal_dir}/applied" && git mv "{proposal_path}" "{proposal_dir}/applied/"`).
+4. Append one entry to `.canon/learning.jsonl`, using the `id`/`proposal_id` and `type`/`target` fields already read from the proposal's frontmatter: `{"timestamp":"<now, ISO-8601>","proposal_id":"<resolved id>","action":"accepted","type":"<frontmatter type>","target":"<frontmatter target>"}` — same shape `/canon:review-learnings` Step 3 already writes.
+
+**Why this is safe under both orderings**: `/canon:review-learnings` Step 3 (items 5–6) performs the identical move + append **after** the writer returns. Both sides are check-then-move — Wave 2 already made the command's move tolerant of an already-moved source (see `review-learnings.md` Step 3) — so whichever side runs first performs the real move + append, and the second side's check finds the proposal already resolved and no-ops. Exactly one move, exactly one `learning.jsonl` line, regardless of order.
+
+**observable-best-effort**: this is best-effort-visible. If the move or append fails (permissions, disk, git error), surface a warning in the `*-SUMMARY.md` — do NOT fail or roll back the promotion that already succeeded above.
+
+**Does not add an auto-apply path**: this closes the loop for a promotion that already happened via an established Accept/HITL context (either `/canon:review-learnings`'s human Accept, or an orchestrator-driven build flow that already gated the promotion). It does not give the writer authority to promote anything autonomously — every existing safety gate below is unchanged and still applies before this loop-closure step is ever reached.
+
 ## Apply-Proposal retire action
 
-When the writer is spawned in `apply-proposal` mode for a `prune-candidate` proposal, it follows Mode: retire in the `canon:write-principle` skill. This action permanently removes a guardrail artifact (principle, convention, or agent-rule) after a human Accept in `/canon:review-learnings`. The operative steps are in the SKILL; this section documents the safety contract.
+When the writer is spawned in `apply-proposal` mode for a `prune-candidate` proposal, it follows Mode: retire in the `canon:write-principle` skill. This action permanently removes a guardrail artifact (principle, convention, or agent-rule) after a human Accept in `/canon:review-learnings`. The operative steps are in the SKILL; this section documents the safety contract. The Apply-Proposal Loop Closure step above runs after retirement completes, same as every other apply-proposal type.
 
 **Four mandatory safety gates** (defense-in-depth — re-checked by the writer even though the learner pre-filtered and review-learnings confirmed):
 

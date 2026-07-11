@@ -6,7 +6,7 @@
 Container for Canon's MCP tool implementations, organized by bounded context. Each subdirectory owns a distinct slice of Canon's capability surface.
 
 ## Architecture
-<!-- last-updated: 2026-06-24 -->
+<!-- last-updated: 2026-07-11 -->
 Features are structured around bounded contexts. Each feature directory is an independent vertical slice with its own tools, services, and tests.
 
 **Feature directories:**
@@ -18,6 +18,7 @@ Features are structured around bounded contexts. Each feature directory is an in
 | `file-context/` | File context tool — structural metrics, imports/exports, blast radius, hotspot data |
 | `history/` | Cross-run analysis — `get_build_history`, `get_historical_artifacts`, `get_cross_run_analysis`; services split across `cross-run-analyzer.ts`, `cross-run-craft-drift.ts`, `cross-run-patterns.ts` |
 | `knowledge-graph/` | Codebase graph — scanner, KG query, import resolution, git intelligence pipeline |
+| `learning/` | Learning-resolution reconcile-on-read — `reconcile_learnings` MCP tool + shared `classifyProposal` actionability classifier (ADR-0050). See `.claude/CLAUDE.md`. |
 | `loops/` | Loop framework — loop-definition schema, registry loader, `list_loops`, `get_loop_definition` (Phase A) |
 | `orchestration/` | Orchestration tools — workspace lifecycle, transcript capture, artifact writing, and agent skill resolution |
 | `pr-review/` | PR review tools — change analysis, blast radius, violation surfacing, review persistence |
