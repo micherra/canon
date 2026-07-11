@@ -51,8 +51,13 @@ export type CompileWavesResult = { ok: true; envelope: WavesEnvelope } | { ok: f
 
 const SANITIZE_PATTERN = /[^A-Za-z0-9._-]/g;
 
-/** Sanitize a task_id for use in a branch name / worktree path (non-charset chars -> `-`). */
-function sanitizeTaskId(taskId: string): string {
+/**
+ * Sanitize a task_id for use in a branch name / worktree path (non-charset
+ * chars -> `-`). Exported so callers that need to embed the same worktree
+ * path/branch in a task's prompt (e.g. `compile-waves.ts`) derive it
+ * identically rather than re-implementing the charset rule.
+ */
+export function sanitizeTaskId(taskId: string): string {
   return taskId.replace(SANITIZE_PATTERN, "-");
 }
 
