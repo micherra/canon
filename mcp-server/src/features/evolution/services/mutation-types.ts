@@ -45,6 +45,42 @@ export type ArtifactClass =
   | "eval-surface";
 
 // ---------------------------------------------------------------------------
+// Proposal kind + score provenance — Gap 3 Layer 3 (learner retire/reinforce wiring)
+// ---------------------------------------------------------------------------
+
+/**
+ * Discriminant for what a mutation candidate proposes to do:
+ *   - "rewrite"   — unchanged Phase 1 behavior: a full-file/span candidate replacing
+ *                   the artifact, gated by violation-based attribution.
+ *   - "retire"    — the artifact's trust-weighted net_score (attribute_outcomes) is
+ *                   strongly negative; candidate_text is the WEAKENED/invalidated
+ *                   artifact (invalidate-don't-delete — never a deletion request).
+ *   - "reinforce" — the artifact's trust-weighted net_score is strongly positive;
+ *                   informational only, no content change proposed.
+ * Defaults to "rewrite" wherever existing code constructs a target/proposal without
+ * setting it explicitly, keeping current behavior byte-compatible.
+ */
+export type MutationProposalKind = "rewrite" | "retire" | "reinforce";
+
+/** One signed, weighted contribution from a single build — the auditable trace unit. */
+export type ScoreProvenanceContribution = {
+  archive_id: string;
+  sign: 1 | -1;
+  weight: number;
+};
+
+/**
+ * The auditable trace set backing a retire/reinforce candidate — carries WHY a
+ * principle is being retired or reinforced (invalidate-don't-delete posture: a
+ * retirement is never a silent drop). Mirrors outcome-attribution.ts's
+ * TrustWeightedScore net_score + contributing_builds shape (Gap 3 Layer 2).
+ */
+export type ScoreProvenance = {
+  net_score: number;
+  contributing_builds: ScoreProvenanceContribution[];
+};
+
+// ---------------------------------------------------------------------------
 // Core target shape — construction-ready for the learner's inline rewrite
 // ---------------------------------------------------------------------------
 
@@ -52,6 +88,12 @@ export type ArtifactClass =
  * A single mutation target ready for the learner to generate a candidate.
  * `baseline_body` is the current on-disk file content (empty string when missing).
  * `gate_eligible` is always true here — ineligible paths land in GateIneligibleTarget.
+ *
+ * `attribution` and `failure_kind` are nullable: a retire/reinforce target (Gap 3
+ * Layer 3) is derived from a corpus-wide trust-weighted score, not a single
+ * violation-based join — it has no FailureAttribution and no FailureKind to report.
+ * `proposal_kind`/`score_provenance` are optional and absent for the unchanged
+ * "rewrite" path.
  */
 export type MutationTarget = {
   target_path: string;
@@ -60,10 +102,14 @@ export type MutationTarget = {
   char_span: [number, number] | null;
   gate_eligible: boolean;
   confidence: AttributionConfidence;
-  failure_kind: FailureKind;
+  failure_kind: FailureKind | null;
   principle_id: string | null;
   attributed_violation_count: number;
-  attribution: FailureAttribution;
+  attribution: FailureAttribution | null;
+  /** Defaults to "rewrite" when absent (existing construction sites, unchanged behavior). */
+  proposal_kind?: MutationProposalKind;
+  /** Present only for retire/reinforce targets — the trust-weighted audit trace. */
+  score_provenance?: ScoreProvenance;
 };
 
 // ---------------------------------------------------------------------------
@@ -96,10 +142,20 @@ export type GateIneligibleTarget = {
     | "harness_entrypoint";
 };
 
-/** An attribution skipped before gate-eligibility check. */
+/**
+ * An attribution skipped before gate-eligibility check, or (Gap 3 L3) a
+ * retire/reinforce score candidate skipped before target construction.
+ * `target_path` carries the principle_id for the two score-mode reasons (no
+ * target_path is known until the artifact resolves).
+ */
 export type SkippedAttribution = {
   target_path: string;
-  reason: "hash_unverified" | "confidence_below_high" | "budget_exhausted";
+  reason:
+    | "hash_unverified"
+    | "confidence_below_high"
+    | "budget_exhausted"
+    | "artifact_unresolved"
+    | "not_gate_eligible";
 };
 
 // ---------------------------------------------------------------------------
@@ -133,8 +189,15 @@ export type SelectMutationTargetsResult = {
  * gate-check evalResult.accepted before calling shapeMutationProposal).
  *
  * apply_channel routing:
- *   principle | rule → "writer" (existing HITL author, review-learnings:79)
- *   all others       → "engineer-build-flow" (DEFERRED enrichment)
+ *   proposal_kind "retire" | "reinforce" → always "writer" (Gap 3 L3)
+ *   proposal_kind "rewrite":
+ *     principle | rule → "writer" (existing HITL author, review-learnings:79)
+ *     all others       → "engineer-build-flow" (DEFERRED enrichment)
+ *
+ * `failure_kind` is nullable — a retire/reinforce proposal has no single violation
+ * to report (corpus-wide trust-weighted score instead). `proposal_kind` is always
+ * present (defaults to "rewrite" at construction); `score_provenance` is present
+ * only for retire/reinforce.
  */
 export type MutationProposal = {
   id: string;
@@ -147,9 +210,13 @@ export type MutationProposal = {
   holdout_baseline: number;
   holdout_candidate: number;
   accepted: true;
-  failure_kind: FailureKind;
+  failure_kind: FailureKind | null;
   principle_id: string | null;
   join_basis: string;
   hash_verified: boolean;
   apply_channel: "writer" | "engineer-build-flow";
+  /** Defaults to "rewrite" — always present in the emitted frontmatter (Gap 3 L3). */
+  proposal_kind: MutationProposalKind;
+  /** Present only for retire/reinforce — the trust-weighted audit trace (Gap 3 L3). */
+  score_provenance?: ScoreProvenance;
 };

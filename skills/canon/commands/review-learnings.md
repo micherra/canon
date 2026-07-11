@@ -21,7 +21,7 @@ Sort directories by timestamp (newest first). If `--all` is passed, show all pro
 
 ### Step 2: Present proposals
 
-For each proposal directory, read all `.md` files within it (excluding any files inside `applied/`, `rejected/`, or `dismissed/` subdirectories). Parse the YAML frontmatter reading `id` first (preferred field), falling back to `proposal_id` for legacy files that predate the `id:` field. Also parse `type`, `confidence`, and `target`. Additionally parse `apply_channel` and `artifact_class` (both may be absent on legacy learner proposals — this is expected; absence is handled in Step 3, not an error). The resolved identifier (whichever field was found) is referred to as `{proposal_id}` in the steps below; when logging to `learning.jsonl`, always use the log key `proposal_id` for backward compatibility regardless of which source field was found.
+For each proposal directory, read all `.md` files within it (excluding any files inside `applied/`, `rejected/`, or `dismissed/` subdirectories). Parse the YAML frontmatter reading `id` first (preferred field), falling back to `proposal_id` for legacy files that predate the `id:` field. Also parse `type`, `confidence`, and `target`. Additionally parse `apply_channel`, `artifact_class`, and `proposal_kind` (all may be absent on legacy learner proposals — this is expected; absence is handled in Step 3, not an error — `proposal_kind` defaults to `"rewrite"` when absent, per `skills/canon/skills/evolve-candidate/SKILL.md`). The resolved identifier (whichever field was found) is referred to as `{proposal_id}` in the steps below; when logging to `learning.jsonl`, always use the log key `proposal_id` for backward compatibility regardless of which source field was found.
 
 If a target principle or convention referenced by a proposal no longer exists in its expected location, inform the user and skip the proposal:
 "Proposal {proposal_id} references {target} which no longer exists. Skipping."
@@ -42,6 +42,7 @@ Present a summary table:
 | 2 | severity-change | — | no-silent-failures | 0.72 | 15 violations in last 10 reviews suggest promotion |
 | 3 | prune-watch | — | some-principle | 0.60 | Never triggered across 10 reviews (in cooling-off; not yet actionable) |
 | 4 | evolution-candidate | primer | primers/diagnosis.md | 0.85 | Diagnosis primer missing structured guidance |
+| 5 | evolution-candidate (retire) | principle | some-principle | 0.60 | Trust-weighted net_score -6.5 across 4 builds — never earns its keep |
 ```
 
 Show `—` in the Artifact class column for proposals where `artifact_class` is absent.
@@ -79,9 +80,19 @@ For each accepted proposal, determine the apply channel using a fail-closed allo
 ```
 raw   = frontmatter.apply_channel   # may be absent on legacy proposals
 class = frontmatter.artifact_class  # may be absent on legacy proposals
+kind  = frontmatter.proposal_kind   # may be absent on proposals predating Gap 3 L3 → default "rewrite"
+
+# --- retire/reinforce dispatch (Gap 3 L3) — takes priority over the channel/class table below.
+# These are `type: "evolution-candidate"` proposals with a NEW proposal_kind, distinct from the
+# legacy `type: "prune-candidate"` retirement track (which deletes via write-principle's Mode:
+# retire). A Gap 3 retire/reinforce candidate is NEVER routed to that delete-based mode. ---
+if type == "evolution-candidate" and kind == "retire":
+    → Arm R (writer, invalidate-don't-delete mode — mark retired, NEVER delete)
+elif type == "evolution-candidate" and kind == "reinforce":
+    → Arm N (writer, confidence-bump-only — no content change, no deletion)
 
 # --- normalize channel (absent ≠ unrecognized) ---
-if raw is absent:
+elif raw is absent:
     channel = "writer"                # legacy learner proposal → existing principle/convention path
 elif raw == "writer":
     channel = "writer"
@@ -90,7 +101,8 @@ elif raw == "engineer-build-flow":
 else:
     → Arm F (fail-safe: surface manual-apply required; do not apply this proposal)
 
-# --- dispatch by channel ---
+# --- dispatch by channel (kind == "rewrite" or absent only — Arm R/Arm N above already
+#      intercepted retire/reinforce) ---
 if channel == "writer":
     → apply via writer agent (see "Writer arm" below)
 elif channel == "engineer-build-flow":
@@ -128,6 +140,61 @@ For each accepted proposal:
    ```json
    {"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"..."}
    ```
+
+**Arm R — retire (Gap 3 L3, `proposal_kind: "retire"`, invalidate-don't-delete):**
+
+This arm applies ONLY to `type: "evolution-candidate"` proposals with `proposal_kind:
+"retire"` — the trust-weighted attribution consumer's retirement track (Gap 3 Layer 3,
+`skills/canon/skills/evolve-candidate/SKILL.md` Step 0). It is distinct from the legacy
+`type: "prune-candidate"` track, which deletes via write-principle's `Mode: retire` —
+this arm NEVER deletes.
+
+1. Resolve `target_path` from proposal frontmatter. If the file does not exist on disk,
+   fall through to Arm F.
+2. Read the CURRENT on-disk content of `target_path` and present the `## Proposed
+   Change` block (the weakened/retired candidate body, per the proposal's invalidate-
+   don't-delete Impact note) as a diff against it.
+3. Ask: **"Accept / Reject / Skip this RETIREMENT of {target_path}? (writer will mark it
+   retired — never delete)"**
+   - **Accept**: Spawn the **writer agent** with `"Mode: apply-proposal. PROPOSAL=${proposal_file_path}. ACTION=invalidate-dont-delete."`
+     The writer's job for this action is narrower than its normal apply-proposal modes:
+     - Read the proposal's `## Proposed Change` candidate body (or the current on-disk
+       body if the candidate omits the marker) and add/update frontmatter fields
+       `status: retired` and `portable: false`, plus a short note (e.g. a `>` blockquote)
+       recording the `score_provenance` net_score and that this was a trust-weighted
+       retirement.
+     - **NEVER run `git rm` or otherwise delete the file.** The artifact stays on disk,
+       fully readable, with its retirement marker and score_provenance trace intact.
+     - Save the edited file in place (same path — this is an edit, not a move).
+     - **Apply-provenance — record + producer commit**: identical to the Writer arm's
+       steps 1 and 4–5 above (before/after hash capture, `record_applied_evolution` call,
+       charset-guarded producer commit) — this IS a `type: "evolution-candidate"`
+       proposal, so apply-provenance applies exactly as for a rewrite proposal.
+   - **Reject / Skip**: same mechanics as "Reject / Dismiss / Skip mechanics" below.
+4. After the writer completes, move the proposal file to
+   `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl`
+   with `proposal_kind: "retire"` and `apply_channel: "writer"` included.
+
+**Arm N — reinforce (Gap 3 L3, `proposal_kind: "reinforce"`, informational, no deletion):**
+
+This arm applies ONLY to `type: "evolution-candidate"` proposals with `proposal_kind:
+"reinforce"` — trust-weighted positive evidence that a principle earns its keep. No
+content change is proposed.
+
+1. Present the proposal's `## Observation`/`## Evidence` sections (the score_provenance
+   trace) to the reviewer.
+2. Ask: **"Acknowledge this REINFORCEMENT of {target_path}? (confidence bump only — no
+   content change, no deletion)"**
+   - **Accept**: Spawn the **writer agent** with `"Mode: apply-proposal. PROPOSAL=${proposal_file_path}. ACTION=confidence-bump."`
+     The writer records a confidence/trust annotation for the principle (e.g. a note in
+     the artifact or a `.canon/learning.jsonl` entry — no MANDATORY on-disk edit for this
+     action; if the writer has no confidence field to bump, it may no-op the file write
+     and rely on the `learning.jsonl` entry alone as the durable record). It must NEVER
+     write or delete artifact content beyond this.
+   - **Reject / Skip**: same mechanics as "Reject / Dismiss / Skip mechanics" below.
+3. After the writer completes (or no-ops), move the proposal file to
+   `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl`
+   with `proposal_kind: "reinforce"` and `apply_channel: "writer"` included.
 
 **Arm M — primer / agent / template direct-write:**
 
@@ -234,6 +301,7 @@ If any proposals were accepted, suggest the user run `/canon:check` to verify th
 - `learning.jsonl` is append-only
 - Never demote security-tagged rules; show extra confirmation for any rule demotion
 - Never retire security-tagged or never-pruneable artifacts (`fail-closed-by-default`, `hooks-fail-closed`, `least-privilege-access`, `secrets-never-in-code`, `validate-at-trust-boundaries`, `agent-artifact-write-before-return`, `agent-template-required`); show a rule-tier CAUTION confirmation for any rule-tier `prune-candidate`; rule-tier retirement requires a non-null `superseded_by`
+- **Gap 3 L3 retirement is a SEPARATE track from `prune-candidate`**: a `proposal_kind: "retire"` proposal (Arm R) is ALWAYS invalidate-don't-delete — the writer marks the artifact `status: retired` / `portable: false` and NEVER runs `git rm`, regardless of artifact tier. This is intentionally less destructive than `prune-candidate`'s delete-based `Mode: retire`, so the security-tagged/never-pruneable allowlist checks above do not block it — but the writer's Arm R spawn instruction never permits deletion either way, so no allowlist bypass is possible. A `proposal_kind: "reinforce"` proposal (Arm N) never writes or deletes artifact content — confidence bump only.
 - If a target principle or convention no longer exists, inform the user and skip rather than failing silently
 - Apply-provenance is recorded (via `record_applied_evolution`) ONLY for accepted `type: evolution-candidate` proposals, and ONLY from the two write arms (Writer arm + Arm M) after the target file is actually edited; legacy proposal types (new-convention, severity-change, prune-candidate, prune-watch) carry no holdout scores and never record. Arm T and Arm F never write and never record. The record only writes a drift.db row — it never reverts, quarantines, or merges anything.
 - Apply-provenance is also committed: the Writer arm and Arm M each create ONE git commit per accepted `evolution-candidate` apply, carrying a `Canon-Evolution: {proposal_id}` trailer — guarded by the proposal_id charset check (dc-05) and skipped (with a surfaced warning, apply left standing) when the current branch is `main`/`master` (no auto-commit on main/master). After all applies, `backfill_applying_commit` is invoked once to populate `applied_evolutions.applying_commit` from those trailers — best-effort-visible, never blocking. Legacy proposal types never commit and never trigger the backfill call on their own.
