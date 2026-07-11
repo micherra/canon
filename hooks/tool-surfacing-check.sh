@@ -39,11 +39,25 @@
 #         opener's name literal cannot be resolved on its immediately-
 #         following non-blank line (unresolvable -> fail closed, never
 #         guessed), OR registration files were present but zero tool names
-#         were extracted at all (vacuous-pass tripwire), OR the gate's own
-#         arg prerequisites failed (non-directory worktree_path, missing
+#         were extracted at all (vacuous-pass tripwire), OR the total count
+#         of registration OPENERS (registerTool(/registerToolWithUi( literal
+#         occurrences) exceeds the number of RESOLVED rows the parser emitted
+#         (opener-accounting tripwire — a structural, vocabulary-free
+#         completeness check independent of the line-parser's own idioms; see
+#         "OPENER-ACCOUNTING TRIPWIRE" below), OR the gate's own arg
+#         prerequisites failed (non-directory worktree_path, missing
 #         mcp-server/src/app) — fail-closed (hooks-fail-closed). Emits a
 #         CANON: diagnostic on stderr for every failing path
 #         (hooks-observable-failures).
+#
+# The `registerToolWithUi(` opener form is recognized whether or not `server,`
+# appears on the same line: when the opener line carries no resolvable name
+# (with or without a same-line `server,` prefix), the bounded resolution
+# window extends one extra non-blank line to skip a lone `server,` line before
+# looking for the name literal (the split-opener idiom
+# `registerToolWithUi(\n  server,\n  "name",` — the Codex P2 finding this gate
+# was hardened against). If that extended window still doesn't resolve, the
+# gate fails closed exactly as the single-line-window case does.
 
 set -euo pipefail
 
@@ -106,7 +120,7 @@ for f in "${REG_FILES[@]+"${REG_FILES[@]}"}"; do
       }
       return ""
     }
-    BEGIN { expecting = 0; unresolved = 0 }
+    BEGIN { expecting = 0; expecting_withui = 0; unresolved = 0 }
     {
       line = $0
       if (expecting) {
@@ -114,6 +128,13 @@ for f in "${REG_FILES[@]+"${REG_FILES[@]}"}"; do
         gsub(/^[ \t]+/, "", trimmed)
         gsub(/[ \t]+$/, "", trimmed)
         if (trimmed == "") { next }  # skip blank lines; still waiting for the bounded line
+        if (expecting_withui && trimmed == "server,") {
+          # split-before-server idiom: registerToolWithUi(\n  server,\n
+          # "name" -- consume the lone server, line, keep waiting one more
+          # non-blank line for the name literal.
+          expecting_withui = 0
+          next
+        }
         name = try_name(line)
         if (name != "") {
           hasmarker = (index(line, marker) > 0) ? 1 : 0
@@ -124,6 +145,7 @@ for f in "${REG_FILES[@]+"${REG_FILES[@]}"}"; do
           exit 1
         }
         expecting = 0
+        expecting_withui = 0
         next
       }
       if (match(line, /registerTool\(/)) {
@@ -137,14 +159,19 @@ for f in "${REG_FILES[@]+"${REG_FILES[@]}"}"; do
         }
         next
       }
-      if (match(line, /registerToolWithUi\(server,[[:space:]]*/)) {
+      if (match(line, /registerToolWithUi\(/)) {
         rest = substr(line, RSTART + RLENGTH)
+        # same-line "server," continuation: registerToolWithUi(server, "name"
+        if (match(rest, /^[[:space:]]*server,[[:space:]]*/)) {
+          rest = substr(rest, RLENGTH + 1)
+        }
         name = try_name(rest)
         if (name != "") {
           hasmarker = (index(line, marker) > 0) ? 1 : 0
           printf "%s\t%d\n", name, hasmarker
         } else {
           expecting = 1
+          expecting_withui = 1
         }
         next
       }
@@ -174,6 +201,37 @@ awk -F'\t' '$2 == "1" { print $1 }' "$REG_RAW" | sort -u > "$MARKER_FILE"
 # ---------------------------------------------------------------------------
 if [[ ! -s "$REGISTERED_FILE" ]]; then
   echo "CANON: tool-surfacing-check -- registration files present but zero tool names extracted (parser gap or unexpected registration form)" >&2
+  exit 2
+fi
+
+# ---------------------------------------------------------------------------
+# OPENER-ACCOUNTING TRIPWIRE — vocabulary-free completeness check,
+# independent of the line-parser above. Counts total registration OPENERS
+# (literal `registerTool(` + `registerToolWithUi(` occurrences) across the
+# same file set the extractor scanned, and compares to the number of
+# RESOLVED rows the extractor emitted. The line-parser's own idioms only
+# cover the opener forms it knows about; a form it doesn't recognize (or a
+# second opener packed onto a line the parser already consumed via `next`)
+# would otherwise be silently uncounted with no error -- exactly the fail-
+# open shape this whole gate exists to prevent (PR #270). openers > resolved
+# means some opener was not accounted for -- fail closed.
+# ---------------------------------------------------------------------------
+OPENERS_REGISTERTOOL=0
+OPENERS_REGISTERTOOLWITHUI=0
+for f in "${REG_FILES[@]+"${REG_FILES[@]}"}"; do
+  # DOCUMENTED FAIL-OPEN -- grep exits 1 on zero matches, which is a valid
+  # (zero) count here, not a failure; the `|| true` only neutralizes the
+  # exit status under set -e, the assigned count is unaffected either way.
+  c1="$(grep -o 'registerTool(' "$f" | wc -l | tr -d '[:space:]')" || true
+  c2="$(grep -o 'registerToolWithUi(' "$f" | wc -l | tr -d '[:space:]')" || true
+  OPENERS_REGISTERTOOL=$((OPENERS_REGISTERTOOL + c1))
+  OPENERS_REGISTERTOOLWITHUI=$((OPENERS_REGISTERTOOLWITHUI + c2))
+done
+TOTAL_OPENERS=$((OPENERS_REGISTERTOOL + OPENERS_REGISTERTOOLWITHUI))
+RESOLVED_COUNT="$(wc -l < "$REG_RAW" | tr -d '[:space:]')"
+
+if [[ "$TOTAL_OPENERS" -gt "$RESOLVED_COUNT" ]]; then
+  echo "CANON: tool-surfacing-check failed-closed -- opener-accounting mismatch: ${TOTAL_OPENERS} registration opener(s) found (registerTool(: ${OPENERS_REGISTERTOOL}, registerToolWithUi(: ${OPENERS_REGISTERTOOLWITHUI}) but only ${RESOLVED_COUNT} resolved -- some opener was not accounted for by the parser" >&2
   exit 2
 fi
 

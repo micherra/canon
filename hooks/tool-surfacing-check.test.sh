@@ -90,6 +90,50 @@ write_register_ui_multiline() {
   } > "$root/mcp-server/src/app/$file"
 }
 
+# write_register_ui_split_before_server <root> <file> <tool_name> [other_name]
+# `registerToolWithUi(\n  server,\n  "<tool_name>", ...)` — opener split
+# BEFORE `server` (the Codex P2 repro: neither the `registerTool(` branch nor
+# the same-line `registerToolWithUi(server,` branch matches the opener line).
+# When [other_name] is given, a second, normally-parsed `registerTool(` sits
+# ahead of it in the same file so the total extraction is non-zero and the
+# vacuous-pass tripwire alone cannot catch the miss (case p).
+write_register_ui_split_before_server() {
+  local root="$1" file="$2" name="$3" other="${4:-}"
+  {
+    if [[ -n "$other" ]]; then
+      printf 'function registerX(server) {\n'
+      printf '  server.registerTool(\n'
+      printf '    "%s",\n' "$other"
+      printf '    { description: "x", inputSchema: {} },\n'
+      printf '    async () => ({}),\n'
+      printf '  );\n'
+      printf '}\n'
+    fi
+    printf 'function registerY(server) {\n'
+    printf '  registerToolWithUi(\n'
+    printf '    server,\n'
+    printf '    "%s", {\n' "$name"
+    printf '    description: "x",\n'
+    printf '  });\n'
+    printf '}\n'
+  } > "$root/mcp-server/src/app/$file"
+}
+
+# write_register_packed_same_line <root> <file> <name_a> <name_b>
+# Two `registerTool(` openers on the SAME source line — the per-line state
+# machine (`match()` + `next`) only ever inspects the first match on a given
+# line, so the second opener is silently skipped with no row and no error.
+# Direct exercise of the opener-accounting tripwire, independent of the
+# split-before-server parser gap (case q).
+write_register_packed_same_line() {
+  local root="$1" file="$2" name_a="$3" name_b="$4"
+  {
+    printf 'function registerX(server) {\n'
+    printf '  server.registerTool("%s", h1); server.registerTool("%s", h2);\n' "$name_a" "$name_b"
+    printf '}\n'
+  } > "$root/mcp-server/src/app/$file"
+}
+
 # write_register_dynamic <root> <file>
 # Registration is entirely dynamic — no `registerTool(` / `registerToolWithUi(`
 # idiom appears anywhere in the file, so zero tool names can be extracted from
@@ -368,6 +412,36 @@ echo "-- (o) registerTool(sneakyTool, ... \"get_context\" ...) does not evade vi
   write_register_sneaky "$FIX" register-o.ts
   write_agent "$FIX" engineer "get_context"
   run_gate_out 2 "unresolvable registration" "sneaky unquoted name does not evade via later quoted token" "$FIX"
+  rm -rf "$FIX"
+}
+
+echo "-- (p) registerToolWithUi( split BEFORE server (Codex P2 repro) is captured, not silently skipped --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_ui_split_before_server "$FIX" register-p.ts split_tool granted_tool
+  write_agent "$FIX" engineer "granted_tool"
+  run_gate 2 "split-before-server ui tool unsurfaced + other tool granted -> exit 2 (not silent 0)" "$FIX"
+  rm -rf "$FIX"
+}
+
+echo "-- (p2) registerToolWithUi( split BEFORE server, legitimately granted -> exit 0 (no false positive) --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_ui_split_before_server "$FIX" register-p2.ts split_tool granted_tool
+  write_agent "$FIX" engineer "split_tool,granted_tool"
+  run_gate 0 "split-before-server ui tool granted -> exit 0" "$FIX"
+  rm -rf "$FIX"
+}
+
+echo "-- (q) two registerTool( openers packed on one source line -> exit 2 via opener-accounting tripwire --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_packed_same_line "$FIX" register-q.ts packed_a packed_b
+  write_agent "$FIX" engineer "packed_a,packed_b"
+  run_gate_out 2 "opener" "packed same-line openers -> exit 2 opener/resolved mismatch" "$FIX"
   rm -rf "$FIX"
 }
 
