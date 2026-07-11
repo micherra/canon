@@ -300,6 +300,16 @@ Follow the save and validate steps from the appropriate mode (new-principle, new
 - The file path where the entry was saved
 - Any significant changes made to the proposal content during assembly
 
+### Step 6: Close the loop — move the originating proposal (idempotent)
+
+After saving, perform the idempotent move-and-append documented in `agents/writer.md` § Apply-Proposal Loop Closure:
+
+1. Resolve the `PROPOSAL=<path>` token from the spawn prompt.
+2. If the proposal's parent directory is already `applied/`, `rejected/`, `dismissed/`, or `stale/`, or the file no longer exists at that path, it is already resolved — do nothing.
+3. Otherwise, create an `applied/` subdirectory alongside the proposal if needed, move the proposal file into it, then append one `accepted` entry to `.canon/learning.jsonl` (same shape `/canon:review-learnings` Step 3 writes), using the `id`/`proposal_id` and `type`/`target` fields read from the proposal's frontmatter in Step 1.
+
+This is idempotent and safe regardless of whether `/canon:review-learnings` also performs its own move after the writer returns — see the Ownership boundary note in `agents/writer.md`. On failure, note the warning in the `*-SUMMARY.md`; do NOT fail or roll back the save that already succeeded.
+
 ---
 
 ## Mode: retire
@@ -340,12 +350,17 @@ Proceed only after Steps 1 and 2 pass. Use the existing toolset (no new tool req
    - Clean up each hit found: remove index entries, cross-references, and citations.
 3. Stage all reference-cleanup edits with `git add`.
 
-### Step 4: Write the apply-proposal summary
+### Step 4: Close the loop — move the originating proposal (idempotent)
+
+Perform the same idempotent move-and-append as apply-proposal Step 6 above (see `agents/writer.md` § Apply-Proposal Loop Closure): if the proposal's parent directory is already `applied/`/`rejected/`/`dismissed/`/`stale/`, or the file no longer exists at that path, do nothing. Otherwise move the proposal into a sibling `applied/` subdirectory and append one `accepted` entry to `.canon/learning.jsonl`. This is idempotent under either ordering with `/canon:review-learnings`'s own move.
+
+### Step 5: Write the apply-proposal summary
 
 Write the `*-SUMMARY.md` (per `agent-template-required`) documenting:
 - The removed artifact file path
 - Each reference-cleanup edit (file, line, what was removed)
 - Confirmation that the never-pruneable allowlist check and rule-tier gate passed
+- Confirmation of the Step 4 loop-closure outcome (moved, or already resolved)
 
 ---
 

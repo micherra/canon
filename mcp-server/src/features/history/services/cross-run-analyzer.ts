@@ -23,7 +23,11 @@ import type {
 } from "../history-types.ts";
 import { computeCliffEventsDimension } from "./cross-run-cliff-events.ts";
 import { computeCraftDrift } from "./cross-run-craft-drift.ts";
-import { analyzePlannerPatterns, computePerformanceTrends } from "./cross-run-patterns.ts";
+import {
+  analyzePlannerPatterns,
+  computeCacheEfficiencyByAgent,
+  computePerformanceTrends,
+} from "./cross-run-patterns.ts";
 import { computeOutcomeWeight, type OutcomeSignals } from "./judge-weight.ts";
 
 // ---- Helpers ----
@@ -481,11 +485,13 @@ export function analyzeCrossRunPatterns(
   const planner_patterns = analyzePlannerPatterns(summaries);
   const craft_drift = computeCraftDrift(craftProfiles);
   const cliff_events = computeCliffEventsDimension(cliffRows);
+  const cache_efficiency = computeCacheEfficiencyByAgent(summaries);
   const analysis_window = computeAnalysisWindow(allReviews, allFlowRuns, summaries);
 
   return {
     agent_performance_trends,
     analysis_window,
+    cache_efficiency,
     cliff_events,
     craft_drift,
     fix_cycle_patterns,
