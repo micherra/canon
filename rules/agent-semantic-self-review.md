@@ -23,10 +23,10 @@ State a short 3-axis result in the return (or summary — see `templates/summary
 
 This rule governs a SEMANTIC judgment made by the engineer, on live source, before returning, while context is warm. It is deliberately distinct from the automated **evaluator gate** (`agents/evaluator.md`, the post-implement/fix quality gate in root `CLAUDE.md` → Post-Step Effects), which is:
 
-- **STRUCTURAL / regex-pattern**: it consumes a pre-computed `EvaluateStepOutput` — `PatternFinding[]` (lazy/hacky/`todo`/`fixme`/`as-any`/`ts-ignore`/bare-catch markers), file-scope drift (declared-vs-actual overlap), and diff stats. It never sees source.
+- **STRUCTURAL / regex-pattern**: it consumes a pre-computed `EvaluateStepOutput` — `PatternFinding[]` (the lazy-marker and hacky-marker families it scans for), file-scope drift (declared-vs-actual overlap), and diff stats. It never sees source.
 - **Orchestrator-side, Haiku, fail-open, AFTER the engineer returns** — a fresh agent with no memory of writing the code.
 
-Do NOT re-count lazy/hacky markers, do NOT re-derive scope-drift file overlap, and do NOT restate the evaluator's four structural dimensions here — that is the evaluator's job, running separately afterward. This rule asks only the three semantic questions above. The boundary is clean on two orthogonal axes — signal type (structural/regex vs. semantic/intent) and who/when/context (orchestrator Haiku on pre-extracted signals after return vs. the engineer on live source before return) — so there is no overlap to reconcile.
+Do NOT re-count lazy-marker or hacky-marker hits, do NOT re-derive scope-drift file overlap, and do NOT restate the evaluator's four structural dimensions here — that is the evaluator's job, running separately afterward. This rule asks only the three semantic questions above. The boundary is clean on two orthogonal axes — signal type (structural/regex vs. semantic/intent) and who/when/context (orchestrator Haiku on pre-extracted signals after return vs. the engineer on live source before return) — so there is no overlap to reconcile.
 
 ## Rationale
 

@@ -155,7 +155,7 @@
     "rules/agent-missing-artifact.md": "c292a91479d8018f16203cec42f9b7e71ef81ca01fb773c9fc0103657b308aaf",
     "rules/agent-never-trust-overlay-tier.md": "a01b27f882c0882e90f91aa23bf079ed06e9dc4d7d96da4023c0a73142ba90e4",
     "rules/agent-plans-are-prompts.md": "c90e61abd84ef07572680fea32eaaa05ca4045e37fe20cab97c97799742b725a",
-    "rules/agent-semantic-self-review.md": "9c9baf30dab37bc68c81693dc1402e51499e4d95fd23e87c7d15ea5f25ae2d1e",
+    "rules/agent-semantic-self-review.md": "57ace375a233f234fcf0639d72616c7f64fab09cdf96620376717fbebcc172d2",
     "rules/agent-simplify-before-extending.md": "9fc76856a8e71ef4cb1b9bcd0d2c359ad12c5b5b928d499535b967a111fabac0",
     "rules/agent-structured-triage.md": "b46cd8eef823dbd56734175056ce93c4ab83d7cb95ddd8cb1447e400588a4104",
     "rules/agent-surface-assumptions.md": "5218e788bae5bdf51a8d83bb9c7d4e8bbdc73424035bff3d58f019f1cde38f51",
