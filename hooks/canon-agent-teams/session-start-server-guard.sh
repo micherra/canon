@@ -58,14 +58,43 @@ if [[ -f "$PID_FILE" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Part B: Zero-tool observability guard — health probe
+# Part B: Zero-tool observability guard — bounded /health poll
 # ---------------------------------------------------------------------------
-if curl -fsS --max-time 2 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
-  # Server is responding — session is healthy
-  :
+# DOCUMENTED FAIL-OPEN: this is a quality/observability signal, not a safety
+# gate — hooks-fail-closed deliberately does NOT apply here (matches the
+# documented fail-open posture of daemon-version-nudge.sh and the evaluator
+# gate). Every path below still exits 0.
+#
+# A bounded retry/poll (mirroring the supervisor's own curl-poll idiom in
+# session-start-daemon-supervisor.sh) avoids false-positive WARNs while the
+# daemon is still mid-start. The default budget is kept under the
+# supervisor's own 10s start-timeout so a genuine outage stays owned by the
+# supervisor's louder CANON ERROR block.
+HEALTH_TIMEOUT="${CANON_GUARD_HEALTH_TIMEOUT:-8}"
+
+_guard_probe_health() {
+  curl -fsS --max-time 1 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1
+}
+
+HEALTHY=0
+if _guard_probe_health; then
+  HEALTHY=1
 else
-  # Server is not responding. Print loud, actionable warning.
-  echo "CANON WARN: Canon MCP server is not responding on :${PORT}. If mcp__canon__* tools are unavailable, run /mcp to reconnect (stdio servers do not auto-reconnect)."
+  ELAPSED=0
+  while (( ELAPSED < HEALTH_TIMEOUT )); do
+    sleep 1
+    (( ELAPSED++ )) || true
+    if _guard_probe_health; then
+      HEALTHY=1
+      break
+    fi
+  done
+fi
+
+if [[ "$HEALTHY" -eq 0 ]]; then
+  # Server is still not responding after the bounded poll. Print loud,
+  # actionable warning.
+  echo "CANON WARN: Canon MCP server is not responding on :${PORT} after ${HEALTH_TIMEOUT}s. If mcp__canon__* tools are unavailable, run /mcp to reconnect; if the HTTP daemon is down, start it with: bash mcp-server/boot.sh --daemon (or restart the session)."
 fi
 
 exit 0
