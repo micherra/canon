@@ -38,19 +38,31 @@ tests supply fakes directly rather than mocking modules.
 - **Reconcile**: only ACTIONABLE pending proposals are eligible. A proposal
   reconciles only when its resolved target path (`target_path` ->
   `target_file` -> `target`-as-principle-id, first existing of
-  `principles/**/<id>.md` / `.canon/principles/**/<id>.md`) exists on disk AND
-  `git log --since=<proposal date> -- <target>` shows a commit — the
-  evidence predicate (decision 0047; guards against false-positive
-  auto-resolve). A commit that CREATED the target is sufficient on its own;
-  a commit that only MODIFIED an already-existing target must additionally
-  reference the proposal (its id, or the target's principle id) in the
-  commit message — an unrelated churn commit to the same (often
-  frequently-edited) file is not evidence. The proposal-date bound uses the
-  frontmatter `created` field when it carries a time component, falling back
-  to the full-precision dir-timestamp when `created` is date-only (a
-  date-only value collapses to an implicit midnight and can falsely count a
-  same-day-earlier commit as post-dating an evening proposal). INFORMATIONAL
-  proposals are never reconciled — they have no apply-mapping.
+  `principles/**/<id>.md` / `.canon/principles/**/<id>.md`) — re-contained
+  under `project_dir` via `isPathContained` (a resolved path escaping via
+  `..` segments is treated as unresolved, closing a path-traversal existence
+  oracle) — exists on disk AND `git log --since=<proposal date> -- <target>`
+  shows a commit — the evidence predicate (decision 0047; guards against
+  false-positive auto-resolve). A commit that CREATED the target is
+  sufficient on its own; a DEDICATED creation probe (`creationCommitSince`,
+  `--diff-filter=A`) checks for this FIRST and recovers an OLDER creating
+  commit even when a NEWER, unrelated commit later churns the same file —
+  the plain most-recent-commit view (`latestCommitSince`) alone would only
+  ever see the newer churn commit and (wrongly) conclude the target was
+  never created, orphaning the proposal forever. Only when no creation
+  commit is found does evaluation fall back to `latestCommitSince`: a commit
+  that only MODIFIED an already-existing target must additionally reference
+  the proposal (its id, or the target's principle id) in the commit message
+  — an unrelated churn commit to the same (often frequently-edited) file is
+  not evidence. The proposal-date bound uses the frontmatter `created` field
+  when it is a recognized full timestamp, falling back to the
+  full-precision dir-timestamp when `created` is date-only (a date-only
+  value collapses to an implicit midnight and can falsely count a
+  same-day-earlier commit as post-dating an evening proposal) OR malformed
+  (a value that is neither date-only nor a full timestamp, e.g. `soon`, is
+  never handed to `git log --since` verbatim — git's approxidate parser
+  would silently mis-parse it). INFORMATIONAL proposals are never
+  reconciled — they have no apply-mapping.
 - **Freshness** (decision `freshness-policy`): `FRESHNESS_DAYS = 30` default,
   overridable via `freshness_days`. A stale set (`age > freshness_days`) that
   is fully informational (zero actionable survivors after reconcile)
@@ -71,9 +83,12 @@ tests supply fakes directly rather than mocking modules.
   to (new `"accepted"`/`"archived"` lines); a proposal file is only ever
   `rename`d into a resolution subdir, never `rm`'d. The append happens
   immediately after each proposal's own rename (`moveAndAppend`), not batched
-  at the end of the apply loop — so a crash partway through applying a plan
-  never leaves an already-moved file with no audit line
-  (`explicit-transaction-boundaries`).
+  at the end of the apply loop — this bounds a mid-apply crash's
+  unlogged-move window to AT MOST the single proposal in flight when the
+  crash lands (down from the whole batch under end-of-loop batching); the
+  residual one-proposal window (a crash between that proposal's own rename
+  and its append) is inherent to non-atomic filesystem operations and is not
+  eliminated (`explicit-transaction-boundaries`).
 - **Idempotent**: reconciled/archived files no longer appear as top-level
   `.md` files in their `{ts}/` dir on the next run, so a second run over
   already-resolved state is a zero-mutation no-op by construction — no

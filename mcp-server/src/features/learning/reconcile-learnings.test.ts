@@ -60,6 +60,12 @@ function makeFakeFs(opts: {
  * evidence on its own (creation is unambiguous). `createdFile: false` (the
  * default) models a commit that only MODIFIED an already-existing target —
  * this requires the relevance check (`message` content-linkage) to reconcile.
+ *
+ * `creationCommitSince` mirrors the same single scenario: when the fake
+ * models a creation (`createdFile: true`), the dedicated creation probe
+ * finds it too (a real creating commit IS a creation, regardless of which
+ * seam method asks). When the fake models a pure modify, the creation probe
+ * correctly finds nothing.
  */
 function makeFakeGit(
   hasCommit: boolean,
@@ -67,6 +73,9 @@ function makeFakeGit(
 ): ReconcileGitSeam {
   const { hash = "abc1234", createdFile = false, message = "" } = opts;
   return {
+    creationCommitSince: vi.fn(() =>
+      hasCommit && createdFile ? { createdFile: true, hash, message } : null,
+    ),
     latestCommitSince: vi.fn(() => (hasCommit ? { createdFile, hash, message } : null)),
   };
 }
@@ -74,12 +83,19 @@ function makeFakeGit(
 /**
  * Time-aware fake for the date-only `created` boundary tests: returns a
  * commit only when `commitIso` is at-or-after the requested `sinceIso`,
- * mirroring `git log --since` semantics.
+ * mirroring `git log --since` semantics. Both seam methods apply the same
+ * time check — these tests probe the `--since` boundary, not the
+ * creation-vs-modify distinction.
  */
 function makeTimeAwareFakeGit(commitIso: string, hash = "abc1234"): ReconcileGitSeam {
+  const evidenceIfDue = (sinceIso: string) =>
+    new Date(commitIso) >= new Date(sinceIso) ? { createdFile: true, hash, message: "" } : null;
   return {
+    creationCommitSince: vi.fn((_projectDir: string, _targetPath: string, sinceIso: string) =>
+      evidenceIfDue(sinceIso),
+    ),
     latestCommitSince: vi.fn((_projectDir: string, _targetPath: string, sinceIso: string) =>
-      new Date(commitIso) >= new Date(sinceIso) ? { createdFile: true, hash, message: "" } : null,
+      evidenceIfDue(sinceIso),
     ),
   };
 }
@@ -207,6 +223,7 @@ describe("reconcileLearnings", () => {
     });
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const git: ReconcileGitSeam = {
+      creationCommitSince: () => null, // no creation evidence — falls through to latestCommitSince
       latestCommitSince: () => {
         throw new Error("simulated git failure");
       },
@@ -544,4 +561,8 @@ describe("reconcileLearnings", () => {
     expect(result.reconciled).toHaveLength(1);
     expect(fs.renamed).toHaveLength(1);
   });
+
+  // Fixes A, C, D (fix-review round 2 — creation-probe, malformed `created`
+  // guard, target re-containment) live in reconcile-learnings-fixes.test.ts —
+  // split out to keep this file under the line-count lint budget.
 });

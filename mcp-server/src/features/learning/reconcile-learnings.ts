@@ -8,9 +8,16 @@
  * target post-dates the proposal (the evidence predicate, decision 0047),
  * moves the proposal to `applied/` and appends an accepted `learning.jsonl`
  * entry immediately after its own move (per-file interleaving — see
- * `moveAndAppend` — so a crash mid-apply never leaves a moved file with no
- * audit line). A commit that CREATED the target is sufficient evidence on
- * its own; a commit that only MODIFIED an already-existing target must
+ * `moveAndAppend`). This bounds a mid-apply crash's unlogged-move window to
+ * AT MOST the single proposal in flight when the crash lands — down from N
+ * (the whole batch) under naive append-at-end-of-loop batching; the residual
+ * one-file window (a crash between THIS proposal's own rename and its
+ * append) is inherent to non-atomic filesystem operations and is not
+ * eliminated. A commit that CREATED the target is sufficient evidence on
+ * its own — including an OLDER creating commit even when a NEWER, unrelated
+ * commit later churns the same file (the dedicated creation probe, not the
+ * single most-recent-commit view, decides this); a commit that only
+ * MODIFIED an already-existing target must
  * additionally reference the proposal (id or principle id) in its message —
  * an unrelated churn commit to the same file is not evidence. Also computes
  * freshness (decision `freshness-policy`): a stale, fully-informational set
@@ -32,6 +39,7 @@ import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { isNotFound } from "@shared/lib/errors.ts";
 import { isSafeProjectDirInput } from "@shared/lib/safe-project-dir.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { isPathContained } from "@shared/lib/worktree-guard.ts";
 import { classifyProposal } from "./actionability.ts";
 
 // ---------------------------------------------------------------------------
@@ -84,8 +92,29 @@ export type ReconcileGitSeam = {
    * exists on disk AND has a commit that post-dates the proposal. Whether
    * that evidence is SUFFICIENT (creation vs. relevance-checked modification)
    * is decided by the caller — see `evaluateActionableProposal`.
+   *
+   * NOTE: this returns only the SINGLE most recent qualifying commit. A
+   * target created by an older commit and later churned by an unrelated,
+   * newer commit is reported here as the newer (non-creating) commit — see
+   * `creationCommitSince` for the dedicated probe that recovers the older
+   * creation evidence regardless of later churn.
    */
   latestCommitSince(
+    projectDir: string,
+    targetPath: string,
+    sinceIso: string,
+  ): CommitEvidence | null;
+  /**
+   * Dedicated creation probe: returns evidence for the most recent commit
+   * that ADDED `targetPath` at or after `sinceIso`, or null when no such
+   * creating commit exists in that window. Independent of
+   * `latestCommitSince` — a target can have an older creating commit AND a
+   * newer, unrelated modifying commit; `latestCommitSince` alone would only
+   * ever see the newer one. Creation is sufficient evidence on its own
+   * (decision 0047), so the caller checks this FIRST, before falling back to
+   * `latestCommitSince`'s modify-plus-relevance path.
+   */
+  creationCommitSince(
     projectDir: string,
     targetPath: string,
     sinceIso: string,
@@ -123,6 +152,35 @@ export const defaultFsSeam: ReconcileFsSeam = {
 
 /** Default git seam — real `git log`/`git show` via the shared git adapter. */
 export const defaultGitSeam: ReconcileGitSeam = {
+  creationCommitSince(projectDir, targetPath, sinceIso) {
+    // `--diff-filter=A` restricts git log to commits that ADDED targetPath —
+    // this finds the creating commit directly, regardless of how many later
+    // commits touched the file since.
+    const result = gitExec(
+      [
+        "log",
+        "--since",
+        sinceIso,
+        "--diff-filter=A",
+        "-n",
+        "1",
+        "--format=%h%x00%B",
+        "--",
+        targetPath,
+      ],
+      projectDir,
+    );
+    if (!result.ok) return null;
+    const raw = result.stdout.trim();
+    if (raw.length === 0) return null;
+
+    const sep = raw.indexOf("\0");
+    const hash = sep === -1 ? raw : raw.slice(0, sep);
+    const message = sep === -1 ? "" : raw.slice(sep + 1).trim();
+
+    return { createdFile: true, hash, message };
+  },
+
   latestCommitSince(projectDir, targetPath, sinceIso) {
     const result = gitExec(
       ["log", "--since", sinceIso, "-n", "1", "--format=%h%x00%B", "--", targetPath],
@@ -201,11 +259,11 @@ function dirTimestampToIso(tsDir: string): string {
   return tsDir.replace(/T(\d{2})-(\d{2})-(\d{2})Z$/, "T$1:$2:$3Z");
 }
 
-const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const FULL_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
 
-/** True for a bare `YYYY-MM-DD` value with no time component. */
-function isDateOnly(value: string): boolean {
-  return DATE_ONLY_PATTERN.test(value);
+/** True for a full `YYYY-MM-DDTHH:MM:SS` timestamp (optional fraction/offset). */
+function isFullTimestamp(value: string): boolean {
+  return FULL_TIMESTAMP_PATTERN.test(value);
 }
 
 /**
@@ -214,11 +272,16 @@ function isDateOnly(value: string): boolean {
  * an implicit midnight when handed to `git log --since`, which can falsely
  * count a same-day-earlier commit as post-dating an evening proposal — so
  * date-only values fall back to the full-precision dir-timestamp instead. A
- * `created` value that already carries a time component is used verbatim.
+ * `created` value that already carries a time component is used verbatim —
+ * but only when it is actually a recognized full timestamp shape. A
+ * malformed value (e.g. `created: soon`) is neither date-only nor a full
+ * timestamp; handing it to `git log --since` verbatim would let git's
+ * approxidate parser silently mis-parse it, so it falls back to the
+ * full-precision dir-timestamp too, the same as the date-only case.
  */
 function resolveProposalDateIso(raw: string, tsDir: string): string {
   const created = extractYamlField(raw, "created");
-  if (created && !isDateOnly(created)) return created;
+  if (created && isFullTimestamp(created)) return created;
   return dirTimestampToIso(tsDir);
 }
 
@@ -316,14 +379,23 @@ function isRelevantCommit(message: string, proposalId: string | null, targetPath
 }
 
 /**
- * Evaluates a single actionable proposal: resolves its target, then checks
- * the evidence predicate (target exists on disk AND a commit touching it
- * post-dates the proposal). For a target the commit only MODIFIED (it
- * already existed), the commit must additionally reference the proposal —
- * an unrelated churn commit is not evidence. For a target the commit itself
- * CREATED, creation alone is sufficient. Returns either a planned reconcile
- * action or a "survivor" outcome (stays pending, with the reason it didn't
- * reconcile).
+ * Evaluates a single actionable proposal: resolves its target, re-contains it
+ * under `project_dir` (a resolved `target_path` that escapes via `..`
+ * segments is treated as unresolved — path-traversal existence-oracle guard),
+ * then checks the evidence predicate (target exists on disk AND a commit
+ * touching it post-dates the proposal).
+ *
+ * The creation probe runs FIRST: a commit that CREATED the target — however
+ * long ago, as long as it post-dates the proposal — is sufficient evidence on
+ * its own, regardless of any later, unrelated commit that also touched the
+ * file (the `-n 1`-most-recent-commit view alone would miss this: it only
+ * ever sees the newest qualifying commit, which may be an unrelated churn
+ * commit that post-dates the real creation). Only when no creation commit is
+ * found does evaluation fall back to the most-recent-commit view: a target
+ * the commit only MODIFIED (it already existed) additionally requires the
+ * commit to reference the proposal — an unrelated churn commit is not
+ * evidence. Returns either a planned reconcile action or a "survivor"
+ * outcome (stays pending, with the reason it didn't reconcile).
  */
 async function evaluateActionableProposal(
   ctx: ReconcileContext,
@@ -339,10 +411,30 @@ async function evaluateActionableProposal(
   const targetPath = await resolveTargetPath(ctx.fs, ctx.projectDir, raw);
   if (targetPath === null) return survivor("no resolvable target path");
 
-  const exists = await ctx.fs.fileExists(join(ctx.projectDir, targetPath));
+  const resolvedAbsPath = join(ctx.projectDir, targetPath);
+  if (!isPathContained(ctx.projectDir, resolvedAbsPath)) {
+    return survivor(`resolved target path escapes project_dir: ${targetPath}`);
+  }
+
+  const exists = await ctx.fs.fileExists(resolvedAbsPath);
   if (!exists) return survivor(`target does not exist on disk: ${targetPath}`);
 
   const proposalDateIso = resolveProposalDateIso(raw, tsDir);
+
+  const creationEvidence = ctx.git.creationCommitSince(ctx.projectDir, targetPath, proposalDateIso);
+  if (creationEvidence !== null) {
+    return {
+      action: {
+        commit: creationEvidence.hash,
+        file,
+        reason: `reconciled: ${targetPath} created in ${creationEvidence.hash}`,
+        targetPath,
+        tsDir,
+      },
+      kind: "reconcile",
+    };
+  }
+
   const evidence = ctx.git.latestCommitSince(ctx.projectDir, targetPath, proposalDateIso);
   if (evidence === null) {
     return survivor(`no commit touching ${targetPath} post-dates the proposal`);
@@ -527,12 +619,18 @@ type ApplyContext = { fs: ReconcileFsSeam; jsonlPath: string };
 
 /**
  * Moves one file into a resolution subdir and appends its audit line
- * IMMEDIATELY afterward (per-file interleaving, not batched at the end) —
- * so a crash partway through `applyPlan` never leaves a moved file with no
- * `learning.jsonl` entry (`explicit-transaction-boundaries`). Rename-then-
- * append (not append-then-rename) keeps retries idempotency-safe: a retry
- * re-enumerates only files still pending, so append-first would risk a
- * duplicate audit line for the same move on retry.
+ * IMMEDIATELY afterward (per-file interleaving, not batched at the end).
+ * This bounds the unlogged-move window to AT MOST one in-flight proposal
+ * (`explicit-transaction-boundaries`): a crash between THIS proposal's own
+ * rename and its append still leaves that one file moved-but-unlogged — that
+ * residual single-file window is inherent to non-atomic filesystem
+ * operations and is not eliminated — but a crash before or after this call
+ * cannot orphan any OTHER proposal's audit line the way end-of-loop batching
+ * would (where a single crash could leave the ENTIRE batch's moves
+ * unlogged). Rename-then-append (not append-then-rename) keeps retries
+ * idempotency-safe: a retry re-enumerates only files still pending, so
+ * append-first would risk a duplicate audit line for the same move on
+ * retry.
  */
 async function moveAndAppend(
   ctx: ApplyContext,
