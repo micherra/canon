@@ -3,7 +3,6 @@
  * Creates a new workspace directory structure or resumes an existing one.
  */
 
-import { createHash } from "node:crypto";
 import { existsSync, lstatSync, realpathSync, symlinkSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -18,7 +17,6 @@ import {
 } from "@domains/workspaces/workspace.ts";
 import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
 import { registerFromInit } from "../services/active-workspace-registration.ts";
-import { buildCachePrefix } from "../services/cache-prefix-builder.ts";
 import { acquireLock } from "../services/workspace-lock.ts";
 import { readJournal, writeJournal } from "./orchestration-journal.ts";
 import { validateSeedPath } from "./seed-workspace.ts";
@@ -53,7 +51,6 @@ type InitWorkspaceResult = {
   preflight_issues?: string[];
   worktree_path?: string;
   worktree_branch?: string;
-  cache_prefix_hash?: string;
   seeded_from?: string;
   /**
    * Set to true when a live foreign lock exists on the workspace.
@@ -455,27 +452,18 @@ type FinalizeWorkspaceOptions = {
   board: Board;
   session: Session;
   projectDir: string;
-  pluginDir: string;
 };
 
-/** Persist execution, set up cache prefix, worktree, and return final result. */
+/** Persist execution, set up worktree, and return final result. */
 async function finalizeNewWorkspace(
   store: ReturnType<typeof getExecutionStore>,
   input: InitWorkspaceInput,
   options: FinalizeWorkspaceOptions,
 ): Promise<InitWorkspaceResult> {
-  const { workspace, slug, board, session, projectDir, pluginDir } = options;
+  const { workspace, slug, board, session, projectDir } = options;
   const raceResult = initExecutionOrRace(store, board, session, workspace);
   if (raceResult) return raceResult;
 
-  const cachePrefix = await buildCachePrefix(input, {
-    flowName: input.flow_name,
-    pluginDir,
-    projectDir,
-    slug,
-  });
-  store.setCachePrefix(cachePrefix);
-  const prefixHash = createHash("sha256").update(cachePrefix).digest("hex").slice(0, 12);
   store.appendProgress(`## Progress: ${input.task}`);
 
   const worktreeInfo = createAndPersistWorktree(store, session, {
@@ -491,7 +479,6 @@ async function finalizeNewWorkspace(
     slug,
     workspace,
     ...worktreeInfo,
-    cache_prefix_hash: prefixHash,
   };
 }
 
@@ -516,7 +503,6 @@ type CreateNewWorkspaceOptions = {
   sanitized: string;
   baseSlug: string;
   projectDir: string;
-  pluginDir: string;
 };
 
 /**
@@ -551,7 +537,7 @@ async function seedNewWorkspaceArtifacts(
 
 /** Create a brand-new workspace (no collision, no resume). */
 async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<InitWorkspaceResult> {
-  const { input, branchDir, sanitized, baseSlug, projectDir, pluginDir } = opts;
+  const { input, branchDir, sanitized, baseSlug, projectDir } = opts;
   const slug = await checkSlugCollision(branchDir, baseSlug);
   const workspace = join(branchDir, slug);
   await createWorkspace(projectDir, join(sanitized, slug));
@@ -597,7 +583,6 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
 
   const result = await finalizeNewWorkspace(store, input, {
     board,
-    pluginDir,
     projectDir,
     session,
     slug,
@@ -627,7 +612,7 @@ async function refreshJournalSessionId(
 export async function initWorkspaceFlow(
   input: InitWorkspaceInput,
   projectDir: string,
-  pluginDir: string,
+  _pluginDir: string,
 ): Promise<InitWorkspaceResult> {
   const sanitized = sanitizeBranch(input.branch);
   const baseSlug = generateSlug(input.task);
@@ -656,7 +641,6 @@ export async function initWorkspaceFlow(
     baseSlug,
     branchDir,
     input,
-    pluginDir,
     projectDir,
     sanitized,
   });

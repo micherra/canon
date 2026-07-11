@@ -43,9 +43,10 @@ Each agent file uses YAML frontmatter (`name`, `description`, `model`, `color`, 
 <!-- canon:inventory:end -->
 
 ## Conventions
-<!-- last-updated: 2026-06-09 -->
+<!-- last-updated: 2026-07-10 -->
 
 - **Harness tool grants (as of 2026-06-09):** `LSP` (navigation-only — `findReferences`/`goToDefinition`/etc., no `getDiagnostics`) granted to `reviewer`, `engineer`, `architect`. `WebSearch` granted to `security`, `architect`, `learner`. `WebFetch` granted to `writer` (others already had it or intentionally omitted). `PushNotification` is an orchestrator-side call (NOT an agent grant) fired at plan-approval, review-verdict, and build-complete gates. Requires `typescript-language-server` installed globally for LSP to return results.
+- **Cross-session chatter tool grants (2026-07-10, Inc-0):** `post_message`, `tail_messages`, `list_active_workspaces` granted to `engineer` and `reviewer` — advisory peer coordination for concurrent sessions editing shared hotspots (root `CLAUDE.md`, `mcp-server/**`, `hooks/**`). Governed by the `agent-cross-session-chatter` rule; see `CLAUDE.md` § Multi-Session Concurrency and `references/multi-session-concurrency.md` § Cross-session chatter.
 - Each agent has a declarative `permissionMode` enforced by Claude Code:
   - **`plan`** — truly read-only. No `Write` / `Edit` / `Bash`-to-modify AND no MCP `write_*` / `update_*` tools. Currently unused by any live agent.
   - **`acceptEdits`** — auto-approves file edits and common filesystem commands scoped to the working directory. For agents that produce artifacts via MCP write tools (`architect` → `write_plan_index`; `reviewer` → `write_review`; `tester` → `write_test_report`; `learner` → writes to `.canon/learning.jsonl` and `.canon/proposed-learnings/`; `shipper` → PR description; `writer` → principle files) or that write file artifacts directly (`engineer`, `scribe`, `security`).
