@@ -317,6 +317,33 @@ fi
 rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
 
 # ---------------------------------------------------------------------------
+# Test 12: injection/non-numeric CANON_GUARD_HEALTH_TIMEOUT coerces to the
+# default (8) — no arithmetic-context command substitution, no hang.
+# ---------------------------------------------------------------------------
+TMPDIR_TEST=$(mktemp -d)
+FAKE_BIN=$(mktemp -d)
+INJECTION_MARKER="$TMPDIR_TEST/should_not_exist"
+cat > "$FAKE_BIN/curl" <<'CURLSTUB12'
+#!/usr/bin/env bash
+exit 1
+CURLSTUB12
+chmod +x "$FAKE_BIN/curl"
+
+OUTPUT=$(timeout 15 env CANON_PROJECT_DIR="$TMPDIR_TEST" \
+  CLAUDE_PLUGIN_DATA="" \
+  CANON_GUARD_HEALTH_TIMEOUT="x[\$(touch ${INJECTION_MARKER})]" \
+  PATH="$FAKE_BIN:$PATH" \
+  bash "$HOOK" 2>&1)
+EXIT_CODE=$?
+
+if [[ $EXIT_CODE -eq 0 ]] && [[ ! -f "$INJECTION_MARKER" ]] && echo "$OUTPUT" | grep -q "budget 8s"; then
+  pass "Injection/non-numeric CANON_GUARD_HEALTH_TIMEOUT coerces to default 8, no substitution executed"
+else
+  fail "Injection guard: exit=$EXIT_CODE marker_exists=$(test -f "$INJECTION_MARKER" && echo yes || echo no) output=$(echo "$OUTPUT" | head -3)"
+fi
+rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
