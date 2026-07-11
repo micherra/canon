@@ -30,6 +30,7 @@ categorize_failures
 record_applied_evolution
 get_evolution_outcomes
 attribute_failure
+backfill_applying_commit
 
 # History / archive (orchestrator-only)
 get_historical_artifacts
