@@ -265,7 +265,8 @@ describe("reconcileLearnings — live fixture integration (real fs + real git, n
   it("first run: reconciles the creation and created-then-churned proposals", async () => {
     const result = await reconcileLearnings({ project_dir: projectDir });
     expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error(`expected ok result, got error: ${result.error}`);
+    if (!result.ok)
+      throw new Error(`expected ok result, got error ${result.error_code}: ${result.message}`);
 
     firstReconciledFiles = result.reconciled.map((r) => r.file);
     firstArchivedFiles = result.archived.map((a) => a.file);
@@ -342,7 +343,8 @@ describe("reconcileLearnings — live fixture integration (real fs + real git, n
 
     const second = await reconcileLearnings({ project_dir: projectDir });
     expect(second.ok).toBe(true);
-    if (!second.ok) throw new Error(`expected ok result, got error: ${second.error}`);
+    if (!second.ok)
+      throw new Error(`expected ok result, got error ${second.error_code}: ${second.message}`);
 
     expect(second.reconciled).toHaveLength(0);
     expect(second.archived).toHaveLength(0);
