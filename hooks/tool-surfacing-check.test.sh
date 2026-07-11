@@ -75,6 +75,65 @@ write_register_ui() {
   } > "$root/mcp-server/src/app/$file"
 }
 
+# write_register_ui_multiline <root> <file> <tool_name>
+# `registerToolWithUi(server,\n  "<tool_name>", ...)` — name on the line AFTER
+# the opener (case l).
+write_register_ui_multiline() {
+  local root="$1" file="$2" name="$3"
+  {
+    printf 'function registerY(server) {\n'
+    printf '  registerToolWithUi(server,\n'
+    printf '    "%s", {\n' "$name"
+    printf '    description: "x",\n'
+    printf '  });\n'
+    printf '}\n'
+  } > "$root/mcp-server/src/app/$file"
+}
+
+# write_register_dynamic <root> <file>
+# Registration is entirely dynamic — no `registerTool(` / `registerToolWithUi(`
+# idiom appears anywhere in the file, so zero tool names can be extracted from
+# it (case m: vacuous-pass tripwire).
+write_register_dynamic() {
+  local root="$1" file="$2"
+  {
+    printf 'function registerX(server) {\n'
+    printf '  const TOOLS = buildDynamicToolSet();\n'
+    printf '  TOOLS.forEach((t) => registerDynamicTool(server, t));\n'
+    printf '}\n'
+  } > "$root/mcp-server/src/app/$file"
+}
+
+# write_register_bad_arg <root> <file>
+# `registerTool(camelCaseName, { description: "foo" })` — the name arg is an
+# unquoted identifier; a later quoted token ("foo") must NOT be mistaken for
+# the tool name (case n).
+write_register_bad_arg() {
+  local root="$1" file="$2"
+  {
+    printf 'function registerX(server) {\n'
+    printf '  server.registerTool(camelCaseName, { description: "foo" });\n'
+    printf '}\n'
+  } > "$root/mcp-server/src/app/$file"
+}
+
+# write_register_sneaky <root> <file>
+# `registerTool(\n  sneakyTool,\n  "get_context",\n)` — an unquoted name
+# argument followed a few lines later by a quoted, already-granted tool name.
+# The unbounded forward-scan bug would mis-capture "get_context" and let
+# sneakyTool evade the gate entirely (case o).
+write_register_sneaky() {
+  local root="$1" file="$2"
+  {
+    printf 'function registerSneaky(server) {\n'
+    printf '  server.registerTool(\n'
+    printf '    sneakyTool,\n'
+    printf '    "get_context",\n'
+    printf '  );\n'
+    printf '}\n'
+  } > "$root/mcp-server/src/app/$file"
+}
+
 # write_agent <root> <name> <granted_tools_csv> [body_prose]
 # <granted_tools_csv> = comma-separated bare tool names placed in the
 # frontmatter tools: block as mcp__canon__<name>. <body_prose>, if given, is
@@ -263,6 +322,52 @@ echo "-- (k) empty AGENT_FILES (no agents/*.md) -> fail-closed exit 2, not bash-
   init_fixture "$FIX"
   write_register_single "$FIX" register-k.ts some_tool
   run_gate_out 2 "no agents/*.md files found" "empty AGENT_FILES -> exit 2 with CANON diagnostic" "$FIX"
+  rm -rf "$FIX"
+}
+
+echo "-- (l) registerToolWithUi multiline name-on-next-line is captured --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_ui_multiline "$FIX" register-l.ts ui_multiline_tool
+  write_agent "$FIX" engineer ""
+  run_gate_out 2 "ui_multiline_tool" "registerToolWithUi multiline captured -> exit 2 names it" "$FIX"
+
+  FIX2=$(mktemp -d)
+  init_fixture "$FIX2"
+  write_register_ui_multiline "$FIX2" register-l.ts ui_multiline_tool
+  write_agent "$FIX2" engineer "ui_multiline_tool"
+  run_gate 0 "registerToolWithUi multiline granted -> exit 0" "$FIX2"
+  rm -rf "$FIX" "$FIX2"
+}
+
+echo "-- (m) only dynamic/non-literal registration -> exit 2 (vacuous-pass tripwire) --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_dynamic "$FIX" register-m.ts
+  write_agent "$FIX" engineer ""
+  run_gate_out 2 "zero tool names extracted" "dynamic-only registration -> exit 2 vacuous-pass tripwire" "$FIX"
+  rm -rf "$FIX"
+}
+
+echo "-- (n) registerTool(camelCaseName, { description: \"foo\" }) -> exit 2 unresolvable, not a spurious 'foo' tool --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_bad_arg "$FIX" register-n.ts
+  write_agent "$FIX" engineer ""
+  run_gate_out 2 "unresolvable registration" "unquoted name arg -> exit 2 unresolvable" "$FIX"
+  rm -rf "$FIX"
+}
+
+echo "-- (o) registerTool(sneakyTool, ... \"get_context\" ...) does not evade via mis-captured get_context --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_sneaky "$FIX" register-o.ts
+  write_agent "$FIX" engineer "get_context"
+  run_gate_out 2 "unresolvable registration" "sneaky unquoted name does not evade via later quoted token" "$FIX"
   rm -rf "$FIX"
 }
 

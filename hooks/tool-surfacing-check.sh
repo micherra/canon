@@ -35,8 +35,12 @@
 # scope for this gate (empty today per PROBE-FINDINGS.md Result 2).
 #
 # Exit 0: every registered tool is granted, allowlisted, or marker-suppressed.
-# Exit 2: one or more registered tools are unclassified, OR the gate's own arg
-#         prerequisites failed (non-directory worktree_path, missing
+# Exit 2: one or more registered tools are unclassified, OR a registration
+#         opener's name literal cannot be resolved on its immediately-
+#         following non-blank line (unresolvable -> fail closed, never
+#         guessed), OR registration files were present but zero tool names
+#         were extracted at all (vacuous-pass tripwire), OR the gate's own
+#         arg prerequisites failed (non-directory worktree_path, missing
 #         mcp-server/src/app) — fail-closed (hooks-fail-closed). Emits a
 #         CANON: diagnostic on stderr for every failing path
 #         (hooks-observable-failures).
@@ -88,23 +92,44 @@ if [[ "${#REG_FILES[@]}" -eq 0 ]]; then
 fi
 
 for f in "${REG_FILES[@]+"${REG_FILES[@]}"}"; do
-  awk -v marker="$MARKER_TEXT" '
-    BEGIN { expecting = 0 }
+  if ! awk -v marker="$MARKER_TEXT" '
+    # try_name(str): a registration name literal must be the FIRST token in
+    # str (only leading whitespace allowed before it) — anchored, not
+    # "found anywhere" — so a later quoted arg/description token can never be
+    # mistaken for the name. Returns the bare name, or "" if str does not
+    # open with one.
+    function try_name(str,    seg) {
+      if (match(str, /^[[:space:]]*"[a-z][a-z0-9_]*"/)) {
+        seg = substr(str, RSTART, RLENGTH)
+        sub(/^[[:space:]]*/, "", seg)
+        return substr(seg, 2, length(seg) - 2)
+      }
+      return ""
+    }
+    BEGIN { expecting = 0; unresolved = 0 }
     {
       line = $0
       if (expecting) {
-        if (match(line, /"[a-z][a-z0-9_]*"/)) {
-          name = substr(line, RSTART + 1, RLENGTH - 2)
+        trimmed = line
+        gsub(/^[ \t]+/, "", trimmed)
+        gsub(/[ \t]+$/, "", trimmed)
+        if (trimmed == "") { next }  # skip blank lines; still waiting for the bounded line
+        name = try_name(line)
+        if (name != "") {
           hasmarker = (index(line, marker) > 0) ? 1 : 0
           printf "%s\t%d\n", name, hasmarker
-          expecting = 0
+        } else {
+          printf "CANON: tool-surfacing-check failed-closed -- unresolvable registration in %s at line %d (no name literal on the immediately-following non-blank line)\n", FILENAME, NR > "/dev/stderr"
+          unresolved = 1
+          exit 1
         }
+        expecting = 0
         next
       }
       if (match(line, /registerTool\(/)) {
         rest = substr(line, RSTART + RLENGTH)
-        if (match(rest, /"[a-z][a-z0-9_]*"/)) {
-          name = substr(rest, RSTART + 1, RLENGTH - 2)
+        name = try_name(rest)
+        if (name != "") {
           hasmarker = (index(line, marker) > 0) ? 1 : 0
           printf "%s\t%d\n", name, hasmarker
         } else {
@@ -114,8 +139,8 @@ for f in "${REG_FILES[@]+"${REG_FILES[@]}"}"; do
       }
       if (match(line, /registerToolWithUi\(server,[[:space:]]*/)) {
         rest = substr(line, RSTART + RLENGTH)
-        if (match(rest, /"[a-z][a-z0-9_]*"/)) {
-          name = substr(rest, RSTART + 1, RLENGTH - 2)
+        name = try_name(rest)
+        if (name != "") {
           hasmarker = (index(line, marker) > 0) ? 1 : 0
           printf "%s\t%d\n", name, hasmarker
         } else {
@@ -124,11 +149,33 @@ for f in "${REG_FILES[@]+"${REG_FILES[@]}"}"; do
         next
       }
     }
-  ' "$f" >> "$REG_RAW"
+    END {
+      if (expecting) {
+        printf "CANON: tool-surfacing-check failed-closed -- unresolvable registration in %s (opener with no bounded next line before EOF)\n", FILENAME > "/dev/stderr"
+        unresolved = 1
+      }
+      if (unresolved) { exit 1 }
+    }
+  ' "$f" >> "$REG_RAW"; then
+    echo "CANON: tool-surfacing-check failed-closed -- unresolvable tool registration (see diagnostic above)" >&2
+    exit 2
+  fi
 done
 
 cut -f1 "$REG_RAW" | sort -u > "$REGISTERED_FILE"
 awk -F'\t' '$2 == "1" { print $1 }' "$REG_RAW" | sort -u > "$MARKER_FILE"
+
+# ---------------------------------------------------------------------------
+# Vacuous-pass tripwire: registration files were present, but zero tool names
+# were extracted from any of them. This is a parser gap / unexpected
+# registration form on a whole-tree basis, NOT a clean pass -- silently
+# passing here would be the canonical PR #270 hooks-fail-closed incident
+# shape (extraction silently yields empty -> "all surfaced").
+# ---------------------------------------------------------------------------
+if [[ ! -s "$REGISTERED_FILE" ]]; then
+  echo "CANON: tool-surfacing-check -- registration files present but zero tool names extracted (parser gap or unexpected registration form)" >&2
+  exit 2
+fi
 
 # ---------------------------------------------------------------------------
 # GRANTED — for each agents/*.md, extract mcp__canon__<name> tokens ONLY
