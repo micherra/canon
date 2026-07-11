@@ -99,6 +99,25 @@ const GET_EVOLUTION_OUTCOMES_DESC =
   "FAIL-OPEN: absent signal rows → insufficient verdict, not an error. " +
   "PROPOSAL_NOT_RECORDED when no applied_evolutions row exists.";
 
+const SELECT_MUTATION_TARGETS_DESC =
+  "Select mutation targets for trace-driven evolution. Tri-state, mutually exclusive " +
+  "on 'workspace' | 'archive_id' | 'scores' — exactly one must be provided. " +
+  "'workspace'/'archive_id' mode (violation-based, unchanged): runs the full attribution " +
+  "pipeline (provenance → failure sources → join) then applies the mutator selection " +
+  "gate — filters to hash-verified, high-confidence attributions; partitions by " +
+  "gate-eligibility (guardrail paths and eval surface, not .ts or register-* " +
+  "entrypoints); ranks by violation count then weighted counts; caps at " +
+  "max_targets_per_pass (default 3); emits proposal_kind:'rewrite' targets. " +
+  "'scores' mode (Gap 3 Layer 3, trust-weighted retirement/reinforcement): pass the " +
+  "TrustWeightedScore[] from attribute_outcomes instead — a net_score at or beyond " +
+  "+/-retirement_reinforcement_threshold (default 3) resolves the principle_id to its " +
+  "on-disk artifact and emits a proposal_kind:'retire'|'reinforce' MutationTarget " +
+  "carrying score_provenance; unresolvable/ineligible principle_ids land in skipped[] " +
+  "(artifact_unresolved, not_gate_eligible); max_targets_per_pass is not used in this mode. " +
+  "DETERMINISTIC — no model calls, no subprocess. Pure join + rank + read. " +
+  "Fail-open: absent provenance or reviews → empty targets, not error. " +
+  "INVALID_INPUT when zero or more than one of workspace/archive_id/scores are provided.";
+
 /** Phase-1 mutator pipeline: evaluate_candidate, attribute_failure, select_mutation_targets. */
 function registerMutatorPipelineTools(server: McpServer): void {
   server.registerTool(
@@ -136,16 +155,7 @@ function registerMutatorPipelineTools(server: McpServer): void {
   server.registerTool(
     "select_mutation_targets",
     {
-      description:
-        "Select mutation targets from Canon build attributions for trace-driven evolution. " +
-        "Runs the full attribution pipeline (provenance → failure sources → join) then " +
-        "applies the mutator selection gate: filters to hash-verified, high-confidence " +
-        "attributions; partitions by gate-eligibility (guardrail paths and eval surface, " +
-        "not .ts or register-* entrypoints); ranks by violation count then weighted counts; " +
-        "caps at max_targets_per_pass (default 3). " +
-        "DETERMINISTIC — no model calls, no subprocess. Pure join + rank + read. " +
-        "Fail-open: absent provenance or reviews → empty targets, not error. " +
-        "INVALID_INPUT when both or neither of workspace/archive_id are provided.",
+      description: SELECT_MUTATION_TARGETS_DESC,
       inputSchema: SelectMutationTargetsInputSchema.shape,
     },
     gatedWrapHandler(async (input) => selectMutationTargetsHandler(input, pluginDir)),

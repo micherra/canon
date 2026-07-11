@@ -274,6 +274,17 @@ function processPositiveSignals(
   }
   for (const attr of positiveResult.attributions) {
     buckets.attributionsPositive += 1;
+    // Keys on attr.target_artifact.id directly (NOT the derivePrincipleId helper the negative
+    // path uses below) — this is safe, not a latent bug (Finding 4, Gap 3 review). The honored
+    // join (positive-attribution.ts's findArtifactCandidates) matches on
+    // `artifact.id === principleId`, where principleId is parsed from a REVIEW.md honored[]
+    // line (`- **{principle-id}**: ...`, templates/review.md) — the reviewer only ever emits
+    // principle ids there, never an agent name. An "agent-def" `target_artifact.kind` (the one
+    // case where `.id` is NOT a principle id — it is the agent name, ADR-0032) cannot occur on
+    // this join by construction, unlike the negative path's cliff/code-author edges, which are
+    // explicitly wired to attribute agent-def artifacts (attribution-join.ts). So there is no
+    // artifact-kind branch to dispatch on here; derivePrincipleId's PositiveAttribution
+    // structurally has no `attributed_violations` to fall back through in the first place.
     const principleId = attr.target_artifact.id;
     const contribution = buildContribution({
       agentName: attr.owning_steps[0]?.agent_name ?? "",

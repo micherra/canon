@@ -198,6 +198,14 @@ export type SelectMutationTargetsResult = {
  * to report (corpus-wide trust-weighted score instead). `proposal_kind` is always
  * present (defaults to "rewrite" at construction); `score_provenance` is present
  * only for retire/reinforce.
+ *
+ * `gated`/`holdout_baseline`/`holdout_candidate`: a "reinforce" candidate is
+ * byte-identical to its own baseline (an unchanged artifact cannot be distinguished
+ * from itself by a holdout eval — see mutation-proposal.ts header) and is therefore
+ * NEVER run through `evaluate_candidate`. `gated: false` marks that case explicitly
+ * and `holdout_baseline`/`holdout_candidate` are `null` (no eval ran, not a zero
+ * score). "rewrite"/"retire" are always holdout-gated: `gated: true` with real
+ * numeric holdout counts.
  */
 export type MutationProposal = {
   id: string;
@@ -207,8 +215,10 @@ export type MutationProposal = {
   target: string;
   target_path: string;
   artifact_class: ArtifactClass;
-  holdout_baseline: number;
-  holdout_candidate: number;
+  /** null only when `gated === false` (an ungated reinforce signal). */
+  holdout_baseline: number | null;
+  /** null only when `gated === false` (an ungated reinforce signal). */
+  holdout_candidate: number | null;
   accepted: true;
   failure_kind: FailureKind | null;
   principle_id: string | null;
@@ -217,6 +227,12 @@ export type MutationProposal = {
   apply_channel: "writer" | "engineer-build-flow";
   /** Defaults to "rewrite" — always present in the emitted frontmatter (Gap 3 L3). */
   proposal_kind: MutationProposalKind;
+  /**
+   * True iff this proposal passed the real `evaluate_candidate` §7 holdout gate
+   * ("rewrite"/"retire"). False for an ungated "reinforce" confidence signal — see
+   * type-level doc above. Always present (Gap 3 L3 fix).
+   */
+  gated: boolean;
   /** Present only for retire/reinforce — the trust-weighted audit trace (Gap 3 L3). */
   score_provenance?: ScoreProvenance;
 };

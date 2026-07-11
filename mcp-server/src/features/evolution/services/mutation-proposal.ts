@@ -2,12 +2,20 @@
  * mutation-proposal.ts — Pure proposal shaper for accepted mutation candidates.
  *
  * One exported function:
- *   shapeMutationProposal — builds the proposal frontmatter + markdown body
- *                           for a candidate that passed the §7 holdout gate.
+ *   shapeMutationProposal — builds the proposal frontmatter + markdown body for a
+ *                           "rewrite"/"retire" candidate that passed the §7 holdout
+ *                           gate, OR for an ungated "reinforce" confidence signal.
  *
- * Precondition (caller-enforced): evalResult.accepted === true.
- * The function is only called when the gate accepted the candidate; producing a
- * proposal for an unaccepted candidate is an evolution-hard-gate violation.
+ * Precondition (caller-enforced):
+ *   - "rewrite" | "retire": evalResult non-null, evalResult.accepted === true.
+ *     The function is only called when the gate accepted the candidate; producing
+ *     a proposal for an unaccepted candidate is an evolution-hard-gate violation.
+ *   - "reinforce": evalResult === null. A reinforce candidate is byte-identical to
+ *     its own baseline_body — there is nothing for a holdout eval to distinguish,
+ *     so it is NEVER run through evaluate_candidate (Gap 3 L3 fix). The emitted
+ *     proposal carries `gated: false` and null holdout fields, clearly marking it
+ *     as an un-holdout-gated confidence/priority signal for human review — not a
+ *     gated artifact-mutation proposal.
  *
  * Proposal shape consumed by /canon:review-learnings (analyze-patterns/SKILL.md:107-144).
  *
@@ -81,8 +89,8 @@ function serializeFrontmatter(fm: MutationProposal): string {
     `target: ${fm.target}`,
     `target_path: ${fm.target_path}`,
     `artifact_class: ${fm.artifact_class}`,
-    `holdout_baseline: ${fm.holdout_baseline}`,
-    `holdout_candidate: ${fm.holdout_candidate}`,
+    `holdout_baseline: ${fm.holdout_baseline ?? "null"}`,
+    `holdout_candidate: ${fm.holdout_candidate ?? "null"}`,
     `accepted: ${fm.accepted}`,
     `failure_kind: ${fm.failure_kind ?? "null"}`,
     `principle_id: ${fm.principle_id ?? "null"}`,
@@ -90,6 +98,7 @@ function serializeFrontmatter(fm: MutationProposal): string {
     `hash_verified: ${fm.hash_verified}`,
     `apply_channel: ${fm.apply_channel}`,
     `proposal_kind: ${fm.proposal_kind}`,
+    `gated: ${fm.gated}`,
   ];
   if (fm.score_provenance) {
     lines.push(...serializeScoreProvenanceLines(fm.score_provenance));
@@ -218,11 +227,28 @@ function buildScoreProvenanceLines(scoreProvenance: ScoreProvenance | undefined)
   ];
 }
 
+/** Ungated (reinforce) evidence — no holdout gate ran; score_provenance is the sole evidence. */
+function buildUngatedEvidenceSection(target: MutationTarget): string {
+  return [
+    "## Evidence",
+    "",
+    "**Not holdout-gated.** This is an informational confidence signal derived from the",
+    "trust-weighted attribution corpus (`attribute_outcomes`) — `evaluate_candidate` was never",
+    "run, because a reinforce candidate is byte-identical to its own baseline and there is",
+    "nothing for a holdout eval to distinguish.",
+    ...buildScoreProvenanceLines(target.score_provenance),
+  ].join("\n");
+}
+
 function buildEvidenceSection(
   target: MutationTarget,
-  evalResult: EvaluateCandidateResult,
+  evalResult: EvaluateCandidateResult | null,
   proposalKind: MutationProposalKind,
 ): string {
+  if (evalResult === null) {
+    return buildUngatedEvidenceSection(target);
+  }
+
   const holdoutLines = [
     "## Evidence",
     "",
@@ -235,7 +261,7 @@ function buildEvidenceSection(
     `| Accepted | — | ✓ |`,
   ];
 
-  if (proposalKind === "retire" || proposalKind === "reinforce") {
+  if (proposalKind === "retire") {
     return [...holdoutLines, ...buildScoreProvenanceLines(target.score_provenance)].join("\n");
   }
 
@@ -264,9 +290,14 @@ function buildImpactSection(
       `**Apply channel:** \`${applyChannel}\``,
       "",
       "**invalidate-don't-delete**: this is a RETIREMENT candidate, not a deletion request. The",
-      "writer agent must mark the artifact retired (a `status: retired` / `portable: false`",
-      "frontmatter flag) and must NEVER remove the file from disk. The artifact stays on disk,",
-      "with its full history and score_provenance trace intact for audit.",
+      "writer agent must mark the artifact retired (an `archived: true` frontmatter flag — the",
+      "SAME loader-honored flag `write-principle`'s `--archive` mode already sets; `shared/",
+      "matcher.ts`'s principle matcher excludes `archived: true` principles from every review /",
+      "get_principles / review_code call) and must NEVER remove the file from disk. The artifact",
+      "stays on disk, with its full history and score_provenance trace intact for audit. This is",
+      "what makes the holdout gate meaningful: archiving genuinely changes which principles the",
+      "eval harness loads, so a candidate that strictly improves the holdout is real signal, not",
+      "a byte-identical no-op.",
       "",
       `**Artifact class:** \`${target.artifact_class}\``,
       "",
@@ -281,9 +312,12 @@ function buildImpactSection(
       "",
       `**Apply channel:** \`${applyChannel}\``,
       "",
-      "This is an INFORMATIONAL reinforcement — trust-weighted positive evidence shows the",
-      "principle earns its keep. No artifact content changes; the writer records a confidence",
-      "bump only. No deletion, no retirement.",
+      "**Un-holdout-gated confidence signal — NOT an artifact mutation.** This is an",
+      "INFORMATIONAL reinforcement — trust-weighted positive evidence shows the principle earns",
+      "its keep. It was never run through `evaluate_candidate` (a reinforce candidate is",
+      "byte-identical to its own baseline, so no holdout eval could ever distinguish them —",
+      "`gated: false` in this proposal's frontmatter marks that explicitly). No artifact content",
+      "changes; the writer records a confidence bump only. No deletion, no retirement.",
       "",
       `**Artifact class:** \`${target.artifact_class}\``,
       "",
@@ -323,8 +357,12 @@ export type ShapeMutationProposalOpts = {
   target: MutationTarget;
   /** The full-file candidate text generated by the learner. */
   candidateText: string;
-  /** The EvaluateCandidateResult with accepted===true. */
-  evalResult: EvaluateCandidateResult;
+  /**
+   * The EvaluateCandidateResult with accepted===true, for "rewrite"/"retire".
+   * MUST be `null` for "reinforce" (target.proposal_kind === "reinforce") — a
+   * reinforce candidate is never run through evaluate_candidate (Gap 3 L3 fix).
+   */
+  evalResult: EvaluateCandidateResult | null;
   /** Timestamp string for the proposal id (e.g. "20260625T143000"). */
   ts: string;
   /** 1-based index within the current pass (for filename ordering). */
@@ -334,10 +372,15 @@ export type ShapeMutationProposalOpts = {
 /**
  * shapeMutationProposal — pure function.
  *
- * Builds a MutationProposal frontmatter + markdown body for a candidate that
- * passed the §7 holdout gate. CALLER MUST ENSURE evalResult.accepted === true
- * before calling — producing a proposal for an unaccepted candidate violates
- * the evolution-hard-gate invariant.
+ * Builds a MutationProposal frontmatter + markdown body for either:
+ *   - a "rewrite"/"retire" candidate that passed the §7 holdout gate. CALLER MUST
+ *     ENSURE evalResult is non-null and evalResult.accepted === true before
+ *     calling — producing a proposal for an unaccepted candidate violates the
+ *     evolution-hard-gate invariant.
+ *   - an ungated "reinforce" confidence signal. CALLER MUST pass evalResult: null
+ *     — a reinforce candidate is byte-identical to its own baseline and is NEVER
+ *     run through evaluate_candidate (Gap 3 L3 fix). The emitted proposal carries
+ *     `gated: false` and null holdout fields.
  *
  * Returns:
  *   - `frontmatter`: the typed MutationProposal object
@@ -373,9 +416,10 @@ export function shapeMutationProposal(opts: ShapeMutationProposalOpts): {
     artifact_class: target.artifact_class,
     confidence: confidenceToNumeric(target.confidence),
     failure_kind: target.failure_kind,
+    gated: evalResult !== null,
     hash_verified: resolveHashVerified(target),
-    holdout_baseline: evalResult.baseline_score,
-    holdout_candidate: evalResult.candidate_score,
+    holdout_baseline: evalResult?.baseline_score ?? null,
+    holdout_candidate: evalResult?.candidate_score ?? null,
     id: `evolve-${ts}-${pad2(index)}`,
     join_basis: resolveJoinBasis(target),
     principle_id: target.principle_id,

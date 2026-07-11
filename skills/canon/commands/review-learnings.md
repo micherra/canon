@@ -159,10 +159,16 @@ this arm NEVER deletes.
    - **Accept**: Spawn the **writer agent** with `"Mode: apply-proposal. PROPOSAL=${proposal_file_path}. ACTION=invalidate-dont-delete."`
      The writer's job for this action is narrower than its normal apply-proposal modes:
      - Read the proposal's `## Proposed Change` candidate body (or the current on-disk
-       body if the candidate omits the marker) and add/update frontmatter fields
-       `status: retired` and `portable: false`, plus a short note (e.g. a `>` blockquote)
-       recording the `score_provenance` net_score and that this was a trust-weighted
-       retirement.
+       body if the candidate omits the marker) and add/update the frontmatter field
+       `archived: true` — the SAME loader-honored flag the `write-principle` skill's
+       `--archive` mode already sets (`shared/matcher.ts`'s principle matcher excludes
+       `archived: true` principles from every review/`get_principles`/`review_code` call).
+       This is a deliberate correction from an earlier `status: retired` / `portable: false`
+       design: neither of those fields is loader-honored, so a candidate marked that way
+       would always score identically to baseline and `evolve-candidate/SKILL.md`'s Step
+       0.4 holdout gate would be structurally inert. Add a short note (e.g. a `>`
+       blockquote) recording the `score_provenance` net_score and that this was a
+       trust-weighted retirement.
      - **NEVER run `git rm` or otherwise delete the file.** The artifact stays on disk,
        fully readable, with its retirement marker and score_provenance trace intact.
      - Save the edited file in place (same path — this is an edit, not a move).
@@ -181,10 +187,20 @@ This arm applies ONLY to `type: "evolution-candidate"` proposals with `proposal_
 "reinforce"` — trust-weighted positive evidence that a principle earns its keep. No
 content change is proposed.
 
+**`gated: false` — un-holdout-gated confidence signal, not a gated artifact-mutation
+proposal.** Unlike Arm R's `retire` proposals (which passed the real `evaluate_candidate`
+holdout gate, `gated: true`), a `reinforce` proposal's frontmatter carries
+`holdout_baseline: null` / `holdout_candidate: null` — it was NEVER run through
+`evaluate_candidate`. A reinforce candidate is byte-identical to its own baseline, so
+there is nothing for a holdout eval to distinguish; the `evolve-candidate/SKILL.md`
+Step 0.3/0.4 procedure skips the gate entirely for this kind. Present this proposal to
+the reviewer as a priority/confidence signal for human judgment, not as evidence that
+passed an automated quality bar.
+
 1. Present the proposal's `## Observation`/`## Evidence` sections (the score_provenance
    trace) to the reviewer.
-2. Ask: **"Acknowledge this REINFORCEMENT of {target_path}? (confidence bump only — no
-   content change, no deletion)"**
+2. Ask: **"Acknowledge this REINFORCEMENT of {target_path}? (un-holdout-gated confidence
+   signal — confidence bump only, no content change, no deletion)"**
    - **Accept**: Spawn the **writer agent** with `"Mode: apply-proposal. PROPOSAL=${proposal_file_path}. ACTION=confidence-bump."`
      The writer records a confidence/trust annotation for the principle (e.g. a note in
      the artifact or a `.canon/learning.jsonl` entry — no MANDATORY on-disk edit for this
@@ -301,7 +317,7 @@ If any proposals were accepted, suggest the user run `/canon:check` to verify th
 - `learning.jsonl` is append-only
 - Never demote security-tagged rules; show extra confirmation for any rule demotion
 - Never retire security-tagged or never-pruneable artifacts (`fail-closed-by-default`, `hooks-fail-closed`, `least-privilege-access`, `secrets-never-in-code`, `validate-at-trust-boundaries`, `agent-artifact-write-before-return`, `agent-template-required`); show a rule-tier CAUTION confirmation for any rule-tier `prune-candidate`; rule-tier retirement requires a non-null `superseded_by`
-- **Gap 3 L3 retirement is a SEPARATE track from `prune-candidate`**: a `proposal_kind: "retire"` proposal (Arm R) is ALWAYS invalidate-don't-delete — the writer marks the artifact `status: retired` / `portable: false` and NEVER runs `git rm`, regardless of artifact tier. This is intentionally less destructive than `prune-candidate`'s delete-based `Mode: retire`, so the security-tagged/never-pruneable allowlist checks above do not block it — but the writer's Arm R spawn instruction never permits deletion either way, so no allowlist bypass is possible. A `proposal_kind: "reinforce"` proposal (Arm N) never writes or deletes artifact content — confidence bump only.
+- **Gap 3 L3 retirement is a SEPARATE track from `prune-candidate`**: a `proposal_kind: "retire"` proposal (Arm R) is ALWAYS invalidate-don't-delete — the writer marks the artifact `archived: true` (the loader-honored flag; see Arm R above) and NEVER runs `git rm`, regardless of artifact tier. This is intentionally less destructive than `prune-candidate`'s delete-based `Mode: retire`, so the security-tagged/never-pruneable allowlist checks above do not block it — but the writer's Arm R spawn instruction never permits deletion either way, so no allowlist bypass is possible. A `proposal_kind: "reinforce"` proposal (Arm N) never writes or deletes artifact content — confidence bump only — and is NEVER holdout-gated (`gated: false`, `holdout_baseline`/`holdout_candidate` both `null`); it is surfaced to the reviewer purely as an un-holdout-gated confidence/priority signal, never as evidence that passed `evaluate_candidate`.
 - If a target principle or convention no longer exists, inform the user and skip rather than failing silently
 - Apply-provenance is recorded (via `record_applied_evolution`) ONLY for accepted `type: evolution-candidate` proposals, and ONLY from the two write arms (Writer arm + Arm M) after the target file is actually edited; legacy proposal types (new-convention, severity-change, prune-candidate, prune-watch) carry no holdout scores and never record. Arm T and Arm F never write and never record. The record only writes a drift.db row — it never reverts, quarantines, or merges anything.
 - Apply-provenance is also committed: the Writer arm and Arm M each create ONE git commit per accepted `evolution-candidate` apply, carrying a `Canon-Evolution: {proposal_id}` trailer — guarded by the proposal_id charset check (dc-05) and skipped (with a surfaced warning, apply left standing) when the current branch is `main`/`master` (no auto-commit on main/master). After all applies, `backfill_applying_commit` is invoked once to populate `applied_evolutions.applying_commit` from those trailers — best-effort-visible, never blocking. Legacy proposal types never commit and never trigger the backfill call on their own.
