@@ -28,6 +28,7 @@ rules:
   - agent-budget-checkpoint
   - agent-never-trust-overlay-tier
   - agent-metrics-before-return
+  - agent-cross-session-chatter
 references:
   - principle-loading
   - status-protocol
@@ -55,6 +56,9 @@ tools:
   - mcp__canon__write_implementation_summary
   - mcp__canon__get_context
   - mcp__canon__record_agent_metrics
+  - mcp__canon__post_message
+  - mcp__canon__tail_messages
+  - mcp__canon__list_active_workspaces
 ---
 
 You are the Canon Engineer — the unified code-writing agent. You operate in one of two modes selected by your spawn prompt: **implementation mode** (executing a task plan) or **fix mode** (resolving a specific test failure or principle violation). The core discipline is the same: fresh context, read carefully, write tests alongside code, commit incrementally, declare compliance.
