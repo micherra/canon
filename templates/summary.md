@@ -52,9 +52,10 @@ commit: "{hash}"
 #### Criteria Coverage
 <!-- Map every acceptance criterion from the task plan to what was implemented. -->
 <!-- The reviewer checks this section in Stage 3 (compliance cross-check). -->
-| # | Task plan criterion | Disposition | Implementation or rationale |
-|---|---------------------|-------------|----------------------------|
-| 1 | {criterion from task plan} | {covered &#124; descoped &#124; partial} | {what was implemented, or why it's deferred} |
+<!-- Reproduction column: a runnable shell command proving the criterion holds, for every mechanically-verifiable AC (reviewer taxonomy: MCP-tool / Structural; architect: mechanical) — a scoped test, curl against the running app, CLI call, or grep assertion. Non-runnable ACs (manual/non-automatable, or not runtime-observable) carry the sanctioned `n/a — <reason>` marker instead (e.g. `n/a — not runtime-observable (pure refactor)`, `n/a — manual (requires human judgment)`). Never fabricate a command to fill the column. `&#124;` is used ONLY to stand in for a literal shell pipe `|` (the same escape `escapeMdCell` uses) — a DISPLAY-ONLY escape for markdown-table parseability, NOT the command's executable form. Any consumer that executes or promotes the recorded command MUST decode the escaped pipe(s) back to `|` first (e.g. `sed 's/&#124;/|/g'`) to recover the intended piped command; running the raw `&#124;`-containing literal in a shell does not pipe. **Strongly prefer a pipe-free / literal-safe command form** (`grep -c X f` over `grep X f | wc -l`) whenever possible — this avoids the escape/decode round-trip entirely, and is more than a convenience: a command whose literal text must itself contain the entity string `&#124;` (e.g. grepping for the sed idiom above, or for the entity itself) cannot round-trip through the decode. Avoid recording such commands; use a `&#124;`-free repro instead. -->
+| # | Task plan criterion | Disposition | Implementation or rationale | Reproduction |
+|---|---------------------|-------------|----------------------------|--------------|
+| 1 | {criterion from task plan} | {covered &#124; descoped &#124; partial} | {what was implemented, or why it's deferred} | `{runnable command}` or `n/a — {reason}` |
 
 #### External Evidence
 <!-- Only include if web research materially informed implementation choices. -->
@@ -87,3 +88,5 @@ commit: "{hash}"
 - Canon compliance section is mandatory — every principle in the plan must appear
 - Concerns and Blockers sections only appear when relevant
 - Include `External Evidence` only when web research materially informed implementation choices
+- Criteria Coverage Reproduction column: every mechanically-verifiable AC MUST carry a runnable command; every non-runnable AC MUST carry an `n/a — <reason>` marker — never a fabricated command
+- A literal shell pipe `|` in a Reproduction command must be written `&#124;` — or better, use a pipe-free / literal-safe form, which is strongly preferred. `&#124;` stands in ONLY for a real pipe operator and is a table-display escape — the command's canonical/executable form uses a real `|`. Any consumer that executes or promotes the recorded command must decode the escaped pipe(s) (`&#124;` → `|`) first (`sed 's/&#124;/|/g'`) to recover the intended piped command; do not run the raw `&#124;` literal in a shell — it does not pipe. A command whose literal text must itself contain the entity string `&#124;` cannot round-trip through this decode — avoid recording such a command; use a `&#124;`-free repro instead
