@@ -372,9 +372,13 @@ function dedupeEdges(edges: ContextEdge[]): ContextEdge[] {
   const seen = new Set<string>();
   const result: ContextEdge[] = [];
   for (const edge of edges) {
-    // NUL-joined — src/dst may be file paths, which can (rarely) contain
-    // spaces; NUL cannot appear in a node_id or a real filesystem path.
-    const key = `${edge.src} ${edge.dst} ${edge.edge_type}`;
+    // \0-joined (escape sequence, not a raw byte) — src/dst may be file
+    // paths, which can (rarely) contain spaces; NUL cannot appear in a
+    // node_id or a real filesystem path. A literal NUL byte in the SOURCE
+    // FILE previously made this file misdetect as binary to line-oriented
+    // tools (grep, some IDE parsers) — the escape sequence produces the
+    // identical runtime string with zero source-file control characters.
+    const key = `${edge.src}\0${edge.dst}\0${edge.edge_type}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(edge);
