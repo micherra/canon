@@ -7,7 +7,7 @@ description: >-
   and the seven named consumers (auto-triage-fix, auto-plugin-update, run-learner, run-evolve, auto-enable-merge, auto-update-branch, auto-staleness-refresh).
 ---
 
-# Loop Framework <!-- last-updated: 2026-07-10 -->
+# Loop Framework <!-- last-updated: 2026-07-11 -->
 
 <!-- Managed by Canon. Manual edits are preserved. -->
 
@@ -140,27 +140,52 @@ flaky failure wastes an engineer cycle chasing a phantom bug:
 1. Read the failing job's logs — `gh pr checks` for the summary, `gh run view <run-id> --log`
    (or `--log-failed`) for the detail — both READ-only, orchestrator-side (not on the runner's
    `observe.shell_commands` allowlist; see the dc-06 note below).
-2. Classify against two signal classes:
-   - **Legit (build-introduced)**: a compile/type error, lint violation, or failing assertion
-     in a file the PR diff touched (`git diff {base}..HEAD --name-only` intersected with the
-     failing file) — a deterministic failure naming changed-code behavior.
-   - **Flaky (known-intermittent/environmental)**: infra/env markers in the log (network
-     timeout, `ETIMEDOUT`/`ECONNRESET`, runner OOM, registry/`npm ci` 5xx, model-download
-     (HuggingFace/ONNX) failure, `"Test timed out in Nms"`, git-subprocess timeout, tmpdir
-     `ENOTEMPTY`/`EEXIST` races); **diff-orthogonality** (the failing test/job exercises files
-     NOT in the PR diff — a strong flaky signal); or an exit-before-tests toolchain/setup
-     failure. Cite known families descriptively (init-workspace concurrency-race,
-     embedding/ONNX cold-start, subprocess PATH/CWD non-determinism, tmpdir races — see
-     `project_flaky_integration_tests_hardening`) — never a maintained test-name list or a
-     hardcoded count (`no-literal-repo-state-counts`).
+2. Classify in TWO ordered steps — a diff-intersection check FIRST, which OVERRIDES the
+   marker-based check that follows. Marker-based flaky classification never wins against a
+   diff-intersection hit; it only ever applies in the diff-orthogonal remainder.
+   a. **Diff-intersection check (overrides marker-based classification):** does the failing
+      job/test exercise a file the PR diff touched (`git diff {base}..HEAD --name-only`
+      intersected against the failing file/test path)? If YES → **Legit**, unconditionally —
+      even if the failure log ALSO carries an infra-looking marker (timeout, OOM, `ETIMEDOUT`,
+      network 5xx). A build-introduced regression (a resource leak, an infinite loop, a
+      genuinely slow query the diff added) can produce the exact same surface signature as
+      flaky infra; a marker match is not license to skip the diff check. Diff-touched territory
+      always wins over marker appearance — this is what makes the classifier safe-by-design
+      against a build-caused failure disguising itself as "just flaky."
+   b. **Marker-family check (reached only when diff-orthogonal — 2a did not match):** classify
+      **Flaky (known-intermittent/environmental)** on infra/env markers in the log (network
+      timeout, `ETIMEDOUT`/`ECONNRESET`, runner OOM, registry/`npm ci` 5xx, model-download
+      (HuggingFace/ONNX) failure, `"Test timed out in Nms"`, git-subprocess timeout, tmpdir
+      `ENOTEMPTY`/`EEXIST` races); the fact of diff-orthogonality itself (the failing test/job
+      exercises files NOT in the PR diff, reached this step precisely because 2a already found
+      no intersection); or an exit-before-tests toolchain/setup failure not attributable to the
+      diff. Cite known families descriptively (init-workspace concurrency-race, embedding/ONNX
+      cold-start, subprocess PATH/CWD non-determinism, tmpdir races — see
+      `project_flaky_integration_tests_hardening`) — never a maintained test-name list or a
+      hardcoded count (`no-literal-repo-state-counts`). Anything reaching 2b that matches none
+      of these families is **Legit** by default (unclassified diff-orthogonal failures are not
+      assumed flaky).
 3. Decision procedure, **retry bound = 1**:
-   a. Strong legit signal → dispatch the fix flow directly (clear → without asking, ambiguous
-      → ask; same tier rule as the comment-transition path above).
-   b. Otherwise (flaky signal, or genuinely ambiguous) → the orchestrator runs **exactly one**
-      bounded re-run of the failed job: `gh run rerun --failed <run-id>` (orchestrator-side,
-      CI-only mutation — reversible, source-untouched).
-      - Re-run **green** → flaky confirmed. Note it, take NO fix action, let `ship-watch`
-        continue watching.
+   a. **Legit via diff-intersection (2a)** → dispatch the fix flow directly (clear → without
+      asking, ambiguous → ask; same tier rule as the comment-transition path above). No re-run —
+      the diff-intersection hit is decisive on its own.
+   b. **Flaky via marker-family (2b)** → the orchestrator runs **exactly one** bounded re-run of
+      the failed job: `gh run rerun --failed <run-id>` (orchestrator-side, CI-only mutation —
+      reversible, source-untouched).
+      - Re-run **green** → flaky confirmed. **Unconditionally surface a note to the human**
+        (the failure was flaky, not fixed — a possibly-real regression must never be silently
+        dropped just because a re-run happened to pass). Take NO fix action. Under
+        **supervised** tier, ASK the user to confirm treating this as resolved before moving
+        on; under autonomous/light-touch, proceed on the note alone (no ask). Critically,
+        **`ship-watch` has already terminated** by this point — the `ci_conclusion: pending →
+        failure` transition that triggered `auto-triage-fix` carries `terminate: true` (see
+        `loops/ship-watch.md`'s `surface.on_transition` and `terminate.when:
+        [..., ci_failure_surfaced, ...]`), so monitoring does NOT resume on its own; do not
+        claim it "continues watching." To resume progression toward merge, the orchestrator
+        must explicitly **re-dispatch `ship-watch` via the post-ship lifecycle tap**
+        (`list_loops({ lifecycle_hook: "post-ship", tier })` → `CronList()` de-dupe → dispatch
+        per `firing_posture[tier]`) — the same per-session re-dispatch mechanism the original
+        post-ship tap used (dc-06; see "Cron job lifecycle" above).
       - Re-run **red** → reclassify as legit → dispatch the fix flow (clear → without asking,
         ambiguous → ask).
    c. No unbounded retry — one re-run, then treat as legit. This bound exists precisely so a
