@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { assertOk, isToolError } from "@shared/lib/tool-result.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { seedExecution } from "../../__tests__/seed-execution-test-helper.ts";
 import type { Journal } from "../orchestration-journal.ts";
 import { batchLogSteps, logStep } from "../orchestration-journal.ts";
 import { writeDesign } from "../write-design.ts";
@@ -20,6 +21,7 @@ let workspace: string;
 
 beforeEach(async () => {
   workspace = await mkdtemp(join(tmpdir(), "canon-write-receipt-gate-"));
+  seedExecution(workspace);
 });
 
 afterEach(async () => {

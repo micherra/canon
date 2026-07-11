@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { assertWorkspaceInitialized } from "../services/validate-workspace-initialized.ts";
 import { emitWriteReceipt } from "../services/write-receipt.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
@@ -116,6 +117,9 @@ export async function writeTestReport(
   const validation = validateReportInput(input);
   if (!validation.ok) return validation;
   const { plansDir } = validation;
+
+  const wsErr = assertWorkspaceInitialized(input.workspace);
+  if (wsErr) return wsErr;
 
   const total = input.passed + input.failed + input.skipped;
   const pass_rate = total > 0 ? input.passed / total : 0;

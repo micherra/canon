@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,6 +6,7 @@ import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts"
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { VERDICT_MAP, type WriteReviewInput, writeReview } from "../tools/write-review.ts";
+import { seedExecution } from "./seed-execution-test-helper.ts";
 
 type ParsedReview = {
   verdict: "BLOCKING" | "WARNING" | "CLEAN";
@@ -126,7 +128,7 @@ function makeInput(overrides: Partial<WriteReviewInput> = {}): WriteReviewInput 
 describe("writeReview — file output", () => {
   it("writes REVIEW.md and REVIEW.meta.json to reviews/ directory", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput());
 
     assertOk(result);
@@ -143,7 +145,7 @@ describe("writeReview — file output", () => {
 
   it("creates the reviews directory if it does not exist", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput());
 
     assertOk(result);
@@ -158,7 +160,7 @@ describe("writeReview — file output", () => {
 describe("writeReview — verdict mapping", () => {
   it("maps approved -> CLEAN", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ verdict: "approved" }));
 
     assertOk(result);
@@ -167,7 +169,7 @@ describe("writeReview — verdict mapping", () => {
 
   it("maps approved_with_concerns -> WARNING", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ verdict: "approved_with_concerns" }));
 
     assertOk(result);
@@ -176,7 +178,7 @@ describe("writeReview — verdict mapping", () => {
 
   it("maps changes_required -> WARNING", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ verdict: "changes_required" }));
 
     assertOk(result);
@@ -185,7 +187,7 @@ describe("writeReview — verdict mapping", () => {
 
   it("maps blocked -> BLOCKING", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ verdict: "blocked" }));
 
     assertOk(result);
@@ -205,7 +207,7 @@ describe("writeReview — verdict mapping", () => {
 describe("writeReview — markdown content", () => {
   it("includes YAML frontmatter with mapped verdict", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ verdict: "blocked" }));
 
     assertOk(result);
@@ -216,7 +218,7 @@ describe("writeReview — markdown content", () => {
 
   it("includes Canon Review heading with mapped verdict", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ verdict: "approved" }));
 
     assertOk(result);
@@ -226,7 +228,7 @@ describe("writeReview — markdown content", () => {
 
   it("includes violations table section", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(
       makeInput({
         verdict: "blocked",
@@ -251,7 +253,7 @@ describe("writeReview — markdown content", () => {
 
   it("includes honored list section", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(
       makeInput({ honored: ["thin-handlers", "validate-at-boundaries"] }),
     );
@@ -265,7 +267,7 @@ describe("writeReview — markdown content", () => {
 
   it("includes score table section", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(
       makeInput({
         score: {
@@ -290,7 +292,7 @@ describe("writeReview — markdown content", () => {
 describe("writeReview — meta JSON", () => {
   it("meta has _type: review and _version: 1", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput());
 
     assertOk(result);
@@ -301,7 +303,7 @@ describe("writeReview — meta JSON", () => {
 
   it("meta stores both verdict_original and mapped verdict", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ verdict: "approved_with_concerns" }));
 
     assertOk(result);
@@ -312,7 +314,7 @@ describe("writeReview — meta JSON", () => {
 
   it("meta includes violations, honored, score, files", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const violations = [
       { file_path: "src/index.ts", principle_id: "thin-handlers", severity: "strong-opinion" },
     ];
@@ -341,7 +343,7 @@ describe("writeReview — meta JSON", () => {
 describe("writeReview — return value", () => {
   it("returns violation_count matching violations array length", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(
       makeInput({
         violations: [
@@ -357,7 +359,7 @@ describe("writeReview — return value", () => {
 
   it("returns violation_count 0 when no violations", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ violations: [] }));
 
     assertOk(result);
@@ -370,7 +372,7 @@ describe("writeReview — return value", () => {
 describe("writeReview — write receipt", () => {
   it("emits a write_receipt event of kind 'review' pointing at REVIEW.md", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput());
     assertOk(result);
 
@@ -409,7 +411,7 @@ describe("writeReview — relative workspace rejection", () => {
 describe("writeReview — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (spaces)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ slug: "has spaces" }));
 
     expect(result.ok).toBe(false);
@@ -421,7 +423,7 @@ describe("writeReview — validation errors", () => {
 
   it("returns INVALID_INPUT for invalid slug (special chars)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ slug: "my/epic" }));
 
     expect(result.ok).toBe(false);
@@ -432,7 +434,7 @@ describe("writeReview — validation errors", () => {
 
   it("returns INVALID_INPUT for path traversal in slug", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ slug: "../etc" }));
 
     expect(result.ok).toBe(false);
@@ -447,7 +449,7 @@ describe("writeReview — validation errors", () => {
 describe("writeReview — backward compat with parseReviewArtifact", () => {
   it("generated REVIEW.md is parseable by parseReviewArtifact (approved -> CLEAN)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ verdict: "approved" }));
 
     assertOk(result);
@@ -459,7 +461,7 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
 
   it("generated REVIEW.md is parseable by parseReviewArtifact (blocked -> BLOCKING)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(
       makeInput({
         verdict: "blocked",
@@ -484,7 +486,7 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
 
   it("parseReviewArtifact extracts honored list from generated markdown", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(
       makeInput({ honored: ["thin-handlers", "errors-are-values"] }),
     );
@@ -499,7 +501,7 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
 
   it("parseReviewArtifact extracts score from generated markdown", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(
       makeInput({
         score: {
@@ -522,7 +524,7 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
 
   it("parseReviewArtifact handles empty violations (CLEAN review)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeReview(makeInput({ verdict: "approved", violations: [] }));
 
     assertOk(result);
@@ -535,7 +537,7 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
 
   it("generates markdown parseable for all four verdict values", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
-
+    seedExecution(tmpDir);
     const verdicts: WriteReviewInput["verdict"][] = [
       "approved",
       "approved_with_concerns",
@@ -547,6 +549,7 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
     await Promise.all(
       verdicts.map(async (verdict, i) => {
         const subDir = await mkdtemp(join(tmpdir(), "write-review-test-v-"));
+        seedExecution(subDir);
         const result = await writeReview({ ...makeInput(), verdict, workspace: subDir });
         assertOk(result);
         const md = await readFile(result.path, "utf-8");
@@ -556,5 +559,21 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
         await rm(subDir, { force: true, recursive: true });
       }),
     );
+  });
+});
+
+describe("writeReview — fail-closed on unbacked workspace", () => {
+  it("returns WORKSPACE_NOT_FOUND and writes no artifact when the workspace has no execution row", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
+    // Deliberately NOT seeded — workspace has no execution row.
+
+    const result = await writeReview(makeInput());
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+      expect(result.message).toContain(tmpDir);
+    }
+    expect(existsSync(join(tmpDir, "reviews", "REVIEW.md"))).toBe(false);
   });
 });

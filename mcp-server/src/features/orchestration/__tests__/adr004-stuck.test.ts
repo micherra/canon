@@ -16,6 +16,7 @@ import { assertOk } from "@shared/lib/tool-result.ts";
 import type Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { writePlanIndex } from "../tools/write-plan-index.ts";
+import { seedExecution } from "./seed-execution-test-helper.ts";
 
 // 1. Migration runner — existing execution data is preserved
 //
@@ -216,6 +217,7 @@ describe("writePlanIndex — additional edge cases", () => {
 
   it("task description with commas in files array doesn't break the table", async () => {
     const tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
+    seedExecution(tmpDir);
     try {
       const result = await writePlanIndex({
         slug: "test",

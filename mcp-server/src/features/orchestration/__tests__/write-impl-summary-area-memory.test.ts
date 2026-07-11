@@ -18,11 +18,13 @@ import {
   writeImplementationSummary,
 } from "../tools/write-implementation-summary.ts";
 import type { AreaMemoryWriter } from "../tools/write-review.ts";
+import { seedExecution } from "./seed-execution-test-helper.ts";
 
 let tmpDir: string;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-area-memory-test-"));
+  seedExecution(tmpDir);
 });
 
 afterEach(async () => {
