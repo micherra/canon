@@ -7,6 +7,7 @@
  */
 
 import type Database from "better-sqlite3";
+import { ContextGraphStore, type ContextNode } from "./kg-context-store.ts";
 import { computeImpactScore } from "./kg-query-insights.ts";
 import type {
   BlastRadiusResult,
@@ -44,9 +45,11 @@ export class KgQuery {
   private readonly stmtGetKgFreshness: Database.Statement;
   private readonly stmtGetFileTagsByPath: Database.Statement;
   private readonly stmtGetFileTagsByFileId: Database.Statement;
+  private readonly contextGraphStore: ContextGraphStore;
 
   constructor(db: Database.Database) {
     this.db = db;
+    this.contextGraphStore = new ContextGraphStore(db);
     this.stmtGetCallers = db.prepare(`
       SELECT ent.entity_id, ent.file_id, ent.name, ent.qualified_name, ent.kind,
              ed.edge_type, ed.confidence
@@ -608,5 +611,18 @@ export class KgQuery {
       edges,
       nodes: [...nodeMap.values()],
     };
+  }
+
+  // Context Graph (decisions/ADRs) — delegates to ContextGraphStore (m2-01);
+  // no SQL duplicated here.
+
+  /** Return context nodes (decisions/ADRs) linked to `path` via `decision_touches_file`. */
+  getContextForFile(path: string): ContextNode[] {
+    return this.contextGraphStore.getNodesForFile(path);
+  }
+
+  /** Return the ordered `supersedes` chain starting from `adrId`, cycle-guarded. */
+  getSupersedesChain(adrId: string): ContextNode[] {
+    return this.contextGraphStore.getSupersedesChain(adrId);
   }
 }
