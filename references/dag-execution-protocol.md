@@ -11,6 +11,56 @@ description: >-
 
 Read this file BEFORE executing any build where `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, and before any task-queue/merge/cleanup operation. See `CLAUDE.md` for the stub pointer.
 
+## canon-waves opt-in path (Increment 1)
+
+canon-waves (`workflows/canon-waves.js` + the `compile_waves` MCP tool, SYNTHESIS Inc-5) is an
+**opt-in, single-wave-only** execution path for a DAG build's parallel-implement phase. It
+replaces the hand-run git checklist below with a compiled `WavesArgs` envelope handed to ONE
+generic `Workflow`-tool runner. It does **not** revive the #167-removed persistent
+flow/wave engine — `compile_waves` is a pure orchestrator-side function, not a generated script
+or a standing state machine, and the manual protocol below is **retained** as the documented
+fallback (Q2 / ADR-0053) — used whenever the opt-in conditions below don't hold.
+
+**Selection condition (all of the following must hold):**
+1. `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists.
+2. The DAG is single-wave — no task has a non-empty `depends_on` (`compile_waves` errors closed
+   on any `depends_on`; multi-wave dependency-ordered execution is deferred to Inc-2, which needs
+   an orchestrator probe on inter-wave worktree provisioning before it can be designed).
+3. The user has opted into workflow orchestration for this build.
+4. The `Workflow` tool is available in the current session.
+
+Any condition failing → fall back to the manual protocol below (or HITL if `Workflow` is
+unavailable mid-build).
+
+**Boundary sequence:**
+1. `compile_waves({ workspace, slug, base_commit, build_worktree })` → returns
+   `{ envelope, worktrees_to_create }`, or a fail-closed `INVALID_INPUT` error (never a partial
+   envelope) when the DAG is invalid or multi-wave.
+2. Orchestrator **pre-creates** each Canon-owned worktree from `worktrees_to_create`:
+   `git worktree add <worktree_path> -b <branch> <base_commit>` per entry.
+3. Invoke `Workflow({ scriptPath: "workflows/canon-waves.js", args: envelope })` — name-based
+   resolution is not built (no `.claude/workflows/` install pipeline exists), so `scriptPath` is
+   mandatory.
+4. On return: **independently git-verify** the merge — N+1 parents on the merge commit, and a
+   per-file `git diff {base_commit}` for every task's declared file — never trust the runner's
+   self-reported `status: 'ok'` alone, matching the probe's verification discipline.
+5. Journal per-task via `batch_log_steps` from the runner's structured return (boundary
+   journaling — the sandboxed script body has no MCP access, so journaling happens here, not
+   inside the script).
+6. Run the deterministic Bash gates (`hooks/dead-wire-gate.sh`, `hooks/summary-diff-check.sh`,
+   etc. — see root `CLAUDE.md` Step Enforcement Contracts) against the merged build worktree at
+   this boundary.
+7. On merge conflict or a `blocked`/`partial` worker → surface the existing merge-conflict HITL
+   (no mid-run HITL inside the Workflow segment — this IS segment-at-gates in its minimal,
+   already-validated form: gates sit at the segment's boundaries, not inside it).
+
+**Out of increment-1 scope** (deferred, not assumed): multi-wave dependency-ordered execution
+(Inc-2); full multi-segment segment-at-gates with gate-answer-parameterized `args` (Inc-3);
+`ingest_workflow_run` + provenance audit + runId-aware `reconcile_workspace` (Inc-4); engine
+default-on flip for the `implement-waves` step type (Inc-5).
+
+## Manual protocol (fallback)
+
 When `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, use parallel dispatch via agent teams. Each entry has `task_id`, `depends_on: []`, `files: []`. If absent, fall back to sequential execution.
 
 > **Supported execution model (current).** The live, exercised path is **single-worktree sequential execution**: `init_workspace` creates one `{workspace}/worktree` and all code-writing agents share it. The worktree-per-task parallel-wave path described below (per-task `canon-task/{task_id}` worktrees + sequential merge) is documented as the intended shape but is **not currently backed by automated tooling** — the wave-lifecycle helpers (`createWaveWorktrees`/`mergeWaveResults`/`cleanupWorktrees`) were removed in PR #167. Until they are deliberately rebuilt (see `docs/explore/adaptive-queen.md` revisit trigger), run the merge steps below as explicit git operations, or prefer sequential execution. Do not reintroduce calls to the removed helpers.
