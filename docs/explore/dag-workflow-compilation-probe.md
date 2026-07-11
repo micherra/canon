@@ -1,6 +1,6 @@
 # DAG → Workflow Compilation Probe — Findings
 
-**Status: Resolved — THESIS HOLDS.** No blockers. Two design implications for the
+**Status: Resolved — THESIS HOLDS.** No blockers. Three design implications for the
 eventual compiler are recorded below.
 
 ## Purpose
@@ -167,7 +167,7 @@ than the synthesis's own roadmap anticipated.
 ## Blockers
 
 **None.** Both rungs are green, git-verified, and the boundary gate composes as
-expected. Two design implications the eventual compiler MUST honor, surfaced
+expected. Three design implications the eventual compiler MUST honor, surfaced
 by this probe and now fixed in `workflows/dag-compile-probe.js`:
 
 1. **`args` arrives as a JSON string, not a parsed object.** The first A3
@@ -184,6 +184,16 @@ by this probe and now fixed in `workflows/dag-compile-probe.js`:
    shape the sandbox permits, and this probe's clean pass/fail split (S3 body
    vs. agent-node/boundary effects) is the concrete proof that the pattern is
    sufficient, not just theoretically necessary.
+3. **Input arity validation.** The probe script relies on per-node `git -C ...
+   rev-parse --show-toplevel` safety guards plus a 2-of-2 `workersOk`
+   requirement to fail closed on a malformed `args` (e.g. a `task_worktrees`
+   array missing an element interpolates `undefined` into a worker prompt,
+   which the rev-parse guard then rejects as a path mismatch). That is
+   sufficient for a throwaway probe, but a *generated* compiler MUST emit an
+   explicit up-front arity/shape check on its `args` (e.g. assert
+   `task_worktrees.length === expected` before building any worker prompt)
+   rather than relying on downstream guards. Source: review advisory on this
+   build.
 
 **Event-backbone co-design opportunity:** a segment's structured return (the
 `{status, note}` / `{rung, status, workers, merge}` shape returned here) is
