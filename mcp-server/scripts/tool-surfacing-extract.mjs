@@ -21,7 +21,10 @@
  *   Every `CallExpression` whose callee is:
  *     - the bare identifier `registerTool` or `registerToolWithUi`, OR
  *     - a `PropertyAccessExpression` ending in `.registerTool` or
- *       `.registerToolWithUi` (the `server.registerTool(...)` member form)
+ *       `.registerToolWithUi` (the `server.registerTool(...)` member form), OR
+ *     - an `ElementAccessExpression` whose computed member is a string
+ *       literal `"registerTool"` or `"registerToolWithUi"` (the
+ *       `server["registerTool"](...)` computed-member form)
  *   is a MATCHED registration call. The name-literal argument is
  *   `arguments[1]` for `registerToolWithUi` (its first positional is the
  *   `server` handle) and `arguments[0]` for `registerTool`.
@@ -31,6 +34,13 @@
  *   `"...server.registerTool..."` string mention is never matched — no
  *   regex-based exclusion is needed, unlike the line-parser this replaces.
  *
+ *   The `canon:allow-unsurfaced:` marker attaches to a call ONLY if it
+ *   appears after that call's name-literal argument and before the next
+ *   matched call's start on the same physical line (or before end-of-line
+ *   when no further call follows on that line). This prevents a marker
+ *   trailing the LAST of several calls packed on one source line from being
+ *   inherited by the earlier calls on that same line.
+ *
  * FAIL-CLOSED GUARANTEE
  *   ANY error (missing `typescript` module, ENOENT, syntactic parse errors,
  *   or a matched call whose name argument is not a resolvable string
@@ -39,6 +49,18 @@
  *   position — an unresolvable registration must never be silently dropped
  *   (that is the fail-open class this rewrite closes). Exit 0 with rows
  *   printed to stdout is the ONLY success path.
+ *
+ * KNOWN LIMITATIONS (out of the accidental-omission threat model, fail-open)
+ *   - Aliased-import call forms are NOT resolved:
+ *     `import { registerTool as rt } from "..."; rt(...)` requires
+ *     TypeScript binding/type-checker resolution (tracing `rt` back to its
+ *     import specifier) to catch — deliberately not implemented here, since
+ *     this rewrite's threat model is accidental omission via source-form
+ *     variation (line-packing, multiline splits, computed-member access),
+ *     not deliberate obfuscation of the callee identifier itself.
+ *   - Computed string-member access (`server["registerTool"](...)`) IS
+ *     handled (see MATCHING RULE above) — this was the one computed-access
+ *     gap in scope for this rewrite and is now closed.
  *
  * MODULE RESOLUTION
  *   This script MUST reside under mcp-server/ so the bare specifier
@@ -76,6 +98,14 @@ function matchedMethodName(ts, callee) {
     REGISTRATION_METHODS.has(callee.name.text)
   ) {
     return callee.name.text;
+  }
+  if (
+    ts.isElementAccessExpression(callee) &&
+    callee.argumentExpression &&
+    ts.isStringLiteral(callee.argumentExpression) &&
+    REGISTRATION_METHODS.has(callee.argumentExpression.text)
+  ) {
+    return callee.argumentExpression.text;
   }
   return null;
 }
@@ -138,6 +168,34 @@ async function main() {
       return lines[line] ?? "";
     }
 
+    // Returns 1 iff MARKER_TEXT appears strictly after `nameArg`'s own
+    // position and strictly before the next matched call's start ON THE
+    // SAME PHYSICAL LINE (or before end-of-line when no further call
+    // follows on that line). Narrows marker attachment to the call it
+    // actually trails — two calls packed on one line no longer both inherit
+    // a marker meant only for the second (Finding 2).
+    function hasMarkerFor(nameArg, nextCallNode) {
+      const startPos = nameArg.getStart();
+      const { line: startLine, character: startChar } =
+        sourceFile.getLineAndCharacterOfPosition(startPos);
+      const lineText = lineTextAt(startPos);
+      let windowEndChar = lineText.length;
+      if (nextCallNode) {
+        const { line: nextLine, character: nextChar } = sourceFile.getLineAndCharacterOfPosition(
+          nextCallNode.getStart(),
+        );
+        if (nextLine === startLine) {
+          windowEndChar = nextChar;
+        }
+      }
+      if (startChar >= windowEndChar) {
+        return 0;
+      }
+      return lineText.slice(startChar, windowEndChar).includes(MARKER_TEXT) ? 1 : 0;
+    }
+
+    const matches = [];
+
     function visit(node) {
       if (ts.isCallExpression(node)) {
         const methodName = matchedMethodName(ts, node.expression);
@@ -152,14 +210,20 @@ async function main() {
               `unresolvable registration in '${filePath}' at line ${line + 1}, column ${character + 1} — ${methodName}(...) name argument is not a resolvable string literal`,
             );
           }
-          const hasMarker = lineTextAt(nameArg.getStart()).includes(MARKER_TEXT) ? 1 : 0;
-          rows.push(`${nameArg.text}\t${hasMarker}`);
+          matches.push({ node, nameArg });
         }
       }
       ts.forEachChild(node, visit);
     }
 
     visit(sourceFile);
+
+    for (let i = 0; i < matches.length; i++) {
+      const { nameArg } = matches[i];
+      const nextCallNode = matches[i + 1] ? matches[i + 1].node : null;
+      const hasMarker = hasMarkerFor(nameArg, nextCallNode);
+      rows.push(`${nameArg.text}\t${hasMarker}`);
+    }
   }
 
   process.stdout.write(rows.length > 0 ? rows.join("\n") + "\n" : "");

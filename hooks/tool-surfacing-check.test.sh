@@ -165,6 +165,35 @@ write_register_string_mention() {
   } > "$root/mcp-server/src/app/$file"
 }
 
+# write_register_computed_member <root> <file> <tool_name>
+# `server["registerTool"]("<tool_name>", ...)` — the ElementAccessExpression
+# computed-member callee form (F2 adversarial-review fail-open case). The AST
+# extractor must resolve this identically to the `.registerTool` property-
+# access form (case v).
+write_register_computed_member() {
+  local root="$1" file="$2" name="$3"
+  {
+    printf 'function registerX(server) {\n'
+    printf '  server["registerTool"]("%s", { description: "x" }, h);\n' "$name"
+    printf '}\n'
+  } > "$root/mcp-server/src/app/$file"
+}
+
+# write_register_packed_marked <root> <file> <name_a> <name_b>
+# Two `registerTool(` openers packed on ONE physical line, with a single
+# trailing `canon:allow-unsurfaced:` marker AFTER the second call only. The
+# marker must attach ONLY to <name_b> (the call it trails) — NOT to <name_a>,
+# which sits earlier on the same shared line (Finding 2 marker-over-
+# suppression fail-open case).
+write_register_packed_marked() {
+  local root="$1" file="$2" name_a="$3" name_b="$4"
+  {
+    printf 'function registerX(server) {\n'
+    printf '  server.registerTool("%s", h1); server.registerTool("%s", h2); // canon:allow-unsurfaced: x\n' "$name_a" "$name_b"
+    printf '}\n'
+  } > "$root/mcp-server/src/app/$file"
+}
+
 # write_register_dynamic <root> <file>
 # Registration is entirely dynamic — no `registerTool(` / `registerToolWithUi(`
 # idiom appears anywhere in the file, so zero tool names can be extracted from
@@ -560,6 +589,32 @@ STUB
     FAIL=$((FAIL + 1))
   fi
   rm -rf "$FIX" "$STUB_DIR"
+}
+
+echo "-- (v) computed-member server[\"registerTool\"](...) is captured (F2 hardening) --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_computed_member "$FIX" register-v.ts dead_computed_tool
+  write_agent "$FIX" engineer ""
+  run_gate_out 2 "dead_computed_tool" "computed-member registration unsurfaced -> exit 2 names it" "$FIX"
+
+  FIX2=$(mktemp -d)
+  init_fixture "$FIX2"
+  write_register_computed_member "$FIX2" register-v.ts dead_computed_tool
+  write_agent "$FIX2" engineer "dead_computed_tool"
+  run_gate 0 "computed-member registration granted -> exit 0" "$FIX2"
+  rm -rf "$FIX" "$FIX2"
+}
+
+echo "-- (w) packed same-line marker attaches only to the trailing call, not the earlier one (Finding 2 hardening) --"
+{
+  FIX=$(mktemp -d)
+  init_fixture "$FIX"
+  write_register_packed_marked "$FIX" register-w.ts packed_a packed_b
+  write_agent "$FIX" engineer ""
+  run_gate_out 2 "packed_a" "packed_a (no marker in its window) still flagged despite trailing marker on the line" "$FIX"
+  rm -rf "$FIX"
 }
 
 echo ""
