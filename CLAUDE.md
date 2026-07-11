@@ -246,11 +246,15 @@ Before `Agent` call: invoke `resolve_agent_skills({ agent_name })` → include r
 
 ### Team Dispatch Protocol
 
-Three-phase loop: partition → spawn → consolidate. Reviewer is the concrete implementation; other team types follow the same pattern.
+Two fan-out axes, one mode-selection decision. **Horizontal**: three-phase loop — partition (disjoint file groups) → spawn (one reviewer per group, same lens) → consolidate (minority-finding verification probes). **Vertical**: same three-phase shape over the other axis — assign diverse concern lenses → spawn one reviewer per lens over the FULL file set → consolidate with inverted semantics (single-lens findings first-class, overlap = agreement, any-juror-blocks). Reviewer is the concrete implementation; other team types follow the horizontal pattern.
 
-Fan-out threshold: aggregate blast radius > ~50, OR multiple files with `impact_score > 0.7`, OR 3+ layers with cross-layer dependencies. Below threshold: single reviewer, full file list.
+| Mode | Trigger |
+|------|---------|
+| Horizontal fan-out | Aggregate blast radius > ~50, OR multiple files with `impact_score > 0.7`, OR 3+ layers with cross-layer dependencies. Below threshold: single reviewer, full file list. |
+| Vertical diverse-lens jury | `compute_autonomy_tier` returned the ADR-0044 sensitive-path deny-list floor (`require_security: true` + `require_adversarial: true`). |
+| Capped vertical×horizontal hybrid | Both triggers fire — bounded escape hatch (hard-capped M-lenses × K-partitions reviewer count), not the default. |
 
-Read `references/team-dispatch-protocol.md` BEFORE spawning a team-dispatched review.
+Full phases for both axes, the mode-selection preamble, and the hybrid cap: `references/team-dispatch-protocol.md`. Read it BEFORE spawning a team-dispatched review.
 
 ### Journal Protocol
 
@@ -533,11 +537,11 @@ canon/
 │       │   ├── history/         # get_build_history, get_historical_artifacts, get_cross_run_analysis — cross-run analysis for learner
 │       │   ├── loops/           # list_loops, get_loop_definition; loop schema + determinism guardrail (Phase E current)
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes, check_context_staleness
-│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023); record_applied_evolution + get_evolution_outcomes post-apply regression detection — applied_evolutions v12 (ADR-0034)
+│       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023); record_applied_evolution + get_evolution_outcomes post-apply regression detection — applied_evolutions v12 (ADR-0034); backfill_applying_commit closes the applying_commit seam from Canon-Evolution git trailers (Inc-3)
 │       │   └── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs; overlay trust boundary (UntrustedText opaque box, closed-domain validators, linear-time glob matcher — ADR-0026/ADR-0027)
-├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve)
+├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve + evolution-regression-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── workflows/            # Managed workflow-script library — Canon's 6th managed-artifact class; plain-JS scripts invoked on-demand via Workflow `scriptPath`; lint enforced by `hooks/workflows-lint.sh`
 ├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)

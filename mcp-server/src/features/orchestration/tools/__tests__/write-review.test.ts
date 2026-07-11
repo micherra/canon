@@ -13,12 +13,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import { afterEach, describe, expect, it } from "vitest";
+import { seedExecution } from "../../__tests__/seed-execution-test-helper.ts";
 import { type ConfidenceAdapter, type WriteReviewInput, writeReview } from "../write-review.ts";
 
 // ---- Helpers ----
 
 async function makeTmpWorkspace(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "write-review-test-"));
+  const workspace = await mkdtemp(join(tmpdir(), "write-review-test-"));
+  seedExecution(workspace);
+  return workspace;
 }
 
 const baseInput: WriteReviewInput = {

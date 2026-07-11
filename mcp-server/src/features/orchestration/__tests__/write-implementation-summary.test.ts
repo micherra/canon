@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,6 +6,7 @@ import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts"
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { writeImplementationSummary } from "../tools/write-implementation-summary.ts";
+import { seedExecution } from "./seed-execution-test-helper.ts";
 
 let tmpDir: string;
 
@@ -19,7 +21,7 @@ afterEach(async () => {
 describe("writeImplementationSummary — valid input", () => {
   it("writes {task_id}-SUMMARY.md and .meta.json to correct location", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [
         {
@@ -49,7 +51,7 @@ describe("writeImplementationSummary — valid input", () => {
 
   it("markdown contains files changed table with correct actions", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [
         { action: "added", path: "src/foo.ts" },
@@ -75,7 +77,7 @@ describe("writeImplementationSummary — valid input", () => {
 
   it("meta JSON has _type: implementation_summary and _version: 1", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [{ action: "added", path: "src/tools/foo.ts" }],
       slug: "my-epic",
@@ -95,7 +97,7 @@ describe("writeImplementationSummary — valid input", () => {
 
   it("handles optional fields omitted (no decisions_applied, deviations, tests_added)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [],
       slug: "my-epic",
@@ -117,7 +119,7 @@ describe("writeImplementationSummary — valid input", () => {
 
   it("includes decisions_applied in markdown and meta when provided", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       decisions_applied: ["dec-01", "dec-03"],
       files_changed: [],
@@ -137,7 +139,7 @@ describe("writeImplementationSummary — valid input", () => {
 
   it("includes deviations in markdown and meta when provided", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       deviations: [
         { decision_id: "dec-02", reason: "legacy constraint prevented strict compliance" },
@@ -161,7 +163,7 @@ describe("writeImplementationSummary — valid input", () => {
 
   it("includes tests_added in markdown and meta when provided", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [],
       slug: "my-epic",
@@ -187,7 +189,7 @@ describe("writeImplementationSummary — valid input", () => {
 
   it("all optional fields included in markdown and meta", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       decisions_applied: ["dec-01"],
       deviations: [{ decision_id: "dec-02", reason: "test reason" }],
@@ -215,7 +217,7 @@ describe("writeImplementationSummary — valid input", () => {
 
   it("creates the plans directory if it does not exist", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [],
       slug: "new-slug",
@@ -229,7 +231,7 @@ describe("writeImplementationSummary — valid input", () => {
 
   it("different task_ids produce different output filenames (DAG collision prevention)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const resultA = await writeImplementationSummary({
       files_changed: [{ action: "added", path: "src/a.ts" }],
       slug: "my-epic",
@@ -260,7 +262,7 @@ describe("writeImplementationSummary — valid input", () => {
 describe("writeImplementationSummary — write receipt", () => {
   it("emits a write_receipt event of kind 'implementation_summary' pointing at the SUMMARY path", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [{ action: "added", path: "src/a.ts" }],
       slug: "my-epic",
@@ -298,7 +300,7 @@ describe("writeImplementationSummary — relative workspace rejection", () => {
 describe("writeImplementationSummary — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (spaces)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [],
       slug: "invalid slug",
@@ -315,7 +317,7 @@ describe("writeImplementationSummary — validation errors", () => {
 
   it("returns INVALID_INPUT for invalid slug (special chars)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [],
       slug: "my/epic!",
@@ -331,7 +333,7 @@ describe("writeImplementationSummary — validation errors", () => {
 
   it("returns INVALID_INPUT for invalid task_id (spaces)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [],
       slug: "my-epic",
@@ -348,7 +350,7 @@ describe("writeImplementationSummary — validation errors", () => {
 
   it("returns INVALID_INPUT for invalid task_id (special chars)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [],
       slug: "my-epic",
@@ -364,7 +366,7 @@ describe("writeImplementationSummary — validation errors", () => {
 
   it("returns INVALID_INPUT for path traversal in slug", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeImplementationSummary({
       files_changed: [],
       slug: "../evil",
@@ -376,5 +378,26 @@ describe("writeImplementationSummary — validation errors", () => {
     if (!result.ok) {
       expect(result.error_code).toBe("INVALID_INPUT");
     }
+  });
+});
+
+describe("writeImplementationSummary — fail-closed on unbacked workspace", () => {
+  it("returns WORKSPACE_NOT_FOUND and writes no artifact when the workspace has no execution row", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
+    // Deliberately NOT seeded — workspace has no execution row.
+
+    const result = await writeImplementationSummary({
+      files_changed: [{ action: "modified", path: "src/foo.ts" }],
+      slug: "unbacked-slug",
+      task_id: "task-01",
+      workspace: tmpDir,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+      expect(result.message).toContain(tmpDir);
+    }
+    expect(existsSync(join(tmpDir, "plans", "unbacked-slug", "task-01-SUMMARY.md"))).toBe(false);
   });
 });

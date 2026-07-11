@@ -1,16 +1,17 @@
 # features/evolution/ — Trace-Driven Evolution Bounded Context
 
-<!-- last-updated: 2026-07-01 -->
+<!-- last-updated: 2026-07-10 -->
 
 ## Purpose
 
 The `evolution/` feature module implements Canon's trace-driven evolution
-pipeline (Phase 1). It provides five MCP tools:
+pipeline (Phase 1). It provides six MCP tools:
 - `evaluate_candidate` — offline fitness gate (§7 strict-holdout, ADR-0022/ADR-0025 dual injection)
 - `attribute_failure` — attribution consumer: joins recorded `context_provenance` with review violations + cliff events to localize each failure to the in-context artifact (ADR-0024)
 - `select_mutation_targets` — deterministic (no model calls) selection layer: composes `attribute_failure`, applies policy + budget, returns construction-ready `MutationTarget[]` for the learner
 - `record_applied_evolution` — authoritative/fail-closed apply-provenance write to drift.db `applied_evolutions` (ADR-0034)
 - `get_evolution_outcomes` — fail-open, target-scoped, apply-anchored regression HYPOTHESIS reader
+- `backfill_applying_commit` — observable-best-effort back-fill of `applied_evolutions.applying_commit` from `Canon-Evolution:` git trailers (Inc-3, ADR-0034)
 
 All tools are **offline** — never called on the build hot path.
 
@@ -21,7 +22,8 @@ features/evolution/
 ├── tools/
 │   ├── evaluate-candidate.ts       # MCP tool handler — dual-mode dispatch via isGuardrailTarget()
 │   ├── attribute-failure.ts        # MCP tool handler (thin wrapper over attribution services)
-│   └── select-mutation-targets.ts  # MCP tool handler — composes attribution pipeline + selectMutationTargets()
+│   ├── select-mutation-targets.ts  # MCP tool handler — composes attribution pipeline + selectMutationTargets()
+│   └── backfill-applying-commit.ts # MCP tool handler — parseEvolutionTrailers (pure) + backfillApplyingCommit (Inc-3, ADR-0034)
 ├── services/
 │   ├── eval-runner.ts          # parseSummary, decideGate, decideCompositeGate (holistic veto, 2026-07-06), resolveAgentEvalRoot + resolveHolisticEvalRoot (per-agent + holistic suite resolution, 2026-07-06), runSplit (pure + one I/O fn, agentEvalRoot/evalRootOverride options)
 │   ├── candidate-injection.ts  # withInjectedCandidate (ADR-0022) + withInjectedGuardrailCandidate (ADR-0025) + isGuardrailTarget()
@@ -55,7 +57,8 @@ features/evolution/
     ├── artifact-path-resolver.test.ts            # self-host, foreign-install fallback, overlay never-fallback, fail-closed missing, absolute-as-is
     ├── frontmatter-guard.test.ts                 # 11 pure unit cases for checkFrontmatterImmutable
     ├── evaluate-candidate-frontmatter-guard.test.ts  # 4 handler-wiring cases — asserts zero runShell calls on reject
-    └── agent-def-real-path-integration.test.ts   # end-to-end: resolveAgentSkills -> readProvenance -> attributeFailures -> selectMutationTargets -> evaluateCandidate's frontmatter guard, using the REAL emitted path (no hand-written fixture)
+    ├── agent-def-real-path-integration.test.ts   # end-to-end: resolveAgentSkills -> readProvenance -> attributeFailures -> selectMutationTargets -> evaluateCandidate's frontmatter guard, using the REAL emitted path (no hand-written fixture)
+    └── backfill-applying-commit.test.ts          # 10 cases: 6 parseEvolutionTrailers unit tests (charset guard, dedupe, first-seen-wins) + 4 handler integration tests (happy path, no-op, INVALID_INPUT, fail-safe) — Inc-3
 ```
 
 Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
@@ -222,10 +225,11 @@ return empty output.
 
 **Cross-root artifact re-read (`resolveArtifactReadPath`, `services/artifact-path-resolver.ts`, Codex P2 #1):** both `attribute_failure`'s `readCurrentBody` seam and `select_mutation_targets`' baseline-body read resolve provenance paths project_dir-first, falling back to `pluginDir` when the path's first segment is a `PLUGIN_ARTIFACT_ROOTS` dir AND the artifact is absent from `project_dir` AND present under `pluginDir` — closes the cross-root gap where a trusted plugin-tier artifact (e.g. `agents/engineer.md`) absent from `project_dir` under a foreign plugin install was spuriously `hash_unverified`/missing. The committable `project_dir` copy still wins when present (mutation-apply semantics unchanged — this is a READ-path fix only). Untrusted `.canon/` overlay paths never fall back (ADR-0027 trust boundary). `pluginDir` is threaded in as an optional handler param (`attributeFailure(input, pluginDir?)`, `selectMutationTargetsHandler(input, pluginDir?)`), injected from server-state by `register-evolution.ts` — same pattern as `register-agent-teams.ts`. It is NOT a public schema field on either tool's `Input`.
 
-## Tools: `record_applied_evolution` + `get_evolution_outcomes` (ADR-0034)
+## Tools: `record_applied_evolution` + `get_evolution_outcomes` + `backfill_applying_commit` (ADR-0034)
 
-Post-apply evolution regression detection (Inc 1 + Inc 2). Backed by the drift.db
-`applied_evolutions` table (v12 migration) + `AppliedEvolutionsDao`.
+Post-apply evolution regression detection (Inc 1 + Inc 2) plus the Inc-3 back-fill that
+closes the `applying_commit` inert seam. Backed by the drift.db `applied_evolutions` table
+(v12 migration) + `AppliedEvolutionsDao`.
 
 **`record_applied_evolution` (`tools/record-applied-evolution.ts`)** — AUTHORITATIVE /
 FAIL-CLOSED write. Input carries pre-computed `before_hash`/`after_hash` (the call-site
@@ -251,20 +255,38 @@ signal (via `listAppliedSince`) set `ambiguous:true` + `confounding_proposal_ids
 `ambiguous`. Verdict ∈ `regression_candidate | no_signal_change | improvement_candidate |
 ambiguous | insufficient`. Absent signal rows → cohort zeros + `insufficient` (never an error).
 
+**`backfill_applying_commit` (`tools/backfill-applying-commit.ts`, Inc-3)** — OBSERVABLE-BEST-EFFORT
+(not fail-closed like `record_applied_evolution`). Input `{ project_dir, max_commits? }`
+(default `max_commits` 2000). Runs `git log --grep='^Canon-Evolution:'` via `git-adapter.ts`,
+parses `{proposal_id, sha}` pairs out of the commit bodies via the pure, unit-tested
+`parseEvolutionTrailers` (one pair per commit; deduped by `proposal_id`, first-seen/most-recent
+sha wins; a trailer value failing the `^[A-Za-z0-9._-]+$` charset guard — dc-05, the same guard
+enforced at the producer commit sink — is skipped, never surfaced as a pair), then applies them
+via `AppliedEvolutionsDao.backfillApplyingCommit(pairs)`. Returns `{ updated, scanned }`. A git
+or storage failure returns a `ToolResult` `UNEXPECTED` error; the caller (`review-learnings.md`)
+surfaces a warning but never blocks or undoes an apply on this tool's failure —
+`record_applied_evolution` stays the sole authoritative write path; this tool only reconciles a
+nullable column. `backfill_applying_commit` is the SOLE writer of `applying_commit`.
+
 **Apply-provenance call-sites**: `record_applied_evolution` is invoked from the
 `review-learnings` apply path (Writer arm + Arm M), guarded on `type == "evolution-candidate"`
 (legacy proposals — new-convention, severity-change, prune — carry no holdout scores and get
 NO record; Arm T / Arm F never write, so never record). The Writer arm captures `before_hash`
 from the on-disk target BEFORE spawning the writer (hashing after the edit would make
 `before_hash == after_hash`); Arm M reuses the pre-write content it already read for the diff.
-The command does not commit, so `applying_commit` is left null at record time (back-filled later
-from the `Canon-Evolution:` trailer). The record only writes a drift.db row — no revert/quarantine/merge.
-See `skills/canon/commands/review-learnings.md`.
+**Producer commit (Inc-3):** immediately after each `record_applied_evolution` call, both arms
+create ONE git commit carrying a `Canon-Evolution: {proposal_id}` trailer — guarded by the same
+dc-05 charset check and skipped (with a surfaced warning, apply left standing) on `main`/`master`
+(no auto-commit on those branches). `record_applied_evolution` itself still does not commit, so
+`applying_commit` is left null at record time; after all applies, `review-learnings.md` invokes
+`backfill_applying_commit` once to populate it from the producer's trailers. The record only
+writes a drift.db row / the producer only writes a git commit — neither reverts, quarantines, or
+merges anything. See `skills/canon/commands/review-learnings.md`.
 
 **`Canon-Evolution:` trailer** (`shared/lib/commit-trailers.ts`) — optional `evolutionId?`
 on `TrailerOpts` appends a `Canon-Evolution: {id}` line after `Canon-Task` (or after
-`Canon-State` when no task). Additive/backward-compatible; enables later back-fill of
-`applied_evolutions.applying_commit` from git history.
+`Canon-State` when no task). Additive/backward-compatible; consumed by `backfill_applying_commit`'s
+`parseEvolutionTrailers` (Inc-3) to back-fill `applied_evolutions.applying_commit` from git history.
 
 ## Attribution Join Contract (ADR-0024, ADR-0032)
 

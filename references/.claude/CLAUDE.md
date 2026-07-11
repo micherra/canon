@@ -48,7 +48,7 @@ references/
 | runbook-vocabulary.md |  |
 | security-checklist.md |  |
 | status-protocol.md |  |
-| team-dispatch-protocol.md | Full three-phase team dispatch protocol for Canon review fan-out. Covers Phase 1 (partition by blast radius), Phase 2 (spawn N reviewers in parallel), and Phase 3 (consolidate with minority-finding verification probes). |
+| team-dispatch-protocol.md | Full team dispatch protocol for Canon review fan-out, covering both fan-out axes. Horizontal: Phase 1 (partition by blast radius), Phase 2 (spawn N reviewers in parallel, one per disjoint file group), Phase 3 (consolidate with minority-finding verification probes). Vertical: Phase 1V (assign diverse concern lenses), Phase 2V (spawn N reviewers over the full file set, one per lens), Phase 3V (consolidate with single-lens-first-class, overlap-as-agreement, any-juror-blocks semantics). Includes a Mode Selection preamble and a capped hybrid escape hatch. |
 | tester-report-template.md |  |
 | tool-preference.md |  |
 | workflow-probe-matrix.md |  |

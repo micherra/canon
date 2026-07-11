@@ -1,9 +1,11 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { writePlanIndex } from "../tools/write-plan-index.ts";
+import { seedExecution } from "./seed-execution-test-helper.ts";
 
 let tmpDir: string;
 
@@ -18,7 +20,7 @@ afterEach(async () => {
 describe("writePlanIndex — valid input", () => {
   it("creates INDEX.md and returns path, task_count, wave_count", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
-
+    seedExecution(tmpDir);
     const result = await writePlanIndex({
       slug: "my-epic",
       tasks: [
@@ -38,7 +40,7 @@ describe("writePlanIndex — valid input", () => {
 
   it("writes a parseable markdown table", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
-
+    seedExecution(tmpDir);
     const result = await writePlanIndex({
       slug: "my-epic",
       tasks: [
@@ -65,7 +67,7 @@ describe("writePlanIndex — valid input", () => {
 
   it("creates the plans directory if it does not exist", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
-
+    seedExecution(tmpDir);
     const result = await writePlanIndex({
       slug: "new-slug",
       tasks: [{ task_id: "t-01", wave: 1 }],
@@ -79,7 +81,7 @@ describe("writePlanIndex — valid input", () => {
 
   it("handles optional fields (depends_on, files, principles)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
-
+    seedExecution(tmpDir);
     const result = await writePlanIndex({
       slug: "test-slug",
       tasks: [
@@ -103,7 +105,7 @@ describe("writePlanIndex — valid input", () => {
 
   it("wave_count is 1 when all tasks are in the same wave", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
-
+    seedExecution(tmpDir);
     const result = await writePlanIndex({
       slug: "single-wave",
       tasks: [
@@ -137,7 +139,7 @@ describe("writePlanIndex — relative workspace rejection", () => {
 describe("writePlanIndex — validation errors", () => {
   it("returns INVALID_INPUT for task_id with spaces", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
-
+    seedExecution(tmpDir);
     const result = await writePlanIndex({
       slug: "my-epic",
       tasks: [{ task_id: "task with spaces", wave: 1 }],
@@ -153,7 +155,7 @@ describe("writePlanIndex — validation errors", () => {
 
   it("returns INVALID_INPUT for task_id with special chars", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
-
+    seedExecution(tmpDir);
     const result = await writePlanIndex({
       slug: "my-epic",
       tasks: [{ task_id: "task@01!", wave: 1 }],
@@ -168,7 +170,7 @@ describe("writePlanIndex — validation errors", () => {
 
   it("returns INVALID_INPUT for duplicate task IDs", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
-
+    seedExecution(tmpDir);
     const result = await writePlanIndex({
       slug: "my-epic",
       tasks: [
@@ -187,7 +189,7 @@ describe("writePlanIndex — validation errors", () => {
 
   it("returns INVALID_INPUT for wave < 1", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
-
+    seedExecution(tmpDir);
     const result = await writePlanIndex({
       slug: "my-epic",
       tasks: [{ task_id: "task-01", wave: 0 }],
@@ -203,7 +205,7 @@ describe("writePlanIndex — validation errors", () => {
 
   it("returns INVALID_INPUT for negative wave", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
-
+    seedExecution(tmpDir);
     const result = await writePlanIndex({
       slug: "my-epic",
       tasks: [{ task_id: "task-01", wave: -1 }],
@@ -214,5 +216,25 @@ describe("writePlanIndex — validation errors", () => {
     if (!result.ok) {
       expect(result.error_code).toBe("INVALID_INPUT");
     }
+  });
+});
+
+describe("writePlanIndex — fail-closed on unbacked workspace", () => {
+  it("returns WORKSPACE_NOT_FOUND and writes no artifact when the workspace has no execution row", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
+    // Deliberately NOT seeded — workspace has no execution row.
+
+    const result = await writePlanIndex({
+      slug: "unbacked-slug",
+      tasks: [{ task_id: "task-01", wave: 1 }],
+      workspace: tmpDir,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+      expect(result.message).toContain(tmpDir);
+    }
+    expect(existsSync(join(tmpDir, "plans", "unbacked-slug", "INDEX.md"))).toBe(false);
   });
 });
