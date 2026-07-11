@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { atomicWritePair } from "@shared/lib/atomic-write.ts";
 import { afterEach, describe, expect, it } from "vitest";
+import { seedExecution } from "../../__tests__/seed-execution-test-helper.ts";
 import { type WriteReviewInput, writeReview } from "../write-review.ts";
 
 // ---------------------------------------------------------------------------
@@ -22,7 +23,9 @@ import { type WriteReviewInput, writeReview } from "../write-review.ts";
 // ---------------------------------------------------------------------------
 
 async function makeTmpWorkspace(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "write-review-step-test-"));
+  const workspace = await mkdtemp(join(tmpdir(), "write-review-step-test-"));
+  seedExecution(workspace);
+  return workspace;
 }
 
 const tmpDirs: string[] = [];
