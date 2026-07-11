@@ -125,9 +125,7 @@ describe("compileWaves — arity check", () => {
 describe("compileWaves — sanitization", () => {
   it("sanitizes a task_id with slashes/spaces into branch + worktree path", () => {
     const dag: TaskDag = {
-      tasks: [
-        { depends_on: [], files: ["a.ts"], parallel_safe: true, task_id: "feat/my task#1" },
-      ],
+      tasks: [{ depends_on: [], files: ["a.ts"], parallel_safe: true, task_id: "feat/my task#1" }],
     };
     const result = compileWaves({
       ...BASE_INPUT,

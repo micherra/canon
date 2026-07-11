@@ -47,7 +47,9 @@ export type CompileWavesInput = {
   prompt_seeds: Record<string, string>;
 };
 
-export type CompileWavesResult = { ok: true; envelope: WavesEnvelope } | { ok: false; errors: string[] };
+export type CompileWavesResult =
+  | { ok: true; envelope: WavesEnvelope }
+  | { ok: false; errors: string[] };
 
 const SANITIZE_PATTERN = /[^A-Za-z0-9._-]/g;
 

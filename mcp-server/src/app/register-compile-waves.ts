@@ -20,8 +20,6 @@ export function registerCompileWavesTool(server: McpServer): void {
         workspace: z.string().describe("Absolute path to the Canon workspace"),
       },
     },
-    gatedWrapHandler(async (input, extra) =>
-      compileWavesTool(input, resolveScope(extra)),
-    ),
+    gatedWrapHandler(async (input, extra) => compileWavesTool(input, resolveScope(extra))),
   );
 }

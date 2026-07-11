@@ -39,11 +39,7 @@ tasks:
       - "src/child.ts"
 `;
 
-async function seedPlans(
-  plansDir: string,
-  dagYaml: string,
-  taskIds: string[],
-): Promise<void> {
+async function seedPlans(plansDir: string, dagYaml: string, taskIds: string[]): Promise<void> {
   await mkdir(plansDir, { recursive: true });
   await writeFile(join(plansDir, "task-dag.yaml"), dagYaml, "utf-8");
   for (const taskId of taskIds) {
@@ -111,7 +107,9 @@ describe("compileWavesTool — happy path", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.worktrees_to_create[0].worktree_path).toContain("/fallback-proj/.canon/worktrees/");
+    expect(result.worktrees_to_create[0].worktree_path).toContain(
+      "/fallback-proj/.canon/worktrees/",
+    );
   });
 });
 

@@ -2,7 +2,12 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type { TaskDag, TaskNode } from "@shared/lib/dag-validator.ts";
 import { splitFrontmatter } from "@shared/lib/frontmatter.ts";
-import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import {
+  type CanonToolError,
+  type ToolResult,
+  toolError,
+  toolOk,
+} from "@shared/lib/tool-result.ts";
 import { compileWaves, sanitizeTaskId, type WavesEnvelope } from "@shared/lib/waves-compiler.ts";
 import { parse as parseYaml } from "yaml";
 
@@ -128,10 +133,8 @@ function buildPromptSeed(opts: PromptSeedOpts): string {
   ].join("\n");
 }
 
-export async function compileWavesTool(
-  input: CompileWavesInput,
-  defaultProjectDir: string,
-): Promise<ToolResult<CompileWavesToolResult>> {
+/** Validate top-level input shape before touching the filesystem. */
+function validateCompileWavesInput(input: CompileWavesInput): CanonToolError | null {
   if (!isAbsolute(input.workspace)) {
     return toolError(
       "INVALID_INPUT",
@@ -139,13 +142,16 @@ export async function compileWavesTool(
     );
   }
   if (!SLUG_PATTERN.test(input.slug)) {
-    return toolError("INVALID_INPUT", `Invalid slug "${input.slug}": must match /^[a-zA-Z0-9_-]+$/`);
+    return toolError(
+      "INVALID_INPUT",
+      `Invalid slug "${input.slug}": must match /^[a-zA-Z0-9_-]+$/`,
+    );
   }
+  return null;
+}
 
-  const projectDir = input.project_dir ?? defaultProjectDir;
-  const plansDir = join(input.workspace, "plans", input.slug);
-  const dagPath = join(plansDir, "task-dag.yaml");
-
+/** Read + parse task-dag.yaml into the validator's TaskDag shape. */
+async function loadTaskDag(dagPath: string): Promise<{ ok: true; dag: TaskDag } | CanonToolError> {
   let dagContent: string;
   try {
     dagContent = await readFile(dagPath, "utf-8");
@@ -162,9 +168,22 @@ export async function compileWavesTool(
       `task-dag.yaml is not valid YAML: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  const dag = normalizeTaskDag(rawDag);
-  const canonParentWorkspace = deriveCanonParentWorkspace(input.workspace, projectDir);
+  return { dag: normalizeTaskDag(rawDag), ok: true };
+}
 
+type BuildPromptSeedsOpts = {
+  dag: TaskDag;
+  plansDir: string;
+  input: CompileWavesInput;
+  projectDir: string;
+  canonParentWorkspace: string;
+};
+
+/** Read each task's PLAN.md and build its self-contained worker prompt. */
+async function buildPromptSeeds(
+  opts: BuildPromptSeedsOpts,
+): Promise<{ ok: true; promptSeeds: Record<string, string> } | CanonToolError> {
+  const { dag, plansDir, input, projectDir, canonParentWorkspace } = opts;
   const promptSeeds: Record<string, string> = {};
   for (const task of dag.tasks) {
     const planPath = join(plansDir, `${task.task_id}-PLAN.md`);
@@ -190,13 +209,37 @@ export async function compileWavesTool(
       worktreePath: `${projectDir}/.canon/worktrees/${sanitized}`,
     });
   }
+  return { ok: true, promptSeeds };
+}
+
+export async function compileWavesTool(
+  input: CompileWavesInput,
+  defaultProjectDir: string,
+): Promise<ToolResult<CompileWavesToolResult>> {
+  const inputError = validateCompileWavesInput(input);
+  if (inputError) return inputError;
+
+  const projectDir = input.project_dir ?? defaultProjectDir;
+  const plansDir = join(input.workspace, "plans", input.slug);
+  const dagResult = await loadTaskDag(join(plansDir, "task-dag.yaml"));
+  if (!dagResult.ok) return dagResult;
+
+  const canonParentWorkspace = deriveCanonParentWorkspace(input.workspace, projectDir);
+  const seedsResult = await buildPromptSeeds({
+    canonParentWorkspace,
+    dag: dagResult.dag,
+    input,
+    plansDir,
+    projectDir,
+  });
+  if (!seedsResult.ok) return seedsResult;
 
   const compileResult = compileWaves({
     base_commit: input.base_commit,
     build_worktree: input.build_worktree,
-    dag,
+    dag: dagResult.dag,
     project_dir: projectDir,
-    prompt_seeds: promptSeeds,
+    prompt_seeds: seedsResult.promptSeeds,
     slug: input.slug,
   });
 
