@@ -11,6 +11,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { DriftDbSignals } from "@platform/storage/drift/drift-db-signals.ts";
 import { initDriftDb } from "@platform/storage/drift/drift-schema.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
@@ -368,6 +369,22 @@ describe("writeReview + reconcilePredictions integration", () => {
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-reconcile-test-"));
+    const now = new Date().toISOString();
+    getExecutionStore(tmpDir).initExecution({
+      base_commit: "abc123",
+      branch: "feat/test",
+      created: now,
+      current_state: "build",
+      entry: "build",
+      flow: "test-flow",
+      flow_name: "test-flow",
+      last_updated: now,
+      sanitized: "feat-test",
+      slug: "test-slug",
+      started: now,
+      task: "test task",
+      tier: "medium",
+    });
     ({ db, signals } = makeDb());
   });
 

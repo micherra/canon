@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { assertWorkspaceInitialized } from "../services/validate-workspace-initialized.ts";
 import { emitWriteReceipt } from "../services/write-receipt.ts";
 
 /**
@@ -51,6 +52,9 @@ export async function writeContextSync(
       `Slug "${input.slug}" resolves outside workspace plans directory`,
     );
   }
+
+  const wsErr = assertWorkspaceInitialized(input.workspace);
+  if (wsErr) return wsErr;
 
   await mkdir(plansDir, { recursive: true });
   const syncPath = join(plansDir, "CONTEXT-SYNC.md");

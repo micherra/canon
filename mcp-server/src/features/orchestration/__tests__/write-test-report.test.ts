@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,6 +6,7 @@ import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts"
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { writeTestReport } from "../tools/write-test-report.ts";
+import { seedExecution } from "./seed-execution-test-helper.ts";
 
 let tmpDir: string;
 
@@ -19,7 +21,7 @@ afterEach(async () => {
 describe("writeTestReport — valid input", () => {
   it("writes TEST-REPORT.md and TEST-REPORT.meta.json to correct location", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       passed: 10,
@@ -44,7 +46,7 @@ describe("writeTestReport — valid input", () => {
 
   it("markdown contains stats table with correct values", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 2,
       passed: 8,
@@ -80,7 +82,7 @@ describe("writeTestReport — valid input", () => {
 
   it("computes total and pass_rate correctly", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 1,
       passed: 3,
@@ -97,7 +99,7 @@ describe("writeTestReport — valid input", () => {
 
   it("handles pass_rate edge case of 0 total (no divide by zero)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       passed: 0,
@@ -114,7 +116,7 @@ describe("writeTestReport — valid input", () => {
 
   it("meta JSON has _type: test_report and _version: 1", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       passed: 5,
@@ -134,7 +136,7 @@ describe("writeTestReport — valid input", () => {
 
   it("meta JSON preserves all input fields and computed fields", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 3,
       passed: 7,
@@ -158,7 +160,7 @@ describe("writeTestReport — valid input", () => {
 
   it("meta JSON issues array preserves input structure", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const issues = [
       {
         category: "logic",
@@ -195,7 +197,7 @@ describe("writeTestReport — valid input", () => {
 
   it("includes Issues section in markdown when issues are present", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 2,
       issues: [{ category: "regression", error: "it broke", file: "src/foo.ts", test: "test foo" }],
@@ -220,7 +222,7 @@ describe("writeTestReport — valid input", () => {
 
   it("handles missing optional issues field (empty array in meta)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       passed: 5,
@@ -244,7 +246,7 @@ describe("writeTestReport — valid input", () => {
 
   it("creates the plans directory if it does not exist", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       passed: 1,
@@ -263,7 +265,7 @@ describe("writeTestReport — valid input", () => {
 describe("writeTestReport — manual_verification field", () => {
   it("renders ## Manual Verification Needed section when items are provided", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       manual_verification: [
@@ -307,7 +309,7 @@ describe("writeTestReport — manual_verification field", () => {
 
   it("does not render section when manual_verification is an empty array", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       manual_verification: [],
@@ -325,7 +327,7 @@ describe("writeTestReport — manual_verification field", () => {
 
   it("does not render section when manual_verification is absent", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       passed: 3,
@@ -342,7 +344,7 @@ describe("writeTestReport — manual_verification field", () => {
 
   it("meta JSON includes manual_verification array when provided", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const manualVerification = [
       {
         criterion: "Login flow works with SSO",
@@ -373,7 +375,7 @@ describe("writeTestReport — manual_verification field", () => {
 
   it("meta JSON manual_verification defaults to empty array when absent", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       passed: 2,
@@ -392,7 +394,7 @@ describe("writeTestReport — manual_verification field", () => {
 
   it("escapes pipe characters in manual_verification values", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       manual_verification: [
@@ -423,7 +425,7 @@ describe("writeTestReport — manual_verification field", () => {
 describe("writeTestReport — write receipt", () => {
   it("emits a write_receipt event of kind 'test_report' pointing at TEST-REPORT.md", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       passed: 5,
@@ -464,7 +466,7 @@ describe("writeTestReport — relative workspace rejection", () => {
 describe("writeTestReport — validation errors", () => {
   it("returns INVALID_INPUT for slug with spaces", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       passed: 0,
@@ -483,7 +485,7 @@ describe("writeTestReport — validation errors", () => {
 
   it("returns INVALID_INPUT for slug with special characters", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       passed: 0,
@@ -501,7 +503,7 @@ describe("writeTestReport — validation errors", () => {
 
   it("returns INVALID_INPUT for path traversal attempt (slug containing ..)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     // The slug pattern check catches ".." first, but test that the path traversal
     // guard also works for cases that might slip through
     const result = await writeTestReport({
@@ -521,7 +523,7 @@ describe("writeTestReport — validation errors", () => {
 
   it("does not perform file I/O when slug is invalid", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
-
+    seedExecution(tmpDir);
     const result = await writeTestReport({
       failed: 0,
       passed: 0,
@@ -533,5 +535,28 @@ describe("writeTestReport — validation errors", () => {
 
     expect(result.ok).toBe(false);
     // If we got here without filesystem errors, the validate-before-IO principle is honored
+  });
+});
+
+describe("writeTestReport — fail-closed on unbacked workspace", () => {
+  it("returns WORKSPACE_NOT_FOUND and writes no artifact when the workspace has no execution row", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
+    // Deliberately NOT seeded — workspace has no execution row.
+
+    const result = await writeTestReport({
+      failed: 0,
+      passed: 1,
+      skipped: 0,
+      slug: "unbacked-slug",
+      summary: "Should not be written.",
+      workspace: tmpDir,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+      expect(result.message).toContain(tmpDir);
+    }
+    expect(existsSync(join(tmpDir, "plans", "unbacked-slug", "TEST-REPORT.md"))).toBe(false);
   });
 });
