@@ -531,7 +531,7 @@ canon/
 │       ├── features/     # Tool implementations grouped by feature
 │       │   ├── orchestration/   # Orchestration runtime: init_workspace, finalize_workspace, log_step, batch_log_steps, record_agent_metrics, etc.; get_decisions_corpus — offline cross-workspace decisions reader/aggregator unioning live workspaces with the durable drift.db `orchestrator_decisions` table (ADR-0040)
 │       │   ├── principles/      # get_principles, list_principles, get_compliance
-│       │   ├── knowledge-graph/ # codebase_graph, graph_query, semantic_search
+│       │   ├── knowledge-graph/ # codebase_graph, graph_query (incl. context_for_file/supersedes_chain over a decisions/ADR context graph, ADR-0047), semantic_search
 │       │   ├── pr-review/       # show_pr_impact, review_code, store_pr_review
 │       │   ├── file-context/    # get_file_context
 │       │   ├── history/         # get_build_history, get_historical_artifacts, get_cross_run_analysis — cross-run analysis for learner
