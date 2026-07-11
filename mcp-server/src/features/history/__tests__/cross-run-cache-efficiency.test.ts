@@ -148,7 +148,7 @@ describe("computeCacheEfficiencyByAgent", () => {
             agent_type: "engineer",
             metrics: {
               cache_creation_tokens: 100,
-              cache_hit_ratio: "not-a-number" as unknown as number,
+              cache_hit_ratio: "not-a-number",
               cache_read_tokens: 500,
             },
           }),

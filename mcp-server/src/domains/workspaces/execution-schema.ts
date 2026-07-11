@@ -220,7 +220,7 @@ const MIGRATIONS: Migration[] = [
     up: (db) => {
       db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
     },
-    // v4: the retired prefix column (ADR-0048) is no longer created; migration kept as
+    // v4: the retired prefix column (ADR-0049) is no longer created; migration kept as
     // version-only bump to preserve ladder contiguity
     version: "4",
   },

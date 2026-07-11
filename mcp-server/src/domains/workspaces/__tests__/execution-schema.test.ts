@@ -195,7 +195,7 @@ describe("fresh DB — required columns", () => {
     db.close();
   });
 
-  test("does not have the retired cache_prefix column on execution table (ADR-0048)", () => {
+  test("does not have the retired cache_prefix column on execution table (ADR-0049)", () => {
     const db = initExecutionDb(":memory:");
     expect(columnExists(db, "execution", "cache_prefix")).toBe(false);
     expect(getSchemaVersion(db)).toBe(SCHEMA_VERSION);

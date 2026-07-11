@@ -1,12 +1,12 @@
 ---
-adr: "0048"
+adr: "0049"
 title: "Retire the dead cache_prefix subsystem"
 status: accepted
 date: "2026-07-11"
 build: "surface-per-agent-type-cache-efficiency-in-getcrossrunanalysis-read"
 ---
 
-# ADR-0048: Retire the dead cache_prefix subsystem
+# ADR-0049: Retire the dead cache_prefix subsystem
 
 ## Context
 
