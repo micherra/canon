@@ -60,6 +60,7 @@ Workflow({ scriptPath: "workflows/canon-probe.js" })
 | Script | Role | Status |
 |--------|------|--------|
 | `canon-probe.js` | Harness-upgrade-stability canary | active |
+| `dag-compile-probe.js` | DAG→Workflow compilation evidence probe | active |
 
 ## Relationship to Other Concepts
 
