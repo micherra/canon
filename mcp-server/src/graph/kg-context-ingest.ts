@@ -133,6 +133,21 @@ function extractBacktickPaths(body: string): string[] {
   return matches.map((m) => m.slice(1, -1));
 }
 
+/**
+ * Strip a trailing `:<line>` or `:<line>-<line>` citation suffix from a
+ * cited path (`foo/bar.ts:13` -> `foo/bar.ts`, `foo/bar.ts:13-20` ->
+ * `foo/bar.ts`). ADRs and decisions commonly cite a specific line/range
+ * (see docs/adr/0001, 0007, 0031, 0035, 0036, 0040) — an EXACT
+ * `filePaths.has(path)` match never fires against the bare KG row
+ * otherwise (PR #487 review fix). Only a numeric-only suffix after the
+ * FINAL colon, anchored to the end of the string, is recognized — this
+ * never strips a colon that's part of the path itself.
+ */
+function stripLineSuffix(path: string): string {
+  const m = /^(.*):\d+(?:-\d+)?$/.exec(path);
+  return m ? m[1] : path;
+}
+
 // Principle-id scanning
 
 /** Add one principle file's frontmatter `id:` to `ids`, if present. Fail-open. */
@@ -227,8 +242,14 @@ function deriveDecisionRecord(
 
     const edges: ContextEdge[] = [];
     for (const ref of d.refs ?? []) {
-      if (filePaths.has(ref)) {
-        edges.push({ dst: ref, edge_type: "decision_touches_file", evidence: "refs", src: nodeId });
+      const barePath = stripLineSuffix(ref);
+      if (filePaths.has(barePath)) {
+        edges.push({
+          dst: barePath,
+          edge_type: "decision_touches_file",
+          evidence: "refs",
+          src: nodeId,
+        });
       }
     }
     const citedText = `${d.summary} ${(d.refs ?? []).join(" ")}`;
@@ -278,9 +299,10 @@ function deriveAdrRecord(
 
     const edges: ContextEdge[] = [];
     for (const path of extractBacktickPaths(adr.body)) {
-      if (filePaths.has(path)) {
+      const barePath = stripLineSuffix(path);
+      if (filePaths.has(barePath)) {
         edges.push({
-          dst: path,
+          dst: barePath,
           edge_type: "decision_touches_file",
           evidence: "adr-body-path",
           src: nodeId,

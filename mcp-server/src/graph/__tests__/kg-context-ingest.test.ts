@@ -243,4 +243,79 @@ describe("ingestContextGraph", () => {
 
     db.close();
   });
+
+  test("ADR citing a file with a :line suffix produces a decision_touches_file edge to the bare path (PR #487 fix)", () => {
+    // Real ADRs (0001/0007/0031/0035/0036/0040) cite files with a `:line`
+    // suffix in backtick-quoted paths. An EXACT filePaths.has(path) match
+    // never fires for "foo.ts:13" against a bare "foo.ts" KG row — the
+    // edge must target the bare (stripped) path instead.
+    const db = initDatabase(":memory:");
+    seedFile(db, "mcp-server/src/features/knowledge-graph/__tests__/md-relations.test.ts");
+    writeAdr(
+      "0001-first-adr.md",
+      { adr: "0001", status: "accepted", title: "First ADR" },
+      "See `mcp-server/src/features/knowledge-graph/__tests__/md-relations.test.ts:13` for the fixture.",
+    );
+
+    ingestContextGraph(db, [], projectDir, pluginDir);
+
+    const store = new ContextGraphStore(db);
+    const touchesFileEdges = store
+      .getAllEdges()
+      .filter((e) => e.edge_type === "decision_touches_file");
+    expect(touchesFileEdges).toEqual([
+      {
+        dst: "mcp-server/src/features/knowledge-graph/__tests__/md-relations.test.ts",
+        edge_type: "decision_touches_file",
+        evidence: "adr-body-path",
+        src: "adr:ADR-0001",
+      },
+    ]);
+
+    db.close();
+  });
+
+  test("ADR citing a file with a :line-line range suffix produces an edge to the bare path (PR #487 fix)", () => {
+    const db = initDatabase(":memory:");
+    seedFile(db, "src/foo.ts");
+    writeAdr(
+      "0001-first-adr.md",
+      { adr: "0001", status: "accepted", title: "First ADR" },
+      "See `src/foo.ts:13-20` for the range.",
+    );
+
+    ingestContextGraph(db, [], projectDir, pluginDir);
+
+    const store = new ContextGraphStore(db);
+    const touchesFileEdges = store
+      .getAllEdges()
+      .filter((e) => e.edge_type === "decision_touches_file");
+    expect(touchesFileEdges.length).toBe(1);
+    expect(touchesFileEdges[0].dst).toBe("src/foo.ts");
+
+    db.close();
+  });
+
+  test("decision ref with a :line suffix produces a decision_touches_file edge to the bare path (PR #487 fix)", () => {
+    const db = initDatabase(":memory:");
+    seedFile(db, "src/foo.ts");
+    const decisions: IngestableDecision[] = [makeDecision({ refs: ["src/foo.ts:42"] })];
+
+    ingestContextGraph(db, decisions, projectDir, pluginDir);
+
+    const store = new ContextGraphStore(db);
+    const touchesFileEdges = store
+      .getAllEdges()
+      .filter((e) => e.edge_type === "decision_touches_file");
+    expect(touchesFileEdges).toEqual([
+      {
+        dst: "src/foo.ts",
+        edge_type: "decision_touches_file",
+        evidence: "refs",
+        src: "decision:build-a#1",
+      },
+    ]);
+
+    db.close();
+  });
 });
