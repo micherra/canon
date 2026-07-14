@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-07-10 -->
+<!-- last-updated: 2026-07-11 -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -26,6 +26,7 @@ src/
 │   ├── file-context/     # get_file_context tool
 │   ├── history/          # get_build_history, get_historical_artifacts, get_cross_run_analysis tools
 │   ├── knowledge-graph/  # graph_query, semantic_search, search_knowledge, codebase_graph, git-intel
+│   ├── learning/         # reconcile_learnings — reconcile-on-read for .canon/proposed-learnings/{ts}/ (ADR-0050)
 │   ├── loops/            # list_loops, get_loop_definition — loop-definition schema, registry loader + read-only-shell carve-out (Phase C current)
 │   ├── orchestration/    # Orchestration runtime: init_workspace, finalize_workspace, log_step, record_agent_metrics, all orchestration tools
 │   ├── pr-review/        # show_pr_impact, review_code, store_pr_review
@@ -51,6 +52,7 @@ src/
 - **History tools + RecurringViolation types** → `src/features/history/.claude/CLAUDE.md`.
 - **History services** (`features/history/services/`) — cross-run analysis, craft drift, judge-weight, consolidate-policy. See `src/features/history/services/.claude/CLAUDE.md`.
 - **Loop tools** (`features/loops/`) — loop-definition schema, registry loader, list_loops/get_loop_definition. See `src/features/loops/.claude/CLAUDE.md`.
+- **Learning tools** (`features/learning/`) — `reconcile_learnings` reconcile-on-read (ADR-0050), shared `classifyProposal` actionability classifier. See `src/features/learning/.claude/CLAUDE.md`.
 - **PR review tools + PR Review Data service** → `src/features/pr-review/.claude/CLAUDE.md`.
 - **Shared kernel** (`shared/`) — constants, matcher, schema, lib/ utilities; overlay trust boundary (`UntrustedText` opaque box + closed-domain validators + linear-time `matchGlob`, ADR-0026/ADR-0027). See `src/shared/.claude/CLAUDE.md`.
 - **UI snippets** (`ui/snippets/`) — force-graph, file-detail-card, renderer helpers. See `src/ui/snippets/.claude/CLAUDE.md`.
@@ -59,7 +61,7 @@ src/
 - **Principle matching** (`shared/matcher.ts`) — OR semantics: matches if layers OR scope.tags intersect; file-pattern matching uses `matchGlob` from `lib/glob-matcher.ts` (linear-time DP, `globToRegex`+RegExp removed, ADR-0026 §Amendment-3)
 
 ## Contracts
-<!-- last-updated: 2026-07-10 -->
+<!-- last-updated: 2026-07-11 -->
 
 > **Subsystem detail by directory:**
 > - App (boot.sh, server-state, http-server, findAnchorDir) → `src/app/.claude/CLAUDE.md`
@@ -78,7 +80,7 @@ src/
 
 **Flow parser** (`src/orchestration/flow-parser.ts`) — ADR-004: `loadAndResolveFlow` throws on hard validation errors. Exports: `validateSpawnCoverage`, `analyzeReachability`, `checkUnresolvedRefs`, `validateStateIdParams`, `VIRTUAL_SINKS`, `RUNTIME_VARIABLES`.
 
-**Execution store** (`src/domains/workspaces/execution-store.ts`) — optimistic locking via `updateExecutionVersioned(fields, expectedVersion)` (returns `{ updated: true|false }`); `SQLITE_BUSY` retry via `withRetry`; all board mutations use `updateExecutionVersioned`; `isStuck` is SQL-based. SCHEMA_VERSION = '11'. Event types added 2026-06-24: `context_provenance` (emitted per agent spawn by `resolve_agent_skills` post-disclosure, keyed by `step_id`); `context_provenance_agent_id` (back-filled by `log_step`/`batch_log_steps` on step completion with `agent_id`, keyed by `step_id`).
+**Execution store** (`src/domains/workspaces/execution-store.ts`) — optimistic locking via `updateExecutionVersioned(fields, expectedVersion)` (returns `{ updated: true|false }`); `SQLITE_BUSY` retry via `withRetry`; all board mutations use `updateExecutionVersioned`; `isStuck` is SQL-based. SCHEMA_VERSION = '11'. Event types added 2026-06-24: `context_provenance` (emitted per agent spawn by `resolve_agent_skills` post-disclosure, keyed by `step_id`); `context_provenance_agent_id` (back-filled by `log_step`/`batch_log_steps` on step completion with `agent_id`, keyed by `step_id`). `transcript_capture_miss` added 2026-07-11: fail-open, emitted by `tryTranscriptCapture` (`features/orchestration/services/transcript-capture-hook.ts`) when both the raw exact-stat attempt and (for named agents) the session-scoped named fallback fail to locate a completed step's transcript source (`{ step_id, agent_type, agent_id, reason }`).
 
 **Context provenance module** (`src/domains/workspaces/context-provenance.ts`) — `ContextProvenanceRecord` / `ContextProvenanceSummary` types; `hashContent(s)` (deterministic sha256 hex); `buildContextProvenanceRecord(opts)` — pure; builds hashes + char spans for each artifact, never stores content; blanked artifacts carry `char_span: null` + `source:"sidecar"` + `sidecar_path`; fail-open: `indexOf === -1` yields `char_span: null`. Added 2026-06-24. (ADR-0018) — `ArtifactTrustTier = "trusted" | "untrusted-project-local"` is REQUIRED on `AssembledArtifact`; overlay artifacts carry `"untrusted-project-local"`, plugin/built-in carry `"trusted"`. Added 2026-06-27. `ProvenanceArtifactKind` widened with `"agent-def"` (ADR-0031); `AssembledArtifact` gained optional `sections?: SectionSpan[]` (populated only for `kind:"agent-def"`); `buildContextProvenanceRecord` gained an optional `agentDef?: { path, fullFile }` branch — emits exactly one `agent-def` artifact per spawn with `content_hash` over the WHOLE file (frontmatter included, keeps the `readCurrentBody` byte-identity seam unchanged) and `char_span: null` (the body is never part of `preload_prompt`); pure `computeBodySections(fullFile)` splits the BODY into markdown ATX-heading sections (`^#{1,6}\s`), every span starting at or after the frontmatter-end offset — frontmatter is never covered by a mutable span; malformed frontmatter YAML fails open to zero sections (never a fallback span overlapping the fence). Added 2026-07-01.
 
@@ -155,6 +157,7 @@ src/
 | `get_decisions_corpus` | Offline, cross-workspace decisions reader + aggregator (ADR-0040): unions every live-on-disk workspace's decisions (glob `.canon/workspaces/**/orchestration.db`, read via `readDecisionEvents`) with durably-persisted decisions from reaped workspaces (drift.db `orchestrator_decisions` table via `OrchestratorDecisionsDao`); dedup-free by construction (a workspace is live-on-disk OR reaped-and-persisted, never both). Returns `{ decisions: CorpusDecision[], aggregation, skipped, rendered }` — `decisions` tagged `source: "live" \| "durable"` + `source_slug`, deterministically sorted by `decided_at`/`source_slug`/`source_event_id`; `aggregation.by_category` keys on effective category `gate ?? decision_type` so `plan_approval`/`review_verdict` are first-class buckets; unreadable live stores surface in `skipped[]` (never silently dropped). Pure query — no mutation. |
 | `write_orchestrator_checkpoint` | Write a derived compact resume-state snapshot to `${workspace}/checkpoint.md` (current/completed/pending steps + recent decisions + next action). **Best-effort-observable** — write failure returns a `ToolResult` error (never silent success). Refresh per completed step (alongside `log_step(...completed)`) and at each HITL gate. |
 | `evaluate_step` | Extract structural signals from a git diff for the evaluator step-transition gate — pattern findings (lazy/hacky code markers), file-scope overlap against `declared_files`, and diff statistics; no LLM calls, pure structural analysis; returns `EvaluateStepOutput`. Called by the orchestrator directly (not pre-spawn context) after implement/fix steps, before verify; consumed by `canon:evaluator`. Registered via `registerEvaluateStepTool(server)` inside `registerOrchestrationTools()` (`register-orchestration.ts`) — not a new top-level `create-server.ts` group. |
+| `reconcile_learnings` | Reconcile-on-read for the `.canon/proposed-learnings/{timestamp}/` review surface (ADR-0050): auto-moves ACTIONABLE-typed pending proposals whose resolved target already shipped to `applied/` (evidence-cited: a dedicated `--diff-filter=A` creation-probe checks target-creation first, recovering an older creating commit even after later unrelated churn; falls back to most-recent-commit + commit-message-references-proposal for modify-only pre-existing targets), and auto-archives fully-informational stale sets (`freshness_days`, default 30) to `stale/`; idempotent, fail-open, append-only (`learning.jsonl`), move-never-delete; scans only the TIMESTAMPED-DIR surface, never the loose top-level `.md` files. Invoked by `/canon:review-learnings` Step 1, before computing pending. Registered via `registerLearningTools(server)` (`register-learning.ts`) — an 8th top-level `create-server.ts` group. See `src/features/learning/.claude/CLAUDE.md`. |
 
 **Text-only principle/review tools:**
 
@@ -291,3 +294,5 @@ Node.js 24+ required. Enforced at runtime by `boot.sh` Step 12.5 (fail-closed, a
 **Vitest policy** — `vitest.config.ts` sets `testTimeout: 20000` (20s) and `maxWorkers: 4` project-wide; do not add per-test `timeout` overrides — the config-level policy covers subprocess-heavy suites (git, depcruise, embeddings). `setupFiles: ["./src/tests/vitest-setup-drift-guard.ts"]` registers a global per-file `beforeAll`/`afterAll` fixture-leak guard (`installDriftDbLeakGuard`, `src/tests/drift-db-leak-guard.ts`) that fails the suite if either protected `.canon/drift.db` (repo root or `mcp-server/`) grows a `flow_runs` row during the run — see Conventions. Added 2026-07-02.
 
 **CI supply-chain gate** — `.github/workflows/ci.yml` runs `npm audit --omit=dev --audit-level=high` after `npm ci`; high+ production-dependency vulnerabilities fail CI.
+
+**Benign dev-only MCP dedup nudge** — when developing the Canon repo itself as a project WITH the marketplace plugin also installed, Claude Code prints `MCP server "canon" skipped — same command/URL as already-configured "canon"` at session start. This is expected and harmless: the repo-root `.mcp.json` IS the plugin's `.mcp.json` (the marketplace clones `github:micherra/canon` as the plugin), so it loads at both project scope and plugin scope, and Claude Code de-dupes by URL. Both entries point at the same daemon; nothing is broken. To silence it locally, disable one `canon` registration via `/mcp`.

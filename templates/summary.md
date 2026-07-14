@@ -57,6 +57,12 @@ commit: "{hash}"
 |---|---------------------|-------------|----------------------------|--------------|
 | 1 | {criterion from task plan} | {covered &#124; descoped &#124; partial} | {what was implemented, or why it's deferred} | `{runnable command}` or `n/a — {reason}` |
 
+#### Semantic Self-Review
+<!-- OPTIONAL (agent-semantic-self-review). One sentence per axis — the intent/edge-case/contract judgment made before returning, distinct from the evaluator gate's structural marker-counting. -->
+- **Intent-satisfaction**: {does the diff satisfy the task's actual intent, not just its literal words}
+- **Edge-cases**: {which boundary/error/empty/concurrent conditions were considered}
+- **Contract-consistency**: {how the change stays consistent with the signatures/invariants/conventions it touches}
+
 #### External Evidence
 <!-- Only include if web research materially informed implementation choices. -->
 - `{URL}` — {what implementation decision, API usage, or constraint this source informed}
@@ -88,5 +94,6 @@ commit: "{hash}"
 - Canon compliance section is mandatory — every principle in the plan must appear
 - Concerns and Blockers sections only appear when relevant
 - Include `External Evidence` only when web research materially informed implementation choices
+- `Semantic Self-Review` is OPTIONAL — downstream readers tolerate-when-absent (agent-semantic-self-review)
 - Criteria Coverage Reproduction column: every mechanically-verifiable AC MUST carry a runnable command; every non-runnable AC MUST carry an `n/a — <reason>` marker — never a fabricated command
 - A literal shell pipe `|` in a Reproduction command must be written `&#124;` — or better, use a pipe-free / literal-safe form, which is strongly preferred. `&#124;` stands in ONLY for a real pipe operator and is a table-display escape — the command's canonical/executable form uses a real `|`. Any consumer that executes or promotes the recorded command must decode the escaped pipe(s) (`&#124;` → `|`) first (`sed 's/&#124;/|/g'`) to recover the intended piped command; do not run the raw `&#124;` literal in a shell — it does not pipe. A command whose literal text must itself contain the entity string `&#124;` cannot round-trip through this decode — avoid recording such a command; use a `&#124;`-free repro instead

@@ -165,6 +165,21 @@ export type CliffEventsDimension = {
   confidence: ConfidenceAnnotation;
 };
 
+/** Per-agent-type cache-efficiency rollup over archived step_outcomes.metrics. */
+export type CacheEfficiencyByAgent = {
+  agent_type: string;
+  /**
+   * Mean of per-step cache_hit_ratio over steps that carried one.
+   * Omitted entirely (never NaN/0) when no step for this agent_type carried a ratio —
+   * matches aggregateCacheUsage + averageRecordedCounter's omit convention.
+   */
+  mean_cache_hit_ratio?: number;
+  total_cache_read_tokens: number;
+  total_cache_creation_tokens: number;
+  /** Steps that contributed at least one cache number (transparency for sparse data). */
+  sample_count: number;
+};
+
 /** Full cross-run analysis result. */
 export type CrossRunAnalysisResult = {
   recurring_violations: RecurringViolation[];
@@ -173,6 +188,8 @@ export type CrossRunAnalysisResult = {
   planner_patterns: PlannerPatternAnalysis;
   craft_drift: CraftDrift;
   cliff_events: CliffEventsDimension;
+  /** Per-agent-type cache-efficiency rollup — additive (see CacheEfficiencyByAgent). */
+  cache_efficiency: CacheEfficiencyByAgent[];
   total_archived_runs: number;
   analysis_window: { from: string; to: string };
 };
