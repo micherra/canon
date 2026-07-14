@@ -88,6 +88,10 @@ describe("compileWavesTool — happy path", () => {
     const taskA = result.envelope.waves[0].tasks.find((t) => t.task_id === "task-a");
     expect(taskA?.prompt_seed).toContain("Do the thing.");
     expect(taskA?.prompt_seed).toContain(taskA?.worktree_path);
+    // The envelope's branch and the prompt seed's embedded BRANCH= line must
+    // NEVER drift apart — both derive from the single `deriveTaskBranch`
+    // owner in waves-compiler.ts, not two independent templates.
+    expect(taskA?.prompt_seed).toContain(`BRANCH=${taskA?.branch}`);
   });
 
   it("defaults project_dir to the caller-supplied fallback when omitted", async () => {
@@ -151,6 +155,45 @@ describe("compileWavesTool — task_id charset guard (security F1)", () => {
       `
 tasks:
   - task_id: "../../etc/evil"
+    depends_on: []
+    parallel_safe: true
+    files:
+      - "src/a.ts"
+`,
+      "utf-8",
+    );
+
+    const result = await compileWavesTool(
+      {
+        base_commit: "abc123",
+        build_worktree: `${tmpDir}/worktree`,
+        project_dir: "/proj",
+        slug: "my-slug",
+        workspace: tmpDir,
+      },
+      "/proj",
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error_code).toBe("INVALID_INPUT");
+    expect(result.message).toContain("task_id");
+  });
+
+  it("rejects a slash-free '..' task_id (defense-in-depth gap: charset-identity alone admits it)", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "compile-waves-test-"));
+    const plansDir = join(tmpDir, "plans", "my-slug");
+    // No slash at all — `sanitizeTaskId("..") === ".."`, so the old
+    // identity-sanitize test passed this straight through. Deliberately do
+    // NOT seed a `..-PLAN.md` — if the guard didn't fire before the plan
+    // read, this would surface as WORKSPACE_NOT_FOUND instead of
+    // INVALID_INPUT, proving the read never happened.
+    await mkdir(plansDir, { recursive: true });
+    await writeFile(
+      join(plansDir, "task-dag.yaml"),
+      `
+tasks:
+  - task_id: ".."
     depends_on: []
     parallel_safe: true
     files:

@@ -8,7 +8,12 @@ import {
   toolError,
   toolOk,
 } from "@shared/lib/tool-result.ts";
-import { compileWaves, sanitizeTaskId, type WavesEnvelope } from "@shared/lib/waves-compiler.ts";
+import {
+  compileWaves,
+  deriveTaskBranch,
+  deriveTaskWorktreePath,
+  type WavesEnvelope,
+} from "@shared/lib/waves-compiler.ts";
 import { parse as parseYaml } from "yaml";
 
 /**
@@ -22,7 +27,7 @@ import { parse as parseYaml } from "yaml";
  * list before invoking the `workflows/canon-waves.js` runner.
  */
 
-export type CompileWavesInput = {
+export type CompileWavesToolInput = {
   workspace: string;
   slug: string;
   base_commit: string;
@@ -134,7 +139,7 @@ function buildPromptSeed(opts: PromptSeedOpts): string {
 }
 
 /** Validate top-level input shape before touching the filesystem. */
-function validateCompileWavesInput(input: CompileWavesInput): CanonToolError | null {
+function validateCompileWavesInput(input: CompileWavesToolInput): CanonToolError | null {
   if (!isAbsolute(input.workspace)) {
     return toolError(
       "INVALID_INPUT",
@@ -151,18 +156,33 @@ function validateCompileWavesInput(input: CompileWavesInput): CanonToolError | n
 }
 
 /**
- * Reject any task_id containing characters outside `sanitizeTaskId`'s charset
- * (security F1) — a raw task_id is joined directly into a plan-file path
- * (`{plansDir}/{task_id}-PLAN.md`) before `compileWaves` ever runs its own
- * sanitization, so an unsanitized `../`-laden task_id would escape `plansDir`
+ * Positive allow-pattern for a raw (unsanitized) task_id: must start with an
+ * alphanumeric or underscore, then only charset-legal characters — and never
+ * contain a `..` substring. This is deliberately NOT the identity-sanitize
+ * test (`sanitizeTaskId(id) !== id`) it replaces: the sanitizer's charset
+ * `[A-Za-z0-9._-]` is a no-op on `.`, `..`, `...`, `.hidden`, or `a..b`, so
+ * that test let a task_id of `..` (or worse, `a..b`) pass straight through —
+ * a fail-open gap in the defense-in-depth around the plan-path read below
+ * (adversarial-review finding).
+ */
+const TASK_ID_ALLOW_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/;
+
+/**
+ * Reject any task_id that isn't safe to embed in a branch name / worktree
+ * path / plan-file path (security F1) — a raw task_id is joined directly
+ * into a plan-file path (`{plansDir}/{task_id}-PLAN.md`) before `compileWaves`
+ * ever runs its own sanitization, so an unsafe task_id would escape `plansDir`
  * on the read. Fail-closed BEFORE any plan-path read or envelope emit.
  */
 function validateTaskIdCharset(dag: TaskDag): CanonToolError | null {
   for (const task of dag.tasks) {
-    if (sanitizeTaskId(task.task_id) !== task.task_id) {
+    const id = task.task_id;
+    const unsafe =
+      id === "." || id === ".." || id.includes("..") || !TASK_ID_ALLOW_PATTERN.test(id);
+    if (unsafe) {
       return toolError(
         "INVALID_INPUT",
-        `Invalid task_id "${task.task_id}": must contain only characters in the sanitizer charset (A-Za-z0-9._-)`,
+        `Invalid task_id "${id}": must match ${TASK_ID_ALLOW_PATTERN} and must not contain ".."`,
       );
     }
   }
@@ -193,7 +213,7 @@ async function loadTaskDag(dagPath: string): Promise<{ ok: true; dag: TaskDag } 
 type BuildPromptSeedsOpts = {
   dag: TaskDag;
   plansDir: string;
-  input: CompileWavesInput;
+  input: CompileWavesToolInput;
   projectDir: string;
   canonParentWorkspace: string;
 };
@@ -213,10 +233,9 @@ async function buildPromptSeeds(
       return toolError("WORKSPACE_NOT_FOUND", `Task plan not found: ${planPath}`);
     }
     const { body } = splitFrontmatter(planRaw);
-    const sanitized = sanitizeTaskId(task.task_id);
 
     promptSeeds[task.task_id] = buildPromptSeed({
-      branch: `canon-task/${sanitized}`,
+      branch: deriveTaskBranch(task.task_id),
       buildBaseCommit: input.base_commit,
       canonParentWorkspace,
       modelTier: "sonnet",
@@ -225,14 +244,14 @@ async function buildPromptSeeds(
       slug: input.slug,
       taskId: task.task_id,
       workspace: input.workspace,
-      worktreePath: `${projectDir}/.canon/worktrees/${sanitized}`,
+      worktreePath: deriveTaskWorktreePath(projectDir, task.task_id),
     });
   }
   return { ok: true, promptSeeds };
 }
 
 export async function compileWavesTool(
-  input: CompileWavesInput,
+  input: CompileWavesToolInput,
   defaultProjectDir: string,
 ): Promise<ToolResult<CompileWavesToolResult>> {
   const inputError = validateCompileWavesInput(input);

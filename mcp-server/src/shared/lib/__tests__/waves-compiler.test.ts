@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { TaskDag } from "../dag-validator.ts";
-import { compileWaves } from "../waves-compiler.ts";
+import { compileWaves, deriveTaskBranch, deriveTaskWorktreePath } from "../waves-compiler.ts";
 
 const BASE_INPUT = {
   base_commit: "abc123",
@@ -144,6 +144,15 @@ describe("compileWaves — arity check", () => {
     };
     const result = compileWaves({ ...BASE_INPUT, dag, prompt_seeds: { "task-a": "   " } });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("deriveTaskBranch / deriveTaskWorktreePath — single owner of the path/branch templates", () => {
+  it("derives the same branch/worktree_path templates compileWaves' buildWavesTask emits", () => {
+    expect(deriveTaskBranch("feat/my task#1")).toBe("canon-task/feat-my-task-1");
+    expect(deriveTaskWorktreePath("/proj", "feat/my task#1")).toBe(
+      "/proj/.canon/worktrees/feat-my-task-1",
+    );
   });
 });
 

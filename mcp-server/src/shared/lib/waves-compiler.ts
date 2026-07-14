@@ -63,6 +63,25 @@ export function sanitizeTaskId(taskId: string): string {
   return taskId.replace(SANITIZE_PATTERN, "-");
 }
 
+/**
+ * Derive a task's branch name from its (unsanitized) task_id. Sole owner of
+ * the `canon-task/{sanitized}` convention — `compile-waves.ts` calls this
+ * rather than re-deriving the template, so the envelope's `branch` and the
+ * worker prompt's embedded `BRANCH=` line can never drift apart.
+ */
+export function deriveTaskBranch(taskId: string): string {
+  return `canon-task/${sanitizeTaskId(taskId)}`;
+}
+
+/**
+ * Derive a task's worktree path from its (unsanitized) task_id. Sole owner of
+ * the `{projectDir}/.canon/worktrees/{sanitized}` convention — see
+ * `deriveTaskBranch` for why this must not be re-implemented at the caller.
+ */
+export function deriveTaskWorktreePath(projectDir: string, taskId: string): string {
+  return `${projectDir}/.canon/worktrees/${sanitizeTaskId(taskId)}`;
+}
+
 /** Increment-1 single-wave assertion: any task with dependencies is out of scope. */
 function collectMultiWaveErrors(dag: TaskDag): string[] {
   const errors: string[] = [];
@@ -90,13 +109,12 @@ function collectArityErrors(dag: TaskDag, promptSeeds: Record<string, string>): 
 
 /** Derive a WavesTask from a validated TaskNode + the caller-supplied prompt seed. */
 function buildWavesTask(task: TaskNode, input: CompileWavesInput): WavesTask {
-  const sanitized = sanitizeTaskId(task.task_id);
   return {
-    branch: `canon-task/${sanitized}`,
+    branch: deriveTaskBranch(task.task_id),
     files: task.files,
     prompt_seed: input.prompt_seeds[task.task_id],
     task_id: task.task_id,
-    worktree_path: `${input.project_dir}/.canon/worktrees/${sanitized}`,
+    worktree_path: deriveTaskWorktreePath(input.project_dir, task.task_id),
   };
 }
 
