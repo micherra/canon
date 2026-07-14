@@ -257,7 +257,8 @@ if command -v "$CANON_ADR_GH_BIN" >/dev/null 2>&1 \
   _pr_json=""
   _gh_exit=0
   _pr_json=$("$_TIMEOUT_BIN" "$CANON_ADR_OPENPR_TIMEOUT" "$CANON_ADR_GH_BIN" pr list \
-    --state open --json number,headRefName,files --limit "$CANON_ADR_OPENPR_LIMIT" 2>/dev/null) \
+    --state open --json number,headRefName,isCrossRepository,files \
+    --limit "$CANON_ADR_OPENPR_LIMIT" 2>/dev/null) \
     || _gh_exit=$?  # DOCUMENTED FAIL-OPEN -- non-zero = absent/unauthed/offline/timeout(124)/error; scan skipped below
 
   if [[ "$_gh_exit" -eq 0 && -n "$_pr_json" ]]; then
@@ -268,8 +269,14 @@ if command -v "$CANON_ADR_GH_BIN" >/dev/null 2>&1 \
       | grep -oE '[0-9]{4}' \
       | sort -u || true)  # DOCUMENTED FAIL-OPEN -- empty means nothing to compare; loop below simply no-ops
 
+    # Self-exclusion is qualified by HEAD REPOSITORY, not branch name alone
+    # (Codex P2, PR #497): a fork PR can share our branch name (e.g. two
+    # contributors both using "feature") without being our own PR. Only a
+    # same-repo (isCrossRepository == false) PR on our current branch name is
+    # "self" and excluded; a cross-repo PR with a matching branch name is
+    # still compared and can trigger a WARNING.
     _OTHER_PR_ROWS=$(echo "$_pr_json" | jq -r --arg cur "$_cur_branch" '
-      .[] | select(.headRefName != $cur) | . as $pr
+      .[] | select((.headRefName != $cur) or (.isCrossRepository == true)) | . as $pr
       | .files[] | select(.changeType=="ADDED")
       | select(.path | test("^docs/adr/[0-9]{4}-.*\\.md$"))
       | "\($pr.number)\t\($pr.headRefName)\t\(.path)"

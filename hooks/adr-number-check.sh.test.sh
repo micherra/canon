@@ -900,11 +900,11 @@ CANON_ADR_GH_BIN="$CASE34_GH" run_test_in_dir_no_pattern \
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Case 35: self-branch exclusion — the "other" PR in the gh listing is actually
-# OUR OWN branch (headRefName == "feature") claiming the same number → excluded
-# from comparison, no warning, exit 0
+# OUR OWN branch (headRefName == "feature", SAME repo — isCrossRepository:false)
+# claiming the same number → excluded from comparison, no warning, exit 0
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "-- Case 35: self-branch excluded from comparison → no warning, exit 0 --"
+echo "-- Case 35: self-branch (same repo) excluded from comparison → no warning, exit 0 --"
 
 CASE35_REPO="$MASTER_TMP/case35"
 setup_repo_with_origin "$CASE35_REPO" "docs/adr/0022-existing.md"
@@ -913,15 +913,51 @@ add_adr "$CASE35_REPO" "docs/adr/0030-new-unique.md"
 CASE35_GH="$MASTER_TMP/case35-gh-stub.sh"
 write_gh_stub "$CASE35_GH" 'cat <<JSON
 [
-  {"number": 503, "headRefName": "feature", "files": [
+  {"number": 503, "headRefName": "feature", "isCrossRepository": false, "files": [
     {"path": "docs/adr/0030-new-unique.md", "changeType": "ADDED"}
   ]}
 ]
 JSON'
 
 CANON_ADR_GH_BIN="$CASE35_GH" run_test_in_dir_no_pattern \
-  "self-branch exclusion: own PR listed → exit 0, no warning" 0 \
+  "self-branch exclusion: own same-repo PR listed → exit 0, no warning" 0 \
   "CANON WARNING" "$CASE35_REPO" '{"command":"git push origin feature"}'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Case 37 (Codex P2 fix, PR #497): a FORK PR with the SAME branch name as ours
+# (headRefName == "feature") but a DIFFERENT head repository
+# (isCrossRepository: true) claims the SAME colliding ADR number. Branch-name-
+# only self-exclusion would wrongly treat this as "our own PR" and skip it —
+# a false negative on a genuine cross-fork collision. It must be COMPARED and
+# WARN.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "-- Case 37: fork PR with matching branch name + colliding number → WARN, exit 0 --"
+
+CASE37_REPO="$MASTER_TMP/case37"
+setup_repo_with_origin "$CASE37_REPO" "docs/adr/0022-existing.md"
+add_adr "$CASE37_REPO" "docs/adr/0030-new-unique.md"
+
+CASE37_GH="$MASTER_TMP/case37-gh-stub.sh"
+write_gh_stub "$CASE37_GH" 'cat <<JSON
+[
+  {"number": 504, "headRefName": "feature", "isCrossRepository": true, "files": [
+    {"path": "docs/adr/0030-fork-slug.md", "changeType": "ADDED"}
+  ]}
+]
+JSON'
+
+CANON_ADR_GH_BIN="$CASE37_GH" run_test_in_dir_with_output \
+  "fork same-branch-name collision → CANON WARNING, exit 0" 0 \
+  "CANON WARNING" "$CASE37_REPO" '{"command":"git push origin feature"}'
+
+CANON_ADR_GH_BIN="$CASE37_GH" run_test_in_dir_with_output \
+  "fork same-branch-name collision: WARNING names number 0030" 0 \
+  "0030" "$CASE37_REPO" '{"command":"git push origin feature"}'
+
+CANON_ADR_GH_BIN="$CASE37_GH" run_test_in_dir_with_output \
+  "fork same-branch-name collision: WARNING names the fork PR (#504)" 0 \
+  "#504" "$CASE37_REPO" '{"command":"git push origin feature"}'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Case 36: committed-main regression — a real committed-main collision still
