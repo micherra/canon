@@ -61,8 +61,33 @@ describe("compileWaves — AC1 field-only-diff (genericity proof)", () => {
     // Field values genuinely differ (proving no shared hardcoded output).
     expect(resultA.envelope.waves[0].tasks.length).toBe(1);
     expect(resultB.envelope.waves[0].tasks.length).toBe(2);
-    expect(resultA.envelope.merge_order).toEqual(["task-a"]);
-    expect(resultB.envelope.merge_order).toEqual(["task-b1", "task-b2"]);
+    expect(resultA.envelope.merge_order).toEqual(["canon-task/task-a"]);
+    expect(resultB.envelope.merge_order).toEqual(["canon-task/task-b1", "canon-task/task-b2"]);
+  });
+});
+
+describe("compileWaves — merge_order/branch contract", () => {
+  it("emits merge_order entries that EQUAL the tasks' own branch values (the contract canon-waves.js's git merge depends on)", () => {
+    const dag: TaskDag = {
+      tasks: [
+        { depends_on: [], files: ["a.ts"], parallel_safe: true, task_id: "task-a" },
+        { depends_on: [], files: ["b.ts"], parallel_safe: true, task_id: "task-b" },
+      ],
+    };
+    const result = compileWaves({
+      ...BASE_INPUT,
+      dag,
+      prompt_seeds: { "task-a": "seed-a", "task-b": "seed-b" },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const taskBranches = result.envelope.waves[0].tasks.map((t) => t.branch).sort();
+    expect(result.envelope.merge_order).toEqual(taskBranches);
+    // Never raw task_ids — this is the regression this test guards against.
+    for (const entry of result.envelope.merge_order) {
+      expect(entry.startsWith("canon-task/")).toBe(true);
+    }
   });
 });
 

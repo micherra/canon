@@ -150,6 +150,25 @@ function validateCompileWavesInput(input: CompileWavesInput): CanonToolError | n
   return null;
 }
 
+/**
+ * Reject any task_id containing characters outside `sanitizeTaskId`'s charset
+ * (security F1) — a raw task_id is joined directly into a plan-file path
+ * (`{plansDir}/{task_id}-PLAN.md`) before `compileWaves` ever runs its own
+ * sanitization, so an unsanitized `../`-laden task_id would escape `plansDir`
+ * on the read. Fail-closed BEFORE any plan-path read or envelope emit.
+ */
+function validateTaskIdCharset(dag: TaskDag): CanonToolError | null {
+  for (const task of dag.tasks) {
+    if (sanitizeTaskId(task.task_id) !== task.task_id) {
+      return toolError(
+        "INVALID_INPUT",
+        `Invalid task_id "${task.task_id}": must contain only characters in the sanitizer charset (A-Za-z0-9._-)`,
+      );
+    }
+  }
+  return null;
+}
+
 /** Read + parse task-dag.yaml into the validator's TaskDag shape. */
 async function loadTaskDag(dagPath: string): Promise<{ ok: true; dag: TaskDag } | CanonToolError> {
   let dagContent: string;
@@ -223,6 +242,9 @@ export async function compileWavesTool(
   const plansDir = join(input.workspace, "plans", input.slug);
   const dagResult = await loadTaskDag(join(plansDir, "task-dag.yaml"));
   if (!dagResult.ok) return dagResult;
+
+  const taskIdError = validateTaskIdCharset(dagResult.dag);
+  if (taskIdError) return taskIdError;
 
   const canonParentWorkspace = deriveCanonParentWorkspace(input.workspace, projectDir);
   const seedsResult = await buildPromptSeeds({

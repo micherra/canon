@@ -68,7 +68,14 @@ if (shapeError) {
 const wave = A.waves[0]
 const tasks = wave.tasks
 const buildWorktree = A.build_worktree
-const mergeOrder = Array.isArray(A.merge_order) ? A.merge_order : tasks.map((t) => t.branch)
+// merge_order holds the compiled branch refs (canon-task/{sanitized-task_id})
+// that git merge actually needs — fall back to the tasks' own `branch` field
+// for a missing OR empty merge_order (a compileWaves-produced envelope never
+// emits one, but this runner must still be robust to malformed args).
+const mergeOrder =
+  Array.isArray(A.merge_order) && A.merge_order.length > 0
+    ? A.merge_order
+    : tasks.map((t) => t.branch)
 
 phase('Implement')
 
@@ -94,13 +101,10 @@ let merge = null
 if (allOk) {
   phase('Merge')
 
-  const branches = tasks.map((t) => t.branch)
-  const mergeBranches = mergeOrder.length > 0 ? mergeOrder : branches
-
   merge = await agent(
     `Using Bash, first run: git -C ${buildWorktree} rev-parse --show-toplevel\n` +
       `Confirm the output resolves to exactly "${buildWorktree}" (the Canon-owned build worktree). If it does not match, STOP and return {"status":"blocked","note":"worktree mismatch: expected ${buildWorktree}"} without making any changes.\n` +
-      `Otherwise, run: git -C ${buildWorktree} merge --no-ff ${mergeBranches.join(' ')} -m "canon-waves: merge ${mergeBranches.join(', ')}"\n` +
+      `Otherwise, run: git -C ${buildWorktree} merge --no-ff ${mergeOrder.join(' ')} -m "canon-waves: merge ${mergeOrder.join(', ')}"\n` +
       `Return {"status":"ok","note":"<the resulting merge commit sha>"} on success, {"status":"blocked","note":"<the exact error output>"} otherwise.`,
     {
       schema: VERDICT,

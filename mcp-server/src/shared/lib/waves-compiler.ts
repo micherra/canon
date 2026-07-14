@@ -124,7 +124,12 @@ export function compileWaves(input: CompileWavesInput): CompileWavesResult {
   }
 
   const tasks = input.dag.tasks.map((task) => buildWavesTask(task, input));
-  const mergeOrder = input.dag.tasks.map((task) => task.task_id).sort();
+  // merge_order must hold the SAME branch refs `buildWavesTask` assigns to
+  // `branch` (canon-task/{sanitized-task_id}) — canon-waves.js feeds this
+  // array straight into `git merge --no-ff <entries>`, so a raw task_id here
+  // would merge against branches that were never created. Sort for a
+  // deterministic (not Date/random) merge order.
+  const mergeOrder = tasks.map((task) => task.branch).sort();
 
   return {
     envelope: {
