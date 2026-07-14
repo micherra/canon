@@ -1,12 +1,12 @@
 ---
-adr: "0051"
+adr: "0053"
 title: "adr-number-check open-PR scan WARNs and fails OPEN — it never blocks a push on GitHub availability"
 status: accepted
 date: "2026-07-11"
 build: "extend-hooksadr-number-checksh-to-detect-adr-number-collisions-against"
 ---
 
-# ADR-0051: The concurrent-open-PR ADR-collision scan WARNs (exit 0) and fails OPEN on gh unavailability
+# ADR-0053: The concurrent-open-PR ADR-collision scan WARNs (exit 0) and fails OPEN on gh unavailability
 
 ## Context
 

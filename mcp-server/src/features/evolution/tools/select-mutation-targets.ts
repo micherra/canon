@@ -18,8 +18,10 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
+import { relative, sep } from "node:path";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { loadAllPrinciples } from "@shared/matcher.ts";
 import { z } from "zod";
 import { resolveArtifactReadPath } from "../services/artifact-path-resolver.ts";
 import {
@@ -29,12 +31,34 @@ import {
 import { attributeFailures } from "../services/attribution-join.ts";
 import { readProvenance } from "../services/attribution-provenance-source.ts";
 import type { FailureAttribution } from "../services/attribution-types.ts";
-import { selectMutationTargets } from "../services/mutation-selection.ts";
+import {
+  type PrincipleArtifactLookup,
+  selectMutationTargets,
+  selectRetirementReinforcementTargets,
+} from "../services/mutation-selection.ts";
 import type { SelectMutationTargetsResult } from "../services/mutation-types.ts";
+import type { TrustWeightedScore } from "../services/outcome-attribution.ts";
 
 // ---------------------------------------------------------------------------
 // Input schema
 // ---------------------------------------------------------------------------
+
+/** Zod shape for one TrustWeightedScore entry (attribute_outcomes output, Gap 3 L2). */
+const TrustWeightedScoreSchema = z.object({
+  contributing_builds: z.array(
+    z.object({
+      archive_id: z.string(),
+      sign: z.union([z.literal(1), z.literal(-1)]),
+      weight: z.number(),
+    }),
+  ),
+  corroboration: z.number(),
+  negative_weight: z.number(),
+  net_score: z.number(),
+  positive_weight: z.number(),
+  principle_id: z.string(),
+  tier_breakdown: z.object({ codex: z.number(), internal: z.number() }),
+});
 
 export const SelectMutationTargetsInputSchema = z.object({
   archive_id: z
@@ -42,7 +66,7 @@ export const SelectMutationTargetsInputSchema = z.object({
     .optional()
     .describe(
       "Archive ID of a completed build (from get_build_history). " +
-        "Exactly one of workspace or archive_id must be provided.",
+        "Exactly one of workspace, archive_id, or scores must be provided.",
     ),
   max_targets_per_pass: z
     .number()
@@ -52,7 +76,8 @@ export const SelectMutationTargetsInputSchema = z.object({
     .describe(
       "Maximum number of mutation targets to select per pass. " +
         "Defaults to DEFAULT_MAX_TARGETS_PER_PASS (3). " +
-        "Overflow targets land in skipped with reason budget_exhausted.",
+        "Overflow targets land in skipped with reason budget_exhausted. " +
+        "Not used in scores mode.",
     ),
   project_dir: z
     .string()
@@ -60,12 +85,30 @@ export const SelectMutationTargetsInputSchema = z.object({
       "Absolute path to the project root (contains .canon/ directory). " +
         "Required for artifact body reads, drift.db cliff events, and archive lookups.",
     ),
+  retirement_reinforcement_threshold: z
+    .number()
+    .positive()
+    .optional()
+    .describe(
+      "Override RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD (default 3, mirrors the " +
+        "learner's weighted_instance_count >= 3 convention as a symmetric net-score band). " +
+        "Only used in scores mode.",
+    ),
+  scores: z
+    .array(TrustWeightedScoreSchema)
+    .optional()
+    .describe(
+      "Trust-weighted scores from attribute_outcomes (Gap 3 L3). When provided, the tool " +
+        "runs RETIREMENT/REINFORCEMENT selection instead of the violation-based selection: " +
+        "net_score <= -threshold nominates a retire target, net_score >= +threshold " +
+        "nominates a reinforce target. Mutually exclusive with workspace/archive_id.",
+    ),
   workspace: z
     .string()
     .optional()
     .describe(
       "Absolute path to the live Canon workspace directory. " +
-        "Exactly one of workspace or archive_id must be provided.",
+        "Exactly one of workspace, archive_id, or scores must be provided.",
     ),
 });
 
@@ -132,19 +175,82 @@ function collectAttributionSources(
   return attributeFailures({ cliffEvents, provenance, readCurrentBody, violations });
 }
 
+/**
+ * buildPrincipleArtifactLookup — Gap 3 L3: resolves a principle_id to its on-disk
+ * path (relative to project_dir or pluginDir, matching the target_path convention
+ * used elsewhere in this file) + current body, for retirement/reinforcement
+ * candidate construction.
+ *
+ * Scope note: covers `principles/{rules,strong-opinions,conventions}/*.md` only
+ * (via loadAllPrinciples, the shared kernel's principle loader) — NOT the
+ * top-level agent-behavior `rules/*.md` class. An id outside that scope resolves
+ * to null and lands in selectRetirementReinforcementTargets's typed `skipped[]`
+ * bucket (errors-are-values), never thrown. Widening coverage to agent-behavior
+ * rules is a follow-up, not required by Gap 3 L3's stated scope ("which principle
+ * earns its keep").
+ */
+async function buildPrincipleArtifactLookup(
+  projectDir: string,
+  pluginDir: string,
+): Promise<PrincipleArtifactLookup> {
+  const principles = await loadAllPrinciples(projectDir, pluginDir);
+  const byId = new Map(principles.map((p) => [p.id, p]));
+
+  return (principleId: string) => {
+    const principle = byId.get(principleId);
+    if (!principle) return null;
+    const root = principle.source === "project" ? projectDir : pluginDir;
+    const path = relative(root, principle.filePath).split(sep).join("/");
+    try {
+      return { body: readFileSync(principle.filePath, "utf-8"), path };
+    } catch {
+      return null;
+    }
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
 /**
+ * scoresModeHandler — Gap 3 L3: retirement/reinforcement selection from
+ * attribute_outcomes scores. Pure query — resolves each nominated principle's
+ * on-disk artifact (read-only) and returns MutationTarget[] carrying
+ * proposal_kind + score_provenance. Never mutates `principles/**`.
+ */
+async function scoresModeHandler(
+  scores: TrustWeightedScore[],
+  projectDir: string,
+  pluginDir: string | undefined,
+  threshold: number | undefined,
+): Promise<ToolResult<SelectMutationTargetsResult>> {
+  const resolveArtifact = await buildPrincipleArtifactLookup(projectDir, pluginDir ?? projectDir);
+  const { targets, skipped } = selectRetirementReinforcementTargets(scores, resolveArtifact, {
+    threshold,
+  });
+
+  return toolOk({
+    gate_ineligible: [],
+    meta: { attributions_seen: scores.length, budget: scores.length, selected: targets.length },
+    skipped: skipped.map((s) => ({ reason: s.reason, target_path: s.principle_id })),
+    targets,
+  });
+}
+
+/**
  * selectMutationTargetsHandler — main handler.
  *
- * Wires:
- *   provenance source → failure sources → pure join → baseline body reads
- *     → selectMutationTargets → ToolResult.
+ * Dual-mode:
+ *   - workspace/archive_id (unchanged): provenance source → failure sources →
+ *     pure join → baseline body reads → selectMutationTargets → ToolResult.
+ *   - scores (Gap 3 L3, new): attribute_outcomes scores → principle artifact
+ *     resolution → selectRetirementReinforcementTargets → ToolResult. Mutually
+ *     exclusive with workspace/archive_id.
  *
- * Mirrors attribute-failure.ts composition exactly (consumes AS-IS).
- * Extends it with: body reads + existence checks + selectMutationTargets call.
+ * Mirrors attribute-failure.ts composition exactly (consumes AS-IS) for the
+ * unchanged mode. Extends it with: body reads + existence checks +
+ * selectMutationTargets call.
  *
  * Fail-open for every source: absent provenance, absent REVIEW.md, absent
  * artifact bodies all produce partial results rather than errors.
@@ -158,21 +264,33 @@ export async function selectMutationTargetsHandler(
   input: SelectMutationTargetsInput,
   pluginDir?: string,
 ): Promise<ToolResult<SelectMutationTargetsResult>> {
-  const { workspace, archive_id, project_dir, max_targets_per_pass } = input;
+  const { workspace, archive_id, project_dir, max_targets_per_pass, scores } = input;
 
-  // Validate: exactly one of workspace / archive_id
-  if (!workspace && !archive_id) {
+  const modesProvided = [workspace !== undefined, archive_id !== undefined, scores !== undefined];
+  const modeCount = modesProvided.filter(Boolean).length;
+
+  // Validate: exactly one of workspace / archive_id / scores
+  if (modeCount === 0) {
     return toolError(
       "INVALID_INPUT",
-      "Exactly one of 'workspace' or 'archive_id' must be provided.",
+      "Exactly one of 'workspace', 'archive_id', or 'scores' must be provided.",
       false,
     );
   }
-  if (workspace && archive_id) {
+  if (modeCount > 1) {
     return toolError(
       "INVALID_INPUT",
-      "Provide exactly one of 'workspace' or 'archive_id', not both.",
+      "Provide exactly one of 'workspace', 'archive_id', or 'scores', not more than one.",
       false,
+    );
+  }
+
+  if (scores !== undefined) {
+    return scoresModeHandler(
+      scores as TrustWeightedScore[],
+      project_dir,
+      pluginDir,
+      input.retirement_reinforcement_threshold,
     );
   }
 

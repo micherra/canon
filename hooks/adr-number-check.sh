@@ -34,7 +34,7 @@
 #   origin/main unresolvable + no ADRs: exit 0 (early-out; fail-closed scoped to ADR adds)
 #   Open-PR concurrent claim:            WARN + exit 0 (FAIL-OPEN); gh
 #                                         absent/unauthed/offline/timeout/malformed
-#                                         JSON: silent exit 0 (ADR-0051)
+#                                         JSON: silent exit 0 (ADR-0053)
 #
 # Parser-fail-open justification (security-hook-parser-allowlist-posture):
 # The non-push gate and the parse-fail path (lines 37–43) are denylist-shaped:
@@ -229,7 +229,7 @@ EOF
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 4: Concurrent-open-PR ADR-number scan (WARN-only, fail-open, ADR-0051).
+# Step 4: Concurrent-open-PR ADR-number scan (WARN-only, fail-open, ADR-0053).
 # Reached only after Steps 1-3 have passed (no committed-main collision).
 # EVERY path in this block exits 0 — it contains NO non-zero exit or return.
 # Rationale: an open PR's claim is racy/eventually-consistent (the PR may be
