@@ -12,8 +12,10 @@
  */
 
 import fs from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Module mocks (must precede module imports) ──────────────────────────────
@@ -62,6 +64,7 @@ vi.mock("../../../platform/storage/drift/drift-db-cache.ts", () => ({
 import { evictStoresForScope } from "../../../domains/workspaces/execution-store-cache.ts";
 import { evictJobManagerForScope } from "../../../platform/jobs/job-manager.ts";
 import { evictDriftDbForScope } from "../../../platform/storage/drift/drift-db-cache.ts";
+import { createCanonServer } from "../../create-server.ts";
 import {
   clearConnectionScope,
   clearSessionReady,
@@ -73,6 +76,7 @@ import {
   _resolveSessionScopeForTest,
   buildAllowedHosts,
   closeAllSessions,
+  handleMcpRequest,
   sessionCount,
   teardownSession,
 } from "../session-manager.ts";
@@ -325,6 +329,71 @@ describe("closeAllSessions", () => {
     expect(sessionCount()).toBe(2);
     await closeAllSessions();
     expect(sessionCount()).toBe(0);
+  });
+});
+
+// ── handleMcpRequest — stale/unknown session (ADR-0051, dc-01/dc-03) ───────
+//
+// A restarted daemon wipes the in-memory `sessions` registry. A client that
+// still holds a pre-restart `mcp-session-id` must get the spec-compliant
+// 404 `-32001` "Session not found" (not the prior 400 "Server not
+// initialized"), and must NOT trigger a throwaway createCanonServer()
+// allocation. An `initialize` request (no session-id header) is unaffected.
+
+describe("handleMcpRequest — stale/unknown session", () => {
+  it("T1 (dc-01): unknown mcp-session-id → spec-compliant 404 -32001 'Session not found'", async () => {
+    const req = {
+      headers: { "mcp-session-id": "stale-unknown-id" },
+    } as unknown as IncomingMessage;
+    const res = { end: vi.fn(), writeHead: vi.fn() } as unknown as ServerResponse;
+
+    await handleMcpRequest(req, res, 3142);
+
+    expect(vi.mocked(res.writeHead)).toHaveBeenCalledWith(404, {
+      "Content-Type": "application/json",
+    });
+    expect(vi.mocked(res.end)).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(vi.mocked(res.end).mock.calls[0]?.[0] as string) as unknown;
+    expect(body).toEqual({
+      jsonrpc: "2.0",
+      error: { code: -32001, message: "Session not found" },
+      id: null,
+    });
+  });
+
+  it("T2 (dc-01, no-allocation): unknown session id never allocates createCanonServer()", async () => {
+    const req = {
+      headers: { "mcp-session-id": "stale-unknown-id-2" },
+    } as unknown as IncomingMessage;
+    const res = { end: vi.fn(), writeHead: vi.fn() } as unknown as ServerResponse;
+
+    await handleMcpRequest(req, res, 3142);
+
+    expect(vi.mocked(createCanonServer)).not.toHaveBeenCalled();
+  });
+
+  it("T3 (dc-03): no mcp-session-id header still takes the create-new-transport path (init path unchanged)", async () => {
+    const handleRequestSpy = vi
+      .spyOn(StreamableHTTPServerTransport.prototype, "handleRequest")
+      .mockResolvedValue(undefined);
+    vi.mocked(createCanonServer).mockReturnValue(
+      makeServerMock() as unknown as ReturnType<typeof createCanonServer>,
+    );
+
+    const req = { headers: {} } as unknown as IncomingMessage;
+    const res = { end: vi.fn(), writeHead: vi.fn() } as unknown as ServerResponse;
+
+    try {
+      await handleMcpRequest(req, res, 3142);
+
+      // No-header requests must reach the create-new-transport path — NOT the
+      // stale-session 404 short-circuit.
+      expect(vi.mocked(createCanonServer)).toHaveBeenCalledTimes(1);
+      expect(handleRequestSpy).toHaveBeenCalledWith(req, res);
+      expect(vi.mocked(res.writeHead)).not.toHaveBeenCalledWith(404, expect.anything());
+    } finally {
+      handleRequestSpy.mockRestore();
+    }
   });
 });
 
