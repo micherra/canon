@@ -16,6 +16,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Module mocks (must precede module imports) ──────────────────────────────
@@ -90,6 +91,14 @@ function makeTmpDir(name: string): string {
   return d;
 }
 
+/** Narrow structural shape of the McpServer surface handleMcpRequest actually touches. */
+type ServerMockShape = Pick<ReturnType<typeof createCanonServer>, "close" | "connect"> & {
+  server: Pick<
+    ReturnType<typeof createCanonServer>["server"],
+    "listRoots" | "setNotificationHandler"
+  >;
+};
+
 /** Build a minimal McpServer mock. */
 function makeServerMock() {
   return {
@@ -99,6 +108,22 @@ function makeServerMock() {
       listRoots: vi.fn().mockResolvedValue({ roots: [] }),
       setNotificationHandler: vi.fn(),
     },
+  };
+}
+
+/** Build a minimal IncomingMessage mock — headers only, the sole field handleMcpRequest reads. */
+function makeReq(headers: IncomingMessage["headers"]): IncomingMessage {
+  return { headers } as Pick<IncomingMessage, "headers"> as IncomingMessage;
+}
+
+/** Build a minimal ServerResponse mock exposing the two methods handleMcpRequest calls. */
+function makeRes(): ServerResponse & { end: Mock; writeHead: Mock } {
+  return { end: vi.fn(), writeHead: vi.fn() } as Pick<
+    ServerResponse,
+    "end" | "writeHead"
+  > as ServerResponse & {
+    end: Mock;
+    writeHead: Mock;
   };
 }
 
@@ -342,10 +367,8 @@ describe("closeAllSessions", () => {
 
 describe("handleMcpRequest — stale/unknown session", () => {
   it("T1 (dc-01): unknown mcp-session-id → spec-compliant 404 -32001 'Session not found'", async () => {
-    const req = {
-      headers: { "mcp-session-id": "stale-unknown-id" },
-    } as unknown as IncomingMessage;
-    const res = { end: vi.fn(), writeHead: vi.fn() } as unknown as ServerResponse;
+    const req = makeReq({ "mcp-session-id": "stale-unknown-id" });
+    const res = makeRes();
 
     await handleMcpRequest(req, res, 3142);
 
@@ -353,7 +376,11 @@ describe("handleMcpRequest — stale/unknown session", () => {
       "Content-Type": "application/json",
     });
     expect(vi.mocked(res.end)).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(vi.mocked(res.end).mock.calls[0]?.[0] as string) as unknown;
+    const body = JSON.parse(res.end.mock.calls[0]?.[0] as string) as {
+      jsonrpc: string;
+      error: { code: number; message: string };
+      id: null;
+    };
     expect(body).toEqual({
       jsonrpc: "2.0",
       error: { code: -32001, message: "Session not found" },
@@ -362,10 +389,8 @@ describe("handleMcpRequest — stale/unknown session", () => {
   });
 
   it("T2 (dc-01, no-allocation): unknown session id never allocates createCanonServer()", async () => {
-    const req = {
-      headers: { "mcp-session-id": "stale-unknown-id-2" },
-    } as unknown as IncomingMessage;
-    const res = { end: vi.fn(), writeHead: vi.fn() } as unknown as ServerResponse;
+    const req = makeReq({ "mcp-session-id": "stale-unknown-id-2" });
+    const res = makeRes();
 
     await handleMcpRequest(req, res, 3142);
 
@@ -377,11 +402,11 @@ describe("handleMcpRequest — stale/unknown session", () => {
       .spyOn(StreamableHTTPServerTransport.prototype, "handleRequest")
       .mockResolvedValue(undefined);
     vi.mocked(createCanonServer).mockReturnValue(
-      makeServerMock() as unknown as ReturnType<typeof createCanonServer>,
+      makeServerMock() as ServerMockShape as ReturnType<typeof createCanonServer>,
     );
 
-    const req = { headers: {} } as unknown as IncomingMessage;
-    const res = { end: vi.fn(), writeHead: vi.fn() } as unknown as ServerResponse;
+    const req = makeReq({});
+    const res = makeRes();
 
     try {
       await handleMcpRequest(req, res, 3142);
