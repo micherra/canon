@@ -37,7 +37,7 @@ Stateful HTTP MCP transport subsystem: token-based auth, per-session McpServer r
 - `probeIdentity(port, token, nonce, timeoutMs?)` — authenticated `GET /identity?nonce=<n>` with Bearer token; returns `"same-version" | "identity-mismatch"`; errors resolve to `"identity-mismatch"` (fail-closed)
 
 **`session-manager.ts`**
-- `handleMcpRequest(req, res, port)` — main entry point; routes by session ID; creates transport+server for new POSTs; `cleanupFailedInit` on abrupt close; unknown non-empty `mcp-session-id` (stale post-restart session) → spec-compliant 404 `-32001` "Session not found", no transport/server allocated (ADR-0051)
+- `handleMcpRequest(req, res, port)` — main entry point; routes by session ID; creates transport+server for new POSTs; `cleanupFailedInit` on abrupt close; unknown non-empty `mcp-session-id` (stale post-restart session) → spec-compliant 404 `-32001` "Session not found", no transport/server allocated (ADR-0053)
 - `createSessionTransport(port, server, headerDir)` — transport factory; wires `onsessioninitialized` and `onsessionclosed`
 - `teardownSession(sessionId)` — idempotent; isolation-finish-01 order: `server.close()` → `clearConnectionScope` → `clearSessionReady` → `evictStoresForScope` → `evictDriftDbForScope` → `evictJobManagerForScope`; refcount guard via `hasOtherSessionsForDir`; pending-handshake guard via `hasPendingHandshakeForDir`
 - `resolveSessionScope(session, headerDir)` — layered fail-closed: `x-canon-project-dir` header → `roots/list` retry (3×2s) → gate stays pending; scope never falls back to daemon cwd/env

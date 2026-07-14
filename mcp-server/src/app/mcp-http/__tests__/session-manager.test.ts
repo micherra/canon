@@ -357,7 +357,7 @@ describe("closeAllSessions", () => {
   });
 });
 
-// ── handleMcpRequest — stale/unknown session (ADR-0051, dc-01/dc-03) ───────
+// ── handleMcpRequest — stale/unknown session (ADR-0053, dc-01/dc-03) ───────
 //
 // A restarted daemon wipes the in-memory `sessions` registry. A client that
 // still holds a pre-restart `mcp-session-id` must get the spec-compliant

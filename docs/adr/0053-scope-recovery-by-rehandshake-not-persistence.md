@@ -1,4 +1,4 @@
-# ADR-0051 — Recover session scope by re-handshake (spec-404), not by persisting the scope registry
+# ADR-0053 — Recover session scope by re-handshake (spec-404), not by persisting the scope registry
 
 - Status: Accepted
 - Date: 2026-07-11

@@ -660,7 +660,7 @@ function registerRootsChangedHandler(
  *
  * Unknown non-empty mcp-session-id (stale session, e.g. post-restart registry loss):
  *   → respond directly with the spec-compliant 404 -32001 "Session not found"
- *     (ADR-0051) — no transport/server allocation; drives the client to
+ *     (ADR-0053) — no transport/server allocation; drives the client to
  *     re-initialize and re-establish scope through the authentic handshake
  *
  * No session header + POST initialize:
@@ -688,7 +688,7 @@ export async function handleMcpRequest(
     // 404 -32001 "Session not found" (the MCP signal that tells the client to discard the dead
     // session and re-initialize, which re-establishes scope through the authentic handshake) instead
     // of routing through a throwaway uninitialized transport that emits 400 "Server not initialized"
-    // and allocates a full createCanonServer() per stale poll. resolveScope stays fail-closed (ADR-0051).
+    // and allocates a full createCanonServer() per stale poll. resolveScope stays fail-closed (ADR-0053).
     respondJson(res, 404, {
       error: { code: -32001, message: "Session not found" },
       id: null,
