@@ -162,6 +162,15 @@ rediscovered later.
   security + adversarial tail. Accepted: the same file also holds the mutation denylist and the
   shell allowlist, and a floor that exempts "routine" edits is not a floor.
 - The category has two members and may look arbitrary without this ADR. That is what this ADR is for.
+- **The floor is inert until this merges, the plugin updates, and the daemon restarts** —
+  `compute_autonomy_tier` resolves `SENSITIVE_PATH_DENY_LIST` from the daemon's installed
+  source, not the working tree. Builds touching `loop-schema.ts` before that window is complete
+  are scored, not floored. Caught by the contract-compatibility juror: this ADR's own
+  Consequences originally stated the floor engages "regardless of build history or
+  `override_tier`" with no mention of this window — the same shape of defect (a floor-coverage
+  assertion that does not yet hold) this ADR exists to correct in ADR-0045, reproduced in
+  miniature and time-bounded, in the very document whose thesis is that this shape is the
+  defect. Documentation only; no code change.
 
 **Discovered, not fixed here:**
 - A tracked ADR carried a false safety claim for ~5 days and was inherited verbatim by a
