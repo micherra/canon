@@ -451,3 +451,40 @@ describe("loadLoopsFromDir — ship-watch orchestrator_action directives", () =>
     expect(invalidShipWatch).toBeUndefined();
   });
 });
+
+// ── fire_on_baseline body↔frontmatter consistency (ADR-0056) ─────────────────
+// The runner is agentic markdown (ADR-0017): get_loop_definition returns definition + body,
+// and the tick prompt instructs the model to execute THAT BODY's pipeline. A loop whose
+// frontmatter declares fire_on_baseline: true but whose body never mentions it risks the
+// body's own prose silently overriding the frontmatter (a real defect this test pins —
+// session-watch.md shipped with fire_on_baseline: true on kg_stale while its body still
+// asserted, unconditionally, that no on_transition rule fires on tick 1). This is a proxy,
+// not a full semantic check: it cannot prove the body's prose is *correct*, only that the
+// body was updated to be AWARE of the opt-in. A full check would require executing the
+// agentic runner itself, which is out of reach for a unit test (see loop-runner-first-tick.test.ts
+// header — the same limitation the ADR-0002 proof suite already documents).
+describe("loadLoopsFromDir — fire_on_baseline body↔frontmatter consistency (ADR-0056)", () => {
+  it("every loop with a fire_on_baseline: true rule mentions fire_on_baseline in its own body", async () => {
+    const { valid, validBodies } = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const loopsWithBaselineOptIn = valid.filter((def) =>
+      def.surface.on_transition.some(
+        (rule) => (rule as { fire_on_baseline?: boolean }).fire_on_baseline === true,
+      ),
+    );
+
+    // Sanity pin: this build opted in exactly 2 loops (ship-watch x2 rules, session-watch x1).
+    // If this fails, the fixture set changed — update it deliberately, not as a side effect.
+    expect(loopsWithBaselineOptIn.map((d) => d.id).sort()).toEqual(["session-watch", "ship-watch"]);
+
+    for (const def of loopsWithBaselineOptIn) {
+      const body = validBodies?.[def.id];
+      expect(body, `${def.id} has no body`).toBeDefined();
+      expect(
+        body,
+        `${def.id} declares fire_on_baseline: true in its frontmatter but its body never ` +
+          `mentions "fire_on_baseline" — the body is the operative runner instruction ` +
+          `(ADR-0017) and can silently override the frontmatter's intent.`,
+      ).toContain("fire_on_baseline");
+    }
+  });
+});

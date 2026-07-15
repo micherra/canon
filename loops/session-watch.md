@@ -83,9 +83,19 @@ declared threshold). Both concerns are observe+surface only — no build mutatio
 `ScheduleWakeup`. Authoring this file only registers the definition. Do not call
 `ScheduleWakeup` from within this body to start the loop — only to re-arm the next tick.
 
-**First-tick baseline (ADR-0002):** On tick 1 there is no prior snapshot, so no
-`on_transition` rules fire. Write the baseline snapshot and report:
-`[loop: session-watch] Tick 1 baseline captured. Watching from next tick.`
+**First-tick baseline (ADR-0002, amended by ADR-0056):** On tick 1 there is no prior
+snapshot, so no `on_transition` rule fires — **with one exception**: `kg_stale` declares
+`fire_on_baseline: true` and fires on tick 1 if the observed value already equals `"true"`
+(i.e. the KG already looks stale at session-open). No other rule in this loop carries the
+flag — `surfaced_cliff_signatures` is `append`-mode (ineligible), `open_drift_crossed` is
+tick-relative by body construction, and `docs_stale_crossed`/`kg_age_crossed` are
+deliberately excluded (see the comment above those two rules — their directive is already
+tick-1 capable via the ADR-0045 ledger; adding the flag would double-fire).
+
+Write the baseline snapshot and report the baseline capture, noting whether `kg_stale`
+fired:
+- If it fired: `[loop: session-watch] Tick 1 baseline captured (1 rule fired on baseline). Watching from next tick.`
+- Otherwise: `[loop: session-watch] Tick 1 baseline captured. Watching from next tick.`
 
 ### Observe
 
@@ -179,6 +189,11 @@ After the diff determines which rules fire:
    condition, which a pure `on_transition` rule would miss — ADR-0002 first-tick guard); the
    `on_transition` rules on `docs_stale_crossed`/`kg_age_crossed` above cover the
    observability/tick-2+ human-facing message for a later mid-session transition.
+4. `kg_stale` is NOT enumerated above because it needs no body-side handling — its
+   `fire_on_baseline: true` flag (ADR-0056) makes it tick-1 capable through the generic
+   runner Step 5/6 path alone, unlike the ledger-driven staleness directives in step 3.
+   It surfaces via the ordinary fall-through, both on tick 1 (if already stale) and on any
+   later transition.
 
 This prevents double-HITL collisions with the resume/post_subagent cliff passes: once a
 signature is in the ledger, session-watch suppresses it on subsequent ticks. The same
