@@ -31,6 +31,7 @@ import { evictJobManagerForScope } from "@platform/jobs/job-manager.ts";
 import { evictDriftDbForScope } from "@platform/storage/drift/drift-db-cache.ts";
 import { isSafeProjectDirInput } from "@shared/lib/safe-project-dir.ts";
 import { createCanonServer } from "../create-server.ts";
+import { respondJson } from "../http-routes.ts";
 import {
   clearConnectionScope,
   clearSessionReady,
@@ -657,11 +658,13 @@ function registerRootsChangedHandler(
  * Known session (mcp-session-id header present and in registry):
  *   → delegate to session.transport.handleRequest (SDK handles POST/GET/DELETE)
  *
+ * Unknown non-empty mcp-session-id (stale session, e.g. post-restart registry loss):
+ *   → respond directly with the spec-compliant 404 -32001 "Session not found"
+ *     (ADR-0054) — no transport/server allocation; drives the client to
+ *     re-initialize and re-establish scope through the authentic handshake
+ *
  * No session header + POST initialize:
  *   → create new transport+server, wire callbacks, connect server, handle request
- *
- * Other cases (unknown session, no-header non-POST):
- *   → let the SDK return 404/400 via a fresh transport (do not duplicate SDK logic)
  */
 export async function handleMcpRequest(
   req: IncomingMessage,
@@ -679,7 +682,19 @@ export async function handleMcpRequest(
       await session.transport.handleRequest(req, res);
       return;
     }
-    // Unknown session ID — fall through to create a new transport that will reject with 404
+    // Unknown non-empty mcp-session-id: a stale session (e.g. the daemon restarted and wiped the
+    // in-memory registry). An `initialize` request carries NO mcp-session-id header, so this is
+    // necessarily a non-init request for a dead session. Respond with the spec-compliant
+    // 404 -32001 "Session not found" (the MCP signal that tells the client to discard the dead
+    // session and re-initialize, which re-establishes scope through the authentic handshake) instead
+    // of routing through a throwaway uninitialized transport that emits 400 "Server not initialized"
+    // and allocates a full createCanonServer() per stale poll. resolveScope stays fail-closed (ADR-0054).
+    respondJson(res, 404, {
+      error: { code: -32001, message: "Session not found" },
+      id: null,
+      jsonrpc: "2.0",
+    });
+    return;
   }
 
   // Capture x-canon-project-dir for scope handshake before transport consumes request

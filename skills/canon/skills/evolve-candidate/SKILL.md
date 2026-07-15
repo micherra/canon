@@ -2,9 +2,12 @@
 name: evolve-candidate
 description: >-
   Procedural skill for generating, evaluating, and shaping evolution proposals
-  for Canon's trace-driven evolution loop (Phase 1 mutator pipeline).
-  Orchestrates select_mutation_targets → evaluate_candidate → shapeMutationProposal
-  for each selected target. Loaded by the learner agent.
+  for Canon's trace-driven evolution loop (Phase 1 mutator pipeline, plus the
+  Gap 3 Layer 3 retire/reinforce pass). Orchestrates select_mutation_targets →
+  evaluate_candidate → shapeMutationProposal for each selected target, and
+  attribute_outcomes → select_mutation_targets (scores mode) → evaluate_candidate
+  → shapeMutationProposal for trust-weighted retire/reinforce candidates. Loaded
+  by the learner agent.
 user-invocable: false
 ---
 
@@ -19,16 +22,147 @@ loop.
 workspace paths, but NEVER modify project source code, principles, or agent-rules
 directly. Proposals are emitted and routed via the orchestrator.
 
+There are TWO independent passes described below. Run either or both, per the
+orchestrator's instruction:
+
+- **Rewrite pass** (Steps 1–5) — the original Phase 1 mutator pipeline: a single
+  build's violation-based attribution nominates targets for a full-file/span rewrite.
+- **Retire/reinforce pass** (Step 0) — Gap 3 Layer 3: corpus-wide trust-weighted
+  scores (`attribute_outcomes`) nominate principles to retire (invalidate-don't-delete)
+  or reinforce (confidence bump, informational). Independent of any single build.
+
 ---
 
 ## Pre-conditions
 
 Before running this skill, verify:
 
-1. A workspace or archive_id is available (from a completed build with attribution data).
+1. A workspace or archive_id is available (from a completed build with attribution data) —
+   required for the rewrite pass only; the retire/reinforce pass is corpus-wide.
 2. `mcp__canon__select_mutation_targets` is in your tools allowlist.
 3. `mcp__canon__evaluate_candidate` is in your tools allowlist.
-4. The project root (`project_dir`) is known.
+4. `mcp__canon__attribute_outcomes` is in your tools allowlist — required for Step 0 only.
+5. The project root (`project_dir`) is known.
+
+---
+
+## Step 0 — Retire/reinforce pass (Gap 3 Layer 3, run independently of Steps 1–5)
+
+This pass answers "which principle actually earns its keep?" from the whole
+decisions/RunSummary corpus, not a single build. It NEVER auto-applies — like the
+rewrite pass, it only emits gated candidates to `.canon/proposed-learnings/`.
+
+### Step 0.1 — Score the corpus
+
+Call `mcp__canon__attribute_outcomes` with `project_dir` (optionally `archive_ids`/`now`
+to scope or pin the corpus):
+
+```
+mcp__canon__attribute_outcomes({ project_dir: <path> })
+```
+
+Read `scores[]` — each entry is `{ principle_id, net_score, positive_weight,
+negative_weight, corroboration, tier_breakdown, contributing_builds }`. Also log
+`unattributed_positive[]`, `unattributed_negative[]`, and `flagged[]` for observability
+(informational — never block on them).
+
+### Step 0.2 — Select retire/reinforce targets
+
+Call `mcp__canon__select_mutation_targets` in **scores mode** — pass `scores` (the
+array from Step 0.1) instead of `workspace`/`archive_id`:
+
+```
+mcp__canon__select_mutation_targets({
+  project_dir: <path>,
+  scores: <scores[] from Step 0.1>
+})
+```
+
+A `net_score <= -3` nominates a `retire` target; `net_score >= +3` nominates a
+`reinforce` target (the threshold mirrors the learner's `weighted_instance_count >= 3`
+minimum-evidence convention as a symmetric net-score band — override via
+`retirement_reinforcement_threshold` only with an explicit reason). Scores inside the
+neutral band are silently not nominated — that is the expected, common case.
+
+Read the result exactly as in Step 1 below: `targets[]` (each carries `proposal_kind:
+"retire"|"reinforce"` and `score_provenance`), `skipped[]` (`artifact_unresolved` —
+the principle_id has no resolvable `principles/**` file; `not_gate_eligible`).
+
+If `targets` is empty, stop here: emit "No retire/reinforce candidates this pass."
+
+### Step 0.3 — Produce candidate text
+
+For each target, **the two kinds now diverge — `retire` is holdout-gated (Step 0.4),
+`reinforce` is NOT** (skip straight to Step 0.5). This split exists because a
+`reinforce` candidate can never be constructed as anything other than a
+byte-identical copy of its own baseline — there is nothing for a holdout eval to
+distinguish, so running it through `evaluate_candidate` would be theater, not a gate.
+
+- **`retire`**: produce the WEAKENED/invalidated artifact — the original
+  `baseline_body` with an `archived: true` frontmatter flag added (the SAME
+  loader-honored flag `write-principle`'s `--archive` mode sets — `shared/matcher.ts`'s
+  principle matcher excludes `archived: true` principles from every review /
+  get_principles / review_code call), plus a short note explaining why. This is
+  **invalidate-don't-delete**: the candidate is never empty and never a deletion — it
+  is the same artifact, marked archived. Because `archived: true` genuinely changes
+  which principles the eval harness loads, a candidate that strictly improves the
+  holdout is real signal — this is what makes Step 0.4's gate meaningful (a
+  `status: retired` / `portable: false` marker would NOT do this — the loader does not
+  honor either field, so such a candidate would always score identically to baseline).
+  Proceed to **Step 0.4**.
+- **`reinforce`**: the candidate text is the UNCHANGED `baseline_body` verbatim — no
+  content change is proposed; this pass is purely informational. Do **not** call
+  `evaluate_candidate` for a `reinforce` target. Skip directly to **Step 0.5** with
+  `evalResult: null`.
+
+### Step 0.4 — Evaluate each RETIRE candidate (holdout gate — same gate as Step 3)
+
+**`retire` targets only** — `reinforce` targets never reach this step (Step 0.3 routes
+them straight to Step 0.5).
+
+Exactly Step 3 below, called per `retire` target from Step 0.2/0.3: `mcp__canon__evaluate_candidate`
+with `candidate_text`, `target_path: target.target_path`, `project_dir`,
+`splits: ["holdout"]`. **`evolution-hard-gate` invariant unchanged**: only proceed to
+Step 0.5 when `accepted === true`. A `retire` candidate that regresses the holdout is
+NEVER emitted — the artifact stays as-is.
+
+### Step 0.5 — Shape and emit retire/reinforce proposals
+
+Exactly Step 4 below (same proposal shape — `proposal_kind`/`score_provenance`/`gated`
+are part of the canonical frontmatter), with these differences from the rewrite path:
+- `apply_channel` is always `"writer"` for both `retire` and `reinforce` (regardless
+  of `artifact_class`).
+- **`retire`**: pass the real `evalResult` from Step 0.4 (`accepted === true`
+  required — never emit a `retire` proposal for any other result). `gated: true`,
+  real `holdout_baseline`/`holdout_candidate` numbers. The `## Impact` section states
+  invalidate-don't-delete (writer marks the artifact `archived: true`, never deletes it).
+- **`reinforce`**: pass `evalResult: null` — there is no gate result because Step 0.3
+  never called `evaluate_candidate` for this kind. `gated: false`,
+  `holdout_baseline`/`holdout_candidate` both `null`. Emit UNCONDITIONALLY for every
+  `reinforce` target selected in Step 0.2 (no accept/reject gate exists for this
+  kind — the frontmatter's `gated: false` is what tells `/canon:review-learnings` and
+  the human reviewer this is an un-holdout-gated confidence/priority signal, not a
+  gated artifact-mutation proposal). The `## Impact` section states this explicitly
+  and that no content change is proposed.
+
+Write the proposal to `.canon/proposed-learnings/${timestamp}/${pad2(index)}-${slug(target_path)}.md`
+exactly as Step 4 — same directory, same file-naming convention, same run shares one
+timestamp with any rewrite-pass proposals emitted in the same pass.
+
+### Step 0.6 — Surface results
+
+Same shape as Step 5, plus the retire/reinforce split. Note `reinforce` proposals are
+always emitted (ungated) — only `retire` has an accept/reject holdout outcome:
+
+```
+### Retire/Reinforce Pass Results
+
+- Scores read: N
+- Retire candidates: M | Reinforce candidates: K
+- Retire proposals accepted (holdout-gated): A | Retire skipped (not accepted): B
+- Reinforce proposals emitted (ungated confidence signal): K
+- Skipped (artifact_unresolved / not_gate_eligible): C
+```
 
 ---
 
@@ -140,7 +274,9 @@ proposal = {
 
 <!-- proposal-shape:begin -->
 ```yaml
-# Frontmatter keys (all required, serialized in this order)
+# Frontmatter keys (all required except score_provenance, serialized in this order).
+# holdout_baseline/holdout_candidate are `null` iff gated is false (an ungated
+# "reinforce" signal, Gap 3 L3 — see Step 0.4/0.5 below); otherwise real numbers.
 id: example-string
 type: evolution-candidate
 confidence: 0.9
@@ -155,6 +291,9 @@ principle_id: example-string
 join_basis: example-string
 hash_verified: true
 apply_channel: writer
+proposal_kind: rewrite
+gated: true
+score_provenance: {net_score: -6, contributing_builds: [{archive_id: example-string, sign: -1, weight: 3.2}]}
 ```
 
 ```text
@@ -199,8 +338,8 @@ After emitting proposals, surface the routing intent to the orchestrator:
 
 | apply_channel | Next step |
 |---|---|
-| `writer` | Route to the `canon:writer` agent via `content-flow/learn-apply` for conflict detection, format validation, and the actual edit. |
-| `engineer-build-flow` | Handled by `/canon:review-learnings`: primer/agent/template proposals → diff → Accept → direct-write + `sync_indexes`; tool-description proposals → surface-only (manual-apply instructions, no auto-write); unknown artifact class → fail-safe ("manual-apply required"). All arms require explicit reviewer confirmation before any write. |
+| `writer` | Route to the `canon:writer` agent via `content-flow/learn-apply` for conflict detection, format validation, and the actual edit. For `proposal_kind: "retire"` (`gated: true`, holdout-accepted), `/canon:review-learnings` routes to the writer in **invalidate-don't-delete** mode (mark `archived: true`, never `rm`). For `proposal_kind: "reinforce"` (`gated: false` — never holdout-gated, see Step 0.3/0.4), the writer applies a confidence bump only — no content or deletion. |
+| `engineer-build-flow` | Handled by `/canon:review-learnings`: primer/agent/template proposals → diff → Accept → direct-write + `sync_indexes`; tool-description proposals → surface-only (manual-apply instructions, no auto-write); unknown artifact class → fail-safe ("manual-apply required"). All arms require explicit reviewer confirmation before any write. Never used for `retire`/`reinforce` — those are always `writer` (Step 0.5). |
 
 The learner NEVER applies proposals itself. Surface them and stop.
 
@@ -213,6 +352,17 @@ The learner NEVER applies proposals itself. Surface them and stop.
 - If `evaluate_candidate` returns an error (non-ok result), log it as a warning and
   skip that target — never treat an eval error as an accept.
 - Maximum 3 proposals per pass (DEFAULT_MAX_TARGETS_PER_PASS) unless `max_targets_per_pass`
-  was overridden in Step 1.
+  was overridden in Step 1. The retire/reinforce pass (Step 0) has no fixed cap — it is
+  bounded by however many scores cross the threshold. Only `retire` targets are gated by
+  `evaluate_candidate`; `reinforce` targets are never gated (Step 0.3/0.4).
 - The `baseline_body` is already in each `MutationTarget` — do not re-read the file.
 - Only generate one candidate per target (`CANDIDATES_PER_TARGET = 1`).
+- **invalidate-don't-delete** (Step 0 only): a `retire` candidate is NEVER an empty file
+  or a deletion request — it is the original artifact with an `archived: true` marker
+  added. Only the writer agent (via `/canon:review-learnings`'s routing, never this
+  skill) may mark an artifact `archived: true` on disk, and it must never `rm` the file.
+- **reinforce is never holdout-gated** (Step 0 only): do not call `evaluate_candidate`
+  for a `reinforce` target under any circumstance — a byte-identical candidate has
+  nothing for a holdout eval to distinguish from its own baseline, so any such call
+  would be theater, not a real gate. Every `reinforce` target selected in Step 0.2 is
+  emitted, marked `gated: false` in its frontmatter.
