@@ -165,6 +165,17 @@ Write the updated snapshot values back to `definition.state.path` (JSON format):
 
 Create parent directories if needed. Use atomic write (write to temp, rename) if possible.
 
+**Exposure for `fire_on_baseline` rules (ADR-0056, accepted trade-off, not fixed here):** a
+baseline-fired rule's once-only guarantee depends on this write actually landing. If the tick
+dies or this write fails between Step 6 (surface) and here, the next tick again sees an absent
+prior — the rule fires AGAIN, re-emitting its `ORCHESTRATOR_ACTION` line. Before this build a
+failed tick-1 write was unobservable (tick 1 always fired zero rules either way); now it can
+cause a re-fire. Deliberately NOT fixed by reordering Step 6 and Step 7 (surface-then-write
+stays the order for every rule, not just baseline-fired ones) — see ADR-0056 § Consequences for
+why a global reorder trades a self-healing failure mode (duplicate surface) for a worse,
+silent one (permanently lost surface) across every loop, for a benefit narrowly scoped to 3
+rules whose consumers already precheck idempotently.
+
 ## Step 8: Evaluate termination
 
 Check `definition.terminate.when` conditions:

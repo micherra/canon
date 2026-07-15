@@ -210,6 +210,25 @@ ADR-0045 ledger, so adding the flag would emit the directive twice on tick 1.
   `auto-update-branch` merges `origin/main` and pushes. A re-surfacing interval would re-trigger a
   completed action against every consumer's idempotence precheck. If the action fails, that is the
   consumer's failure to report, not the observer's cue to nag.
+- **Once-only is conditional on the Step 7 baseline write landing (accepted, post-review).** A
+  correctness juror found: if the runner dies, or the snapshot write fails, between Step 6
+  (surface) and Step 7 (write) of `skills/canon/commands/loop-tick.md`, the next tick again sees
+  an absent prior and the baseline-fired rule fires AGAIN, re-emitting its
+  `ORCHESTRATOR_ACTION`. This is genuinely new — before this build a failed tick-1 write was
+  unobservable, since tick 1 fired nothing either way regardless of whether the write landed.
+  **Deliberately not fixed by reordering Step 6/Step 7** (write-before-surface) for baseline-fired
+  rules specifically or globally. A global reorder trades a self-healing failure mode
+  (write fails → next tick re-detects the same transition → duplicate, harmless surface) for a
+  strictly worse one across every rule in every loop, not just the 3 new ones: if the write
+  succeeds but the surfacing step itself then fails, the transition is silently and permanently
+  lost — there is no self-healing path back to it, because the snapshot has already moved past
+  it. Duplicate-but-eventually-correct beats silently-dropped-forever, especially for a directive
+  like `ci_conclusion: pending→failure` that reports a real build failure. A reorder scoped only
+  to baseline-fired rules would require the exact per-action special-casing this build's own
+  `baseline-02-runner` task explicitly ruled out of scope ("this exception... does not alter the
+  snapshot write (Step 7)"). Documented in `loop-tick.md` Step 7 instead. Bounded in practice: the
+  named consumer (`auto-update-branch`) already idempotently prechecks before acting, so a re-fire
+  degrades to a harmless no-op read, not a duplicate `git merge`.
 - **Verification is against a model, not the runner (accepted).** The runner
   (`skills/canon/commands/loop-tick.md`) is agentic markdown, so the tests prove the *semantics*
   via a pure model of the diff algorithm — they cannot prove an LLM executes the prose correctly.
