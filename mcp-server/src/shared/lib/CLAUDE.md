@@ -152,7 +152,7 @@ Added 2026-06-27.
 
 ---
 
-### `waves-compiler.ts` — canon-waves DAG Compiler (SYNTHESIS Inc-5, Increment 1, ADR-0053)
+### `waves-compiler.ts` — canon-waves DAG Compiler (SYNTHESIS Inc-5, Increment 1, ADR-0054)
 
 Pure leaf module: compiles a validated `TaskDag` + per-task prompt seeds into a `WavesEnvelope` for the `workflows/canon-waves.js` runner. No per-flow branches — behavior comes only from DAG/plan fields.
 

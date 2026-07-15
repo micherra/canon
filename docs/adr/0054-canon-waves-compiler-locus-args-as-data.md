@@ -1,12 +1,12 @@
 ---
-adr: "0053"
+adr: "0054"
 title: "canon-waves compiler locus — args-as-data envelope + one generic runner, not generated code or a persistent engine"
 status: accepted
 date: "2026-07-11"
 build: "scope-and-design-canon-waves-a-managedsaved-workflow-that-compiles (SYNTHESIS Inc-5, Increment 1)"
 ---
 
-# ADR-0053: canon-waves compiler locus — args-as-data envelope + one generic runner
+# ADR-0054: canon-waves compiler locus — args-as-data envelope + one generic runner
 
 ## Context
 

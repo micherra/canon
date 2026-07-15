@@ -15,7 +15,7 @@
  *   - no-llm-calls-in-mcp-tools: pure deterministic join, no model calls
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -243,6 +243,78 @@ describe("selectMutationTargetsHandler — fail-open", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
     // No violations → no attributions → no targets
+    expect(result.targets).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. scores mode — Gap 3 L3: consume attribute_outcomes scores
+// ---------------------------------------------------------------------------
+
+describe("selectMutationTargetsHandler — scores mode (Gap 3 L3)", () => {
+  it("INVALID_INPUT when scores is combined with workspace", async () => {
+    const result = await selectMutationTargetsHandler({
+      workspace: tmpWorkspace,
+      project_dir: tmpProjectDir,
+      scores: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected error");
+    expect(result.error_code).toBe("INVALID_INPUT");
+  });
+
+  it("a strongly-negative principle produces a retire target; principles/** is never mutated", async () => {
+    mkdirSync(join(tmpProjectDir, "principles", "rules"), { recursive: true });
+    const principlePath = join(tmpProjectDir, "principles", "rules", "some-principle.md");
+    const before =
+      "---\nid: some-principle\ntitle: Some Principle\nseverity: rule\nportable: true\n---\n\nBody.\n";
+    writeFileSync(principlePath, before);
+
+    const result = await selectMutationTargetsHandler({
+      project_dir: tmpProjectDir,
+      scores: [
+        {
+          principle_id: "some-principle",
+          net_score: -5,
+          positive_weight: 0,
+          negative_weight: 5,
+          corroboration: 1,
+          tier_breakdown: { codex: 0, internal: -5 },
+          contributing_builds: [{ archive_id: "archive-001", sign: -1, weight: 5 }],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.targets).toHaveLength(1);
+    expect(result.targets[0].proposal_kind).toBe("retire");
+    expect(result.targets[0].principle_id).toBe("some-principle");
+    expect(result.targets[0].score_provenance?.net_score).toBe(-5);
+
+    // The tool is a pure query — the on-disk artifact is untouched.
+    expect(readFileSync(principlePath, "utf-8")).toBe(before);
+  });
+
+  it("an unresolvable principle_id lands in skipped, not an error", async () => {
+    const result = await selectMutationTargetsHandler({
+      project_dir: tmpProjectDir,
+      scores: [
+        {
+          principle_id: "nonexistent-principle",
+          net_score: -10,
+          positive_weight: 0,
+          negative_weight: 10,
+          corroboration: 1,
+          tier_breakdown: { codex: 0, internal: -10 },
+          contributing_builds: [{ archive_id: "archive-001", sign: -1, weight: 10 }],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
     expect(result.targets).toHaveLength(0);
   });
 });

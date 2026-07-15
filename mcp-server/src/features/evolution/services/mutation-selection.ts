@@ -19,17 +19,19 @@
 
 import { basename, extname, normalize, sep } from "node:path";
 import type { AssembledArtifact } from "@domains/workspaces/context-provenance.ts";
-import type { FailureAttribution } from "./attribution-types.ts";
+import type { AttributionConfidence, FailureAttribution } from "./attribution-types.ts";
 import { isGuardrailTarget } from "./candidate-injection.ts";
 import type {
   ArtifactClass,
   GateIneligibleTarget,
+  MutationProposalKind,
   MutationSelectionOptions,
   MutationTarget,
   SelectMutationTargetsResult,
   SkippedAttribution,
 } from "./mutation-types.ts";
 import { DEFAULT_MAX_TARGETS_PER_PASS } from "./mutation-types.ts";
+import type { TrustWeightedScore } from "./outcome-attribution.ts";
 
 /** Eval surface prefix as a posix-style path for comparison. */
 const EVAL_SURFACE_POSIX = "skills/canon/evals";
@@ -367,4 +369,124 @@ export function selectMutationTargets(
     skipped: [...skipped, ...overflowSkipped],
     targets,
   };
+}
+
+// ---------------------------------------------------------------------------
+// selectRetirementReinforcementTargets — Gap 3 Layer 3: consume attribute_outcomes
+// ---------------------------------------------------------------------------
+
+/**
+ * Net-score threshold for retirement/reinforcement nomination (Gap 3 L3, DESIGN.md
+ * Open question 2). Mirrors the learner's `weighted_instance_count >= 3`
+ * minimum-evidence convention (skills/canon/skills/analyze-patterns/SKILL.md;
+ * cross-run-analyzer.ts computeWeightedCount) — reused here as a SYMMETRIC
+ * net-score band rather than a raw instance count: a principle needs a
+ * trust-weighted net_score whose magnitude reaches this threshold, in either
+ * direction, before it is nominated. Not a new magic number — the same "3" the
+ * learner already treats as its minimum-evidence bar elsewhere.
+ */
+export const RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD = 3;
+
+/**
+ * Resolves a principle_id to its on-disk artifact (path relative to the project
+ * root, plus current body). Injected so selectRetirementReinforcementTargets stays
+ * I/O-free — the caller (tool handler) does the actual file read, exactly like
+ * selectMutationTargets's bodies/existing maps.
+ */
+export type PrincipleArtifactLookup = (
+  principleId: string,
+) => { path: string; body: string } | null;
+
+/** A score that could not be turned into a target — typed bucket (errors-are-values). */
+export type RetirementReinforcementSkip = {
+  principle_id: string;
+  reason: "artifact_unresolved" | "not_gate_eligible";
+};
+
+export type RetirementReinforcementSelectionResult = {
+  targets: MutationTarget[];
+  skipped: RetirementReinforcementSkip[];
+};
+
+/** Confidence in a retire/reinforce candidate, derived from corroboration (distinct owning steps). */
+function confidenceFromCorroboration(corroboration: number): AttributionConfidence {
+  if (corroboration >= 3) return "high";
+  if (corroboration >= 1) return "medium";
+  return "low";
+}
+
+/** net_score <= -threshold → retire; >= +threshold → reinforce; inside the band → null (not nominated). */
+function deriveProposalKind(netScore: number, threshold: number): MutationProposalKind | null {
+  if (netScore <= -threshold) return "retire";
+  if (netScore >= threshold) return "reinforce";
+  return null;
+}
+
+/** Build a single retire/reinforce MutationTarget from a score + its resolved artifact. */
+function buildRetirementReinforcementTarget(
+  score: TrustWeightedScore,
+  proposalKind: MutationProposalKind,
+  artifact: { path: string; body: string },
+): MutationTarget {
+  return {
+    artifact_class: classifyArtifact(artifact.path, "rule"),
+    attributed_violation_count: 0,
+    attribution: null,
+    baseline_body: artifact.body,
+    char_span: null,
+    confidence: confidenceFromCorroboration(score.corroboration),
+    failure_kind: null,
+    gate_eligible: true,
+    principle_id: score.principle_id,
+    proposal_kind: proposalKind,
+    score_provenance: {
+      contributing_builds: score.contributing_builds,
+      net_score: score.net_score,
+    },
+    target_path: artifact.path,
+  };
+}
+
+/**
+ * selectRetirementReinforcementTargets — deterministic, PURE (no I/O).
+ *
+ * Consumes attribute_outcomes's TrustWeightedScore[] (Gap 3 Layer 2): a net_score
+ * at or beyond +/- threshold nominates a reinforce/retire MutationTarget carrying
+ * score_provenance (the auditable trace, invalidate-don't-delete posture). Scores
+ * inside the neutral band are silently not nominated — most principles sit there;
+ * that is the expected, non-error case. Unresolvable or gate-ineligible
+ * principle_ids land in the typed `skipped[]` bucket instead of being thrown or
+ * silently dropped (errors-are-values).
+ *
+ * Every returned target has `attribution: null` and `failure_kind: null` — a
+ * corpus-wide trust-weighted score has no single violation to join to, unlike the
+ * violation-based `selectMutationTargets` targets above.
+ */
+export function selectRetirementReinforcementTargets(
+  scores: TrustWeightedScore[],
+  resolveArtifact: PrincipleArtifactLookup,
+  opts: { threshold?: number } = {},
+): RetirementReinforcementSelectionResult {
+  const threshold = opts.threshold ?? RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD;
+  const targets: MutationTarget[] = [];
+  const skipped: RetirementReinforcementSkip[] = [];
+
+  for (const score of scores) {
+    const proposalKind = deriveProposalKind(score.net_score, threshold);
+    if (proposalKind === null) continue;
+
+    const artifact = resolveArtifact(score.principle_id);
+    if (artifact === null) {
+      skipped.push({ principle_id: score.principle_id, reason: "artifact_unresolved" });
+      continue;
+    }
+    if (!isGateEligible(artifact.path, true)) {
+      skipped.push({ principle_id: score.principle_id, reason: "not_gate_eligible" });
+      continue;
+    }
+
+    targets.push(buildRetirementReinforcementTarget(score, proposalKind, artifact));
+  }
+
+  return { skipped, targets };
 }
