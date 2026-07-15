@@ -1,14 +1,15 @@
 # features/evolution/ — Trace-Driven Evolution Bounded Context
 
-<!-- last-updated: 2026-07-10 -->
+<!-- last-updated: 2026-07-11 -->
 
 ## Purpose
 
 The `evolution/` feature module implements Canon's trace-driven evolution
-pipeline (Phase 1). It provides six MCP tools:
+pipeline (Phase 1 + Gap 3 trust-weighted attribution). It provides seven MCP tools:
 - `evaluate_candidate` — offline fitness gate (§7 strict-holdout, ADR-0022/ADR-0025 dual injection)
 - `attribute_failure` — attribution consumer: joins recorded `context_provenance` with review violations + cliff events to localize each failure to the in-context artifact (ADR-0024)
-- `select_mutation_targets` — deterministic (no model calls) selection layer: composes `attribute_failure`, applies policy + budget, returns construction-ready `MutationTarget[]` for the learner
+- `select_mutation_targets` — deterministic (no model calls) selection layer: composes `attribute_failure`, applies policy + budget, returns construction-ready `MutationTarget[]` for the learner; also accepts a `scores` input mode (Gap 3 L3) that selects retire/reinforce targets from `attribute_outcomes` scores
+- `attribute_outcomes` — trust-weighted, two-sided (positive `honored[]` + negative violations/cliff) per-principle scorer over the decisions/RunSummary corpus; offline, deterministic, derive-on-read — no new drift.db table (ADR-0051, Gap 3 L1+L2)
 - `record_applied_evolution` — authoritative/fail-closed apply-provenance write to drift.db `applied_evolutions` (ADR-0034)
 - `get_evolution_outcomes` — fail-open, target-scoped, apply-anchored regression HYPOTHESIS reader
 - `backfill_applying_commit` — observable-best-effort back-fill of `applied_evolutions.applying_commit` from `Canon-Evolution:` git trailers (Inc-3, ADR-0034)
@@ -22,18 +23,22 @@ features/evolution/
 ├── tools/
 │   ├── evaluate-candidate.ts       # MCP tool handler — dual-mode dispatch via isGuardrailTarget()
 │   ├── attribute-failure.ts        # MCP tool handler (thin wrapper over attribution services)
-│   ├── select-mutation-targets.ts  # MCP tool handler — composes attribution pipeline + selectMutationTargets()
+│   ├── select-mutation-targets.ts  # MCP tool handler — composes attribution pipeline + selectMutationTargets(); scoresModeHandler() for the Gap 3 L3 `scores` input mode
+│   ├── attribute-outcomes.ts       # MCP tool handler (Gap 3 L1+L2, ADR-0051) — enumerates archives, reads RunSummary + cliff events per build, calls aggregateOutcomes(); thin
 │   └── backfill-applying-commit.ts # MCP tool handler — parseEvolutionTrailers (pure) + backfillApplyingCommit (Inc-3, ADR-0034)
 ├── services/
 │   ├── eval-runner.ts          # parseSummary, decideGate, decideCompositeGate (holistic veto, 2026-07-06), resolveAgentEvalRoot + resolveHolisticEvalRoot (per-agent + holistic suite resolution, 2026-07-06), runSplit (pure + one I/O fn, agentEvalRoot/evalRootOverride options)
 │   ├── candidate-injection.ts  # withInjectedCandidate (ADR-0022) + withInjectedGuardrailCandidate (ADR-0025) + isGuardrailTarget()
-│   ├── mutation-types.ts       # Pure types: MutationTarget, GateIneligibleTarget, SkippedAttribution, SelectMutationTargetsResult, MutationProposal, ArtifactClass; budget constants DEFAULT_MAX_TARGETS_PER_PASS, CANDIDATES_PER_TARGET
-│   ├── mutation-selection.ts   # selectMutationTargets() — pure join+rank+filter; PLUGIN_ARTIFACT_ROOTS eligibility check; derivePrincipleId() keys agent-def targets off the violated principle, not the agent name (Codex P2 #2)
-│   ├── mutation-proposal.ts    # shapeMutationProposal() — shapes accepted eval result into MutationProposal
+│   ├── mutation-types.ts       # Pure types: MutationTarget, GateIneligibleTarget, SkippedAttribution, SelectMutationTargetsResult, MutationProposal, ArtifactClass; MutationProposalKind ("rewrite"|"retire"|"reinforce"), ScoreProvenance/ScoreProvenanceContribution (Gap 3 L3); budget constants DEFAULT_MAX_TARGETS_PER_PASS, CANDIDATES_PER_TARGET
+│   ├── mutation-selection.ts   # selectMutationTargets() — pure join+rank+filter; PLUGIN_ARTIFACT_ROOTS eligibility check; derivePrincipleId() keys agent-def targets off the violated principle, not the agent name (Codex P2 #2); selectRetirementReinforcementTargets() + RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD (Gap 3 L3, ADR-0052)
+│   ├── mutation-proposal.ts    # shapeMutationProposal() — shapes accepted eval result into MutationProposal; proposalKind-branched (rewrite/retire/reinforce, ADR-0052); evalResult accepts null for the ungated reinforce path
 │   ├── attribution-types.ts    # Mutator-facing output types: FailureKind, AttributedArtifact, FailureAttribution, AttributeFailureResult
 │   ├── attribution-join.ts     # attributeFailures() — pure join of provenance + failure sources; review_violation attributes via BOTH the rule edge (principle_id==artifact_id) and the code-author agent-def edge (ADR-0032)
 │   ├── attribution-provenance-source.ts  # readProvenance() — reads live workspace or archived RunSummary
 │   ├── attribution-failure-sources.ts   # collectFailureSources() — reads review violations + cliff events
+│   ├── positive-attribution.ts # attributeHonored() (Gap 3 L1, ADR-0051) — parses honored[] `**{id}**:` prefixes at read time, joins to in-context provenance artifacts; mismatch/missing artifact -> flagged only, never attributed (asymmetric with the negative path)
+│   ├── attribution-weight.ts   # computeTrustWeight() (Gap 3 L1) — pure sign x roleTier x corroboration x decay x computeOutcomeWeight composite; TrustTierSlot ("internal"|"codex", codex reserved/v1-unused per ADR-0052)
+│   ├── outcome-attribution.ts  # aggregateOutcomes() (Gap 3 L2, ADR-0051) — pure two-sided per-principle aggregation over BuildRecord[]; TrustWeightedScore, AggregateOutcomesResult
 │   ├── artifact-path-resolver.ts  # resolveArtifactReadPath() — pure cross-root re-read resolver: project_dir-first, pluginDir-fallback for trusted plugin-tier artifacts (Codex P2 #1)
 │   └── frontmatter-guard.ts    # checkFrontmatterImmutable() — pure runtime frontmatter-immutability guard (ADR-0031 amendment)
 └── __tests__/
@@ -43,17 +48,23 @@ features/evolution/
     ├── evaluate-candidate-holistic-gate.test.ts  # handler-wiring for the holistic composite gate (split out of evaluate-candidate.test.ts on file-length grounds)
     ├── candidate-injection.test.ts
     ├── guardrail-injection-integration.test.ts  # Integration: guardrail sandbox build + isGuardrailTarget predicate
-    ├── mutation-proposal.test.ts
+    ├── mutation-proposal.test.ts         # rewrite/retire/reinforce proposal shapes; gated:boolean, nullable holdout fields
     ├── mutation-selection.test.ts
     ├── mutation-selection-principle-id.test.ts  # derivePrincipleId(): agent-def -> violated principle_id, cliff agent-def -> null, rule/cliff-on-rule unchanged
+    ├── retirement-selection.test.ts      # selectRetirementReinforcementTargets: threshold, retire/reinforce/neutral-band, artifact_unresolved skip (Gap 3 L3)
+    ├── retire-candidate-emission.test.ts # dc-04 end-to-end: selection -> evaluate_candidate (REAL gate) -> shapeMutationProposal -> emission, principles/** never mutated; reinforce bypasses evaluate_candidate entirely
     ├── mutator-gate-integration.test.ts
-    ├── proposal-shape-parity.test.ts    # Proposal frontmatter matches canonical template in SKILL.md
-    ├── select-mutation-targets.test.ts
+    ├── proposal-shape-parity.test.ts    # Proposal frontmatter matches canonical template in SKILL.md (rewrite + reinforce fixtures)
+    ├── select-mutation-targets.test.ts  # includes scores-mode: INVALID_INPUT when combined with workspace/archive_id, retire/reinforce emission, unresolvable principle_id -> skipped
     ├── attribution-join.test.ts           # 17 pure unit tests (happy path, byte-identity, cliff join, lossy paths)
     ├── attribute-failure.test.ts          # 6 integration tests (real SQLite + REVIEW.md)
     ├── attribution-provenance-source.test.ts
     ├── attribution-failure-sources.test.ts
     ├── attribution-join-agent-def.test.ts        # cliff->agent-def + review_violation->agent-def code-author join (7 cases)
+    ├── positive-attribution.test.ts       # attributeHonored: happy path, unparseable honored line, no in-context artifact, hash mismatch, artifact missing, empty inputs
+    ├── attribution-weight.test.ts         # computeTrustWeight: role tier, adversarial step, corroboration, decay, sign, codex tier slot, errors-are-values, determinism
+    ├── outcome-attribution.test.ts        # aggregateOutcomes: corroboration counting, decay wiring, tier_breakdown, two-sided dc-03, determinism dc-01, agent-def no-principle skip, flagged pass-through, meta.decisions_seen
+    ├── attribute-outcomes.test.ts         # fixed-corpus score assertion, determinism dc-01, two-sided dc-03, fail-open (no archives), INVALID_INPUT, no-LLM grep
     ├── artifact-path-resolver.test.ts            # self-host, foreign-install fallback, overlay never-fallback, fail-closed missing, absolute-as-is
     ├── frontmatter-guard.test.ts                 # 11 pure unit cases for checkFrontmatterImmutable
     ├── evaluate-candidate-frontmatter-guard.test.ts  # 4 handler-wiring cases — asserts zero runShell calls on reject
@@ -86,10 +97,19 @@ Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
 ## Tool: `select_mutation_targets`
 
 **Input (`SelectMutationTargetsInputSchema`):**
-- `workspace` (string, optional) — absolute path to a live Canon workspace; exactly one of `workspace` or `archive_id` must be provided.
+- `workspace` (string, optional) — absolute path to a live Canon workspace; exactly one of `workspace`, `archive_id`, or `scores` must be provided.
 - `archive_id` (string, optional) — archive ID of a completed build (from `get_build_history`).
+- `scores` (`TrustWeightedScore[]`, optional, Gap 3 L3) — output of `attribute_outcomes`. When provided, dispatches to `scoresModeHandler` instead of the attribution pipeline; not used with `workspace`/`archive_id`.
 - `project_dir` (string, required) — absolute path to the project root.
-- `max_targets_per_pass` (number, optional) — override budget cap; default `DEFAULT_MAX_TARGETS_PER_PASS` (3).
+- `max_targets_per_pass` (number, optional) — override budget cap; default `DEFAULT_MAX_TARGETS_PER_PASS` (3). Not used in `scores` mode.
+
+**`scores` mode (Gap 3 L3, ADR-0052):** `scoresModeHandler(scores, resolveArtifact, project_dir)` calls `selectRetirementReinforcementTargets(scores, resolveArtifact, { threshold? })` (`services/mutation-selection.ts`) — a pure, deterministic nomination over `net_score`:
+- `net_score <= -RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD` (default 3) → `proposal_kind: "retire"`.
+- `net_score >= +RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD` → `proposal_kind: "reinforce"`.
+- Between the two (exclusive) → neutral band, not nominated.
+- Each nominated `principle_id` is resolved to its on-disk artifact via `loadAllPrinciples` (scope: `principles/{rules,strong-opinions,conventions}/*.md` only — NOT the top-level agent-behavior `rules/*.md` class); unresolvable → `skipped[reason: "artifact_unresolved"]`; not-gate-eligible → `skipped[reason: "not_gate_eligible"]`. Never thrown.
+- Every returned `MutationTarget` carries `score_provenance: { net_score, contributing_builds }` (the auditable trace) and `attribution: null` / `failure_kind: null` (no single violation backs a corpus-wide score).
+- `meta`: `{ attributions_seen: scores.length, budget: scores.length, selected: targets.length }`.
 
 **Output (`SelectMutationTargetsResult`):**
 - `targets[]` — `MutationTarget[]`: each has `target_path`, `artifact_class`, `baseline_body`, `char_span`, `gate_eligible: true`, `confidence`, `failure_kind`, `principle_id`, `attribution`.
@@ -225,6 +245,27 @@ return empty output.
 
 **Cross-root artifact re-read (`resolveArtifactReadPath`, `services/artifact-path-resolver.ts`, Codex P2 #1):** both `attribute_failure`'s `readCurrentBody` seam and `select_mutation_targets`' baseline-body read resolve provenance paths project_dir-first, falling back to `pluginDir` when the path's first segment is a `PLUGIN_ARTIFACT_ROOTS` dir AND the artifact is absent from `project_dir` AND present under `pluginDir` — closes the cross-root gap where a trusted plugin-tier artifact (e.g. `agents/engineer.md`) absent from `project_dir` under a foreign plugin install was spuriously `hash_unverified`/missing. The committable `project_dir` copy still wins when present (mutation-apply semantics unchanged — this is a READ-path fix only). Untrusted `.canon/` overlay paths never fall back (ADR-0027 trust boundary). `pluginDir` is threaded in as an optional handler param (`attributeFailure(input, pluginDir?)`, `selectMutationTargetsHandler(input, pluginDir?)`), injected from server-state by `register-evolution.ts` — same pattern as `register-agent-teams.ts`. It is NOT a public schema field on either tool's `Input`.
 
+## Tool: `attribute_outcomes` (ADR-0051, Gap 3 L1+L2)
+
+**Input** (`AttributeOutcomesInputSchema`):
+- `archive_ids` (string[], optional) — defaults to every archive registered in drift.db for `project_dir` (via `db.getArchiveManifests()`).
+- `now` (ISO string, optional) — threaded into decay. Defaults to the build corpus's max `completed_at`/`archived_at` (`resolveNowMs`) — **NEVER `Date.now()`**; determinism (dc-01) requires a single `now_ms` resolved once at the handler boundary and threaded down into the pure aggregator.
+- `project_dir` (string, required) — `INVALID_INPUT` when absent.
+
+**Output (`AggregateOutcomesResult`):**
+- `scores: TrustWeightedScore[]` — one per attributed `principle_id`: `net_score`, `positive_weight`, `negative_weight`, `corroboration` (summed distinct-owning-step count), `tier_breakdown: Record<TrustTierSlot, number>`, `contributing_builds: ContributingBuild[]` (`{ archive_id, sign, weight }` — the auditable per-build trace).
+- `unattributed_positive[]` / `unattributed_negative[]` — typed lossy buckets (unparseable honored line, no in-context artifact, agent-def cliff with no `principle_id`) — never silently dropped.
+- `flagged[]` — hash-mismatched/missing artifacts, tagged with `archive_id`.
+- `meta`: `{ builds_seen, decisions_seen, attributions_positive, attributions_negative }`.
+
+**Handler** (`tools/attribute-outcomes.ts`) is thin: enumerates `archive_ids` (or all drift.db archives), reads each build's `run-summary.json` + drift.db cliff events (`getCliffEvents().getByWorkspace(slug)`) into a `BuildRecord`, resolves `now_ms`, and calls the pure `aggregateOutcomes()`. Per-archive read failure (missing archive, unparseable/malformed `run-summary.json`) is fail-open — that archive is skipped (`console.warn`), never blocks the rest of the corpus. `readCurrentBody` reuses `resolveArtifactReadPath` (Codex P2 #1, same project_dir-first/pluginDir-fallback resolver as `attribute_failure`/`select_mutation_targets`). `decisions` is injected by `register-evolution.ts` (composition root, `buildDecisionsCorpus`) — `features/evolution/` cannot import `features/orchestration/services/decisions-corpus.ts` directly (`no-cross-feature-internal-import`); typed `readonly unknown[]`, threaded ONLY to `meta.decisions_seen` in v1 (reserved-but-unused, mirroring the `codex` `TrustTierSlot` precedent).
+
+**`aggregateOutcomes` (`services/outcome-attribution.ts`)** — pure, two-sided per-principle aggregation over `BuildRecord[]` (a build's `RunSummary` + cliff events). Composes `attributeHonored` (positive) and the reused `attributeFailures` (negative, from `attribution-join.ts`) per build, then folds each attribution's signed `computeTrustWeight` contribution into a running `TrustWeightedScore` per `principle_id`. Deterministic: identical input → identical (deep-equal) `scores`, sorted ascending by `principle_id`. Never throws — every lossy path lands in a typed bucket.
+
+**Two-sided net score (dc-03):** `net_score = Σ(computeTrustWeight(contribution))` across BOTH signs — a principle with many honored citations and few violations nets positive; the reverse nets negative. `positive_weight`/`negative_weight` are the separately-summed magnitudes (for display/debugging), `net_score` is `positive_weight - negative_weight` in sign-weighted terms (not a simple subtraction of the two — each contribution already carries its own sign through `computeTrustWeight`).
+
+**Consumed by:** `select_mutation_targets`'s `scores` input mode (Gap 3 L3) — see below.
+
 ## Tools: `record_applied_evolution` + `get_evolution_outcomes` + `backfill_applying_commit` (ADR-0034)
 
 Post-apply evolution regression detection (Inc 1 + Inc 2) plus the Inc-3 back-fill that
@@ -299,11 +340,35 @@ on `TrailerOpts` appends a `Canon-Evolution: {id}` line after `Canon-Task` (or a
 - **Hypothesis vocabulary** — all `hypothesis` strings use presence/context vocabulary; "caused"/"causes" are prohibited (verified by grep on every build). This grep now covers BOTH `services/attribution-join.ts` AND `tools/get-evolution-outcomes.ts` — the latter's `hypothesis`/verdict narrative uses candidate-regression/correlation phrasing; the whole file has zero `caus(e|ed|es)` matches (a dedicated unit test greps the source). Note the constraint bans the substring, so "because" is also excluded.
 - **`deriveConfidence`** now keys on `join_basis` (was `failureKind`) — `FailureAttribution["join_basis"]` has 3 values: `"cliff_step_id"`, `"principle_id==artifact_id"`, `"code_author_agent_def"`.
 
+## Trust-Weighted Positive Attribution + Weighting Contract (ADR-0051, Gap 3 L1)
+
+- **`attributeHonored` (`services/positive-attribution.ts`)** — the positive-signal mirror of `attributeFailures`. Parses each `honored[]` line's `**{id}**: desc` prefix (mirroring `extractViolationsSection`'s bare-`principle_id` regex idiom) at READ TIME — `extractHonoredSection`/the archive extractor is untouched (ADR-0051 Option B), so old and new archives parse identically. Joins the parsed `honoredId` against in-context provenance artifacts (`artifact.id === honoredId`), exactly like the negative join.
+- **Asymmetric flagged handling**: a hash-mismatched or missing artifact on the POSITIVE path lands in `flagged[]` ONLY — it is never also emitted as an attribution (unlike the negative path, which still attributes at lower confidence on mismatch). Rationale: a drifted honored artifact should not boost a principle's trust score, whereas a violation remains evidence of a problem regardless of drift.
+- **`computeTrustWeight` (`services/attribution-weight.ts`)** — pure, IO-free: `sign × roleTierWeight(agent_name, is_adversarial_step, tier) × corroborationWeight(distinct_owning_steps) × decay(signal_age_ms) × computeOutcomeWeight(outcome)`. `signal_age_ms` is ALWAYS caller-threaded — never `Date.now()` (dc-01/dc-05). Role tiers: security/reviewer (1.3) > engineer/author (1.0) > other (0.7); `ADVERSARIAL_STEP_MULTIPLIER` (1.2) rewards a FRESH non-author adversarial catch per watch_CCCCCCCCCCCC1; combined role-tier product clamped to `[0.5, 2.0]`. Corroboration is monotonic non-decreasing in distinct owning steps, ceilinged at 1.5. Decay is exponential with a 14-day half-life, floored at 0.05 (a stale signal still counts, just attenuated). `TrustTierSlot` is `"internal" | "codex"` — `"codex"` is a RESERVED, v1-UNUSED tier (PROBE-FINDINGS Q2: no capture seam records external-Codex origin in any offline-readable corpus today); defaults to `"internal"` so a future capture seam can add codex-origin scoring without re-scoring already-recorded history differently. `computeOutcomeWeight` is composed from `@shared/lib/outcome-weight.ts` (relocated from `features/history/services/judge-weight.ts`, see mcp-server root CLAUDE.md Shared libs). Deterministic (identical input → identical `===` output) and errors-are-values (non-finite/negative inputs degrade to neutral sub-weights, never throw).
+
+## Retire/Reinforce Proposal Contract (ADR-0052, Gap 3 L3)
+
+`MutationProposal`/`MutationTarget` (`services/mutation-types.ts`) gained:
+- **`proposal_kind: "rewrite" | "retire" | "reinforce"`** — defaults to `"rewrite"` at every existing construction site (backward-compatible, parity-tested).
+- **`score_provenance?: ScoreProvenance`** (`{ net_score, contributing_builds: ScoreProvenanceContribution[] }`) — present ONLY for retire/reinforce targets; the auditable trust-weighted trace backing the candidate (invalidate-don't-delete posture: a retirement carries WHY, never a silent drop).
+- **`gated: boolean`** on `MutationProposal`, with nullable `holdout_baseline`/`holdout_candidate` (null exactly when `gated:false`).
+- `MutationTarget.attribution`/`.failure_kind` widened to nullable — a retire/reinforce target has no single `FailureAttribution` to join to (a corpus-wide score, not a violation).
+
+**Retire semantics**: `shapeMutationProposal` marks the writer target `archived: true` (the loader-honored flag `shared/matcher.ts`'s `principleMatchesFilters` already excludes — NOT `status`/`portable`, which the matcher does not check). Every RETIRE candidate is still gated by the REAL `evaluate_candidate` holdout run — an `archived:true` candidate that the eval sandbox actually drops from loading genuinely differs from baseline, so the existing strict `decideGate` `>` is meaningful (not structurally inert). A retirement that regresses holdout is rejected, never emitted.
+
+**Reinforce semantics**: a REINFORCE candidate is byte-identical to its own baseline — no holdout run can ever distinguish it from itself, so it is emitted UNGATED (`gated:false`, `evalResult:null` passed to `shapeMutationProposal`) as a pure HITL confidence signal. `evaluate_candidate`/`runShell` is never invoked for a reinforce candidate. Never auto-applied.
+
+**Selection threshold**: `RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD = 3` (`services/mutation-selection.ts`) — mirrors the learner's existing `weighted_instance_count >= 3` minimum-evidence convention, applied symmetrically to `net_score` magnitude.
+
+**Routing**: `/canon:review-learnings` (`skills/canon/commands/review-learnings.md`) gained Arm R (retire) and Arm N (reinforce) — both fully inline, explicit invalidate-don't-delete writer-spawn instructions, kept separate from the pre-existing legacy `prune-candidate` Mode: retire path (which still `git rm`s and is intentionally left untouched/unreachable by the new `proposal_kind` track). `skills/canon/skills/evolve-candidate/SKILL.md` gained the matching Step 0.1 retire/reinforce procedure (calls `attribute_outcomes` → `select_mutation_targets` scores mode). `agents/learner.md` was granted `mcp__canon__attribute_outcomes` in its tool allowlist (otherwise the new SKILL.md instruction would be dead-wire from the agent's permission surface).
+
 ## Known Constraints
 
 - `runShell` is `spawnSync` (synchronous) — relevant to `evaluate_candidate` only; `attribute_failure` has no subprocess calls.
 - `getTranscriptExcerpt` seam in `attribute_failure` is wired but returns `[]` in v1 (transcript evidence not yet populated).
 - `attribute_failure` reads from two Canon stores: execution-store `orchestration.db` (for `context_provenance` events via `getEventsByType`) and drift.db (for cliff events via `CliffEventsDao`). It does NOT write to any Canon storage.
+- `attribute_outcomes` reads the same two stores as `attribute_failure`, PLUS every enumerated build's archived `run-summary.json` (via `getDriftDb().getArchiveById`); still does NOT write to any Canon storage — derive-on-read, no cache (ADR-0051).
+- Codex trust-tier scoring is descoped for v1 (ADR-0052) — the reserved `TrustTierSlot` slot exists but no capture seam populates it; PRD AC#2 ships `partial`.
 
 ## Mutator Pipeline (Phase 1 complete)
 
@@ -317,7 +382,10 @@ The full mutator pipeline runs in the learner via the `canon:evolve-candidate` s
 
 Only `accepted === true` survivors are emitted. The learner NEVER applies proposals — it surfaces them for orchestrator routing.
 
+**Retire/reinforce branch (Gap 3 L3, ADR-0052):** `attribute_outcomes` → `select_mutation_targets` (`scores` mode) → `shapeMutationProposal` (`proposal_kind` branched). Retire candidates still pass through the REAL `evaluate_candidate` holdout gate (step 3, unchanged); reinforce candidates skip step 3 entirely (`evalResult:null`) and emit ungated. Routed by `/canon:review-learnings` Arm R / Arm N.
+
 ## Future Phases
 
 - Phase 2: evolve loop — orchestrator-level routing of accepted proposals (writer/engineer-build-flow channels).
 - Phase 3: multi-candidate generation, ranking by expected holdout improvement.
+- Codex trust-tier capture seam — populate the reserved `"codex"` `TrustTierSlot` from the ship-watch PR-comment channel into the decisions ledger (ADR-0052 Consequences).

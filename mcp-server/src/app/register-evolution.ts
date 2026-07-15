@@ -5,6 +5,8 @@
  *   - evaluate_candidate       — Phase-1 candidate fitness gate tool.
  *   - attribute_failure        — Phase-1 attribution consumer: joins provenance + failures.
  *   - select_mutation_targets  — Phase-1 mutator: selects mutation targets from attributions.
+ *   - attribute_outcomes       — Gap 3 Layer 2: signed, trust-weighted, two-sided score map
+ *                                over the decisions/RunSummary corpus (DESIGN.md dc-01/dc-03).
  *   - record_applied_evolution — ADR-0034 authoritative apply-provenance write.
  *   - get_evolution_outcomes   — ADR-0034 fail-open regression-hypothesis reader.
  *   - backfill_applying_commit — Inc-3 best-effort back-fill of applying_commit from
@@ -15,12 +17,22 @@
  * ADR-002: features/evolution/ NEVER imports node:child_process.
  * All subprocess work routes through @platform/adapters/process-adapter.ts or
  * @platform/adapters/git-adapter.ts.
+ *
+ * attribute_outcomes composition note: features/evolution/ may not import
+ * features/orchestration/services/decisions-corpus.ts directly (no-cross-feature-
+ * internal-import) — this composition root resolves buildDecisionsCorpus and injects
+ * it, the same precedent app/register-knowledge.ts uses for ensureContextGraphFresh's
+ * decisions parameter.
  */
 
 import {
   AttributeFailureInputSchema,
   attributeFailure,
 } from "@features/evolution/tools/attribute-failure.ts";
+import {
+  AttributeOutcomesInputSchema,
+  attributeOutcomes,
+} from "@features/evolution/tools/attribute-outcomes.ts";
 import {
   BackfillApplyingCommitInputSchema,
   backfillApplyingCommit,
@@ -41,8 +53,23 @@ import {
   SelectMutationTargetsInputSchema,
   selectMutationTargetsHandler,
 } from "@features/evolution/tools/select-mutation-targets.ts";
+import { buildDecisionsCorpus } from "@features/orchestration/services/decisions-corpus.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { gatedWrapHandler, pluginDir } from "./server-state.ts";
+
+const ATTRIBUTE_OUTCOMES_DESC =
+  "Signed, trust-weighted, two-sided per-principle score map derived on-read from the " +
+  "decisions/RunSummary corpus (Gap 3 Layer 2, DESIGN.md). For each build, joins " +
+  "positive (honored[]) and negative (violation/cliff) signals to in-context artifacts " +
+  "and weights each by source-tier, corroboration, and time-decay — a careful " +
+  "adversarial catch outweighs an author's self-exoneration, a corroborated jury " +
+  "outweighs a single juror, and stale signal decays. Returns " +
+  "{ scores: [{ principle_id, net_score, positive_weight, negative_weight, " +
+  "corroboration, tier_breakdown, contributing_builds }], unattributed_positive, " +
+  "unattributed_negative, flagged, meta }. DETERMINISTIC — same corpus + same threaded " +
+  "`now` produces byte-identical scores; no Date.now(), no model calls. " +
+  "PURE QUERY — mutates nothing. Fail-open: absent provenance/reviews/archives → " +
+  "partial (empty scores), never throws. INVALID_INPUT when project_dir is missing.";
 
 const RECORD_APPLIED_EVOLUTION_DESC =
   "Record durable apply-provenance for an applied evolution-candidate " +
@@ -71,6 +98,25 @@ const GET_EVOLUTION_OUTCOMES_DESC =
   "HYPOTHESIS VOCABULARY ONLY — presence/correlation phrasing, never proven causation. " +
   "FAIL-OPEN: absent signal rows → insufficient verdict, not an error. " +
   "PROPOSAL_NOT_RECORDED when no applied_evolutions row exists.";
+
+const SELECT_MUTATION_TARGETS_DESC =
+  "Select mutation targets for trace-driven evolution. Tri-state, mutually exclusive " +
+  "on 'workspace' | 'archive_id' | 'scores' — exactly one must be provided. " +
+  "'workspace'/'archive_id' mode (violation-based, unchanged): runs the full attribution " +
+  "pipeline (provenance → failure sources → join) then applies the mutator selection " +
+  "gate — filters to hash-verified, high-confidence attributions; partitions by " +
+  "gate-eligibility (guardrail paths and eval surface, not .ts or register-* " +
+  "entrypoints); ranks by violation count then weighted counts; caps at " +
+  "max_targets_per_pass (default 3); emits proposal_kind:'rewrite' targets. " +
+  "'scores' mode (Gap 3 Layer 3, trust-weighted retirement/reinforcement): pass the " +
+  "TrustWeightedScore[] from attribute_outcomes instead — a net_score at or beyond " +
+  "+/-retirement_reinforcement_threshold (default 3) resolves the principle_id to its " +
+  "on-disk artifact and emits a proposal_kind:'retire'|'reinforce' MutationTarget " +
+  "carrying score_provenance; unresolvable/ineligible principle_ids land in skipped[] " +
+  "(artifact_unresolved, not_gate_eligible); max_targets_per_pass is not used in this mode. " +
+  "DETERMINISTIC — no model calls, no subprocess. Pure join + rank + read. " +
+  "Fail-open: absent provenance or reviews → empty targets, not error. " +
+  "INVALID_INPUT when zero or more than one of workspace/archive_id/scores are provided.";
 
 /** Phase-1 mutator pipeline: evaluate_candidate, attribute_failure, select_mutation_targets. */
 function registerMutatorPipelineTools(server: McpServer): void {
@@ -109,19 +155,25 @@ function registerMutatorPipelineTools(server: McpServer): void {
   server.registerTool(
     "select_mutation_targets",
     {
-      description:
-        "Select mutation targets from Canon build attributions for trace-driven evolution. " +
-        "Runs the full attribution pipeline (provenance → failure sources → join) then " +
-        "applies the mutator selection gate: filters to hash-verified, high-confidence " +
-        "attributions; partitions by gate-eligibility (guardrail paths and eval surface, " +
-        "not .ts or register-* entrypoints); ranks by violation count then weighted counts; " +
-        "caps at max_targets_per_pass (default 3). " +
-        "DETERMINISTIC — no model calls, no subprocess. Pure join + rank + read. " +
-        "Fail-open: absent provenance or reviews → empty targets, not error. " +
-        "INVALID_INPUT when both or neither of workspace/archive_id are provided.",
+      description: SELECT_MUTATION_TARGETS_DESC,
       inputSchema: SelectMutationTargetsInputSchema.shape,
     },
     gatedWrapHandler(async (input) => selectMutationTargetsHandler(input, pluginDir)),
+  );
+
+  server.registerTool(
+    "attribute_outcomes",
+    {
+      description: ATTRIBUTE_OUTCOMES_DESC,
+      inputSchema: AttributeOutcomesInputSchema.shape,
+    },
+    gatedWrapHandler(async (input) => {
+      // Skip the corpus read entirely on an empty project_dir — attributeOutcomes
+      // itself returns INVALID_INPUT; avoids buildDecisionsCorpus touching a
+      // CWD-relative .canon/ path before that guard fires.
+      const decisions = input.project_dir ? buildDecisionsCorpus(input.project_dir).decisions : [];
+      return attributeOutcomes(input, pluginDir, decisions);
+    }),
   );
 }
 

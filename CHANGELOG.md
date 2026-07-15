@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.21.0](https://github.com/micherra/canon/compare/v2.20.0...v2.21.0) (2026-07-11)
+
+
+### Features
+
+* **evolution:** close the applying_commit inert seam — producer + backfill + observe-only loop (Inc-3) ([#484](https://github.com/micherra/canon/issues/484)) ([fd266ed](https://github.com/micherra/canon/commit/fd266edc1a8b1ecef193a09dc1b118dfcbdf79a6))
+* **graph:** decisions/ADRs as a traversable KG context graph (Unified Agent Memory M2) ([#487](https://github.com/micherra/canon/issues/487)) ([5259e73](https://github.com/micherra/canon/commit/5259e7331a0ee829d99773cbecbb03147a2ec860))
+* **orchestration:** diverse-lens review jury for high-stakes changes (ADR-0045, PostHog H2) ([#481](https://github.com/micherra/canon/issues/481)) ([b3f670f](https://github.com/micherra/canon/commit/b3f670f14b459b51dcda5014717e110fee814a01))
+* **orchestration:** wire Inc-0 cross-session chatter into agent layer + fail-closed tool-surfacing gate (ADR-0048) ([#491](https://github.com/micherra/canon/issues/491)) ([3bae0b9](https://github.com/micherra/canon/commit/3bae0b9cb187399b6cc06eb2ca10b34f493571ad))
+* PostHog program M3+M5 — engineer semantic self-review + flaky-vs-legit CI classification ([#493](https://github.com/micherra/canon/issues/493)) ([51b8b89](https://github.com/micherra/canon/commit/51b8b89d61faddf5332c9c768e067b1ff89586f8))
+* **templates:** attach a runnable reproduction command to each acceptance criterion ([#489](https://github.com/micherra/canon/issues/489)) ([5684697](https://github.com/micherra/canon/commit/5684697299a2d9e7594a16ea8b787c41c8afadb8))
+
+
+### Bug Fixes
+
+* **graph:** use \0 escape instead of a raw NUL byte in kg-context-ingest dedupeEdges ([#490](https://github.com/micherra/canon/issues/490)) ([500b178](https://github.com/micherra/canon/commit/500b17879f4ef96c40acf499a5b370b0083a34d6))
+* **orchestration:** fail-closed workspace validation on write_* MCP artifact tools ([#485](https://github.com/micherra/canon/issues/485)) ([5081eec](https://github.com/micherra/canon/commit/5081eec91ddc6e61efd0cda453dcdddf9ab4e74e))
+* **pr-review:** anchor show_pr_impact top-level overlay to prep.files, eliminate cross-PR contamination ([#488](https://github.com/micherra/canon/issues/488)) ([a5c3430](https://github.com/micherra/canon/commit/a5c3430c4cfdfeb57bf3a48d5692eb98e3801ea4))
+
 ## [2.20.0](https://github.com/micherra/canon/compare/v2.19.0...v2.20.0) (2026-07-10)
 
 

@@ -6,7 +6,7 @@ description: >-
   Pre-Mutate Re-Read Gate (S7) for preventing stale-write hazards.
 ---
 
-# Multi-Session Concurrency <!-- last-updated: 2026-06-24 -->
+# Multi-Session Concurrency <!-- last-updated: 2026-07-10 -->
 
 <!-- Managed by Canon. Manual edits are preserved. -->
 
@@ -47,3 +47,16 @@ Before any agent mutates a shared workspace artifact (journal, board, checkpoint
 4. Never cache journal or board snapshots across multiple tool calls — each MCP call sees the current on-disk state.
 
 **Shell helper**: The `hooks/pre-mutate-reread.sh` script (S8) validates that an in-context snapshot age does not exceed a freshness threshold. Agents may invoke it before multi-step journal writes to detect stale-read hazards at the hook layer.
+
+#### Cross-session chatter (Inc-0)
+
+**Channel model**: the workspace path IS the channel — there is one implicit channel per workspace, no separate channel abstraction to create or name. `post_message` and `tail_messages` are registry-gated: only workspaces registered `live` or `finalized_on_disk` accept posts; `unknown`/`reaped` workspaces are rejected.
+
+**Poll-not-push semantics**: `tail_messages` is a best-effort ordered poll (by id, with a `since_id` cursor) over the workspace's messages, plus a `peer_lock` liveness field. There is no delivery guarantee and no push/subscribe mechanism — SQLite is a store here, not a bus. A posted message is visible to a peer only the next time that peer calls `tail_messages`; never assume delivery or reply latency, and never block waiting on a reply.
+
+**When to use (worked scenarios)**:
+1. Before editing a shared hotspot (root `CLAUDE.md`, `mcp-server/**`, `hooks/**`), call `list_active_workspaces` to find concurrent builds, then `tail_messages` on a peer's returned `workspace_path` to check for a heads-up before you start.
+2. When starting or finishing work on a file a peer session may also be touching, `post_message` a short note to your own workspace so a peer polling later sees it.
+3. The `peer_lock` field returned by `tail_messages` shows who currently holds a workspace's `.lock` mutex — useful context, but chatter itself is advisory and never substitutes for that mutex.
+
+`engineer` and `reviewer` are granted all three tools (`post_message`, `tail_messages`, `list_active_workspaces`) and governed by the `agent-cross-session-chatter` rule — see `rules/agent-cross-session-chatter.md`.
