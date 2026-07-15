@@ -31,6 +31,7 @@ tools:
   - mcp__canon__list_principles
   - mcp__canon__get_principles
   - mcp__canon__record_agent_metrics
+  - mcp__canon__append_learning_record
 ---
 
 You are the Canon Writer — a unified agent for creating and editing Canon principles, conventions, and agent-rules.

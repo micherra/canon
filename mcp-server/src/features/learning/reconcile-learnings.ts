@@ -37,6 +37,7 @@ import fs from "node:fs/promises";
 import { join } from "node:path";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { isNotFound } from "@shared/lib/errors.ts";
+import { appendRawLineHealing } from "@shared/lib/jsonl-append.ts";
 import { isSafeProjectDirInput } from "@shared/lib/safe-project-dir.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { isPathContained } from "@shared/lib/worktree-guard.ts";
@@ -140,9 +141,24 @@ async function fileExistsDefault(path: string): Promise<boolean> {
   }
 }
 
-/** Default fs seam — real filesystem via node:fs/promises. */
+/**
+ * Default fs seam — real filesystem via node:fs/promises.
+ *
+ * `appendFile` routes through `appendRawLineHealing` (`@shared/lib/jsonl-append.ts`)
+ * instead of a bare `fs.appendFile` — this is the fix for the merged-line
+ * defect (PROBE-FINDINGS.md P1): an append landing on a predecessor that
+ * left its line open now heals it with a `\n` prefix instead of merging
+ * onto it. The `ReconcileFsSeam.appendFile(path, data)` signature is
+ * unchanged (`data` is already the fully-formatted, newline-terminated
+ * line `moveAndAppend` builds via `jsonlLine`) — only this real
+ * implementation's body changed; the fake seams in
+ * reconcile-learnings.test.ts / reconcile-learnings-fixes.test.ts are
+ * untouched and continue to exercise the plan/apply logic in isolation.
+ */
 export const defaultFsSeam: ReconcileFsSeam = {
-  appendFile: (path, data) => fs.appendFile(path, data, "utf-8"),
+  appendFile: async (path, data) => {
+    await appendRawLineHealing(path, data);
+  },
   fileExists: fileExistsDefault,
   mkdir: (path) => fs.mkdir(path, { recursive: true }).then(() => undefined),
   readDir: readDirDefault,
