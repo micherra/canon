@@ -19,7 +19,7 @@ replaces the hand-run git checklist below with a compiled `WavesArgs` envelope h
 generic `Workflow`-tool runner. It does **not** revive the #167-removed persistent
 flow/wave engine — `compile_waves` is a pure orchestrator-side function, not a generated script
 or a standing state machine, and the manual protocol below is **retained** as the documented
-fallback (Q2 / ADR-0054) — used whenever the opt-in conditions below don't hold.
+fallback (Q2 / ADR-0055) — used whenever the opt-in conditions below don't hold.
 
 **Selection condition (all of the following must hold):**
 1. `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists.

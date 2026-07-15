@@ -6,7 +6,7 @@ date: "2026-07-11"
 build: "scope-and-design-canon-waves-a-managedsaved-workflow-that-compiles (SYNTHESIS Inc-5, Increment 1)"
 ---
 
-# ADR-0054: canon-waves compiler locus — args-as-data envelope + one generic runner
+# ADR-0055: canon-waves compiler locus — args-as-data envelope + one generic runner
 
 ## Context
 

@@ -9,12 +9,12 @@ Orchestration tools and services — workspace lifecycle, transcript capture, ar
 <!-- last-updated: 2026-05-15 -->
 
 **`tools/`** — MCP tool handlers. All handlers are thin wrappers calling services.
-<!-- last-updated: 2026-07-14 (compile-waves.ts / compile_waves added, ADR-0054) -->
+<!-- last-updated: 2026-07-14 (compile-waves.ts / compile_waves added, ADR-0055) -->
 
 | Tool file | MCP tool name |
 |-----------|--------------|
 | `capture-transcript.ts` | `capture_transcript` |
-| `compile-waves.ts` | `compile_waves` — orchestrator-only (not agent-granted; see `hooks/lib/orchestrator-only-tools.txt`); thin wrapper over the pure `compileWaves` compiler (`@shared/lib/waves-compiler.ts`); reads `task-dag.yaml` + task plans, returns a validated `WavesArgs` envelope + `worktrees_to_create` for the `workflows/canon-waves.js` runner; read-only (no worktree/git side effects); fail-closed `INVALID_INPUT` on any `depends_on` (single-wave only, Increment 1) or unsafe `task_id`. See `references/dag-execution-protocol.md` § canon-waves opt-in path (ADR-0054). |
+| `compile-waves.ts` | `compile_waves` — orchestrator-only (not agent-granted; see `hooks/lib/orchestrator-only-tools.txt`); thin wrapper over the pure `compileWaves` compiler (`@shared/lib/waves-compiler.ts`); reads `task-dag.yaml` + task plans, returns a validated `WavesArgs` envelope + `worktrees_to_create` for the `workflows/canon-waves.js` runner; read-only (no worktree/git side effects); fail-closed `INVALID_INPUT` on any `depends_on` (single-wave only, Increment 1) or unsafe `task_id`. See `references/dag-execution-protocol.md` § canon-waves opt-in path (ADR-0055). |
 | `evaluate-step.ts` | `evaluate_step` — pure structural signal extraction (no LLM calls) for the evaluator step-transition gate: pattern findings (lazy/hacky code markers), file-scope overlap against `declared_files`, and diff statistics; returns `EvaluateStepOutput`; called by the orchestrator directly (not pre-spawn context) after implement/fix steps, before verify; consumed by `canon:evaluator`. Registered via `registerEvaluateStepTool(server)` inside `registerOrchestrationTools()` — re-wired 2026-07-02 (#443) after being silently dropped from registration by #175. |
 | `get-transcript.ts` | `get_transcript` |
 | `init-workspace.ts` | `init_workspace` |

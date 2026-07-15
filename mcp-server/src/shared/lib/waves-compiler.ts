@@ -10,7 +10,7 @@
  * is rejected (fail-closed) rather than guessed at — multi-wave dependency
  * ordering (wave N branching from wave N-1's merged HEAD) is not
  * probe-validated and is deferred to a later increment (DESIGN.md
- * Assumption 4 / ADR-0054).
+ * Assumption 4 / ADR-0055).
  */
 
 import { type TaskDag, type TaskNode, validateDag } from "./dag-validator.ts";
