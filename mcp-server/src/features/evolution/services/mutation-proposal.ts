@@ -2,12 +2,20 @@
  * mutation-proposal.ts — Pure proposal shaper for accepted mutation candidates.
  *
  * One exported function:
- *   shapeMutationProposal — builds the proposal frontmatter + markdown body
- *                           for a candidate that passed the §7 holdout gate.
+ *   shapeMutationProposal — builds the proposal frontmatter + markdown body for a
+ *                           "rewrite"/"retire" candidate that passed the §7 holdout
+ *                           gate, OR for an ungated "reinforce" confidence signal.
  *
- * Precondition (caller-enforced): evalResult.accepted === true.
- * The function is only called when the gate accepted the candidate; producing a
- * proposal for an unaccepted candidate is an evolution-hard-gate violation.
+ * Precondition (caller-enforced):
+ *   - "rewrite" | "retire": evalResult non-null, evalResult.accepted === true.
+ *     The function is only called when the gate accepted the candidate; producing
+ *     a proposal for an unaccepted candidate is an evolution-hard-gate violation.
+ *   - "reinforce": evalResult === null. A reinforce candidate is byte-identical to
+ *     its own baseline_body — there is nothing for a holdout eval to distinguish,
+ *     so it is NEVER run through evaluate_candidate (Gap 3 L3 fix). The emitted
+ *     proposal carries `gated: false` and null holdout fields, clearly marking it
+ *     as an un-holdout-gated confidence/priority signal for human review — not a
+ *     gated artifact-mutation proposal.
  *
  * Proposal shape consumed by /canon:review-learnings (analyze-patterns/SKILL.md:107-144).
  *
@@ -17,7 +25,12 @@
  */
 
 import type { EvaluateCandidateResult } from "../tools/evaluate-candidate.ts";
-import type { MutationProposal, MutationTarget } from "./mutation-types.ts";
+import type {
+  MutationProposal,
+  MutationProposalKind,
+  MutationTarget,
+  ScoreProvenance,
+} from "./mutation-types.ts";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -53,9 +66,22 @@ function confidenceToNumeric(confidence: MutationTarget["confidence"]): number {
   }
 }
 
+/** Serialize the score_provenance nested block (retire/reinforce only). Omitted when absent. */
+function serializeScoreProvenanceLines(sp: ScoreProvenance): string[] {
+  const lines = ["score_provenance:", `  net_score: ${sp.net_score}`, "  contributing_builds:"];
+  for (const cb of sp.contributing_builds) {
+    lines.push(
+      `    - archive_id: ${cb.archive_id}`,
+      `      sign: ${cb.sign}`,
+      `      weight: ${cb.weight}`,
+    );
+  }
+  return lines;
+}
+
 /** Serialize a MutationProposal as a YAML frontmatter block. */
 function serializeFrontmatter(fm: MutationProposal): string {
-  return [
+  const lines = [
     "---",
     `id: ${fm.id}`,
     `type: ${fm.type}`,
@@ -63,20 +89,63 @@ function serializeFrontmatter(fm: MutationProposal): string {
     `target: ${fm.target}`,
     `target_path: ${fm.target_path}`,
     `artifact_class: ${fm.artifact_class}`,
-    `holdout_baseline: ${fm.holdout_baseline}`,
-    `holdout_candidate: ${fm.holdout_candidate}`,
+    `holdout_baseline: ${fm.holdout_baseline ?? "null"}`,
+    `holdout_candidate: ${fm.holdout_candidate ?? "null"}`,
     `accepted: ${fm.accepted}`,
-    `failure_kind: ${fm.failure_kind}`,
+    `failure_kind: ${fm.failure_kind ?? "null"}`,
     `principle_id: ${fm.principle_id ?? "null"}`,
     `join_basis: ${fm.join_basis}`,
     `hash_verified: ${fm.hash_verified}`,
     `apply_channel: ${fm.apply_channel}`,
-    "---",
-  ].join("\n");
+    `proposal_kind: ${fm.proposal_kind}`,
+    `gated: ${fm.gated}`,
+  ];
+  if (fm.score_provenance) {
+    lines.push(...serializeScoreProvenanceLines(fm.score_provenance));
+  }
+  lines.push("---");
+  return lines.join("\n");
 }
 
-function buildObservationSection(target: MutationTarget): string {
-  const violations = target.attribution.attributed_violations;
+/** target.attribution's hash_verified, or true when absent (retire/reinforce: freshly read from disk). */
+function resolveHashVerified(target: MutationTarget): boolean {
+  return target.attribution?.target_artifact.hash_verified ?? true;
+}
+
+/** target.attribution's join_basis, or a descriptive placeholder for corpus-wide candidates. */
+function resolveJoinBasis(target: MutationTarget): string {
+  return target.attribution?.join_basis ?? "trust_weighted_aggregate";
+}
+
+/** Retire/reinforce Observation — describes a corpus-wide trust-weighted score, not a violation. */
+function buildScoreObservationSection(
+  target: MutationTarget,
+  proposalKind: "retire" | "reinforce",
+): string {
+  const sp = target.score_provenance;
+  const verdict = proposalKind === "retire" ? "strongly negative" : "strongly positive";
+  return [
+    "## Observation",
+    "",
+    `Artifact \`${target.target_path}\` has a ${verdict} trust-weighted net score across the`,
+    `decisions/RunSummary corpus${sp ? ` (net_score: ${sp.net_score})` : ""}.`,
+    target.principle_id ? `Implicated principle: \`${target.principle_id}\`.` : "",
+    "",
+    `Attribution confidence: **${target.confidence}** (join basis: \`${resolveJoinBasis(target)}\`).`,
+    `Hash verified: \`${resolveHashVerified(target)}\`.`,
+  ]
+    .filter((l) => l !== "")
+    .join("\n");
+}
+
+function buildObservationSection(
+  target: MutationTarget,
+  proposalKind: MutationProposalKind,
+): string {
+  if (proposalKind === "retire" || proposalKind === "reinforce") {
+    return buildScoreObservationSection(target, proposalKind);
+  }
+  const violations = target.attribution?.attributed_violations ?? [];
   const sample =
     violations.length > 0
       ? `\nViolation sample:\n- ${violations
@@ -91,15 +160,43 @@ function buildObservationSection(target: MutationTarget): string {
     `${target.attributed_violation_count} violation(s) of type \`${target.failure_kind}\`.`,
     target.principle_id ? `Implicated principle: \`${target.principle_id}\`.` : "",
     "",
-    `Attribution confidence: **${target.confidence}** (join basis: \`${target.attribution.join_basis}\`).`,
-    `Hash verified: \`${target.attribution.target_artifact.hash_verified}\`.`,
+    `Attribution confidence: **${target.confidence}** (join basis: \`${resolveJoinBasis(target)}\`).`,
+    `Hash verified: \`${resolveHashVerified(target)}\`.`,
     sample,
   ]
     .filter((l) => l !== "")
     .join("\n");
 }
 
-function buildProposedChangeSection(target: MutationTarget, candidateText: string): string {
+function buildProposedChangeSection(
+  target: MutationTarget,
+  candidateText: string,
+  proposalKind: MutationProposalKind,
+): string {
+  if (proposalKind === "reinforce") {
+    return [
+      "## Proposed Change",
+      "",
+      `No content change proposed for \`${target.target_path}\`. This is an informational`,
+      "reinforcement — trust-weighted evidence shows the principle earns its keep.",
+      "",
+      "```",
+      candidateText,
+      "```",
+    ].join("\n");
+  }
+  if (proposalKind === "retire") {
+    return [
+      "## Proposed Change",
+      "",
+      `Retirement candidate for \`${target.target_path}\``,
+      "(invalidate-don't-delete — retired/weakened artifact body, NEVER removed from disk):",
+      "",
+      "```",
+      candidateText,
+      "```",
+    ].join("\n");
+  }
   const spanNote = target.char_span
     ? `(span-guided: chars ${target.char_span[0]}–${target.char_span[1]}):`
     : "(full-file rewrite):";
@@ -115,8 +212,44 @@ function buildProposedChangeSection(target: MutationTarget, candidateText: strin
   ].join("\n");
 }
 
-function buildEvidenceSection(target: MutationTarget, evalResult: EvaluateCandidateResult): string {
+/** Trust-weighted score provenance lines — the auditable trace (retire/reinforce only). */
+function buildScoreProvenanceLines(scoreProvenance: ScoreProvenance | undefined): string[] {
+  if (!scoreProvenance) return [];
   return [
+    "",
+    "### Trust-weighted score provenance",
+    "",
+    `- Net score: ${scoreProvenance.net_score}`,
+    "- Contributing builds:",
+    ...scoreProvenance.contributing_builds.map(
+      (cb) => `  - \`${cb.archive_id}\` — sign: ${cb.sign}, weight: ${cb.weight}`,
+    ),
+  ];
+}
+
+/** Ungated (reinforce) evidence — no holdout gate ran; score_provenance is the sole evidence. */
+function buildUngatedEvidenceSection(target: MutationTarget): string {
+  return [
+    "## Evidence",
+    "",
+    "**Not holdout-gated.** This is an informational confidence signal derived from the",
+    "trust-weighted attribution corpus (`attribute_outcomes`) — `evaluate_candidate` was never",
+    "run, because a reinforce candidate is byte-identical to its own baseline and there is",
+    "nothing for a holdout eval to distinguish.",
+    ...buildScoreProvenanceLines(target.score_provenance),
+  ].join("\n");
+}
+
+function buildEvidenceSection(
+  target: MutationTarget,
+  evalResult: EvaluateCandidateResult | null,
+  proposalKind: MutationProposalKind,
+): string {
+  if (evalResult === null) {
+    return buildUngatedEvidenceSection(target);
+  }
+
+  const holdoutLines = [
     "## Evidence",
     "",
     "### Holdout gate (§7 strict-holdout)",
@@ -126,21 +259,72 @@ function buildEvidenceSection(target: MutationTarget, evalResult: EvaluateCandid
     `| Holdout passed | ${evalResult.baseline_score} | ${evalResult.candidate_score} |`,
     `| Holdout total | ${evalResult.per_split.holdout.total} | ${evalResult.per_split.holdout.total} |`,
     `| Accepted | — | ✓ |`,
+  ];
+
+  if (proposalKind === "retire") {
+    return [...holdoutLines, ...buildScoreProvenanceLines(target.score_provenance)].join("\n");
+  }
+
+  return [
+    ...holdoutLines,
     "",
     "### Attribution evidence",
     "",
     `- Artifact: \`${target.target_path}\``,
     `- Failure kind: \`${target.failure_kind}\``,
     `- Violations attributed: ${target.attributed_violation_count}`,
-    `- Join basis: \`${target.attribution.join_basis}\``,
-    `- Hash verified: \`${target.attribution.target_artifact.hash_verified}\``,
+    `- Join basis: \`${resolveJoinBasis(target)}\``,
+    `- Hash verified: \`${resolveHashVerified(target)}\``,
   ].join("\n");
 }
 
 function buildImpactSection(
   target: MutationTarget,
   applyChannel: MutationProposal["apply_channel"],
+  proposalKind: MutationProposalKind,
 ): string {
+  if (proposalKind === "retire") {
+    return [
+      "## Impact",
+      "",
+      `**Apply channel:** \`${applyChannel}\``,
+      "",
+      "**invalidate-don't-delete**: this is a RETIREMENT candidate, not a deletion request. The",
+      "writer agent must mark the artifact retired (an `archived: true` frontmatter flag — the",
+      "SAME loader-honored flag `write-principle`'s `--archive` mode already sets; `shared/",
+      "matcher.ts`'s principle matcher excludes `archived: true` principles from every review /",
+      "get_principles / review_code call) and must NEVER remove the file from disk. The artifact",
+      "stays on disk, with its full history and score_provenance trace intact for audit. This is",
+      "what makes the holdout gate meaningful: archiving genuinely changes which principles the",
+      "eval harness loads, so a candidate that strictly improves the holdout is real signal, not",
+      "a byte-identical no-op.",
+      "",
+      `**Artifact class:** \`${target.artifact_class}\``,
+      "",
+      "This proposal was generated by Canon's trust-weighted attribution consumer (Gap 3).",
+      "Accept via `/canon:review-learnings`, which routes `retire` proposals to the writer",
+      "agent in invalidate-don't-delete mode.",
+    ].join("\n");
+  }
+  if (proposalKind === "reinforce") {
+    return [
+      "## Impact",
+      "",
+      `**Apply channel:** \`${applyChannel}\``,
+      "",
+      "**Un-holdout-gated confidence signal — NOT an artifact mutation.** This is an",
+      "INFORMATIONAL reinforcement — trust-weighted positive evidence shows the principle earns",
+      "its keep. It was never run through `evaluate_candidate` (a reinforce candidate is",
+      "byte-identical to its own baseline, so no holdout eval could ever distinguish them —",
+      "`gated: false` in this proposal's frontmatter marks that explicitly). No artifact content",
+      "changes; the writer records a confidence bump only. No deletion, no retirement.",
+      "",
+      `**Artifact class:** \`${target.artifact_class}\``,
+      "",
+      "This proposal was generated by Canon's trust-weighted attribution consumer (Gap 3).",
+      "Accept via `/canon:review-learnings`, which routes `reinforce` proposals to the writer agent.",
+    ].join("\n");
+  }
   const routingNote =
     applyChannel === "writer"
       ? "Route to the `writer` agent via the `content-flow/learn-apply` variant for conflict detection, format validation, and the actual edit."
@@ -173,8 +357,12 @@ export type ShapeMutationProposalOpts = {
   target: MutationTarget;
   /** The full-file candidate text generated by the learner. */
   candidateText: string;
-  /** The EvaluateCandidateResult with accepted===true. */
-  evalResult: EvaluateCandidateResult;
+  /**
+   * The EvaluateCandidateResult with accepted===true, for "rewrite"/"retire".
+   * MUST be `null` for "reinforce" (target.proposal_kind === "reinforce") — a
+   * reinforce candidate is never run through evaluate_candidate (Gap 3 L3 fix).
+   */
+  evalResult: EvaluateCandidateResult | null;
   /** Timestamp string for the proposal id (e.g. "20260625T143000"). */
   ts: string;
   /** 1-based index within the current pass (for filename ordering). */
@@ -184,10 +372,15 @@ export type ShapeMutationProposalOpts = {
 /**
  * shapeMutationProposal — pure function.
  *
- * Builds a MutationProposal frontmatter + markdown body for a candidate that
- * passed the §7 holdout gate. CALLER MUST ENSURE evalResult.accepted === true
- * before calling — producing a proposal for an unaccepted candidate violates
- * the evolution-hard-gate invariant.
+ * Builds a MutationProposal frontmatter + markdown body for either:
+ *   - a "rewrite"/"retire" candidate that passed the §7 holdout gate. CALLER MUST
+ *     ENSURE evalResult is non-null and evalResult.accepted === true before
+ *     calling — producing a proposal for an unaccepted candidate violates the
+ *     evolution-hard-gate invariant.
+ *   - an ungated "reinforce" confidence signal. CALLER MUST pass evalResult: null
+ *     — a reinforce candidate is byte-identical to its own baseline and is NEVER
+ *     run through evaluate_candidate (Gap 3 L3 fix). The emitted proposal carries
+ *     `gated: false` and null holdout fields.
  *
  * Returns:
  *   - `frontmatter`: the typed MutationProposal object
@@ -206,12 +399,16 @@ export function shapeMutationProposal(opts: ShapeMutationProposalOpts): {
   filename: string;
 } {
   const { target, candidateText, evalResult, ts, index } = opts;
+  const proposalKind: MutationProposalKind = target.proposal_kind ?? "rewrite";
 
-  // apply_channel routing: principle/rule → writer; everything else → engineer-build-flow
+  // apply_channel routing: retire/reinforce → always writer (Gap 3 L3);
+  // rewrite (unchanged) → principle/rule → writer; everything else → engineer-build-flow
   const applyChannel: MutationProposal["apply_channel"] =
-    target.artifact_class === "principle" || target.artifact_class === "rule"
+    proposalKind === "retire" || proposalKind === "reinforce"
       ? "writer"
-      : "engineer-build-flow";
+      : target.artifact_class === "principle" || target.artifact_class === "rule"
+        ? "writer"
+        : "engineer-build-flow";
 
   const frontmatter: MutationProposal = {
     accepted: true,
@@ -219,24 +416,27 @@ export function shapeMutationProposal(opts: ShapeMutationProposalOpts): {
     artifact_class: target.artifact_class,
     confidence: confidenceToNumeric(target.confidence),
     failure_kind: target.failure_kind,
-    hash_verified: target.attribution.target_artifact.hash_verified,
-    holdout_baseline: evalResult.baseline_score,
-    holdout_candidate: evalResult.candidate_score,
+    gated: evalResult !== null,
+    hash_verified: resolveHashVerified(target),
+    holdout_baseline: evalResult?.baseline_score ?? null,
+    holdout_candidate: evalResult?.candidate_score ?? null,
     id: `evolve-${ts}-${pad2(index)}`,
-    join_basis: target.attribution.join_basis,
+    join_basis: resolveJoinBasis(target),
     principle_id: target.principle_id,
+    proposal_kind: proposalKind,
     target: target.principle_id ?? target.target_path,
     target_path: target.target_path,
     type: "evolution-candidate",
+    ...(target.score_provenance ? { score_provenance: target.score_provenance } : {}),
   };
 
   const filename = `${pad2(index)}-evolve-${slug(target.target_path)}.md`;
 
   const body = [
-    buildObservationSection(target),
-    buildProposedChangeSection(target, candidateText),
-    buildEvidenceSection(target, evalResult),
-    buildImpactSection(target, applyChannel),
+    buildObservationSection(target, proposalKind),
+    buildProposedChangeSection(target, candidateText, proposalKind),
+    buildEvidenceSection(target, evalResult, proposalKind),
+    buildImpactSection(target, applyChannel, proposalKind),
   ].join("\n\n");
 
   const markdown = `${serializeFrontmatter(frontmatter)}\n\n${body}\n`;

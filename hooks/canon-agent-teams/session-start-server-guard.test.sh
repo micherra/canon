@@ -103,6 +103,7 @@ chmod +x "$FAKE_BIN/curl"
 
 OUTPUT=$(CANON_PROJECT_DIR="$TMPDIR_TEST" \
   CLAUDE_PLUGIN_DATA="" \
+  CANON_GUARD_HEALTH_TIMEOUT=0 \
   PATH="$FAKE_BIN:$PATH" \
   bash "$HOOK" 2>&1)
 EXIT_CODE=$?
@@ -145,6 +146,7 @@ chmod +x "$FAKE_BIN/curl"
 OUTPUT=$(CANON_PROJECT_DIR="$TMPDIR_TEST" \
   CLAUDE_PLUGIN_DATA="" \
   CANON_DAEMON_PORT=3142 \
+  CANON_GUARD_HEALTH_TIMEOUT=0 \
   PATH="$FAKE_BIN:$PATH" \
   bash "$HOOK" 2>&1)
 EXIT_CODE=$?
@@ -180,6 +182,7 @@ chmod +x "$FAKE_BIN/curl"
 
 OUTPUT=$(CANON_PROJECT_DIR="$TMPDIR_TEST" \
   CLAUDE_PLUGIN_DATA="" \
+  CANON_GUARD_HEALTH_TIMEOUT=0 \
   PATH="$FAKE_BIN:$PATH" \
   bash "$HOOK" 2>&1)
 EXIT_CODE=$?
@@ -195,6 +198,148 @@ if [[ $EXIT_CODE -eq 0 ]] \
   pass "F2b: CANON_DAEMON_PORT unset → curl targets default :3142 (matches supervisor) and WARN mentions :3142"
 else
   fail "F2b: CANON_DAEMON_PORT unset: exit=$EXIT_CODE probe_url='${PROBE_URL}' warn_output='$(echo "$OUTPUT" | grep -i warn || echo none)'"
+fi
+rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
+
+# ---------------------------------------------------------------------------
+# Test 8: down-then-up — curl fails the first two probes then succeeds within
+# the budget → NO WARN (false-positive eliminated, AC #4).
+# ---------------------------------------------------------------------------
+TMPDIR_TEST=$(mktemp -d)
+FAKE_BIN=$(mktemp -d)
+CALL_COUNT_FILE="$TMPDIR_TEST/call_count"
+echo 0 > "$CALL_COUNT_FILE"
+cat > "$FAKE_BIN/curl" <<CURLSTUB8
+#!/usr/bin/env bash
+COUNT=\$(cat "$CALL_COUNT_FILE")
+COUNT=\$((COUNT + 1))
+echo "\$COUNT" > "$CALL_COUNT_FILE"
+if [[ "\$COUNT" -lt 3 ]]; then
+  exit 1
+fi
+exit 0
+CURLSTUB8
+chmod +x "$FAKE_BIN/curl"
+
+OUTPUT=$(CANON_PROJECT_DIR="$TMPDIR_TEST" \
+  CLAUDE_PLUGIN_DATA="" \
+  CANON_GUARD_HEALTH_TIMEOUT=5 \
+  PATH="$FAKE_BIN:$PATH" \
+  bash "$HOOK" 2>&1)
+EXIT_CODE=$?
+
+if [[ $EXIT_CODE -eq 0 ]] && ! echo "$OUTPUT" | grep -q "CANON WARN"; then
+  pass "Down-then-up within budget: no WARN, hook exits 0 (AC #4)"
+else
+  fail "Down-then-up within budget: exit=$EXIT_CODE output=$(echo "$OUTPUT" | head -3)"
+fi
+rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
+
+# ---------------------------------------------------------------------------
+# Test 9: genuine-down — curl fails through the whole budget → WARN still
+# fires exactly once, exit 0 (AC #6, no false-negative).
+# ---------------------------------------------------------------------------
+TMPDIR_TEST=$(mktemp -d)
+FAKE_BIN=$(mktemp -d)
+cat > "$FAKE_BIN/curl" <<'CURLSTUB9'
+#!/usr/bin/env bash
+exit 1
+CURLSTUB9
+chmod +x "$FAKE_BIN/curl"
+
+OUTPUT=$(CANON_PROJECT_DIR="$TMPDIR_TEST" \
+  CLAUDE_PLUGIN_DATA="" \
+  CANON_GUARD_HEALTH_TIMEOUT=1 \
+  PATH="$FAKE_BIN:$PATH" \
+  bash "$HOOK" 2>&1)
+EXIT_CODE=$?
+WARN_COUNT=$(echo "$OUTPUT" | grep -c "CANON WARN")
+
+if [[ $EXIT_CODE -eq 0 ]] && [[ "$WARN_COUNT" -eq 1 ]]; then
+  pass "Genuine down through full budget: WARN fires exactly once, hook exits 0 (AC #6)"
+else
+  fail "Genuine down: exit=$EXIT_CODE warn_count=$WARN_COUNT output=$(echo "$OUTPUT" | head -5)"
+fi
+rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
+
+# ---------------------------------------------------------------------------
+# Test 10: corrected remediation text — mentions /mcp, does NOT mention stdio
+# (AC #5).
+# ---------------------------------------------------------------------------
+TMPDIR_TEST=$(mktemp -d)
+FAKE_BIN=$(mktemp -d)
+cat > "$FAKE_BIN/curl" <<'CURLSTUB10'
+#!/usr/bin/env bash
+exit 1
+CURLSTUB10
+chmod +x "$FAKE_BIN/curl"
+
+OUTPUT=$(CANON_PROJECT_DIR="$TMPDIR_TEST" \
+  CLAUDE_PLUGIN_DATA="" \
+  CANON_GUARD_HEALTH_TIMEOUT=0 \
+  PATH="$FAKE_BIN:$PATH" \
+  bash "$HOOK" 2>&1)
+
+if echo "$OUTPUT" | grep -q "/mcp" && ! echo "$OUTPUT" | grep -qi "stdio"; then
+  pass "Remediation text: mentions /mcp, does not mention stdio (AC #5)"
+else
+  fail "Remediation text: output=$(echo "$OUTPUT" | head -3)"
+fi
+rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
+
+# ---------------------------------------------------------------------------
+# Test 11: budget=0 → exactly one immediate probe, no sleeps (fast path).
+# ---------------------------------------------------------------------------
+TMPDIR_TEST=$(mktemp -d)
+FAKE_BIN=$(mktemp -d)
+CALL_COUNT_FILE="$TMPDIR_TEST/call_count"
+cat > "$FAKE_BIN/curl" <<CURLSTUB11
+#!/usr/bin/env bash
+COUNT=\$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo 0)
+COUNT=\$((COUNT + 1))
+echo "\$COUNT" > "$CALL_COUNT_FILE"
+exit 1
+CURLSTUB11
+chmod +x "$FAKE_BIN/curl"
+
+CANON_PROJECT_DIR="$TMPDIR_TEST" \
+  CLAUDE_PLUGIN_DATA="" \
+  CANON_GUARD_HEALTH_TIMEOUT=0 \
+  PATH="$FAKE_BIN:$PATH" \
+  bash "$HOOK" >/dev/null 2>&1
+
+CALL_COUNT=$(cat "$CALL_COUNT_FILE" 2>/dev/null || echo -1)
+if [[ "$CALL_COUNT" -eq 1 ]]; then
+  pass "Budget=0: exactly one immediate probe, no sleeps"
+else
+  fail "Budget=0: expected 1 curl call, got $CALL_COUNT"
+fi
+rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
+
+# ---------------------------------------------------------------------------
+# Test 12: injection/non-numeric CANON_GUARD_HEALTH_TIMEOUT coerces to the
+# default (8) — no arithmetic-context command substitution, no hang.
+# ---------------------------------------------------------------------------
+TMPDIR_TEST=$(mktemp -d)
+FAKE_BIN=$(mktemp -d)
+INJECTION_MARKER="$TMPDIR_TEST/should_not_exist"
+cat > "$FAKE_BIN/curl" <<'CURLSTUB12'
+#!/usr/bin/env bash
+exit 1
+CURLSTUB12
+chmod +x "$FAKE_BIN/curl"
+
+OUTPUT=$(timeout 15 env CANON_PROJECT_DIR="$TMPDIR_TEST" \
+  CLAUDE_PLUGIN_DATA="" \
+  CANON_GUARD_HEALTH_TIMEOUT="x[\$(touch ${INJECTION_MARKER})]" \
+  PATH="$FAKE_BIN:$PATH" \
+  bash "$HOOK" 2>&1)
+EXIT_CODE=$?
+
+if [[ $EXIT_CODE -eq 0 ]] && [[ ! -f "$INJECTION_MARKER" ]] && echo "$OUTPUT" | grep -q "budget 8s"; then
+  pass "Injection/non-numeric CANON_GUARD_HEALTH_TIMEOUT coerces to default 8, no substitution executed"
+else
+  fail "Injection guard: exit=$EXIT_CODE marker_exists=$(test -f "$INJECTION_MARKER" && echo yes || echo no) output=$(echo "$OUTPUT" | head -3)"
 fi
 rm -rf "$TMPDIR_TEST" "$FAKE_BIN"
 

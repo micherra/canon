@@ -22,9 +22,12 @@ write_orchestrator_checkpoint
 # Autonomy / gates / escalation (orchestrator-only)
 compute_autonomy_tier
 evaluate_step
-forecast_base_advance
 get_next_escalation_strategy
 categorize_failures
+
+# canon-waves DAG compilation (orchestrator-only — compiles the DAG boundary,
+# no subagent calls it; see references/dag-execution-protocol.md opt-in path)
+compile_waves
 
 # Evolution & attribution (orchestrator/learner-driven, not agent-called)
 record_applied_evolution

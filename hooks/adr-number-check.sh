@@ -32,7 +32,9 @@
 #   Local origin/main NNNN collision:   exit 2 on collision (FAIL-CLOSED)
 #   origin/main unresolvable + ADRs:    exit 2 (FAIL-CLOSED — missed collision is unsafe)
 #   origin/main unresolvable + no ADRs: exit 0 (early-out; fail-closed scoped to ADR adds)
-#   Open-PR check (DEFERRED):           FAIL-OPEN-WITH-WARNING when implemented
+#   Open-PR concurrent claim:            WARN + exit 0 (FAIL-OPEN); gh
+#                                         absent/unauthed/offline/timeout/malformed
+#                                         JSON: silent exit 0 (ADR-0053)
 #
 # Parser-fail-open justification (security-hook-parser-allowlist-posture):
 # The non-push gate and the parse-fail path (lines 37–43) are denylist-shaped:
@@ -52,6 +54,11 @@ set -euo pipefail
 
 # shellcheck source=lib/canon-hook-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/canon-hook-lib.sh"
+
+# Open-PR scan seams (all injectable for hermetic tests; see DESIGN.md / PROBE-FINDINGS.md).
+CANON_ADR_GH_BIN="${CANON_ADR_GH_BIN:-gh}"
+CANON_ADR_OPENPR_TIMEOUT="${CANON_ADR_OPENPR_TIMEOUT:-8}"
+CANON_ADR_OPENPR_LIMIT="${CANON_ADR_OPENPR_LIMIT:-100}"
 
 # Read tool input
 INPUT=$(cat)
@@ -221,10 +228,86 @@ EOF
   exit 2
 fi
 
-# OPEN-PR CHECK (deferred, Decision adr-id-02):
-# When implemented: use 'gh pr list' to inspect open PRs for the same NNNN.
-# gh absent / unauthenticated / offline → print CANON WARNING: and skip (exit 0
-# on this path — FAIL-OPEN-WITH-WARNING for the network-dependent check).
-# Not implemented this build.
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 4: Concurrent-open-PR ADR-number scan (WARN-only, fail-open, ADR-0053).
+# Reached only after Steps 1-3 have passed (no committed-main collision).
+# EVERY path in this block exits 0 — it contains NO non-zero exit or return.
+# Rationale: an open PR's claim is racy/eventually-consistent (the PR may be
+# stale or abandoned), so this dimension only WARNS to let the author
+# renumber proactively; the committed-main check above remains the sole
+# fail-CLOSED backstop against an actual merged duplicate.
+# ─────────────────────────────────────────────────────────────────────────────
+_TIMEOUT_BIN=""
+if command -v timeout >/dev/null 2>&1; then
+  _TIMEOUT_BIN="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  _TIMEOUT_BIN="gtimeout"
+fi
+
+if command -v "$CANON_ADR_GH_BIN" >/dev/null 2>&1 \
+  && command -v jq >/dev/null 2>&1 \
+  && [[ -n "$_TIMEOUT_BIN" ]]; then
+
+  # Self branch: resolution failure yields an empty string, which excludes
+  # nothing (worst case: a spurious self-WARNING — still never a block).
+  _cur_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)  # DOCUMENTED FAIL-OPEN -- empty on failure excludes nothing, never a block
+
+  # Bounded fetch. Capture the exit code explicitly (no blanket || true) so
+  # a genuine failure (absent/unauthed/offline/timeout/error) is detectable.
+  _pr_json=""
+  _gh_exit=0
+  _pr_json=$("$_TIMEOUT_BIN" "$CANON_ADR_OPENPR_TIMEOUT" "$CANON_ADR_GH_BIN" pr list \
+    --state open --json number,headRefName,isCrossRepository,files \
+    --limit "$CANON_ADR_OPENPR_LIMIT" 2>/dev/null) \
+    || _gh_exit=$?  # DOCUMENTED FAIL-OPEN -- non-zero = absent/unauthed/offline/timeout(124)/error; scan skipped below
+
+  if [[ "$_gh_exit" -eq 0 && -n "$_pr_json" ]]; then
+    # This push's newly-added ADR numbers. Recomputed locally: _BRANCH_NUMS
+    # above is only in scope inside the (already-exited) collision branch.
+    _OPENPR_BRANCH_NUMS=$(echo "$NEW_ADRS" \
+      | grep -oE 'docs/adr/[0-9]{4}' \
+      | grep -oE '[0-9]{4}' \
+      | sort -u || true)  # DOCUMENTED FAIL-OPEN -- empty means nothing to compare; loop below simply no-ops
+
+    # Self-exclusion is qualified by HEAD REPOSITORY, not branch name alone
+    # (Codex P2, PR #497): a fork PR can share our branch name (e.g. two
+    # contributors both using "feature") without being our own PR. Only a
+    # same-repo (isCrossRepository == false) PR on our current branch name is
+    # "self" and excluded; a cross-repo PR with a matching branch name is
+    # still compared and can trigger a WARNING.
+    _OTHER_PR_ROWS=$(echo "$_pr_json" | jq -r --arg cur "$_cur_branch" '
+      .[] | select((.headRefName != $cur) or (.isCrossRepository == true)) | . as $pr
+      | .files[] | select(.changeType=="ADDED")
+      | select(.path | test("^docs/adr/[0-9]{4}-.*\\.md$"))
+      | "\($pr.number)\t\($pr.headRefName)\t\(.path)"
+    ' 2>/dev/null || true)  # DOCUMENTED FAIL-OPEN -- jq failure on malformed/non-JSON input yields empty; loop below no-ops
+
+    if [[ -n "$_OTHER_PR_ROWS" ]]; then
+      while IFS=$'\t' read -r _other_num _other_branch _other_path; do
+        [[ -z "$_other_path" ]] && continue
+
+        _other_base=$(basename "$_other_path")
+        _other_adr_num=$(echo "$_other_base" | grep -oE '^[0-9]{4}' || true)  # DOCUMENTED FAIL-OPEN -- non-ADR basename dropped by guard below
+        [[ -z "$_other_adr_num" ]] && continue
+
+        if echo "$_OPENPR_BRANCH_NUMS" | grep -q "^${_other_adr_num}$"; then
+          # Find this branch's own file for the same number, to name in the WARNING.
+          _this_branch_file=$(echo "$NEW_ADRS" \
+            | grep -E "docs/adr/${_other_adr_num}-" \
+            | head -1 || true)  # DOCUMENTED FAIL-OPEN -- empty just omits the filename line; still WARNs with number + other-PR
+
+          cat <<EOF
+CANON WARNING: [adr-number-check] concurrent open-PR ADR-number claim (advisory — not blocking).
+  number: ${_other_adr_num}
+  this branch: ${_this_branch_file}
+  also claimed by: #${_other_num} ${_other_branch} (${_other_path})
+  Consider renumbering before merge to avoid a duplicate ADR number on main.
+  (fail-open: a slow/offline/unauthenticated gh never blocks your push)
+EOF
+        fi
+      done <<< "$_OTHER_PR_ROWS"
+    fi
+  fi
+fi
 
 exit 0

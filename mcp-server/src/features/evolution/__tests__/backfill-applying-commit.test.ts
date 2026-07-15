@@ -4,7 +4,7 @@
  * Tests for backfill_applying_commit — Inc-3 back-fill of
  * applied_evolutions.applying_commit from Canon-Evolution: git trailers.
  *
- * Mirrors the mock strategy used by forecast-base-advance.test.ts: mock
+ * Mirrors the standard mock strategy: mock
  * @platform/adapters/git-adapter.ts (gitExec) to control git-log output, and
  * use the REAL getDriftDb against an isolated tmp project_dir so the DAO's
  * null-only UPDATE is genuinely exercised (never process.cwd()).

@@ -12,6 +12,7 @@ This directory holds design explorations, competed proposals, and research docum
 | **[automatic-craft-prerequisites-scoping.md](automatic-craft-prerequisites-scoping.md)** | Analysis of automatic prerequisite scoping for craft audits. |
 | **[orchestrator-scoped-principle-measurement-gap.md](orchestrator-scoped-principle-measurement-gap.md)** | Open: the 23-principle zero-citation measurement gap (decision recorded in ADR-0035) and the deferred orchestration-trace self-review surface (Option B) as its long-term fix. |
 | **[compilation-gradient.md](compilation-gradient.md)** | Open: pressure-tests the "compilation gradient" framing (PAW paper) against Canon's fuzzy→deterministic architecture; recommends a three-tier execution gradient and one probe-build. The recommended probe ran (see `docs/t2-probe-results.md` — INCONCLUSIVE, 0/96 retrievable). |
+| **[unified-memory.md](unified-memory.md)** | Open: synthesizes Canon's shipped Unified Agent Memory epic (M1 `recall` #478, M2 context graph #487/ADR-0047) against the Cognee/Zep/Mem0/Letta agent-memory frameworks; records three next-increment gaps — bi-temporal supersedes edges, reconcile-on-write, trust-weighted decisions-ledger attribution. |
 
 ## Using these documents
 

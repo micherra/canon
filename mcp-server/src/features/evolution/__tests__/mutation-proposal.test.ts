@@ -303,6 +303,146 @@ describe("shapeMutationProposal — markdown sections", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 5. proposal_kind default + retire/reinforce shaping (Gap 3 L3)
+// ---------------------------------------------------------------------------
+
+describe("shapeMutationProposal — proposal_kind default (backward compat)", () => {
+  it("frontmatter.proposal_kind defaults to 'rewrite' when target.proposal_kind is absent", () => {
+    const target = makeTarget("rules/agent-tdd.md", "rule");
+    const result = shape(target);
+
+    expect(result.frontmatter.proposal_kind).toBe("rewrite");
+  });
+
+  it("frontmatter.score_provenance is absent for the default rewrite path", () => {
+    const target = makeTarget("rules/agent-tdd.md", "rule");
+    const result = shape(target);
+
+    expect(result.frontmatter.score_provenance).toBeUndefined();
+    expect(Object.keys(result.frontmatter)).not.toContain("score_provenance");
+  });
+});
+
+function makeRetireTarget(): MutationTarget {
+  return {
+    target_path: "principles/rules/some-principle.md",
+    artifact_class: "principle",
+    baseline_body: "# Some Principle\n\nOriginal content.",
+    char_span: null,
+    gate_eligible: true,
+    confidence: "high",
+    failure_kind: null,
+    principle_id: "some-principle",
+    attributed_violation_count: 0,
+    attribution: null,
+    proposal_kind: "retire",
+    score_provenance: {
+      net_score: -6.5,
+      contributing_builds: [
+        { archive_id: "archive-001", sign: -1, weight: 2.1 },
+        { archive_id: "archive-002", sign: -1, weight: 1.3 },
+      ],
+    },
+  };
+}
+
+function makeReinforceTarget(): MutationTarget {
+  return {
+    ...makeRetireTarget(),
+    proposal_kind: "reinforce",
+    score_provenance: {
+      net_score: 5.2,
+      contributing_builds: [{ archive_id: "archive-010", sign: 1, weight: 5.2 }],
+    },
+  };
+}
+
+describe("shapeMutationProposal — retire proposal shape", () => {
+  it("apply_channel is always 'writer' for retire, regardless of artifact_class", () => {
+    const target = { ...makeRetireTarget(), artifact_class: "agent" as const };
+    const result = shape(target);
+
+    expect(result.frontmatter.apply_channel).toBe("writer");
+  });
+
+  it("frontmatter.proposal_kind === 'retire'", () => {
+    const result = shape(makeRetireTarget());
+
+    expect(result.frontmatter.proposal_kind).toBe("retire");
+  });
+
+  it("frontmatter.score_provenance carries the net_score + contributing_builds trace", () => {
+    const result = shape(makeRetireTarget());
+
+    expect(result.frontmatter.score_provenance).toEqual({
+      net_score: -6.5,
+      contributing_builds: [
+        { archive_id: "archive-001", sign: -1, weight: 2.1 },
+        { archive_id: "archive-002", sign: -1, weight: 1.3 },
+      ],
+    });
+  });
+
+  it("body Impact section states invalidate-don't-delete — mark retired, never delete", () => {
+    const result = shape(makeRetireTarget());
+
+    expect(result.markdown).toMatch(/invalidate-don't-delete/i);
+    expect(result.markdown).toMatch(/never remove|NEVER remove|never delete/i);
+  });
+
+  it("body includes the score provenance trace (net_score + contributing builds)", () => {
+    const result = shape(makeRetireTarget());
+
+    expect(result.markdown).toContain("-6.5");
+    expect(result.markdown).toContain("archive-001");
+    expect(result.markdown).toContain("archive-002");
+  });
+
+  it("frontmatter.failure_kind is null (no single violation for a corpus-wide score)", () => {
+    const result = shape(makeRetireTarget());
+
+    expect(result.frontmatter.failure_kind).toBeNull();
+  });
+});
+
+describe("shapeMutationProposal — reinforce proposal shape", () => {
+  it("apply_channel is always 'writer' for reinforce", () => {
+    const result = shape(makeReinforceTarget());
+
+    expect(result.frontmatter.apply_channel).toBe("writer");
+  });
+
+  it("frontmatter.proposal_kind === 'reinforce'", () => {
+    const result = shape(makeReinforceTarget());
+
+    expect(result.frontmatter.proposal_kind).toBe("reinforce");
+  });
+
+  it("body Impact section is informational — no deletion, no retirement", () => {
+    const result = shape(makeReinforceTarget());
+
+    expect(result.markdown).toMatch(/informational/i);
+    expect(result.markdown).not.toMatch(/invalidate-don't-delete/i);
+  });
+
+  it("frontmatter.score_provenance carries the positive trace", () => {
+    const result = shape(makeReinforceTarget());
+
+    expect(result.frontmatter.score_provenance?.net_score).toBe(5.2);
+  });
+});
+
+describe("shapeMutationProposal — rewrite path unchanged with nullable fields present", () => {
+  it("still produces the original apply_channel routing by artifact_class", () => {
+    const target = makeTarget("primers/testing.md", "primer", null);
+    const result = shape(target);
+
+    expect(result.frontmatter.apply_channel).toBe("engineer-build-flow");
+    expect(result.frontmatter.proposal_kind).toBe("rewrite");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 4. Filename slug
 // ---------------------------------------------------------------------------
 

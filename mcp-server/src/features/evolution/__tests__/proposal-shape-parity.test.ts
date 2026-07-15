@@ -143,6 +143,34 @@ function makeTarget(): MutationTarget {
   };
 }
 
+/**
+ * A retire/reinforce MutationTarget (Gap 3 L3) — carries score_provenance and no
+ * attribution, unlike makeTarget()'s violation-based "rewrite" fixture. Used as a
+ * second parity fixture so the byte-parity assertion below covers the
+ * score_provenance / gated frontmatter keys, not just the rewrite path
+ * (Finding 3, Gap 3 review — proposal-shape-parity.test.ts previously only
+ * exercised a rewrite fixture, so a retire/reinforce-only key could silently drift).
+ */
+function makeReinforceTarget(): MutationTarget {
+  return {
+    target_path: "principles/rules/some-principle.md",
+    artifact_class: "rule",
+    baseline_body: "# Some Principle",
+    char_span: null,
+    gate_eligible: true,
+    confidence: "high",
+    failure_kind: null,
+    principle_id: "some-principle",
+    attributed_violation_count: 0,
+    attribution: null,
+    proposal_kind: "reinforce",
+    score_provenance: {
+      net_score: 6,
+      contributing_builds: [{ archive_id: "archive-001", sign: 1, weight: 3.5 }],
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Parity tests
 // ---------------------------------------------------------------------------
@@ -154,7 +182,8 @@ describe("proposal-shape parity — SKILL.md canonical template vs shapeMutation
   const skillFmKeys = parseFrontmatterKeys(canonicalBlock);
   const skillSections = parseSectionHeaders(canonicalBlock);
 
-  const result = shapeMutationProposal({
+  // Fixture 1: the unchanged violation-based "rewrite" path (gated, no score_provenance).
+  const rewriteResult = shapeMutationProposal({
     target: makeTarget(),
     candidateText: "# candidate",
     evalResult: makeEvalResult(),
@@ -162,12 +191,27 @@ describe("proposal-shape parity — SKILL.md canonical template vs shapeMutation
     index: 1,
   });
 
-  const actualFmKeys = new Set(Object.keys(result.frontmatter));
+  // Fixture 2: the Gap 3 L3 "reinforce" path (ungated — evalResult: null — carries
+  // score_provenance). Covers the gated/score_provenance keys the rewrite fixture omits.
+  const reinforceResult = shapeMutationProposal({
+    target: makeReinforceTarget(),
+    candidateText: "# Some Principle",
+    evalResult: null,
+    ts: "20260625T143000",
+    index: 2,
+  });
+
+  const actualFmKeys = new Set([
+    ...Object.keys(rewriteResult.frontmatter),
+    ...Object.keys(reinforceResult.frontmatter),
+  ]);
   const actualSections = new Set(
-    result.markdown
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l.startsWith("## ")),
+    [rewriteResult, reinforceResult].flatMap((result) =>
+      result.markdown
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith("## ")),
+    ),
   );
 
   it("SKILL.md canonical block is present and parseable", () => {

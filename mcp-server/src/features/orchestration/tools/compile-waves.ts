@@ -1,0 +1,300 @@
+import { readFile } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
+import type { TaskDag, TaskNode } from "@shared/lib/dag-validator.ts";
+import { splitFrontmatter } from "@shared/lib/frontmatter.ts";
+import {
+  type CanonToolError,
+  type ToolResult,
+  toolError,
+  toolOk,
+} from "@shared/lib/tool-result.ts";
+import {
+  compileWaves,
+  deriveTaskBranch,
+  deriveTaskWorktreePath,
+  type WavesEnvelope,
+} from "@shared/lib/waves-compiler.ts";
+import { parse as parseYaml } from "yaml";
+
+/**
+ * compile_waves — thin MCP wrapper over the pure `compileWaves` compiler.
+ *
+ * Reads `${workspace}/plans/${slug}/task-dag.yaml` + each task's
+ * `{task_id}-PLAN.md`, fills a self-contained worker prompt per task (the
+ * `worker-prompt.md` variable set — see `buildPromptSeed` below), and calls
+ * `compileWaves`. Read-only: no worktree creation or other side effects — the
+ * orchestrator pre-creates worktrees from the returned `worktrees_to_create`
+ * list before invoking the `workflows/canon-waves.js` runner.
+ */
+
+export type CompileWavesToolInput = {
+  workspace: string;
+  slug: string;
+  base_commit: string;
+  build_worktree: string;
+  project_dir?: string;
+};
+
+export type WorktreeToCreate = {
+  worktree_path: string;
+  branch: string;
+  base_commit: string;
+};
+
+export type CompileWavesToolResult = {
+  envelope: WavesEnvelope;
+  worktrees_to_create: WorktreeToCreate[];
+};
+
+const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+type RawTaskDagTask = {
+  task_id?: unknown;
+  depends_on?: unknown;
+  parallel_safe?: unknown;
+  files?: unknown;
+};
+
+type RawTaskDag = {
+  tasks?: RawTaskDagTask[];
+};
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+/** Normalize a parsed task-dag.yaml document into the validator's TaskDag shape. */
+function normalizeTaskDag(raw: unknown): TaskDag {
+  const rawDag = (raw ?? {}) as RawTaskDag;
+  const tasks: TaskNode[] = (rawDag.tasks ?? []).map((task) => ({
+    depends_on: toStringArray(task.depends_on),
+    files: toStringArray(task.files),
+    parallel_safe: typeof task.parallel_safe === "boolean" ? task.parallel_safe : true,
+    task_id: typeof task.task_id === "string" ? task.task_id : "",
+  }));
+  return { tasks };
+}
+
+/** Strip `{project_dir}/.canon/workspaces/` prefix per worker-prompt.md's Template Notes. */
+function deriveCanonParentWorkspace(workspace: string, projectDir: string): string {
+  const prefix = `${projectDir}/.canon/workspaces/`;
+  return workspace.startsWith(prefix) ? workspace.slice(prefix.length) : workspace;
+}
+
+type PromptSeedOpts = {
+  taskId: string;
+  worktreePath: string;
+  branch: string;
+  planBody: string;
+  slug: string;
+  workspace: string;
+  projectDir: string;
+  buildBaseCommit: string;
+  canonParentWorkspace: string;
+  modelTier: string;
+};
+
+/**
+ * Build a self-contained prompt for a single canon-waves task worker.
+ *
+ * Reuses `templates/worker-prompt.md`'s variable set (WORKER_NAME, PROJECT_DIR,
+ * WORKSPACE, SLUG, CANON_PARENT_WORKSPACE, BUILD_BASE_COMMIT, MODEL_TIER) but
+ * embeds the task plan directly rather than relying on a TaskList pull-loop —
+ * canon-waves direct-assigns one worker per task via `parallel()`, so there is
+ * no task queue to pull a description from.
+ */
+function buildPromptSeed(opts: PromptSeedOpts): string {
+  return [
+    `You are a Canon build worker (${opts.taskId}) for build ${opts.slug}.`,
+    "",
+    "## Step 0 (REQUIRED) — L4 hook authorization",
+    "```bash",
+    `export CANON_PARENT_WORKSPACE="${opts.canonParentWorkspace}"`,
+    "```",
+    'If CANON_PARENT_WORKSPACE is empty or unset, STOP and return {"status":"blocked","note":"L4 hook authorization failed"}.',
+    "",
+    "## Step 1 — worktree safety guard",
+    `Using Bash, run: git -C ${opts.worktreePath} rev-parse --show-toplevel`,
+    `Confirm the output resolves to exactly "${opts.worktreePath}" (your Canon-owned task worktree). If it does not match, STOP and return {"status":"blocked","note":"worktree mismatch: expected ${opts.worktreePath}"} without making any changes.`,
+    "",
+    "## Step 2 — do the work",
+    `Work ONLY in ${opts.worktreePath} (never the project root or build worktree). Follow the task plan below exactly.`,
+    "",
+    "## Step 3 — commit",
+    `Commit with Canon provenance trailers: Canon-Workflow: ${opts.slug}, Canon-Agent: engineer, Canon-State: implement, Canon-Task: ${opts.taskId}.`,
+    "",
+    "## Step 4 — return",
+    'Return {"status":"ok","note":"<the resulting commit sha>"} on success, {"status":"blocked","note":"<the exact error output>"} otherwise.',
+    "",
+    `PROJECT_DIR=${opts.projectDir}`,
+    `WORKSPACE=${opts.workspace}`,
+    `BUILD_BASE_COMMIT=${opts.buildBaseCommit}`,
+    `MODEL_TIER=${opts.modelTier}`,
+    `BRANCH=${opts.branch}`,
+    "",
+    "## Task Plan",
+    "",
+    opts.planBody,
+  ].join("\n");
+}
+
+/** Validate top-level input shape before touching the filesystem. */
+function validateCompileWavesInput(input: CompileWavesToolInput): CanonToolError | null {
+  if (!isAbsolute(input.workspace)) {
+    return toolError(
+      "INVALID_INPUT",
+      `workspace must be an absolute path; got: "${input.workspace}"`,
+    );
+  }
+  if (!SLUG_PATTERN.test(input.slug)) {
+    return toolError(
+      "INVALID_INPUT",
+      `Invalid slug "${input.slug}": must match /^[a-zA-Z0-9_-]+$/`,
+    );
+  }
+  return null;
+}
+
+/**
+ * Positive allow-pattern for a raw (unsanitized) task_id: must start with an
+ * alphanumeric or underscore, then only charset-legal characters — and never
+ * contain a `..` substring. This is deliberately NOT the identity-sanitize
+ * test (`sanitizeTaskId(id) !== id`) it replaces: the sanitizer's charset
+ * `[A-Za-z0-9._-]` is a no-op on `.`, `..`, `...`, `.hidden`, or `a..b`, so
+ * that test let a task_id of `..` (or worse, `a..b`) pass straight through —
+ * a fail-open gap in the defense-in-depth around the plan-path read below
+ * (adversarial-review finding).
+ */
+const TASK_ID_ALLOW_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/;
+
+/**
+ * Reject any task_id that isn't safe to embed in a branch name / worktree
+ * path / plan-file path (security F1) — a raw task_id is joined directly
+ * into a plan-file path (`{plansDir}/{task_id}-PLAN.md`) before `compileWaves`
+ * ever runs its own sanitization, so an unsafe task_id would escape `plansDir`
+ * on the read. Fail-closed BEFORE any plan-path read or envelope emit.
+ */
+function validateTaskIdCharset(dag: TaskDag): CanonToolError | null {
+  for (const task of dag.tasks) {
+    const id = task.task_id;
+    const unsafe =
+      id === "." || id === ".." || id.includes("..") || !TASK_ID_ALLOW_PATTERN.test(id);
+    if (unsafe) {
+      return toolError(
+        "INVALID_INPUT",
+        `Invalid task_id "${id}": must match ${TASK_ID_ALLOW_PATTERN} and must not contain ".."`,
+      );
+    }
+  }
+  return null;
+}
+
+/** Read + parse task-dag.yaml into the validator's TaskDag shape. */
+async function loadTaskDag(dagPath: string): Promise<{ ok: true; dag: TaskDag } | CanonToolError> {
+  let dagContent: string;
+  try {
+    dagContent = await readFile(dagPath, "utf-8");
+  } catch {
+    return toolError("WORKSPACE_NOT_FOUND", `task-dag.yaml not found at ${dagPath}`);
+  }
+
+  let rawDag: unknown;
+  try {
+    rawDag = parseYaml(dagContent);
+  } catch (err) {
+    return toolError(
+      "INVALID_INPUT",
+      `task-dag.yaml is not valid YAML: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return { dag: normalizeTaskDag(rawDag), ok: true };
+}
+
+type BuildPromptSeedsOpts = {
+  dag: TaskDag;
+  plansDir: string;
+  input: CompileWavesToolInput;
+  projectDir: string;
+  canonParentWorkspace: string;
+};
+
+/** Read each task's PLAN.md and build its self-contained worker prompt. */
+async function buildPromptSeeds(
+  opts: BuildPromptSeedsOpts,
+): Promise<{ ok: true; promptSeeds: Record<string, string> } | CanonToolError> {
+  const { dag, plansDir, input, projectDir, canonParentWorkspace } = opts;
+  const promptSeeds: Record<string, string> = {};
+  for (const task of dag.tasks) {
+    const planPath = join(plansDir, `${task.task_id}-PLAN.md`);
+    let planRaw: string;
+    try {
+      planRaw = await readFile(planPath, "utf-8");
+    } catch {
+      return toolError("WORKSPACE_NOT_FOUND", `Task plan not found: ${planPath}`);
+    }
+    const { body } = splitFrontmatter(planRaw);
+
+    promptSeeds[task.task_id] = buildPromptSeed({
+      branch: deriveTaskBranch(task.task_id),
+      buildBaseCommit: input.base_commit,
+      canonParentWorkspace,
+      modelTier: "sonnet",
+      planBody: body.trim(),
+      projectDir,
+      slug: input.slug,
+      taskId: task.task_id,
+      workspace: input.workspace,
+      worktreePath: deriveTaskWorktreePath(projectDir, task.task_id),
+    });
+  }
+  return { ok: true, promptSeeds };
+}
+
+export async function compileWavesTool(
+  input: CompileWavesToolInput,
+  defaultProjectDir: string,
+): Promise<ToolResult<CompileWavesToolResult>> {
+  const inputError = validateCompileWavesInput(input);
+  if (inputError) return inputError;
+
+  const projectDir = input.project_dir ?? defaultProjectDir;
+  const plansDir = join(input.workspace, "plans", input.slug);
+  const dagResult = await loadTaskDag(join(plansDir, "task-dag.yaml"));
+  if (!dagResult.ok) return dagResult;
+
+  const taskIdError = validateTaskIdCharset(dagResult.dag);
+  if (taskIdError) return taskIdError;
+
+  const canonParentWorkspace = deriveCanonParentWorkspace(input.workspace, projectDir);
+  const seedsResult = await buildPromptSeeds({
+    canonParentWorkspace,
+    dag: dagResult.dag,
+    input,
+    plansDir,
+    projectDir,
+  });
+  if (!seedsResult.ok) return seedsResult;
+
+  const compileResult = compileWaves({
+    base_commit: input.base_commit,
+    build_worktree: input.build_worktree,
+    dag: dagResult.dag,
+    project_dir: projectDir,
+    prompt_seeds: seedsResult.promptSeeds,
+    slug: input.slug,
+  });
+
+  if (!compileResult.ok) {
+    return toolError("INVALID_INPUT", compileResult.errors.join("; "));
+  }
+
+  const worktreesToCreate: WorktreeToCreate[] = compileResult.envelope.waves[0].tasks.map(
+    (task) => ({
+      base_commit: input.base_commit,
+      branch: task.branch,
+      worktree_path: task.worktree_path,
+    }),
+  );
+
+  return toolOk({ envelope: compileResult.envelope, worktrees_to_create: worktreesToCreate });
+}
