@@ -22,11 +22,17 @@ merges); this is not a race.
 P2/P3 identified the writer: the only code call site
 (`reconcile-learnings.ts:642`) is already correct and post-dates the
 corruption by roughly six weeks. The real writers are **agents executing
-freeform Bash** against four prose instruction sites (`learner-dimensions.md`,
-`analyze-patterns/SKILL.md`, `review-learnings.md`, `writer.md`), none of
-which specify newline-termination or a mechanism. Each agent improvises its
-own shell idiom; one, on 2026-06-04, improvised one without a trailing
-newline.
+freeform Bash** against prose instruction sites spanning five files
+(`learner-dimensions.md`, `analyze-patterns/SKILL.md`, `review-learnings.md`,
+`write-principle/SKILL.md`, `writer.md`) and ten distinct instructive
+paragraphs — `review-learnings.md` alone carries five separate append
+instructions (one per apply arm) and `write-principle/SKILL.md` carries two
+— none of which specify newline-termination or a mechanism. (An earlier
+count of "four sites" undercounted both the file list, which omitted
+`write-principle/SKILL.md`, and the per-file paragraph granularity; a
+fix-review round on this same build caught the gap — see "Amendment:
+fix-review round 2" below.) Each agent improvises its own shell idiom;
+one, on 2026-06-04, improvised one without a trailing newline.
 
 This means there is no code bug to patch — prose cannot bind an agent's
 ad-hoc shell command, and asking an agent to "remember to append `\n`" is a
@@ -36,9 +42,9 @@ request for vigilance, which is a defect generator, not a fix.
 
 ### Option A: Prose hardening only (v1 scope)
 
-Document the safe shell idiom (`printf '%s\n' "$json" >> file`) at all four
-prose sites, plus a self-healing predecessor-repair helper for defense in
-depth. No new MCP tool.
+Document the safe shell idiom (`printf '%s\n' "$json" >> file`) at all ten
+prose instruction sites (across five files), plus a self-healing
+predecessor-repair helper for defense in depth. No new MCP tool.
 
 **Pros:**
 - Minimal surface — no new tool contract, no new agent grants.
@@ -46,8 +52,8 @@ depth. No new MCP tool.
 
 **Cons:**
 - Still asks an agent to get a byte-level shell idiom right, every time,
-  across four independently-maintained prose sites. The exact failure mode
-  this ADR exists to close.
+  across ten independently-maintained prose instruction sites spanning five
+  files. The exact failure mode this ADR exists to close.
 - No enforcement — a future prose edit can silently drop the safe idiom
   again with no gate to catch it.
 
@@ -132,9 +138,9 @@ The core justification is that Option A cannot close the actual gap (prose
 cannot bind a freeform-Bash agent) and Option B closes it at a cost already
 measured, first-hand, to be worse than the defect it would prevent. Option
 C converts the failure mode from "an agent must remember a byte-level shell
-idiom, forever, across four prose sites" into "an agent hands over an
-object" — a structural fix, not a vigilance fix — while adding no new
-Bash-inspection hazard.
+idiom, forever, across ten prose instruction sites" into "an agent hands
+over an object" — a structural fix, not a vigilance fix — while adding no
+new Bash-inspection hazard.
 
 ## Canon-Principle Alignment
 
@@ -168,7 +174,7 @@ Bash-inspection hazard.
   corruption now requires **two consecutive tool-bypassing appends** — one
   omitting `\n`, then a naive one landing on it — down from one. This is a
   large reduction, not elimination. `jsonl-02` (doctor Check 9, prose
-  hardening at the four sites) is the compensating detection net for this
+  hardening at all ten sites) is the compensating detection net for this
   residual, not a second enforcement mechanism.
 - New ongoing maintenance surface: the pinned tool-count characterization
   test (`create-server.test.ts`) and the fail-closed
@@ -189,3 +195,19 @@ Bash-inspection hazard.
 - A second JSONL store (beyond `learning.jsonl`) gains a live agent writer
   following the same freeform-Bash pattern — extend the tool (or add a
   sibling) rather than let prose-only guidance re-accumulate the same gap.
+
+## Amendment: fix-review round 2 (prose-inventory correction)
+
+A 3-lens jury + mandatory security pass on this same build caught two gaps
+in the initial ship: (1) `append_learning_record`/`reconcile_learnings`
+never bound `project_dir` to the caller's resolved session scope — fixed by
+threading `resolveScope(extra)` through both handlers, mirroring
+`sync_indexes`; (2) this ADR's own "four prose instruction sites" count
+undercounted the hardening surface it claims to close. The true count is
+ten instructive paragraphs across five files — `learner-dimensions.md` (1),
+`analyze-patterns/SKILL.md` (1), `review-learnings.md` (5 — one per apply
+arm), `write-principle/SKILL.md` (2, previously unlisted), and `writer.md`
+(1) — not the four files originally enumerated in Context. All ten now
+name `append_learning_record` and forbid hand-rolled shell redirection; the
+"four sites" literal throughout this document is corrected to the true
+count.

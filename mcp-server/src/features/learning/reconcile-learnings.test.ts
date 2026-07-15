@@ -138,7 +138,7 @@ describe("reconcileLearnings", () => {
     // is sufficient evidence (Fix 3 relevance gate does not apply).
     const git = makeFakeGit(true, { createdFile: true, hash: "deadbeef" });
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -176,7 +176,7 @@ describe("reconcileLearnings", () => {
     });
     const git = makeFakeGit(true, { createdFile: true, hash: "deadbeef" });
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -200,7 +200,7 @@ describe("reconcileLearnings", () => {
     });
     const git = makeFakeGit(false); // no commit post-dates the proposal
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -229,7 +229,7 @@ describe("reconcileLearnings", () => {
       },
     };
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(false);
     expect(fs.renamed).toHaveLength(0);
@@ -252,7 +252,7 @@ describe("reconcileLearnings", () => {
     });
     const git = makeFakeGit(false);
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -286,7 +286,7 @@ describe("reconcileLearnings", () => {
     // No post-proposal commit — the actionable proposal survives reconcile (stays pending).
     const git = makeFakeGit(false);
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -314,6 +314,7 @@ describe("reconcileLearnings", () => {
 
     const result = await reconcileLearnings(
       { project_dir: PROJECT_DIR, dry_run: true },
+      PROJECT_DIR,
       { fs, git },
     );
 
@@ -326,13 +327,33 @@ describe("reconcileLearnings", () => {
   });
 
   it("rejects a path-escape project_dir input", async () => {
-    const result = await reconcileLearnings({ project_dir: "/fake/../etc" });
+    const result = await reconcileLearnings({ project_dir: "/fake/../etc" }, PROJECT_DIR);
     expect(result.ok).toBe(false);
   });
 
   it("rejects a non-positive freshness_days input", async () => {
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR, freshness_days: 0 });
+    const result = await reconcileLearnings(
+      { project_dir: PROJECT_DIR, freshness_days: 0 },
+      PROJECT_DIR,
+    );
     expect(result.ok).toBe(false);
+  });
+
+  it("rejects a project_dir outside the resolved session scope, with zero mutations (validate-at-trust-boundaries)", async () => {
+    const outsideDir = "/fake/outside-project";
+    const fs = makeFakeFs({ dirs: {}, files: {} });
+    const git = makeFakeGit(false);
+
+    const result = await reconcileLearnings({ project_dir: outsideDir }, PROJECT_DIR, {
+      fs,
+      git,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected error result");
+    expect(result.error_code).toBe("INVALID_INPUT");
+    expect(fs.renamed).toHaveLength(0);
+    expect(fs.appended).toHaveLength(0);
   });
 
   it("never touches a loose top-level proposal file (PROBE-FINDINGS P4 scope)", async () => {
@@ -348,7 +369,7 @@ describe("reconcileLearnings", () => {
     });
     const git = makeFakeGit(true, { createdFile: true, hash: "deadbeef" });
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -396,7 +417,7 @@ describe("reconcileLearnings", () => {
     };
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(false); // the crash propagates to the fail-open handler
     expect(fs.renamed).toHaveLength(1); // only the first rename succeeded
@@ -429,7 +450,7 @@ describe("reconcileLearnings", () => {
     });
     const git = makeTimeAwareFakeGit("2026-05-29T08:00:00Z");
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -463,7 +484,7 @@ describe("reconcileLearnings", () => {
     });
     const git = makeTimeAwareFakeGit("2026-05-29T22:30:00Z");
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -498,7 +519,7 @@ describe("reconcileLearnings", () => {
       message: "chore: fix a typo elsewhere in the file",
     });
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -525,7 +546,7 @@ describe("reconcileLearnings", () => {
       message: "docs(principles): apply sug_TEST1 severity change",
     });
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -554,7 +575,7 @@ describe("reconcileLearnings", () => {
       message: "chore: unrelated commit subject",
     });
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");

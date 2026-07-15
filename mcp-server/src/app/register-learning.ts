@@ -1,7 +1,7 @@
 import { appendLearningRecord, reconcileLearnings } from "@features/learning/index.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { gatedWrapHandler } from "./server-state.ts";
+import { gatedWrapHandler, resolveScope } from "./server-state.ts";
 
 /**
  * Register the learning-resolution tools on the given McpServer.
@@ -29,7 +29,7 @@ export function registerLearningTools(server: McpServer): void {
         project_dir: z.string().describe("Project root directory path"),
       },
     },
-    gatedWrapHandler(async (input) => reconcileLearnings(input)),
+    gatedWrapHandler(async (input, extra) => reconcileLearnings(input, resolveScope(extra))),
   );
 
   server.registerTool(
@@ -46,6 +46,6 @@ export function registerLearningTools(server: McpServer): void {
           ),
       },
     },
-    gatedWrapHandler(async (input) => appendLearningRecord(input)),
+    gatedWrapHandler(async (input, extra) => appendLearningRecord(input, resolveScope(extra))),
   );
 }

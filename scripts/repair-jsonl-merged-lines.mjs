@@ -105,7 +105,7 @@ function main() {
 
   if (linesRepaired === 0) {
     console.log(
-      `repair-jsonl-merged-lines: no merged lines — ${recordsBefore} records, 0 unparseable, no-op.`,
+      `repair-jsonl-merged-lines: no merged lines — ${recordsBefore} records, ${unparseableRemaining} unparseable, no-op.`,
     );
     return;
   }

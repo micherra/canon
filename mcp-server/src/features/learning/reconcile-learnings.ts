@@ -157,7 +157,9 @@ async function fileExistsDefault(path: string): Promise<boolean> {
  */
 export const defaultFsSeam: ReconcileFsSeam = {
   appendFile: async (path, data) => {
-    await appendRawLineHealing(path, data);
+    const { healed } = await appendRawLineHealing(path, data);
+    if (healed)
+      console.warn(`[reconcile-learnings] healed a bypassed append at ${path} (ADR-0056)`);
   },
   fileExists: fileExistsDefault,
   mkdir: (path) => fs.mkdir(path, { recursive: true }).then(() => undefined),
@@ -696,6 +698,7 @@ async function applyPlan(
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
+const DEFAULT_SEAMS = { fs: defaultFsSeam, git: defaultGitSeam };
 
 /**
  * Reconciles the `.canon/proposed-learnings/{ts}/` review surface: auto-moves
@@ -704,20 +707,28 @@ async function applyPlan(
  * move-never-delete.
  *
  * Validates `project_dir`/`freshness_days` at this seam before any filesystem
- * walk (`validate-at-trust-boundaries`). Any internal error — a thrown seam
- * call, a malformed proposal, anything unexpected — is caught here and
- * returned as a typed error; it never throws past this function.
+ * walk (`validate-at-trust-boundaries`); `project_dir` is additionally
+ * contained within `defaultProjectDir` — the caller's resolved session scope
+ * (`resolveScope(extra)`) — via the same `isPathContained` check used below
+ * for target-path re-containment (Fix D). Fail-closed `INVALID_INPUT` with
+ * zero mutations on an out-of-scope `project_dir`; mirrors `sync_indexes`
+ * and the sibling `appendLearningRecord` guard (which uses the async
+ * `isPathInWorktree` instead — real fs paths there support symlink
+ * resolution, whereas this file's fully in-memory `ReconcileFsSeam` fakes
+ * need the pure, filesystem-free check). Any internal error is caught here
+ * and returned as a typed error; it never throws past this function.
  */
 export async function reconcileLearnings(
   input: ReconcileLearningsInput,
-  seams: { fs: ReconcileFsSeam; git: ReconcileGitSeam } = {
-    fs: defaultFsSeam,
-    git: defaultGitSeam,
-  },
+  defaultProjectDir: string,
+  seams: { fs: ReconcileFsSeam; git: ReconcileGitSeam } = DEFAULT_SEAMS,
 ): Promise<ToolResult<ReconcileLearningsOutput>> {
   if (!isSafeProjectDirInput(input.project_dir)) {
     return toolError("INVALID_INPUT", `Invalid project_dir: ${input.project_dir}`, false);
   }
+
+  if (!isPathContained(defaultProjectDir, input.project_dir))
+    return toolError("INVALID_INPUT", `project_dir "${input.project_dir}" outside scope`, false);
 
   const freshnessDays = input.freshness_days ?? FRESHNESS_DAYS;
   if (!Number.isFinite(freshnessDays) || freshnessDays <= 0) {

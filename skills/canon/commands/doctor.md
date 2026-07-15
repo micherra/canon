@@ -233,7 +233,12 @@ For each of the five active append-target stores — `.canon/learning.jsonl`,
 `.canon/patterns.jsonl` — if the file exists:
 - **Leading indicator**: check whether the file ends with a trailing newline. A missing final
   newline is a merge that hasn't happened yet — the next append will land on the open line.
-- **Lagging indicator**: try parsing each line as JSON. Flag lines that fail to parse.
+- **Lagging indicator**: try parsing each line as JSON. Flag lines that fail to parse. Skip
+  blank lines first (a line that is empty or whitespace-only is not a parse failure) — the
+  sanctioned append primitive's healing TOCTOU (`jsonl-append.ts`) can legitimately produce a
+  blank line when two concurrent appends both observe a non-newline last byte and both prefix a
+  healing `\n`; that is strictly better than the pre-ADR-0056 merge it replaces and must not be
+  flagged as corruption.
 
 **WARN** for a missing final newline: "{file}: does not end with a newline — the next append
 will merge onto this line."

@@ -306,7 +306,7 @@ After saving, perform the idempotent move-and-append documented in `agents/write
 
 1. Resolve the `PROPOSAL=<path>` token from the spawn prompt.
 2. If the proposal's parent directory is already `applied/`, `rejected/`, `dismissed/`, or `stale/`, or the file no longer exists at that path, it is already resolved — do nothing.
-3. Otherwise, create an `applied/` subdirectory alongside the proposal if needed, move the proposal file into it, then append one `accepted` entry to `.canon/learning.jsonl` (same shape `/canon:review-learnings` Step 3 writes), using the `id`/`proposal_id` and `type`/`target` fields read from the proposal's frontmatter in Step 1.
+3. Otherwise, create an `applied/` subdirectory alongside the proposal if needed, move the proposal file into it, then append one `accepted` entry to `.canon/learning.jsonl` via the `append_learning_record` MCP tool — never shell redirection (`>>`, `echo`, `printf`, `tee`) or the `Write` tool; a record left without a trailing newline silently merges with the next append (ADR-0056) — with the same shape `/canon:review-learnings` Step 3 writes, using the `id`/`proposal_id` and `type`/`target` fields read from the proposal's frontmatter in Step 1.
 
 This is idempotent and safe regardless of whether `/canon:review-learnings` also performs its own move after the writer returns — see the Ownership boundary note in `agents/writer.md`. On failure, note the warning in the `*-SUMMARY.md`; do NOT fail or roll back the save that already succeeded.
 
@@ -352,7 +352,7 @@ Proceed only after Steps 1 and 2 pass. Use the existing toolset (no new tool req
 
 ### Step 4: Close the loop — move the originating proposal (idempotent)
 
-Perform the same idempotent move-and-append as apply-proposal Step 6 above (see `agents/writer.md` § Apply-Proposal Loop Closure): if the proposal's parent directory is already `applied/`/`rejected/`/`dismissed/`/`stale/`, or the file no longer exists at that path, do nothing. Otherwise move the proposal into a sibling `applied/` subdirectory and append one `accepted` entry to `.canon/learning.jsonl`. This is idempotent under either ordering with `/canon:review-learnings`'s own move.
+Perform the same idempotent move-and-append as apply-proposal Step 6 above (see `agents/writer.md` § Apply-Proposal Loop Closure): if the proposal's parent directory is already `applied/`/`rejected/`/`dismissed/`/`stale/`, or the file no longer exists at that path, do nothing. Otherwise move the proposal into a sibling `applied/` subdirectory and append one `accepted` entry to `.canon/learning.jsonl` via the `append_learning_record` MCP tool — never shell redirection (`>>`, `echo`, `printf`, `tee`) or the `Write` tool (ADR-0056). This is idempotent under either ordering with `/canon:review-learnings`'s own move.
 
 ### Step 5: Write the apply-proposal summary
 
