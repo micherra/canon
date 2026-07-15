@@ -244,6 +244,23 @@ rm -rf "$ISO_RET_TMPDIR"
 trap - EXIT INT TERM
 
 # ---------------------------------------------------------------------------
+# args-defensive-parse fixtures (AC5) — args arrives as a JSON string in the
+# Workflow sandbox; an arg-consuming script must parse it before reading.
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- args-defensive-parse fixtures (AC5) ---"
+
+run_lint_with_construct \
+  "$FIXTURES_DIR/bad-args-bare.js" \
+  "args data access without defensive parse" \
+  "bad-args-bare.js: named 'args data access without defensive parse'"
+
+GOOD_ARGS_TMPDIR="$(mktemp -d)"
+cp "$FIXTURES_DIR/good-args-parsed.js" "$GOOD_ARGS_TMPDIR/"
+run_lint_on_dir 0 "$GOOD_ARGS_TMPDIR" "good-args-parsed.js (defensive parse present, exit 0)"
+rm -rf "$GOOD_ARGS_TMPDIR"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
