@@ -166,10 +166,11 @@ For each accepted proposal:
      ```
      This lands on the current branch (local only — push/PR stays a manual, unchanged step). The full Canon trailer block keeps `post-commit-trailers.sh` quiet.
 6. After the writer completes, move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` (create subdirectory if needed).
-7. Append an entry to `.canon/learning.jsonl`:
-   ```json
-   {"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"..."}
-   ```
+7. Call the `append_learning_record` MCP tool with `project_dir` and a `record` object shaped
+   `{"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"..."}`.
+   This is the only sanctioned append path for `.canon/learning.jsonl` — do not write the entry
+   via shell redirection (`>>`, `echo`, `printf`, `tee`) or the `Write` tool: a record left
+   without a trailing newline silently merges with the next append (ADR-0056).
 
 **Arm R — retire (Gap 3 L3, `proposal_kind: "retire"`, invalidate-don't-delete):**
 
