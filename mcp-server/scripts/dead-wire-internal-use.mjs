@@ -54,9 +54,11 @@
  *   count = 0  → no resolved uses found → DEAD
  *
  * MODULE RESOLUTION
- *   This script MUST reside under mcp-server/ so the bare specifier "typescript"
- *   resolves against mcp-server/node_modules (ESM resolves bare specifiers
- *   relative to the importing file, not cwd).
+ *   This script MUST reside under mcp-server/ so the seam's bare specifier
+ *   "typescript-parser" resolves against mcp-server/node_modules (ESM
+ *   resolves bare specifiers relative to the importing file, not cwd). The
+ *   TypeScript compiler API is obtained via scripts/lib/ts-compiler.mjs, not
+ *   a direct `import("typescript")` — see docs/adr/0056-*.md.
  *
  * EXIT CODES
  *   0  Success: count printed to stdout.
@@ -66,6 +68,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { loadTsCompiler } from "./lib/ts-compiler.mjs";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -92,17 +95,39 @@ async function main() {
     process.exit(1);
   }
 
-  // Import typescript (fail-closed: missing module → non-zero)
-  let ts;
-  try {
-    const mod = await import("typescript");
-    ts = mod.default ?? mod;
-  } catch (err) {
-    process.stderr.write(
-      `CANON ERROR [dead-wire-internal-use]: cannot import 'typescript': ${err.message}\n`,
-    );
-    process.exit(1);
-  }
+  // Load TypeScript compiler API via the fail-loud seam (scripts/lib/ts-compiler.mjs).
+  // See docs/adr/0056-typescript-7-tooling-parser-split.md.
+  const ts = await loadTsCompiler("dead-wire-internal-use", [
+    "ScriptKind",
+    "ScriptTarget",
+    "SymbolFlags",
+    "createCompilerHost",
+    "createProgram",
+    "createSourceFile",
+    "forEachChild",
+    "isArrowFunction",
+    "isClassDeclaration",
+    "isClassExpression",
+    "isEnumDeclaration",
+    "isExportSpecifier",
+    "isFunctionDeclaration",
+    "isFunctionExpression",
+    "isGetAccessorDeclaration",
+    "isIdentifier",
+    "isImportSpecifier",
+    "isInterfaceDeclaration",
+    "isMethodDeclaration",
+    "isMethodSignature",
+    "isModuleDeclaration",
+    "isParameter",
+    "isPropertyDeclaration",
+    "isPropertySignature",
+    "isSetAccessorDeclaration",
+    "isShorthandPropertyAssignment",
+    "isTypeAliasDeclaration",
+    "isVariableDeclaration",
+    "isVariableStatement",
+  ]);
 
   // Build a single in-memory Program (no tsconfig, no lib files needed)
   const scriptKind = filePath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;

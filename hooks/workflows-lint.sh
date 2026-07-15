@@ -19,7 +19,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 LINT_HELPER="$REPO_ROOT/mcp-server/scripts/workflows-lint.mjs"
 WORKFLOWS_DIR="$REPO_ROOT/workflows"
-TS_DEP="$REPO_ROOT/mcp-server/node_modules/typescript"
+# The linter obtains its TypeScript compiler API via scripts/lib/ts-compiler.mjs,
+# which resolves the "typescript-parser" alias (pinned typescript@6.0.3) — not
+# the "typescript" package directly. See docs/adr/0056-typescript-7-tooling-parser-split.md.
+TS_DEP="$REPO_ROOT/mcp-server/node_modules/typescript-parser"
 
 # ── Fail-closed dependency checks (hooks-fail-closed) ───────────────────────
 # node absent → cannot run the check → non-zero exit (never silent pass)
@@ -28,9 +31,9 @@ if ! command -v node >/dev/null 2>&1; then
   exit 1
 fi
 
-# typescript dep absent → cannot import → non-zero exit
+# typescript-parser dep absent → cannot import → non-zero exit
 if [[ ! -d "$TS_DEP" ]]; then
-  echo "ERROR: [workflows-lint] typescript dependency not found at $TS_DEP — cannot run workflows lint (hooks-fail-closed)." >&2
+  echo "ERROR: [workflows-lint] typescript-parser dependency not found at $TS_DEP — cannot run workflows lint (hooks-fail-closed)." >&2
   exit 1
 fi
 

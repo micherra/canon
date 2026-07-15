@@ -45,9 +45,11 @@
  *   Hooks-fail-closed: no 2>/dev/null || true silent pass.
  *
  * MODULE RESOLUTION
- *   This script MUST reside under mcp-server/ so the bare specifier "typescript"
- *   resolves against mcp-server/node_modules (ESM resolves bare specifiers
- *   relative to the importing file, not cwd).
+ *   This script MUST reside under mcp-server/ so the seam's bare specifier
+ *   "typescript-parser" resolves against mcp-server/node_modules (ESM
+ *   resolves bare specifiers relative to the importing file, not cwd). The
+ *   TypeScript compiler API is obtained via scripts/lib/ts-compiler.mjs, not
+ *   a direct `import("typescript")` — see docs/adr/0056-*.md.
  *
  * EXIT CODES
  *   0  All files clean (or targetDir empty/absent).
@@ -57,6 +59,7 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve, dirname, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadTsCompiler } from "./lib/ts-compiler.mjs";
 
 // ---------------------------------------------------------------------------
 // Resolve paths: this script lives at mcp-server/scripts/workflows-lint.mjs.
@@ -68,18 +71,36 @@ const REPO_ROOT = resolve(__dirname, "..", "..");
 const DEFAULT_TARGET_DIR = join(REPO_ROOT, "workflows");
 
 // ---------------------------------------------------------------------------
-// Import TypeScript compiler API (fail-closed: must resolve from mcp-server/)
+// Load TypeScript compiler API via the fail-loud seam (scripts/lib/ts-compiler.mjs).
+// See docs/adr/0056-typescript-7-tooling-parser-split.md.
 // ---------------------------------------------------------------------------
-let ts;
-try {
-  const mod = await import("typescript");
-  ts = mod.default ?? mod;
-} catch (err) {
-  process.stderr.write(
-    `CANON ERROR [workflows-lint]: cannot import 'typescript': ${err.message}\n`,
-  );
-  process.exit(1);
-}
+const ts = await loadTsCompiler("workflows-lint", [
+  "ScriptKind",
+  "ScriptTarget",
+  "SyntaxKind",
+  "createSourceFile",
+  "forEachChild",
+  "getLineAndCharacterOfPosition",
+  "isArrayLiteralExpression",
+  "isCallExpression",
+  "isComputedPropertyName",
+  "isElementAccessExpression",
+  "isIdentifier",
+  "isNewExpression",
+  "isNoSubstitutionTemplateLiteral",
+  "isNumericLiteral",
+  "isObjectBindingPattern",
+  "isObjectLiteralExpression",
+  "isParameter",
+  "isPropertyAccessExpression",
+  "isPropertyAssignment",
+  "isPropertyDeclaration",
+  "isShorthandPropertyAssignment",
+  "isSpreadAssignment",
+  "isStringLiteral",
+  "isVariableDeclaration",
+  "isVariableStatement",
+]);
 
 // TypeScript-only-syntax diagnostic codes — "can only be used in TypeScript files."
 // These codes may be emitted as parseDiagnostics in future TypeScript versions even when
