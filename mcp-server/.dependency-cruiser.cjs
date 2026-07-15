@@ -5,8 +5,8 @@ module.exports = {
       name: "no-orchestration-to-graph-direct",
       comment:
         "Orchestration must not import directly from graph/ — use IKgStore/IKgQuery interface in domains/knowledge-graph/. " +
-        "DEFERRED-DI exceptions: inject-context.ts, init-workspace.ts, workspace-structure.ts, and " +
-        "forecast-base-advance.ts still instantiate KgQuery/KgStore/initDatabase directly because full DI " +
+        "DEFERRED-DI exceptions: inject-context.ts, init-workspace.ts, workspace-structure.ts " +
+        "still instantiate KgQuery/KgStore/initDatabase directly because full DI " +
         "wiring is deferred to a future task. Remove these pathNot entries once a DI container is wired.",
       severity: "error",
       from: {
@@ -20,7 +20,6 @@ module.exports = {
           "^src/features/orchestration/services/kg-context-formatter\\.ts$",
           "^src/features/orchestration/tools/init-workspace\\.ts$",
           "^src/features/orchestration/services/workspace-structure\\.ts$",
-          "^src/features/orchestration/tools/forecast-base-advance\\.ts$",
         ],
       },
       to: { path: "^src/graph/" },
