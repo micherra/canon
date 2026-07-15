@@ -159,6 +159,7 @@ describe("buildContextProvenanceRecord — agent-def artifact", () => {
     if (!artifact?.sections) {
       throw new Error("expected agent-def artifact to have sections");
     }
+    expect(artifact.sections.length).toBeGreaterThan(0);
     for (const section of artifact.sections) {
       expect(section.span[0]).toBeGreaterThanOrEqual(frontmatterEnd);
     }
