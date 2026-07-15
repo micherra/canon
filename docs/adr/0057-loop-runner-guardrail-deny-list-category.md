@@ -152,8 +152,9 @@ rediscovered later.
 - Changes to the loop guardrail now get `canon:security` + a fresh adversarial re-review
   regardless of build history or `override_tier`.
 - `date-shell-guard.ts` — wrong twice already — is floored for the first time.
-- ADR-0056's `superRefine` (the barrier making ADR-0002's noise class inexpressible) can no longer
-  be weakened by an unfloored build.
+- ADR-0056's `superRefine` (the barrier making two of ADR-0002's three named noise sub-classes
+  inexpressible — see ADR-0056 § Consequences for the corrected, narrower statement) can no
+  longer be weakened by an unfloored build.
 - The tracked record stops asserting a false safety property.
 
 **Negative / trade-offs:**

@@ -97,6 +97,8 @@ the existing loop bodies already intend. The narrow downside does not bite eithe
 `session-watch.kg_stale` were genuinely blind with no workaround, and the workaround pattern had
 already been independently reinvented three times elsewhere in the registry. ADR-0056 built the
 per-rule `fire_on_baseline` opt-in this ADR specified as the remedy, mechanically constrained so
-the noise class this ADR exists to prevent stays inexpressible. This ADR's Decision, Status, and
-Options Considered are unchanged — ADR-0056 is an amendment executing this ADR's own contingency,
-not a supersession.
+two of this ADR's three named noise sub-classes (flood/append, any-change) stay inexpressible;
+the third (a to:-matching false-fire) remains schema-admissible and is governed by author
+judgment plus review — see ADR-0056 § Consequences for the corrected statement. This ADR's
+Decision, Status, and Options Considered are unchanged — ADR-0056 is an amendment executing this
+ADR's own contingency, not a supersession.

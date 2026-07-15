@@ -117,9 +117,14 @@ const ObserveSchema = z.object({
   tools: z.array(z.string()).default([]),
 });
 
-// ADR-0056: fire_on_baseline opt-in — admissible ONLY on a state-naming rule (to: set,
-// from: unset, append !== true). The superRefine below enforces this; see its comment
-// for why the noise class ADR-0002 exists to prevent is made structurally inexpressible.
+// ADR-0056: fire_on_baseline opt-in — admissible ONLY on a to:-only, non-append,
+// non-from: rule. The superRefine below makes TWO of ADR-0002's three named noise
+// sub-classes structurally inexpressible: no `to:` → rejected (any-change), and
+// `append: true` → rejected (flood). It does NOT bar the third — a to:-matching
+// false-fire (e.g. a hypothetical `to: "failure"` rule) is schema-admissible
+// regardless of whether the value it names is "alerting" or "healthy"; the schema
+// has no such concept, only equality. That sub-class is governed by per-rule author
+// judgment plus review, not by this guard — see ADR-0056 § Consequences.
 const TransitionRuleSchema = z
   .object({
     append: z.boolean().optional(),

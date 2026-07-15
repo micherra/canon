@@ -1,6 +1,6 @@
 ---
 adr: "0056"
-title: "Loop baseline blindness: a per-rule fire_on_baseline opt-in for state-naming rules, mechanically barred from the noise class"
+title: "Loop baseline blindness: a per-rule fire_on_baseline opt-in for state-naming rules, mechanically constrained to bar the flood and any-change noise sub-classes"
 status: accepted
 date: "2026-07-14"
 build: "adjudicate-the-adr-0002-baseline-blindness-consequence-a-to-matching"
@@ -99,11 +99,22 @@ that opts in fires on a baseline tick if and only if the observed value equals i
 
 **Pros:**
 - Upholds ADR-0002's default for every rule that does not opt in.
-- **The noise class becomes inexpressible, not merely discouraged.** `append` → rejected;
-  no `to:` → rejected; `from:` (which asserts a prior a baseline does not have) → rejected. A loop
-  author *cannot write* "fire everything on tick 1".
-- **A healthy baseline still surfaces nothing, structurally** — the rule fires only when the
-  observed value equals its declared alerting `to:`, which a healthy snapshot does not.
+- **Two of ADR-0002's three named noise sub-classes become inexpressible, not merely
+  discouraged.** `append: true` → rejected (the flood sub-class); no `to:` → rejected (the
+  any-change sub-class). A loop author *cannot write* the append-flood or any-change shapes.
+  **The third sub-class — a to:-matching false-fire (e.g. a hypothetical `to: "failure"` rule
+  firing on an un-acted-on baseline, ADR-0002's own named example) — remains schema-admissible.**
+  Nothing in the `superRefine` distinguishes a `to:` naming an author-intended "alerting" state
+  from one naming a healthy or otherwise noisy one; the schema has no concept of "alerting",
+  only equality. This sub-class is governed by per-rule author judgment plus review, not by a
+  structural bar — accepted for the 3 rules this build opts in, all of which name a state
+  (`BEHIND`, `DIRTY`, `true`) rather than an event, but a future author *could* opt a noisy
+  edge-shaped rule in by mistake and the schema would not stop them.
+- **A healthy baseline still surfaces nothing, structurally, for the opted-in set** — the rule
+  fires only when the observed value equals its declared `to:`, which a healthy snapshot does
+  not match. This mechanical equality-gate holds for any to:-only rule regardless of whether the
+  value is "alerting" — dc-04 (an all-healthy snapshot fires zero rules) holds by construction
+  for the snapshot this build ships, not as a general guarantee against future noisy opt-ins.
 - **Silent-on-no-op falls out for free** — after a tick-1 fire, tick 2 sees `BEHIND` against a
   prior of `BEHIND`, not a change. No ledger, no suppression logic, no new state.
 - It is what ADR-0002 itself specified as the remedy.
@@ -182,7 +193,14 @@ ADR-0045 ledger, so adding the flag would emit the directive twice on tick 1.
 - The three genuinely-blind rules now surface an already-alerting condition at arm time.
   `auto-update-branch` works for a PR that is already BEHIND when the watch arms — the PR #462
   class is observable again.
-- ADR-0002's noise class is now **structurally inexpressible** rather than convention-protected.
+- **Two of ADR-0002's three named noise sub-classes (flood/append, any-change) are now
+  structurally inexpressible rather than convention-protected.** The third — a to:-matching
+  false-fire — remains schema-admissible and is governed by author judgment plus review, not
+  by the `superRefine`; see § Options Considered, Option C Pros for the full statement. This
+  correction was caught by the review's correctness juror invoking `parseLoopDefinition`
+  directly (`{ to: "failure", fire_on_baseline: true }` parses clean) rather than trusting this
+  ADR's original, broader claim — the same `probe-before-build-invoke-not-infer` failure mode
+  ADR-0057 corrects for ADR-0045, one document downstream.
 - Future loop authors get a declared, schema-checked affordance instead of a trap plus three
   undocumented workaround precedents to choose between.
 
@@ -200,10 +218,11 @@ ADR-0045 ledger, so adding the flag would emit the directive twice on tick 1.
   rather than silently inherited.
 - The opt-in is per-rule, so a new loop with an already-alerting field is blind until its author
   declares the flag. The template and `loops/CLAUDE.md` now document it at the point of authoring.
-- The `superRefine` that makes the noise class inexpressible lives in `loop-schema.ts`, which at
-  the time of this decision carried **no** deny-list floor — so a future build could have weakened
-  this guard without triggering a security or adversarial review. ADR-0057 closes that gap in the
-  same build; without it, this ADR's central safety property would rest on an unfloored file.
+- The `superRefine` that bars the flood and any-change noise sub-classes lives in
+  `loop-schema.ts`, which at the time of this decision carried **no** deny-list floor — so a
+  future build could have weakened this guard without triggering a security or adversarial
+  review. ADR-0057 closes that gap in the same build; without it, this ADR's central safety
+  property would rest on an unfloored file.
 
 ## Revisit-If
 
