@@ -12,7 +12,6 @@ import {
   buildContextProvenanceRecord,
   computeBodySections,
   hashContent,
-  type SectionSpan,
 } from "../context-provenance.js";
 
 describe("computeBodySections", () => {
@@ -157,8 +156,10 @@ describe("buildContextProvenanceRecord — agent-def artifact", () => {
     });
     const artifact = record.assembled_artifacts.find((a) => a.kind === "agent-def");
     const { frontmatterEnd } = computeBodySections(fullFile);
-    expect(artifact?.sections).toBeDefined();
-    for (const section of artifact?.sections as SectionSpan[]) {
+    if (!artifact?.sections) {
+      throw new Error("expected agent-def artifact to have sections");
+    }
+    for (const section of artifact.sections) {
       expect(section.span[0]).toBeGreaterThanOrEqual(frontmatterEnd);
     }
   });
