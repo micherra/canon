@@ -180,7 +180,7 @@ export function attributeHonored(input: AttributeHonoredInput): AttributeHonored
  */
 const HONORED_ID_PATTERN = /\*\*([^*]+)\*\*/;
 
-/** Parse the bare principle id from a `**{id}**: ...` honored line. Returns null if unparseable. */
+/** Parse the bare principle id from a `**{id}**` / `**{id}** — desc` honored line. Returns null if unparseable. */
 function parseHonoredId(raw: string): string | null {
   const match = raw.match(HONORED_ID_PATTERN);
   const id = match?.[1]?.trim();
