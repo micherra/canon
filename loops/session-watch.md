@@ -43,10 +43,14 @@ surface:
       message: "Mid-flight cliff detected on a long/backgrounded step — surfacing once via the cliff→HITL pattern."
     - field: kg_stale
       to: "true"
+      fire_on_baseline: true
       message: "Knowledge graph looks stale — dependency reasoning may be degraded. Consider re-running codebase_graph."
     - field: open_drift_crossed
       to: "true"
       message: "Open drift / partially-finished work accumulating — surfacing the staleness digest."
+    # NO fire_on_baseline here (ADR-0056): the auto-staleness-refresh directive is already
+    # tick-1 capable via the .staleness-refreshed.json ledger emitted from this loop's body
+    # (ADR-0045). These rules are the tick-2+ observability echo. Adding the flag double-fires.
     - field: docs_stale_crossed
       to: "true"
       orchestrator_action: auto-staleness-refresh

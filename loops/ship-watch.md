@@ -54,10 +54,12 @@ surface:
       message: "New external review comment(s) on the PR — surfacing for triage."
     - field: merge_state
       to: BEHIND
+      fire_on_baseline: true
       orchestrator_action: auto-update-branch
       message: "PR branch is behind main — surfacing auto-update-branch (orchestrator merges origin/main into the PR branch and pushes)."
     - field: merge_state
       to: DIRTY
+      fire_on_baseline: true
       orchestrator_action: auto-update-branch
       message: "PR branch conflicts with main — surfacing auto-update-branch (orchestrator merges origin/main into the PR branch and pushes)."
 terminate:
