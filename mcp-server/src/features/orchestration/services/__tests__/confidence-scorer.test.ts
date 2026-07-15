@@ -405,9 +405,47 @@ describe("matchSensitivePath", () => {
     expect(matchSensitivePath([])).toBeNull();
   });
 
-  it("SENSITIVE_PATH_DENY_LIST has exactly 9 categories", () => {
+  it("SENSITIVE_PATH_DENY_LIST has exactly 10 categories", () => {
     const categories = new Set(SENSITIVE_PATH_DENY_LIST.map((e) => e.category));
-    expect(categories.size).toBe(9);
+    expect(categories.size).toBe(10);
+  });
+
+  // ── loop-runner-guardrail (ADR-0057) ─────────────────────────────────────────
+  // Two exact patterns — the sole mechanical enforcement point of dc-05/dc-06.
+  // NOT a mcp-server/src/features/loops/** glob: negative cases below pin that boundary.
+
+  it("matches loop-schema.ts — loop-runner-guardrail", () => {
+    expect(matchSensitivePath(["mcp-server/src/features/loops/loop-schema.ts"])?.category).toBe(
+      "loop-runner-guardrail",
+    );
+  });
+
+  it("matches date-shell-guard.ts — loop-runner-guardrail", () => {
+    expect(
+      matchSensitivePath(["mcp-server/src/features/loops/date-shell-guard.ts"])?.category,
+    ).toBe("loop-runner-guardrail");
+  });
+
+  it("does NOT match other loops/ feature files — pinned to the guardrail pair, not a feature glob", () => {
+    expect(matchSensitivePath(["mcp-server/src/features/loops/list-loops.ts"])).toBeNull();
+    expect(matchSensitivePath(["mcp-server/src/features/loops/load-loops.ts"])).toBeNull();
+    expect(
+      matchSensitivePath(["mcp-server/src/features/loops/__tests__/loop-schema.test.ts"]),
+    ).toBeNull();
+  });
+
+  it("loop-runner-guardrail floor beats override_tier: autonomous (ADR-0044 floor-beats-override, re-verified for this category)", () => {
+    const match = {
+      category: "loop-runner-guardrail" as const,
+      matched_path: "mcp-server/src/features/loops/loop-schema.ts",
+      pattern: "mcp-server/src/features/loops/loop-schema.ts",
+    };
+    const result = computeConfidence(
+      makeCleanSignals({ deny_list_match: match, override_tier: "autonomous" }),
+    );
+    expect(result.tier).toBe("supervised");
+    expect(result.score).toBe(0);
+    expect(result.floor).toEqual(match);
   });
 });
 

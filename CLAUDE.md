@@ -125,12 +125,16 @@ the security-intent row's post-safety-hook-fix adversarial mandate, watch_CCCCCC
 evaluated even when signal-gathering otherwise fails (fail-safe branch), so it survives total drift.db/KG
 outage. The authoritative deny-list is `SENSITIVE_PATH_DENY_LIST` in
 `mcp-server/src/features/orchestration/services/confidence-scorer.ts`.
-Categories: `canon-safety-hooks`, `ci-config`, `secrets-credentials`, `auth`, `drift-store-schema`, `mcp-tool-contract`, `principles-rules-config`, `settings-permissions`, `autonomy-tier-control`.
+Categories: `canon-safety-hooks`, `ci-config`, `secrets-credentials`, `auth`, `drift-store-schema`, `mcp-tool-contract`, `principles-rules-config`, `settings-permissions`, `autonomy-tier-control`, `loop-runner-guardrail`.
 The `autonomy-tier-control` category floors the self-governance TRIPOD — the three
 co-dependent files a build could edit to silently weaken the floor: the deny-list's own
 source (`confidence-scorer.ts`), the floor-application logic (`compute-autonomy-tier.ts`),
 and the `matchGlob` matcher every pattern above is evaluated through (`glob-matcher.ts`) —
 so a build touching any leg of the control is itself supervised + adversarially re-reviewed.
+The `loop-runner-guardrail` category (ADR-0057) floors the sole mechanical enforcement point
+of the loop framework's dc-05 determinism guardrail and dc-06 read-only-runner invariant:
+`mcp-server/src/features/loops/loop-schema.ts` and `mcp-server/src/features/loops/date-shell-guard.ts`
+— two exact patterns, not a `features/loops/**` glob (which would over-floor routine loop work).
 
 ### Per-Message Re-Classification (L1)
 
