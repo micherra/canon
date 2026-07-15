@@ -205,6 +205,12 @@ Read `references/dag-execution-protocol.md` BEFORE executing any build where
 `${WORKSPACE}/plans/${slug}/task-dag.yaml` exists, and before any
 task-queue/merge/cleanup operation.
 
+**canon-waves opt-in (Increment 1):** when the build's `task-dag.yaml` is single-wave (no task
+has `depends_on`) and the user has opted into workflow orchestration with the `Workflow` tool
+available, prefer the compiled `compile_waves` → `workflows/canon-waves.js` path over the manual
+task-queue dispatch above — see `references/dag-execution-protocol.md` § canon-waves opt-in path
+for the selection condition and boundary sequence. Otherwise use the manual protocol.
+
 ### Resume Protocol
 
 Read `journal.json` → find last `status: "completed"` step → read produced artifacts for context → continue from first `status: "started"` or next unstarted step. If no journal: check legacy workspace state and advise.

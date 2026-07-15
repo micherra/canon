@@ -63,8 +63,9 @@ function getToolNames(server: McpServer): Set<string> {
 //   +1 recall                     (this build, registerKnowledgeTools — unified-agent-memory M1)
 //   +1 reconcile_learnings        (this build, registerLearningTools — learning-resolution-flow ADR-0050)
 //   +1 backfill_applying_commit   (this build, registerEvolutionTools — post-apply-evolution Inc-3)
+//   +1 compile_waves               (this build, registerOrchestrationTools — canon-waves compiler, Inc-5 Increment 1)
 //   +1 attribute_outcomes         (this build, registerEvolutionTools — Gap 3 Layer 2 trust-weighted scoring)
-//   New total: 70 tools (computed from a live run, not hand-counted)
+//   New total: 71 tools (computed from a live run, not hand-counted)
 //
 // To recount: run this test — the received value in the failure message is authoritative.
 //
@@ -86,9 +87,9 @@ describe("createCanonServer(): characterization — tool count baseline", () => 
     resetForTesting();
   });
 
-  it("factory produces a server with exactly 70 registered tools", () => {
+  it("factory produces a server with exactly 71 registered tools", () => {
     const server = createCanonServer();
-    expect(getToolCount(server)).toBe(70);
+    expect(getToolCount(server)).toBe(71);
   });
 
   it("tool names include a stable known subset", () => {
@@ -186,8 +187,8 @@ describe("createCanonServer(): factory independence", () => {
   it("each instance has the full tool count independently", () => {
     const s1 = createCanonServer();
     const s2 = createCanonServer();
-    expect(getToolCount(s1)).toBe(70);
-    expect(getToolCount(s2)).toBe(70);
+    expect(getToolCount(s1)).toBe(71);
+    expect(getToolCount(s2)).toBe(71);
   });
 });
 

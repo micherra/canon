@@ -152,6 +152,24 @@ Added 2026-06-27.
 
 ---
 
+### `waves-compiler.ts` — canon-waves DAG Compiler (SYNTHESIS Inc-5, Increment 1, ADR-0055)
+
+Pure leaf module: compiles a validated `TaskDag` + per-task prompt seeds into a `WavesEnvelope` for the `workflows/canon-waves.js` runner. No per-flow branches — behavior comes only from DAG/plan fields.
+
+**Exports:**
+- `compileWaves(input: CompileWavesInput): CompileWavesResult` — `CompileWavesResult` is `{ ok: true; envelope: WavesEnvelope } | { ok: false; errors: string[] }`. Fail-closed at every stage — DAG-validation failure, any task with a non-empty `depends_on` (multi-wave is out of scope for Increment 1), or a missing/blank `prompt_seed` each return `{ ok: false, errors }`, never a partial or guessed envelope.
+- `sanitizeTaskId(taskId: string): string` — non-charset chars → `-`; sole sanitizer for embedding a task_id in a branch name or worktree path
+- `deriveTaskBranch(taskId: string): string` — `canon-task/{sanitized}`; sole owner of the branch-name convention, called by both `compileWaves` and `compile-waves.ts` so the envelope's `branch` and the worker prompt's embedded `BRANCH=` line can't drift apart
+- `deriveTaskWorktreePath(projectDir: string, taskId: string): string` — `{projectDir}/.canon/worktrees/{sanitized}`
+
+**Key pattern:** `merge_order` is derived from the same `branch` field `compileWaves` assigns each task (not a raw `task_id`) — `workflows/canon-waves.js` feeds `merge_order` straight into `git merge --no-ff`, so a raw task_id there would merge against branches that were never created. Sorted (not insertion-order) for determinism.
+
+Consumed by `features/orchestration/tools/compile-waves.ts` (the `compile_waves` MCP tool) — a thin wrapper that reads `task-dag.yaml` + task plans off disk and hands them to `compileWaves`.
+
+Added 2026-07-14.
+
+---
+
 ## When to Extract to shared/lib/
 
 A pure function belongs in `shared/lib/` when:

@@ -28,6 +28,15 @@
  *   - meta non-literal    — export const meta must be a pure object literal;
  *                           MethodDeclaration/GetAccessor/SetAccessor members
  *                           and non-PropertyAssignment members are also banned
+ *   - args data access without defensive parse — `args` arrives in the
+ *                           Workflow sandbox as a JSON STRING, not a parsed
+ *                           object (PR #498). A `PropertyAccessExpression`/
+ *                           `ElementAccessExpression` whose base identifier is
+ *                           `args` (`args.rung`, `args['x']`), or an
+ *                           `ObjectBindingPattern` destructuring `args`
+ *                           directly, is banned unless it occurs at or after
+ *                           the file's first `JSON.parse(args)` call (the
+ *                           defensive-parse guard). See workflows/CLAUDE.md.
  *   - parse error         — malformed JS rejected by the TypeScript parser
  *
  * FAIL-CLOSED GUARANTEE
@@ -283,6 +292,79 @@ function isLiteralValue(node) {
 }
 
 // ---------------------------------------------------------------------------
+// checkArgsDefensiveParse — flag bare `args` data access that precedes the
+// file's defensive `JSON.parse(args)` guard (or is unguarded entirely).
+// See workflows/CLAUDE.md "args-is-JSON-string contract".
+//
+// A file that never references `args` is unaffected (no accesses recorded).
+// A file that only reads `args` through the parsed variable (`A.x`, never
+// `args.x`) is clean, because the parsed variable is a different identifier.
+// ---------------------------------------------------------------------------
+function isArgsIdentifier(node) {
+  return ts.isIdentifier(node) && node.text === "args";
+}
+
+// Recognizes `JSON.parse(args)` — the defensive-parse guard call. This single
+// pattern also covers the full
+// `typeof args === 'string' ? JSON.parse(args) : (args || {})` idiom, since
+// that idiom always contains this call in its true branch.
+function isJsonParseArgsCall(node) {
+  if (!ts.isCallExpression(node)) return false;
+  const expr = node.expression;
+  if (
+    !ts.isPropertyAccessExpression(expr) ||
+    !ts.isIdentifier(expr.expression) ||
+    expr.expression.text !== "JSON" ||
+    !ts.isIdentifier(expr.name) ||
+    expr.name.text !== "parse"
+  ) {
+    return false;
+  }
+  return node.arguments.length === 1 && isArgsIdentifier(node.arguments[0]);
+}
+
+function checkArgsDefensiveParse(sf) {
+  const accessPositions = [];
+  const guardPositions = [];
+
+  function visit(node) {
+    // Bare `args.x` / `args['x']`
+    if (
+      (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
+      isArgsIdentifier(node.expression)
+    ) {
+      accessPositions.push(node.getStart(sf));
+    }
+
+    // Destructuring: const { x } = args
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isObjectBindingPattern(node.name) &&
+      node.initializer &&
+      isArgsIdentifier(node.initializer)
+    ) {
+      accessPositions.push(node.name.getStart(sf));
+    }
+
+    if (isJsonParseArgsCall(node)) {
+      guardPositions.push(node.getStart(sf));
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sf);
+
+  if (accessPositions.length === 0) return [];
+
+  const firstGuardPos = guardPositions.length > 0 ? Math.min(...guardPositions) : Infinity;
+
+  return accessPositions
+    .filter((pos) => pos < firstGuardPos)
+    .map((pos) => ({ pos, label: "args data access without defensive parse" }));
+}
+
+// ---------------------------------------------------------------------------
 // checkMetaLiteral — verify that `export const meta = <init>` exists at the
 // top level and that <init> is a pure-literal ObjectLiteralExpression.
 // Records violations into the provided array.
@@ -416,6 +498,7 @@ function lintFile(filePath) {
 
   const banViolations = walkBans(sf);
   const metaViolations = checkMetaLiteral(sf);
+  const argsViolations = checkArgsDefensiveParse(sf);
 
   const all = [
     ...banViolations.map(({ pos, label }) => ({
@@ -423,6 +506,10 @@ function lintFile(filePath) {
       label,
     })),
     ...metaViolations.map(({ pos, label }) => ({
+      lc: lineCol(sf, pos),
+      label,
+    })),
+    ...argsViolations.map(({ pos, label }) => ({
       lc: lineCol(sf, pos),
       label,
     })),
