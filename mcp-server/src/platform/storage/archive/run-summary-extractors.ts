@@ -9,6 +9,30 @@
 
 import type { ReviewResult, ReviewViolation, RunbookStep } from "./archive-types.ts";
 
+// ---- Principle-id closed domain ----
+
+/**
+ * Closed-domain principle-id charset. Rejects prose extracted from free-text reviews,
+ * which is the fabrication boundary for both citation parsers (ADR-0056).
+ */
+export const PRINCIPLE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,}$/;
+
+/**
+ * True when `token` is SHAPED like a principle id.
+ *
+ * Deliberately does NOT check whether the principle exists on disk — parse is not
+ * resolve. Resolution is owned downstream by `select_mutation_targets`, which buckets
+ * misses as `skipped[reason:"artifact_unresolved"]`. Validating against disk here would
+ * erase real historical citations to retired ids and make parsing depend on mutable
+ * state (ADR-0056).
+ *
+ * This is the ONE guard for the domain — `positive-attribution.ts` imports it rather
+ * than carrying a second copy.
+ */
+export function isPrincipleIdShaped(token: string): boolean {
+  return PRINCIPLE_ID_PATTERN.test(token);
+}
+
 // ---- Planning brief ----
 
 /**
@@ -223,6 +247,29 @@ function splitTableRow(line: string): string[] {
 }
 
 /**
+ * Split a markdown table row on UNESCAPED pipes only, then unescape `\|` within each cell.
+ *
+ * Splitting on every `|` shifts columns for any row carrying an escaped pipe — the
+ * `{HIGH\|MEDIUM\|LOW}` shape `templates/review.md` itself prescribes. Measured over the
+ * archived corpus, the naive split silently dropped 4 canonical-header tables.
+ */
+function splitTableRowEscaped(line: string): string[] {
+  const inner = line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/(?<!\\)\|$/, "");
+  return inner.split(/(?<!\\)\|/).map((cell) => cell.replace(/\\\|/g, "|").trim());
+}
+
+/** Strip a cell's surrounding backticks, bold/italic asterisks and whitespace. */
+function stripCellMarkup(cell: string): string {
+  return cell
+    .trim()
+    .replace(/^[`*\s]+/, "")
+    .replace(/[`*\s]+$/, "");
+}
+
+/**
  * Extract the body of a `### {headingText}` section: everything from the line
  * after the heading up to the next `##`/`###` heading, or end of string.
  *
@@ -350,52 +397,83 @@ function extractFrontmatter(content: string): Record<string, unknown> | null {
   return result;
 }
 
+/** Column positions of the cells a violations table row can carry. -1 when absent. */
+type ViolationColumns = {
+  principle: number;
+  severity: number;
+  location: number;
+  description: number;
+};
+
+/**
+ * Locate the violation columns by header NAME, never by position.
+ *
+ * Six header shapes exist in the real corpus; column count AND order both vary, and two
+ * shapes prepend an ordinal `#` column — a positional parser records `1` as a principle
+ * id. Only `principle` is required; a table without it is not a violations table.
+ */
+function findViolationColumns(headerCells: string[]): ViolationColumns | null {
+  const header = headerCells.map((cell) => stripCellMarkup(cell).toLowerCase());
+  const principle = header.indexOf("principle");
+  if (principle === -1) return null;
+
+  const location = header.indexOf("location");
+  return {
+    description: header.indexOf("description"),
+    location: location === -1 ? header.indexOf("file") : location,
+    principle,
+    severity: header.indexOf("severity"),
+  };
+}
+
+/** Read one data row into a violation, or null when its principle cell is not an id. */
+function parseViolationRow(line: string, columns: ViolationColumns): ReviewViolation | null {
+  const cells = splitTableRowEscaped(line);
+
+  const principleId = stripCellMarkup(cells[columns.principle] ?? "");
+  // Never coerce: a cell that is not id-shaped is prose, and the row is dropped whole.
+  if (!isPrincipleIdShaped(principleId)) return null;
+
+  const severity = columns.severity === -1 ? "" : (cells[columns.severity] ?? "").trim();
+  const location = columns.location === -1 ? "" : stripCellMarkup(cells[columns.location] ?? "");
+  const description = columns.description === -1 ? "" : (cells[columns.description] ?? "").trim();
+
+  return {
+    file_path: location === "" ? null : location,
+    message: description,
+    principle_id: principleId,
+    severity: severity === "" ? "unknown" : severity,
+  };
+}
+
 /**
  * Extract violations from a "#### Violations" section in review content.
- * "No violations found." → empty array.
+ *
+ * The section is a markdown table in one of six measured header shapes; sections with no
+ * table carry one of ~20 sentinel phrasings, all of which yield zero rows here without
+ * needing to be enumerated.
  */
 function extractViolationsSection(content: string): ReviewViolation[] {
-  const violations: ReviewViolation[] = [];
-
   const sectionMatch = content.match(/####\s+Violations\s*\n([\s\S]*?)(?=\n####|\n###|\n##|$)/);
-  if (!sectionMatch?.[1]) return violations;
+  if (!sectionMatch?.[1]) return [];
 
-  const sectionContent = sectionMatch[1].trim();
-  if (
-    sectionContent === "No violations found." ||
-    sectionContent === "" ||
-    sectionContent === "None."
-  ) {
-    return violations;
-  }
+  // Header + separator + at least one data row.
+  const tableLines = sectionMatch[1]
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("|"));
+  if (tableLines.length < 3) return [];
 
-  for (const line of sectionContent.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("-")) continue;
+  const columns = findViolationColumns(splitTableRowEscaped(tableLines[0]));
+  if (columns === null) return [];
 
-    const principleMatch = trimmed.match(/\*\*principle-id\*\*:\s*([^\s—–-][^—–]*?)(?:\s*[—–]|$)/);
-    const severityMatch = trimmed.match(/\*\*severity\*\*:\s*([^\s—–-][^—–]*?)(?:\s*[—–]|$)/);
-    const fileMatch = trimmed.match(/\*\*file\*\*:\s*([^\s—–-][^—–]*?)(?:\s*[—–]|$)/);
-
-    if (principleMatch) {
-      violations.push({
-        file_path: fileMatch?.[1]?.trim() ?? null,
-        message: extractViolationMessage(trimmed),
-        principle_id: principleMatch[1]?.trim() ?? "",
-        severity: severityMatch?.[1]?.trim() ?? "unknown",
-      });
-    }
+  const violations: ReviewViolation[] = [];
+  for (const line of tableLines.slice(2)) {
+    const violation = parseViolationRow(line, columns);
+    if (violation !== null) violations.push(violation);
   }
 
   return violations;
-}
-
-/** Extract the trailing message from a violation line (after last —). */
-function extractViolationMessage(line: string): string {
-  const parts = line.split(/\s*[—–]\s*/);
-  const last = parts[parts.length - 1]?.trim() ?? "";
-  if (!last.startsWith("**")) return last;
-  return "";
 }
 
 /**
