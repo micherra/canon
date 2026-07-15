@@ -117,15 +117,42 @@ const ObserveSchema = z.object({
   tools: z.array(z.string()).default([]),
 });
 
-const TransitionRuleSchema = z.object({
-  append: z.boolean().optional(),
-  field: z.string(),
-  from: z.string().optional(),
-  message: z.string(),
-  orchestrator_action: z.enum(ORCHESTRATOR_ACTIONS).optional(),
-  terminate: z.boolean().optional(),
-  to: z.string().optional(),
-});
+// ADR-0056: fire_on_baseline opt-in — admissible ONLY on a state-naming rule (to: set,
+// from: unset, append !== true). The superRefine below enforces this; see its comment
+// for why the noise class ADR-0002 exists to prevent is made structurally inexpressible.
+const TransitionRuleSchema = z
+  .object({
+    append: z.boolean().optional(),
+    field: z.string(),
+    fire_on_baseline: z.boolean().optional(),
+    from: z.string().optional(),
+    message: z.string(),
+    orchestrator_action: z.enum(ORCHESTRATOR_ACTIONS).optional(),
+    terminate: z.boolean().optional(),
+    to: z.string().optional(),
+  })
+  .superRefine((rule, ctx) => {
+    // Intra-rule check — needs no outer context, so it lives on TransitionRuleSchema
+    // itself rather than the outer LoopDefinitionSchema superRefine (simplicity-first).
+    if (rule.fire_on_baseline !== true) return;
+    const reasons: string[] = [];
+    if (rule.to === undefined) {
+      reasons.push("requires 'to' to be set (any-change rules cannot opt in)");
+    }
+    if (rule.from !== undefined) {
+      reasons.push("requires 'from' to be unset (a baseline has no prior to assert against)");
+    }
+    if (rule.append === true) {
+      reasons.push("requires 'append' to not be true (the flood/append class cannot opt in)");
+    }
+    if (reasons.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `fire_on_baseline: true on field '${rule.field}' is inadmissible — ${reasons.join("; ")}`,
+        path: ["fire_on_baseline"],
+      });
+    }
+  });
 
 const SurfaceSchema = z.object({
   on_transition: z
