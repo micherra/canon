@@ -31,7 +31,6 @@ Orchestration drives the runtime — it is the largest context. Board mutation h
 | File | Violating import | Direction |
 |------|-----------------|-----------|
 | `mcp-server/src/features/orchestration/tools/report.ts` | `import { DriftStore } from "@platform/storage/drift/store.ts"` | Orchestration → Drift (concrete coupling) |
-| `mcp-server/src/features/orchestration/tools/forecast-base-advance.ts` | `import { initDatabase } from "@graph/kg-schema.ts"` | Orchestration → Knowledge Graph (concrete coupling, DEFERRED-DI exception in `.dependency-cruiser.cjs`) |
 
 The planned fix is a repository interface (`IDriftStore`) in `domains/drift/` so Orchestration imports the interface only, not the concrete storage class. The `IKgStore` interface definition lives in `mcp-server/src/domains/knowledge-graph/` (planned — `kg-store.interface.ts` not yet written); when complete, it will eliminate the concrete `KgStore`/`initDatabase` coupling exceptions tracked in `.dependency-cruiser.cjs`'s DEFERRED-DI list.
 
@@ -297,7 +296,7 @@ Dependency rules are enforced in CI by `dependency-cruiser`. Run locally with:
 npm run lint:deps
 ```
 
-The `.dependency-cruiser.cjs` config encodes the boundary rules above as forbidden import patterns. Current violations (`tools/report.ts → DriftStore`, `tools/forecast-base-advance.ts → KgStore`/`initDatabase`) are listed as known DEFERRED-DI exceptions with tracking comments until the `IDriftStore`/`IKgStore` interfaces land.
+The `.dependency-cruiser.cjs` config encodes the boundary rules above as forbidden import patterns. Current violations (`tools/report.ts → DriftStore`) are listed as known DEFERRED-DI exceptions with tracking comments until the `IDriftStore`/`IKgStore` interfaces land.
 
 ---
 

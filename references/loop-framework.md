@@ -255,11 +255,10 @@ already-armed auto-merge silently stalled until a human noticed.
 1. Read-only precheck: `gh pr view <pr> --json state,mergeStateStatus`. Proceed only if the
    PR is still `OPEN` and `mergeStateStatus` is still `BEHIND` or `DIRTY` (idempotent — a tick
    that races a concurrent fix is a no-op, not a retry).
-2. `git fetch origin` in the build worktree, fail-open (`git fetch origin || true`) like the
-   plan-time base-advance advisory's fetch — a fetch failure surfaces (the merge proceeds
-   against a possibly-stale `origin/main`) rather than silently blocking the consumer. Without
-   this, a stale local `origin/main` remote-tracking ref makes the next step a no-op merge that
-   never clears the `BEHIND`/`DIRTY` state the loop surfaced.
+2. `git fetch origin` in the build worktree, fail-open (`git fetch origin || true`) — a fetch
+   failure surfaces (the merge proceeds against a possibly-stale `origin/main`) rather than
+   silently blocking the consumer. Without this, a stale local `origin/main` remote-tracking ref
+   makes the next step a no-op merge that never clears the `BEHIND`/`DIRTY` state the loop surfaced.
 3. The orchestrator merges `origin/main` into the PR branch in the build worktree.
 4. Conflict triage: conflicts confined ONLY to generated artifacts (`context-manifest.json`,
    generated `**/.claude/CLAUDE.md` index blocks) are auto-resolved by regenerating them
