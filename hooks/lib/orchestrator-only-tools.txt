@@ -22,7 +22,6 @@ write_orchestrator_checkpoint
 # Autonomy / gates / escalation (orchestrator-only)
 compute_autonomy_tier
 evaluate_step
-forecast_base_advance
 get_next_escalation_strategy
 categorize_failures
 
