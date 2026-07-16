@@ -58,13 +58,20 @@ export type AppendLearningRecordOutput = {
  * allow-list barrier alone is not containment (see module docblock); this
  * second check is what actually confines the write.
  *
- * The serialization check (a record that cannot form a single JSONL line)
- * runs BEFORE any I/O and is the only INPUT-caused failure; failures from
- * `appendJsonlLine`'s own I/O (`open`/`stat`/`read`/`appendFile` — e.g.
- * ENOSPC/EACCES/EIO/EMFILE) are not the agent's fault and are mapped to
- * `UNEXPECTED`/`recoverable: true` instead of `INVALID_INPUT`, matching the
- * sibling `reconcileLearnings` catch-all (`reconcile-learnings.ts`'s
- * fail-open `catch` block).
+ * The newline check (a record that serializes but cannot form a single
+ * JSONL line) runs BEFORE any I/O and is the only checked,
+ * mapped-to-`INVALID_INPUT` failure. `JSON.stringify` itself is NOT
+ * wrapped in a try: a value that cannot be serialized at all (a circular
+ * reference or a `BigInt`) throws uncaught out of this function and is
+ * caught upstream by `gatedWrapHandler` as `UNEXPECTED`, not
+ * `INVALID_INPUT` — unreachable in practice for a real MCP caller, whose
+ * `record` already round-tripped through the transport's `JSON.parse` and
+ * so cannot contain a circular reference or a `BigInt`, but true for any
+ * direct in-process TS caller. Failures from `appendJsonlLine`'s own I/O
+ * (`open`/`stat`/`read`/`appendFile` — e.g. ENOSPC/EACCES/EIO/EMFILE) are
+ * not the agent's fault and are mapped to `UNEXPECTED`/`recoverable: true`
+ * instead of `INVALID_INPUT`, matching the sibling `reconcileLearnings`
+ * catch-all (`reconcile-learnings.ts`'s fail-open `catch` block).
  */
 export async function appendLearningRecord(
   input: AppendLearningRecordInput,

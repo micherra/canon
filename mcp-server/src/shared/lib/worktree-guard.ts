@@ -77,3 +77,28 @@ export const isPathInWorktree = async (
 
   return toolOk({ contained: true as const });
 };
+
+/**
+ * Symlink-safe containment check composed over a caller-supplied `realpath`
+ * resolver, for seam-injected callers that cannot use `isPathInWorktree`'s
+ * direct `node:fs/promises` call — e.g. a module whose filesystem access is
+ * fully seam-injected so its unit tests can supply fully in-memory fakes
+ * (whose fixture paths never exist on real disk). Same two-layer shape as
+ * `isPathInWorktree`: logical containment first, then symlink resolution
+ * via the resolver. A resolver failure (either path doesn't exist) fails
+ * closed — `false`, never a thrown error.
+ */
+export const isPathContainedViaResolver = async (
+  containerDir: string,
+  targetDir: string,
+  resolvePath: (path: string) => Promise<string>,
+): Promise<boolean> => {
+  if (!isPathContained(containerDir, targetDir)) return false;
+  try {
+    const realContainer = await resolvePath(containerDir);
+    const realTarget = await resolvePath(targetDir);
+    return isPathContained(realContainer, realTarget);
+  } catch {
+    return false;
+  }
+};

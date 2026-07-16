@@ -67,6 +67,10 @@ function makeFakeFs(opts: {
     async appendFile(path: string, data: string) {
       appended.push({ path, data });
     },
+    // Identity resolver — see the base test file's `makeFakeFs` for why.
+    async realpath(path: string) {
+      return path;
+    },
   };
 }
 

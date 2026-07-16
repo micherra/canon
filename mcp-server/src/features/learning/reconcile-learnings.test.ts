@@ -52,6 +52,13 @@ function makeFakeFs(opts: {
     async appendFile(path: string, data: string) {
       appended.push({ path, data });
     },
+    // Identity resolver — this fixture's fake paths (e.g. `/fake/project`)
+    // never exist on real disk, so a real `realpath` would throw ENOENT on
+    // every test. Production's `defaultFsSeam.realpath` is the real
+    // resolver (see `reconcile-learnings.ts`'s `isProjectDirContained`).
+    async realpath(path: string) {
+      return path;
+    },
   };
 }
 

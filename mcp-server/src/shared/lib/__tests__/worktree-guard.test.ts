@@ -1,8 +1,12 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { isPathContained, isPathInWorktree } from "../worktree-guard.ts";
+import {
+  isPathContained,
+  isPathContainedViaResolver,
+  isPathInWorktree,
+} from "../worktree-guard.ts";
 
 // isPathContained — pure path logic
 
@@ -167,5 +171,69 @@ describe("isPathInWorktree", () => {
       expect(result.message).toMatch(/could not be resolved/i);
       expect(result.message).not.toMatch(/symlink/i);
     }
+  });
+});
+
+// isPathContainedViaResolver — symlink-safe containment composed over a
+// caller-supplied resolver, for seam-injected callers (e.g.
+// `reconcile_learnings`) that cannot call `node:fs/promises` `realpath`
+// directly because their fs access is fully seam-injected.
+
+describe("isPathContainedViaResolver", () => {
+  let tmpDir: string;
+  let worktree: string;
+  let outside: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "worktree-guard-resolver-test-"));
+    worktree = join(tmpDir, "worktree");
+    outside = join(tmpDir, "outside");
+    await mkdir(worktree, { recursive: true });
+    await mkdir(outside, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { force: true, recursive: true });
+  });
+
+  it("returns true for a real path inside the container, via the real resolver", async () => {
+    const target = join(worktree, "sub");
+    await mkdir(target);
+    expect(await isPathContainedViaResolver(worktree, target, realpath)).toBe(true);
+  });
+
+  it("returns false for a symlink inside the container that resolves outside it", async () => {
+    const escapeLink = join(worktree, "escape-link");
+    await symlink(outside, escapeLink);
+    expect(await isPathContainedViaResolver(worktree, escapeLink, realpath)).toBe(false);
+  });
+
+  it("returns false for a logical traversal, without ever calling the resolver", async () => {
+    let called = false;
+    const resolver = async (p: string) => {
+      called = true;
+      return p;
+    };
+    expect(
+      await isPathContainedViaResolver(worktree, join(worktree, "..", "outside"), resolver),
+    ).toBe(false);
+    expect(called).toBe(false);
+  });
+
+  it("returns false (fails closed) when the resolver throws for a non-existent path", async () => {
+    const resolver = async () => {
+      throw new Error("ENOENT");
+    };
+    expect(await isPathContainedViaResolver(worktree, join(worktree, "nope"), resolver)).toBe(
+      false,
+    );
+  });
+
+  it("supports an identity resolver for fixture paths that never exist on real disk", async () => {
+    const identity = async (p: string) => p;
+    expect(await isPathContainedViaResolver("/fake/project", "/fake/project", identity)).toBe(true);
+    expect(
+      await isPathContainedViaResolver("/fake/project", "/fake/outside-project", identity),
+    ).toBe(false);
   });
 });
