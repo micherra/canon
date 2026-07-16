@@ -4,7 +4,7 @@ title: "Loop baseline blindness: a per-rule fire_on_baseline opt-in for state-na
 status: accepted
 date: "2026-07-14"
 build: "adjudicate-the-adr-0002-baseline-blindness-consequence-a-to-matching"
-amends: "ADR-0002"
+amends: "0002"
 supersedes-rationale-of: "ADR-0045 Option B rejection"
 ---
 
@@ -229,6 +229,16 @@ ADR-0045 ledger, so adding the flag would emit the directive twice on tick 1.
   snapshot write (Step 7)"). Documented in `loop-tick.md` Step 7 instead. Bounded in practice: the
   named consumer (`auto-update-branch`) already idempotently prechecks before acting, so a re-fire
   degrades to a harmless no-op read, not a duplicate `git merge`.
+- **The `amends`/`amended-by`/`supersedes-rationale-of` frontmatter pointers are human-facing
+  only — no context-graph edge is created for them (accepted, post-review).**
+  `graph/kg-context-ingest.ts` ingests only the `supersedes:` key into the ADR context graph;
+  `graph_query`'s `supersedes_chain` will not traverse ADR-0002 → ADR-0056 via these fields.
+  Deliberately NOT given a real `supersedes:` key here — that would falsely tell the graph
+  ADR-0045 is superseded, which this ADR explicitly disclaims (see § Relationship to ADR-0045).
+  The human-facing pointer resolves fine regardless: ADR-0002's body Amendment section names
+  ADR-0056 unambiguously. Numeric-only values (`amends: "0002"`, matching ADR-0039's precedent)
+  are used throughout so a future reuse of `parseSupersedesNumber` on these keys would parse
+  correctly rather than silently yielding null on a leading `"ADR-"` prefix.
 - **Verification is against a model, not the runner (accepted).** The runner
   (`skills/canon/commands/loop-tick.md`) is agentic markdown, so the tests prove the *semantics*
   via a pure model of the diff algorithm — they cannot prove an LLM executes the prose correctly.

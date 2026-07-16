@@ -63,8 +63,10 @@ surface:
       message: "Field changed to expected value."   # [REQUIRED]
       terminate: false     # true → loop ends when this rule fires
       append: false        # true → append to log instead of replacing
-      fire_on_baseline: false  # [ADR-0056] optional; true only admissible when to is set,
-                                # from is unset, and append is not true — see below
+      # fire_on_baseline: true   # [ADR-0056] opt-in; admissible ONLY when to is set, from is
+                                  # unset, and append is not true — this example rule has a
+                                  # `from:` above, so uncommenting as-is would be rejected at
+                                  # parse time. See "First-tick semantics" below before using.
 
 terminate:
   when:                    # [REQUIRED] at least one condition

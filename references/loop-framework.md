@@ -248,18 +248,11 @@ surfaces `ORCHESTRATOR_ACTION: auto-enable-merge field=ci_conclusion loop=ship-w
 `guardrails.mutates_build` stays `false` and no mutating `gh` is on the loop's
 `observe.shell_commands` allowlist — the orchestrator does the mutation, not the runner.
 
-**`auto-update-branch`** (fires on the `ship-watch` `merge_state` transitioning to `BEHIND`
-or `DIRTY`, while the PR is OPEN): motivated by a real incident (PR #462) where `main`
-advanced mid-watch, the PR went `mergeStateStatus: DIRTY` / `mergeable: CONFLICTING`, and an
-already-armed auto-merge silently stalled until a human noticed.
-
-**Can now fire on tick 1 (ADR-0056).** Both `merge_state` rules carry `fire_on_baseline: true` —
-a PR that is already `BEHIND`/`DIRTY` at the moment `ship-watch` arms surfaces immediately rather
-than waiting for a departure-and-return transition that may never happen (the failure mode
-ADR-0056's Context documents live on PR #498, which baselined `BEHIND` and fired nothing under
-the pre-ADR-0056 default). The consumer's existing idempotent precheck below (step 1) already
-handles a baseline-fired directive identically to a tick-2+ one — do not add special-casing for
-it here.
+**`auto-update-branch`** (fires on the `ship-watch` `merge_state` reaching `BEHIND` or `DIRTY`
+— on a transition, or on ship-watch's first tick for a PR already in that state,
+`fire_on_baseline`/ADR-0056 — while the PR is OPEN): motivated by a real incident (PR #462)
+where `main` advanced mid-watch, the PR went `mergeStateStatus: DIRTY` / `mergeable: CONFLICTING`,
+and an already-armed auto-merge silently stalled until a human noticed.
 1. Read-only precheck: `gh pr view <pr> --json state,mergeStateStatus`. Proceed only if the
    PR is still `OPEN` and `mergeStateStatus` is still `BEHIND` or `DIRTY` (idempotent — a tick
    that races a concurrent fix is a no-op, not a retry).
@@ -277,6 +270,14 @@ it here.
    pass the freshness gate).
 6. Push to the PR branch. If auto-merge was already armed (`auto-enable-merge`), it proceeds
    on green once GitHub re-evaluates mergeability — this consumer does not re-arm it.
+
+**Can now fire on tick 1 (ADR-0056).** Both `merge_state` rules carry `fire_on_baseline: true` —
+a PR that is already `BEHIND`/`DIRTY` at the moment `ship-watch` arms surfaces immediately rather
+than waiting for a departure-and-return transition that may never happen (the failure mode
+ADR-0056's Context documents live on PR #498, which baselined `BEHIND` and fired nothing under
+the pre-ADR-0056 default). The consumer's existing idempotent precheck above (step 1) already
+handles a baseline-fired directive identically to a tick-2+ one — no special-casing needed.
+
 Tier gate: unattended in all tiers (autonomous, light-touch, AND supervised) for the
 clean/generated-only-conflict path — the merge is reversible and branch-scoped, unlike arming
 a real merge (`auto-enable-merge`), which still ASKs under supervised. A SOURCE-file conflict

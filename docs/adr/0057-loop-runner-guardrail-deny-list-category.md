@@ -4,7 +4,7 @@ title: "The loop-runner guardrail surface gets its own deny-list category — an
 status: accepted
 date: "2026-07-15"
 build: "adjudicate-the-adr-0002-baseline-blindness-consequence-a-to-matching"
-corrects: "ADR-0045"
+corrects: "0045"
 ---
 
 # ADR-0057: `loop-runner-guardrail` deny-list category

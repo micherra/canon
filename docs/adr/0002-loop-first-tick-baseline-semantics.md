@@ -4,7 +4,7 @@ title: "Loop first-tick is baseline-capture-only — transition rules never fire
 status: accepted
 date: "2026-06-11"
 build: "loop-framework-phase-c-self-paced-mode-schedulewakeup-adapter-session"
-amended-by: "ADR-0056"
+amended-by: "0056"
 ---
 
 # ADR-0002: Loop first-tick is baseline-capture-only
