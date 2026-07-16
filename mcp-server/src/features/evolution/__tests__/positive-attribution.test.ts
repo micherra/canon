@@ -155,6 +155,45 @@ describe("attributeHonored", () => {
     ]);
   });
 
+  it("a no-colon **id** bold span (real majority format) parses + attributes", () => {
+    const provenance = [makeProvenance("review", ["errors-are-values"])];
+    const honored = [makeHonored("**errors-are-values**")];
+
+    const result = attributeHonored({ honored, provenance, readCurrentBody: readsRuleBody });
+
+    expect(result.attributions).toHaveLength(1);
+    expect(result.unattributed).toHaveLength(0);
+    expect(result.flagged).toHaveLength(0);
+    expect(result.attributions[0].target_artifact.id).toBe("errors-are-values");
+    expect(result.attributions[0].target_artifact.hash_verified).toBe(true);
+  });
+
+  it("a trailing paren-loc + colon (colon after the paren, not the bold) parses to the bare id", () => {
+    const provenance = [makeProvenance("review", ["errors-are-values"])];
+    const honored = [
+      makeHonored(
+        "**errors-are-values** (`rules/errors-are-values.md:12`): consistently used typed results",
+      ),
+    ];
+
+    const result = attributeHonored({ honored, provenance, readCurrentBody: readsRuleBody });
+
+    expect(result.attributions).toHaveLength(1);
+    expect(result.attributions[0].target_artifact.id).toBe("errors-are-values");
+  });
+
+  it("a non-id descriptor label with no matching provenance -> no_in_context_artifact, zero attributions (AC#3)", () => {
+    const provenance = [makeProvenance("review", ["errors-are-values"])];
+    const honored = [makeHonored("**complete-excision-verified**")];
+
+    const result = attributeHonored({ honored, provenance, readCurrentBody: readsRuleBody });
+
+    expect(result.attributions).toHaveLength(0);
+    expect(result.unattributed).toEqual([
+      { honored: honored[0], reason: "no_in_context_artifact" },
+    ]);
+  });
+
   it("empty inputs -> empty buckets, no throw", () => {
     expect(() =>
       attributeHonored({ honored: [], provenance: [], readCurrentBody: readsRuleBody }),
