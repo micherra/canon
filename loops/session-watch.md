@@ -43,10 +43,14 @@ surface:
       message: "Mid-flight cliff detected on a long/backgrounded step — surfacing once via the cliff→HITL pattern."
     - field: kg_stale
       to: "true"
+      fire_on_baseline: true
       message: "Knowledge graph looks stale — dependency reasoning may be degraded. Consider re-running codebase_graph."
     - field: open_drift_crossed
       to: "true"
       message: "Open drift / partially-finished work accumulating — surfacing the staleness digest."
+    # NO fire_on_baseline here (ADR-0056): the auto-staleness-refresh directive is already
+    # tick-1 capable via the .staleness-refreshed.json ledger emitted from this loop's body
+    # (ADR-0045). These rules are the tick-2+ observability echo. Adding the flag double-fires.
     - field: docs_stale_crossed
       to: "true"
       orchestrator_action: auto-staleness-refresh
@@ -79,9 +83,19 @@ declared threshold). Both concerns are observe+surface only — no build mutatio
 `ScheduleWakeup`. Authoring this file only registers the definition. Do not call
 `ScheduleWakeup` from within this body to start the loop — only to re-arm the next tick.
 
-**First-tick baseline (ADR-0002):** On tick 1 there is no prior snapshot, so no
-`on_transition` rules fire. Write the baseline snapshot and report:
-`[loop: session-watch] Tick 1 baseline captured. Watching from next tick.`
+**First-tick baseline (ADR-0002, amended by ADR-0056):** On tick 1 there is no prior
+snapshot, so no `on_transition` rule fires — **with one exception**: `kg_stale` declares
+`fire_on_baseline: true` and fires on tick 1 if the observed value already equals `"true"`
+(i.e. the KG already looks stale at session-open). No other rule in this loop carries the
+flag — `surfaced_cliff_signatures` is `append`-mode (ineligible), `open_drift_crossed` is
+tick-relative by body construction, and `docs_stale_crossed`/`kg_age_crossed` are
+deliberately excluded (see the comment above those two rules — their directive is already
+tick-1 capable via the ADR-0045 ledger; adding the flag would double-fire).
+
+Write the baseline snapshot and report the baseline capture, noting whether `kg_stale`
+fired:
+- If it fired: `[loop: session-watch] Tick 1 baseline captured (1 rule fired on baseline). Watching from next tick.`
+- Otherwise: `[loop: session-watch] Tick 1 baseline captured. Watching from next tick.`
 
 ### Observe
 
@@ -155,9 +169,10 @@ editing this block, not by editing the observe steps below.
 
 ### Diff against snapshot
 
-Apply `on_transition` rules per the runner Step 5 algorithm (ADR-0002 first-tick guard is
-always active). Since `surfaced_cliff_signatures` uses `append: true`, the rule fires when
-new signatures are appended to the set (i.e., the set grew this tick).
+Apply `on_transition` rules per the runner Step 5 algorithm (ADR-0002 first-tick guard applies,
+with `kg_stale`'s `fire_on_baseline` exception — see Step 5 and the first-tick section above).
+Since `surfaced_cliff_signatures` uses `append: true`, the rule fires when new signatures are
+appended to the set (i.e., the set grew this tick).
 
 ### Surface-once
 
@@ -175,6 +190,11 @@ After the diff determines which rules fire:
    condition, which a pure `on_transition` rule would miss — ADR-0002 first-tick guard); the
    `on_transition` rules on `docs_stale_crossed`/`kg_age_crossed` above cover the
    observability/tick-2+ human-facing message for a later mid-session transition.
+4. `kg_stale` is NOT enumerated above because it needs no body-side handling — its
+   `fire_on_baseline: true` flag (ADR-0056) makes it tick-1 capable through the generic
+   runner Step 5/6 path alone, unlike the ledger-driven staleness directives in step 3.
+   It surfaces via the ordinary fall-through, both on tick 1 (if already stale) and on any
+   later transition.
 
 This prevents double-HITL collisions with the resume/post_subagent cliff passes: once a
 signature is in the ledger, session-watch suppresses it on subsequent ticks. The same

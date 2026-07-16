@@ -124,3 +124,24 @@ the amended (all-tiers-unattended) posture, not the original dec-04 split record
 - The session-start doc-sync PRs prove noisy in practice (a PR per session despite de-dup) — tighten the
   episode signature or raise the commits threshold.
 - A read-only KG-age MCP tool appears — then `stat`/`date` can be dropped from the shell allowlist.
+
+## Amendment — Correction: the "loop-schema.ts is sensitive-path" Consequences claim was false (2026-07-15)
+
+This ADR's Consequences section asserted: *"`loop-schema.ts` is sensitive-path (mcp-tool-contract) →
+build is supervised + adversarially re-reviewed."* **This claim was false when written and was never
+checked** — it was inherited verbatim into a downstream design (the build that produced ADR-0056/
+ADR-0057) and caught only at that build's plan-approval gate, when the orchestrator invoked
+`compute_autonomy_tier` and read `SENSITIVE_PATH_DENY_LIST` directly instead of trusting this ADR's
+prose.
+
+**What is actually true:** at the time this ADR was written, zero patterns in
+`SENSITIVE_PATH_DENY_LIST` matched "loop". `mcp-server/src/app/register-loops.ts` **does** exist and
+**is** covered by the `mcp-tool-contract` category's `register-*.ts` pattern — the loops *tool
+contract* was floored. What was **not** floored is the *guardrail* — `loop-schema.ts` itself (and its
+sibling `date-shell-guard.ts`). This ADR named the right category for the wrong file.
+
+**ADR-0057 closes the gap** this false claim exposed by adding a new `loop-runner-guardrail` deny-list
+category covering both `loop-schema.ts` and `date-shell-guard.ts`.
+
+This correction touches only the false Consequences bullet above. This ADR's Decision, Status, and its
+`.staleness-refreshed.json` ledger are unaffected and remain fully in force.
