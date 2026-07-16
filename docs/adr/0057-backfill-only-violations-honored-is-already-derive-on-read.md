@@ -62,7 +62,8 @@ This asymmetry is invisible from the symptom — both report zero — and it det
 
 **Pros:**
 - Honored: fixing `HONORED_ID_PATTERN` is **automatically retroactive across all 584 builds** at the next read.
-  Zero archive writes. Measured yield 20.4% → 99.9%.
+  Zero archive writes. Measured yield 20.4% → 95.0% (1,703 / 1,793) — the charset guard (ADR-0056)
+  rejects ~90 prose/non-id tokens a naive bold-span parse (99.9%) would have miscounted.
 - Violations: the backfill re-runs the **real** `extractReviewResults` against the archive path — archive dirs
   mirror the workspace layout (`reviews/` beside `run-summary.json`), so the shipped extractor runs unmodified.
   No second parser is written, so no second parser can drift.

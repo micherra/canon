@@ -36,7 +36,11 @@ falsified that instinct.
 
 **Pros:**
 - Rejects 100% of the measured prose tokens (79/79).
-- Retains 1,791 / 1,793 honored citations (99.9%).
+- Retains 1,703 / 1,793 honored citations (95.0%) — the charset guard rejects ~90 prose/non-id bold
+  spans on top of the 2 truly-unparseable lines. The naive pre-guard bold-span count was 1,791 /
+  1,793 (99.9%), but that figure counts the very prose tokens the guard correctly rejects (see the
+  "rejects 79/79 prose tokens" bullet above), so 99.9% cannot be the post-guard honored yield — 95.0%
+  is the real, post-guard figure.
 - Preserves real historical citations to principles that have since been retired or renamed.
 - Parsing stays a pure, offline, corpus-independent function — no I/O, no dependency on the current principle set.
 
@@ -54,7 +58,7 @@ ingest), `simplicity-first`, `functions-do-one-thing` (parse ≠ resolve).
 - Feels stricter, and "stricter" reads as safer.
 
 **Cons:**
-- **Measured: drops 340 citations across 176 distinct ids — retaining only 1,363 / 1,793 (76.0%) vs 99.9%.**
+- **Measured: drops 340 citations across 176 distinct ids — retaining only 1,363 / 1,793 (76.0%) vs the charset-guard's 95.0%.**
 - The dropped ids are *real* historical citations to retired/renamed principles: `explicit-contracts` (×18),
   `single-source-of-truth` (×13), `thin-handlers` (×8), `no-dead-abstractions` (×8). Deleting them is its own
   species of dishonesty — it rewrites what reviewers actually said.
@@ -90,7 +94,9 @@ unparsed — never coerced, never guessed.
 ## Consequences
 
 **Positive:**
-- Honored-citation yield 20.4% → 99.9%, measured over the real corpus.
+- Honored-citation yield 20.4% → 95.0% (1,703 / 1,793), measured over the real corpus — the charset
+  guard rejects ~90 prose/non-id tokens that a naive bold-span parse (99.9%) would have miscounted as
+  citations.
 - Historical citations to retired principles survive as evidence, and can be studied (e.g. "which retired
   principles were most cited before removal?").
 - Parsing is pure and deterministic — no filesystem reads, trivially unit-testable.

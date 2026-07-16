@@ -10,7 +10,7 @@
  * (`- **{principle-id}**` — the trailing `: {how honored}` the template prescribes is
  * present on only 20.4% of real citations), not bare ids — extractHonoredSection
  * (run-summary-extractors.ts) deliberately does NOT parse them (changing it would break
- * determinism against already-archived strings, ADR-0048). The bare-id parse lives here,
+ * determinism against already-archived strings, ADR-0051). The bare-id parse lives here,
  * at read time — which makes a fix to it retroactive across every archived build with no
  * backfill (ADR-0057).
  *

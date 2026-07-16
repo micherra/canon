@@ -304,6 +304,99 @@ describe("summaryToOutcomeSignals — Bug 1: verdict from violation-bearing revi
   });
 });
 
+// ---- Backfill-activated coverage: populated violations[] across multiple review_results ----
+//
+// Context (fix-review-1, contract juror WARNING/LOW): `review_results[].violations[]` was `[]`
+// across all 584 archived builds, so the `matchingReviews` primary branch of
+// summaryToOutcomeSignals had NEVER executed in production — only the `review_results[0]`
+// fallback ran. The ADR-0057 violations backfill re-derives `violations[]` from REVIEW.md
+// across 351 archives, activating this branch for real for the first time. These tests exercise
+// that previously-dead branch with the realistic post-backfill shape: MULTIPLE review_results,
+// each carrying a POPULATED violations[] array.
+describe("summaryToOutcomeSignals — backfill-activated primary branch (populated violations[])", () => {
+  test("3 reviews each with populated violations → primary branch selects the violation-bearing review, not review_results[0]", () => {
+    // review_results[0] verdict is CLEAN and does NOT hold the target principle.
+    // If the dead review_results[0] fallback fired, we'd wrongly read CLEAN.
+    // The target principle lives only in review[1] (WARNING), proving the
+    // matchingReviews branch — not the fallback — produced the signal.
+    const summary = makeRunSummary({
+      review_results: [
+        {
+          files_reviewed: 2,
+          honored: [],
+          principles_checked: 3,
+          verdict: "CLEAN",
+          violations: [
+            { file_path: "a.ts", message: "", principle_id: "other-a", severity: "convention" },
+          ],
+        },
+        {
+          files_reviewed: 2,
+          honored: [],
+          principles_checked: 3,
+          verdict: "WARNING",
+          violations: [
+            { file_path: "b.ts", message: "", principle_id: "target-principle", severity: "rule" },
+          ],
+        },
+        {
+          files_reviewed: 2,
+          honored: [],
+          principles_checked: 3,
+          verdict: "BLOCKING",
+          violations: [
+            { file_path: "c.ts", message: "", principle_id: "other-c", severity: "rule" },
+          ],
+        },
+      ],
+    });
+
+    const signals = summaryToOutcomeSignals(summary, "target-principle");
+    // Primary branch: verdict comes from the review that holds target-principle (WARNING),
+    // NOT review_results[0]'s CLEAN and NOT the unrelated BLOCKING review.
+    expect(signals.review_verdict?.toLowerCase()).toBe("warning");
+  });
+
+  test("target principle appears in two of three populated reviews → worst verdict wins", () => {
+    const summary = makeRunSummary({
+      review_results: [
+        {
+          files_reviewed: 1,
+          honored: [],
+          principles_checked: 2,
+          verdict: "WARNING",
+          violations: [
+            { file_path: "x.ts", message: "", principle_id: "shared-principle", severity: "rule" },
+            { file_path: "x.ts", message: "", principle_id: "noise", severity: "convention" },
+          ],
+        },
+        {
+          files_reviewed: 1,
+          honored: [],
+          principles_checked: 2,
+          verdict: "CLEAN",
+          violations: [
+            { file_path: "y.ts", message: "", principle_id: "unrelated", severity: "convention" },
+          ],
+        },
+        {
+          files_reviewed: 1,
+          honored: [],
+          principles_checked: 2,
+          verdict: "BLOCKING",
+          violations: [
+            { file_path: "z.ts", message: "", principle_id: "shared-principle", severity: "rule" },
+          ],
+        },
+      ],
+    });
+
+    const signals = summaryToOutcomeSignals(summary, "shared-principle");
+    // Both the WARNING and BLOCKING reviews hold shared-principle → worst (BLOCKING) wins.
+    expect(signals.review_verdict?.toLowerCase()).toBe("blocking");
+  });
+});
+
 // ---- Bug 2: fix_iterations derived from state_iterations ----
 
 describe("summaryToOutcomeSignals — Bug 2: fix_iterations from state_iterations", () => {
