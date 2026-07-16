@@ -223,8 +223,8 @@ identical round-1 impact (out-of-scope proposal rename, out-of-scope
 `learning.jsonl` append) — the round-2 PoC closed, not the vulnerability
 class.
 
-Fixed by re-containing the actual write target (not just `project_dir`) in
-both handlers via one new shared primitive,
+Fixed by re-containing the `.canon` ancestor of the write target (not just
+`project_dir`) in both handlers via one new shared primitive,
 `isPathContainedResolvingAncestor` (`@shared/lib/worktree-guard.ts`). Unlike
 `isPathInWorktree`/`isPathContainedViaResolver` — both of which fail closed
 the instant a target doesn't yet exist, which is correct for validating an
@@ -240,3 +240,72 @@ scope via a symlink. `reconcileLearnings`, which never creates `.canon/`,
 gets the same zero-false-reject property for free: an absent `.canon`
 resolves its nearest existing ancestor (`project_dir`, already validated)
 and passes, and `buildPlan`'s `readDir` already no-ops on that absence.
+
+For `appendLearningRecord` this check runs on the actual write target itself
+— `learning.jsonl` sits directly under `.canon`, so the resolved path handed
+to `isPathContainedResolvingAncestor` IS the write target, and this fix
+closes that tool's containment gap completely. For `reconcileLearnings` the
+resolved path is only the `.canon` ancestor — the deeper paths it actually
+reads and renames files under (`.canon/proposed-learnings/{ts}/...`) are
+joined afterward and are NOT covered by this check. That gap is not closed
+by round 3; see "Amendment: fix-review round 4" below.
+
+## Amendment: fix-review round 4 (deeper-path symlink escape, accepted residual, ratified 2026-07-16)
+
+A further adversarial pass found that round 3's `.canon`-subpath re-containment
+does not extend to the paths `reconcileLearnings` actually joins and mutates
+BELOW `.canon`. The handler validates `project_dir` (round 1/2) and
+re-contains the `project_dir/.canon` ancestor (round 3) — but
+`evaluatePendingFiles`/`planTimestampDir` then
+`join(project_dir, ".canon", "proposed-learnings", tsDir)`
+(`reconcile-learnings.ts:336`, `:408`), and `applyPlan` renames files into
+`{tsDir}/applied/` and `{tsDir}/stale/` (`reconcile-learnings.ts:511-534`),
+without re-validating any of those deeper paths. A `project_dir/.canon` that
+passes the round-3 check but whose `proposed-learnings` child (or a
+timestamped dir beneath it) is itself a symlink can redirect a read, rename,
+or `learning.jsonl` append outside the resolved scope — reproduced with a
+control fixture during this build's adversarial review.
+
+**True containment guarantee, stated precisely:**
+- `project_dir` — contained, symlink-safe (`isPathContainedViaResolver`, round 1/2).
+- `project_dir/.canon` — re-contained, symlink-safe (`isPathContainedResolvingAncestor`, round 3).
+- `appendLearningRecord`'s actual write target (`.canon/learning.jsonl`) —
+  fully re-contained (the `.canon` check above IS the write-target check for
+  this tool). No known residual here.
+- `reconcileLearnings`'s actual read/rename targets
+  (`.canon/proposed-learnings/{ts}/...`, and the `applied/`/`stale/` rename
+  destinations under each) — **NOT re-contained.** A symlink at or below
+  `.canon/proposed-learnings` is not caught by any existing check.
+
+**Accepted, not closed.** This residual grants no capability an agent lacks:
+both grantee agents (`learner`, `writer`) already hold `Bash`, so an agent
+that wanted to write outside scope via a symlink could already do so
+directly — the same parity argument already accepted for the Bash-bypass
+residual documented in Consequences above (an agent can always `printf ... >>`
+past either tool). The severity is therefore no privilege escalation over an
+existing grant, not a new capability. The user has ratified this as a
+documented, accepted gap rather than a build-blocking defect — this build's
+scope was limited to correcting the documentation to state the true
+guarantee; the escape itself is not closed here (see Follow-up below).
+
+Any earlier text in this document that could read as claiming `reconcileLearnings`'s
+containment chain is complete — including phrases like "the narrow contract
+IS the security property" applied without qualification — refers only to
+`project_dir` and the `.canon` ancestor, not to `reconcileLearnings`'s true
+write targets several levels deeper. That stronger claim does not hold and is
+corrected by this amendment.
+
+## Follow-up (deferred, ratified 2026-07-16)
+
+Root-cause fix for a future build — not undertaken here, since this build is a
+documentation-only correction:
+
+- Collapse the four overlapping containment primitives in
+  `worktree-guard.ts` — `isPathContained`, `isPathInWorktree`,
+  `isPathContainedViaResolver`, `isPathContainedResolvingAncestor` — into ONE.
+- Validate the fully-resolved realpath of every write/rename TARGET against
+  scope in ONE place, rather than re-containing each ancestor depth as it is
+  separately discovered by each caller.
+- `reconcile-learnings.ts:336` and `:408` are the unvalidated join sites; the
+  rename targets constructed at `reconcile-learnings.ts:511-534` are the
+  unvalidated mutation sites.

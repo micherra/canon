@@ -24,9 +24,13 @@
  * a narrow, single-file append seam into a general arbitrary-directory-write
  * primitive callable by any agent granted this tool — a far larger surface
  * than the bug being fixed, and one reachable by overlay-influenced content
- * (`agent-never-trust-overlay-tier`). The narrow contract IS the security
- * property; do not add a path parameter for flexibility, and do not drop
- * the scope-containment check (see ADR-0056).
+ * (`agent-never-trust-overlay-tier`). The narrow contract is a large part of
+ * why this tool's own write target ends up fully re-contained (see below) —
+ * do not add a path parameter for flexibility, and do not drop the
+ * scope-containment check (see ADR-0056). This tool's containment is
+ * complete for its own single write target; it is not a claim about the
+ * sibling `reconcileLearnings` tool, which has a documented residual below
+ * `.canon` — see ADR-0056 "Amendment: fix-review round 4".
  *
  * `project_dir` containment alone is NOT sufficient: a genuine, in-scope
  * `project_dir` can still have a `project_dir/.canon` that is itself a
@@ -36,7 +40,9 @@
  * `isPathContainedResolvingAncestor` — the SAME primitive `reconcileLearnings`
  * uses for its own `.canon`-subpath check — which tolerates a not-yet-created
  * target (this tool creates `.canon/` on a legitimate first run) while still
- * rejecting a `.canon` that resolves outside the caller's scope.
+ * rejecting a `.canon` that resolves outside the caller's scope. Because
+ * `learning.jsonl` sits directly under `.canon`, this check runs on the
+ * actual write target itself, not merely an ancestor of it.
  */
 
 import { mkdir, realpath } from "node:fs/promises";
