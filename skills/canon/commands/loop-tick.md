@@ -94,7 +94,8 @@ absent — because there is no state file yet (first tick) or the field is missi
 snapshot — is NOT a transition and matches no `on_transition` rule — **with one exception**: a
 rule declaring `fire_on_baseline: true` fires on a tick with an absent prior **if and only if**
 the observed value equals the rule's `to:` value. The schema guarantees such a rule has a `to:`,
-has no `from:`, and is not `append` — no other shape can carry the flag. Every rule WITHOUT
+has no `from:`, is not `append`, and is not `terminate` — no other shape can carry the flag.
+Every rule WITHOUT
 `fire_on_baseline: true` keeps today's behavior exactly: on the first tick, its field has an
 absent prior, so it never fires, regardless of shape (any-change, `to:`-matching, or otherwise).
 
@@ -228,5 +229,6 @@ Also terminate if any fired transition rule has `terminate: true`.
   snapshot and surfaces nothing for any rule that has not opted in — transition rules always
   compare against a known prior value (present from tick 2+), eliminating false-fires from
   conditions already true at arm time. The one exception: a rule declaring
-  `fire_on_baseline: true` (admissible only on a `to:`-only, non-`append`, non-`from:` rule)
+  `fire_on_baseline: true` (admissible only on a `to:`-only, non-`append`, non-`from:`,
+  non-`terminate` rule)
   fires on the baseline tick when the observed value already equals its `to:`. See Step 5.

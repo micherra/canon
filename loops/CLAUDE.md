@@ -95,8 +95,8 @@ fires; the orchestrator reads and acts on it. See CLAUDE.md § Loop Framework, "
 with one opt-in exception (ADR-0056).** A loop's first tick captures the initial snapshot and
 surfaces nothing by default. Transition rules compare a new value against a *known prior* — a
 field with no prior value (first tick or missing from prior snapshot) is never a transition, for
-any rule that has not opted in. A `to:`-only rule (no `from:`, not `append`) may declare
-`fire_on_baseline: true` to surface a condition already true at arm time — once, since a tick-1
+any rule that has not opted in. A `to:`-only rule (no `from:`, not `append`, not `terminate`)
+may declare `fire_on_baseline: true` to surface a condition already true at arm time — once, since a tick-1
 fire compares equal on tick 2's ordinary diff and does not re-fire. See ADR-0056.
 
 ## Relationship to Other Canon Concepts
