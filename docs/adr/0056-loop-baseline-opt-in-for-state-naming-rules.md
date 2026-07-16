@@ -99,17 +99,22 @@ that opts in fires on a baseline tick if and only if the observed value equals i
 
 **Pros:**
 - Upholds ADR-0002's default for every rule that does not opt in.
-- **Two of ADR-0002's three named noise sub-classes become inexpressible, not merely
-  discouraged.** `append: true` → rejected (the flood sub-class); no `to:` → rejected (the
-  any-change sub-class). A loop author *cannot write* the append-flood or any-change shapes.
-  **The third sub-class — a to:-matching false-fire (e.g. a hypothetical `to: "failure"` rule
-  firing on an un-acted-on baseline, ADR-0002's own named example) — remains schema-admissible.**
-  Nothing in the `superRefine` distinguishes a `to:` naming an author-intended "alerting" state
-  from one naming a healthy or otherwise noisy one; the schema has no concept of "alerting",
-  only equality. This sub-class is governed by per-rule author judgment plus review, not by a
-  structural bar — accepted for the 3 rules this build opts in, all of which name a state
-  (`BEHIND`, `DIRTY`, `true`) rather than an event, but a future author *could* opt a noisy
-  edge-shaped rule in by mistake and the schema would not stop them.
+- **ADR-0002 names two noise sub-classes, not three — and the guard bars one of them
+  structurally.** ADR-0002's own text (Option B's Cons, one sentence) names exactly two: a
+  `to:`-matching false-fire (its first example — "a `to: failure` rule fires on an un-acted-on
+  baseline") and an append-mode flood ("an `append`-mode rule floods the entire initial state as
+  'new'"). `any-change` appears in ADR-0002 only as a *rule shape*, never as a named noise
+  sub-class. Of the two ADR-0002 actually named, the `superRefine` bars **one**: `append: true`
+  → rejected, closing the flood sub-class. **The other — the to:-matching false-fire, ADR-0002's
+  own first named example — remains schema-admissible.** Nothing in the `superRefine`
+  distinguishes a `to:` naming an author-intended "alerting" state from one naming a healthy or
+  otherwise noisy one; the schema has no concept of "alerting", only equality. This sub-class is
+  governed by per-rule author judgment plus review, not by a structural bar — accepted for the 3
+  rules this build opts in, all of which name a state (`BEHIND`, `DIRTY`, `true`) rather than an
+  event, but a future author *could* opt a noisy edge-shaped rule in by mistake and the schema
+  would not stop them. The `superRefine` additionally bars the any-change shape (no `to:` →
+  rejected) and the `from:`-contradiction shape (`from:` set → rejected) — neither of which
+  ADR-0002 named as noise, but both barred as a matter of this opt-in's own design.
 - **A healthy baseline still surfaces nothing, structurally, for the opted-in set** — the rule
   fires only when the observed value equals its declared `to:`, which a healthy snapshot does
   not match. This mechanical equality-gate holds for any to:-only rule regardless of whether the
@@ -193,14 +198,18 @@ ADR-0045 ledger, so adding the flag would emit the directive twice on tick 1.
 - The three genuinely-blind rules now surface an already-alerting condition at arm time.
   `auto-update-branch` works for a PR that is already BEHIND when the watch arms — the PR #462
   class is observable again.
-- **Two of ADR-0002's three named noise sub-classes (flood/append, any-change) are now
-  structurally inexpressible rather than convention-protected.** The third — a to:-matching
-  false-fire — remains schema-admissible and is governed by author judgment plus review, not
-  by the `superRefine`; see § Options Considered, Option C Pros for the full statement. This
-  correction was caught by the review's correctness juror invoking `parseLoopDefinition`
-  directly (`{ to: "failure", fire_on_baseline: true }` parses clean) rather than trusting this
-  ADR's original, broader claim — the same `probe-before-build-invoke-not-infer` failure mode
-  ADR-0057 corrects for ADR-0045, one document downstream.
+- **ADR-0002's flood sub-class is now structurally inexpressible; its to:-matching false-fire
+  sub-class is not.** ADR-0002 names two noise sub-classes, not three (§ Options Considered,
+  Option C Pros has the full accounting from ADR-0002's own text). The `superRefine` bars the
+  flood sub-class (`append: true` → rejected) and additionally bars the any-change and
+  `from:`-contradiction shapes, neither of which ADR-0002 named as noise. The to:-matching
+  false-fire — ADR-0002's own first named example — remains schema-admissible and is governed
+  by author judgment plus review, not by the `superRefine`. This correction was caught by the
+  review's correctness juror invoking `parseLoopDefinition` directly (`{ to: "failure",
+  fire_on_baseline: true }` parses clean) rather than trusting this ADR's prior "two of three"
+  claim — itself a narrowing of the original overclaim that was still wrong, the same
+  `probe-before-build-invoke-not-infer` failure mode ADR-0057 corrects for ADR-0045, one
+  document downstream.
 - Future loop authors get a declared, schema-checked affordance instead of a trap plus three
   undocumented workaround precedents to choose between.
 

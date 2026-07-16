@@ -65,9 +65,10 @@ function diffSnapshot(
       // ADR-0056 exception: a rule declaring fire_on_baseline: true fires on an
       // absent prior IFF the observed value equals the rule's `to:`. The schema
       // guarantees such a rule has `to` set, `from` unset, and is not `append` —
-      // no other shape can carry the flag, so ADR-0002's any-change and
-      // append/flood noise sub-classes never reach this branch with
-      // fire_on_baseline true. A to:-matching false-fire (e.g. a hypothetical
+      // no other shape can carry the flag, so the any-change and append/flood
+      // shapes never reach this branch with fire_on_baseline true (of these,
+      // ADR-0002 names only the flood shape as noise; any-change is barred as
+      // a matter of this opt-in's own design). A to:-matching false-fire (e.g. a hypothetical
       // to: "failure" rule) is NOT barred here — that sub-class is admissible
       // by the schema and governed by author judgment plus review, not by this
       // guard (see ADR-0056 § Consequences, corrected post-review).

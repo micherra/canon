@@ -169,9 +169,10 @@ editing this block, not by editing the observe steps below.
 
 ### Diff against snapshot
 
-Apply `on_transition` rules per the runner Step 5 algorithm (ADR-0002 first-tick guard is
-always active). Since `surfaced_cliff_signatures` uses `append: true`, the rule fires when
-new signatures are appended to the set (i.e., the set grew this tick).
+Apply `on_transition` rules per the runner Step 5 algorithm (ADR-0002 first-tick guard applies,
+with `kg_stale`'s `fire_on_baseline` exception — see Step 5 and the first-tick section above).
+Since `surfaced_cliff_signatures` uses `append: true`, the rule fires when new signatures are
+appended to the set (i.e., the set grew this tick).
 
 ### Surface-once
 

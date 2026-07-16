@@ -96,9 +96,11 @@ the existing loop bodies already intend. The narrow downside does not bite eithe
 **Resolved by ADR-0056 (2026-07-14).** This condition was met: `ship-watch.merge_state` and
 `session-watch.kg_stale` were genuinely blind with no workaround, and the workaround pattern had
 already been independently reinvented three times elsewhere in the registry. ADR-0056 built the
-per-rule `fire_on_baseline` opt-in this ADR specified as the remedy, mechanically constrained so
-two of this ADR's three named noise sub-classes (flood/append, any-change) stay inexpressible;
-the third (a to:-matching false-fire) remains schema-admissible and is governed by author
+per-rule `fire_on_baseline` opt-in this ADR specified as the remedy. This ADR names two noise
+sub-classes, not three — a to:-matching false-fire and an append-mode flood. ADR-0056's guard
+mechanically bars one of them (flood/append) plus additionally bars the any-change and
+`from:`-contradiction shapes, which this ADR did not name as noise. The to:-matching false-fire
+— this ADR's own first named example — remains schema-admissible and is governed by author
 judgment plus review — see ADR-0056 § Consequences for the corrected statement. This ADR's
 Decision, Status, and Options Considered are unchanged — ADR-0056 is an amendment executing this
 ADR's own contingency, not a supersession.

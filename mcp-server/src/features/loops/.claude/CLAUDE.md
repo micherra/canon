@@ -64,16 +64,19 @@ Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-upda
 ## `fire_on_baseline` on `TransitionRuleSchema` (ADR-0056)
 
 `fire_on_baseline` — optional `z.boolean()` field on a transition rule, admissible **iff**
-`to` is set AND `from` is unset AND `append` is not `true`, enforced by a `superRefine` on
-`TransitionRuleSchema` itself (not the outer `LoopDefinitionSchema` cross-field check — this
-constraint is intra-rule).
+`to` is set AND `from` is unset AND `append` is not `true` AND `terminate` is not `true`,
+enforced by a `superRefine` on `TransitionRuleSchema` itself (not the outer
+`LoopDefinitionSchema` cross-field check — this constraint is intra-rule).
 
 - **Omitted or `false`** → both mean "off" (no `.default()` — deliberately, so `undefined` and
   `false` stay distinguishable at the type level but identical in effect); existing loops parse
   unchanged
-- **Inadmissible combination** (`append: true`, or no `to`, or `from` set, with the flag `true`)
-  → parse-time rejection, flows through `parseLoopDefinition`'s `{ ok: false }` path into
-  `invalid[]` (fail-closed), never a runtime warning
+- **Inadmissible combination** (`append: true`, or no `to`, or `from` set, or `terminate: true`,
+  with the flag `true`) → parse-time rejection, flows through `parseLoopDefinition`'s
+  `{ ok: false }` path into `invalid[]` (fail-closed), never a runtime warning. The
+  `terminate: true` bar (added post-review) closes a latent gap: without it, a baseline-fired
+  rule could terminate the loop before it establishes a watch — the worst property a watchdog
+  can have. No shipped rule combines them.
 - **What it does**: on a tick with an absent prior (first tick, or the field missing from a
   partial prior snapshot), a rule carrying `fire_on_baseline: true` fires if the observed value
   already equals the rule's `to:` — the runner's one exception to the ADR-0002 first-tick guard

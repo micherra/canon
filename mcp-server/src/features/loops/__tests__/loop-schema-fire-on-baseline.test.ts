@@ -191,6 +191,29 @@ describe("fire_on_baseline admissibility (ADR-0056)", () => {
     }
   });
 
+  it("fire_on_baseline: true with terminate: true (a baseline-fired rule would terminate the loop before it establishes a watch) → rejected", () => {
+    const bad = {
+      ...validIntervalFrontmatter,
+      surface: {
+        on_transition: [
+          {
+            field: "tick_count",
+            to: "failure",
+            fire_on_baseline: true,
+            terminate: true,
+            message: "Terminates on baseline.",
+          },
+        ],
+      },
+    };
+    const result = parseLoopDefinition(bad, {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/fire_on_baseline/i);
+      expect(result.error).toMatch(/terminate/i);
+    }
+  });
+
   it("fire_on_baseline: true with no `to` AND append: true (both reasons) → rejected", () => {
     const bad = {
       ...validIntervalFrontmatter,

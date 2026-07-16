@@ -134,7 +134,8 @@ Compare each of the five fields against the last-seen value from `state.path`:
 
 ### Surface on transition
 
-Apply `surface.on_transition` rules (transition-only — silent on no-op ticks):
+Apply `surface.on_transition` rules (transition-only and silent on no-op ticks, with the two
+`merge_state` rules' `fire_on_baseline` tick-1 exception below — ADR-0056):
 
 1. **`ci_conclusion`: `pending` → `failure`** — emit the failure message and mark for
    termination. Optionally surface the failing job: `gh pr checks <pr-number>` to show
