@@ -265,4 +265,126 @@ process.exit(0);
     expect(stderr).toContain("CANON ERROR [test-driver]");
     expect(stderr).toContain("parseDiagnostics");
   });
+
+  // -------------------------------------------------------------------
+  // Case C (adversarial review — harden-1): single-fixture-special-casing
+  // stub. A stub that reports real parseDiagnostics ONLY for the exact
+  // string the sec-fix-1 probe used ("const x = ;") and empty diagnostics
+  // for everything else — including a genuinely different malformed
+  // fixture — passed the seam cleanly. Closed by adding a second,
+  // structurally different malformed fixture parsed under a different
+  // ScriptKind (TS interface member with a missing type), so defeating
+  // both requires special-casing two unrelated strings across two
+  // ScriptKinds, not memorizing one.
+  // -------------------------------------------------------------------
+  test("Case C — stub special-cases only the original JS fixture: non-zero exit (second fixture probe)", async () => {
+    const { dir, driver } = setupDriver("single-fixture-special-case");
+    const nodeModulesDir = join(dir, "node_modules", "typescript-parser");
+    mkdirSync(nodeModulesDir, { recursive: true });
+    writeFileSync(
+      join(nodeModulesDir, "package.json"),
+      JSON.stringify({
+        name: "typescript-parser",
+        version: "0.0.0-stub",
+        type: "module",
+        main: "index.js",
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(nodeModulesDir, "index.js"),
+      `export default {
+  version: "0.0.0-stub",
+  ScriptTarget: { Latest: 99 },
+  ScriptKind: { JS: 1, TS: 3 },
+  // Fully present and callable, and genuinely reports parseDiagnostics —
+  // but ONLY for the exact fixture text the original (sec-fix-1) probe
+  // used. Any other input, including a structurally different malformed
+  // fixture, gets an empty (silently "clean") parseDiagnostics array.
+  createSourceFile(fileName, text) {
+    const isMemorizedFixture = text === "const x = ;";
+    return {
+      fileName,
+      text,
+      kind: "SourceFile",
+      statements: [{ kind: 244 }],
+      parseDiagnostics: isMemorizedFixture ? [{ messageText: "memorized fixture only" }] : [],
+    };
+  },
+};
+`,
+      "utf8",
+    );
+
+    const { code, stderr } = await run(driver, [
+      JSON.stringify(["createSourceFile", "ScriptTarget", "ScriptKind"]),
+    ]);
+    expect(code).not.toBe(0);
+    expect(stderr).toContain("CANON ERROR [test-driver]");
+  });
+
+  // -------------------------------------------------------------------
+  // Case D (adversarial review — harden-1): degenerate-AST stub. A stub
+  // that correctly reports parseDiagnostics for BOTH malformed fixtures
+  // (passing both diagnostic probes) but always returns an empty/degenerate
+  // `statements` array — even for genuinely valid input — passed the seam
+  // cleanly, because nothing checked that the returned tree was real and
+  // walkable. Closed by a positive AST-shape assertion: parse a KNOWN-valid
+  // source and require both the expected statement count AND a non-zero
+  // forEachChild walk over it.
+  // -------------------------------------------------------------------
+  test("Case D — stub reports diagnostics correctly but returns a degenerate AST: non-zero exit (shape probe)", async () => {
+    const { dir, driver } = setupDriver("degenerate-ast-stub");
+    const nodeModulesDir = join(dir, "node_modules", "typescript-parser");
+    mkdirSync(nodeModulesDir, { recursive: true });
+    writeFileSync(
+      join(nodeModulesDir, "package.json"),
+      JSON.stringify({
+        name: "typescript-parser",
+        version: "0.0.0-stub",
+        type: "module",
+        main: "index.js",
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(nodeModulesDir, "index.js"),
+      `export default {
+  version: "0.0.0-stub",
+  ScriptTarget: { Latest: 99 },
+  ScriptKind: { JS: 1, TS: 3 },
+  // Genuinely detects BOTH malformed probe fixtures and reports real
+  // parseDiagnostics for them (passes the diagnostic-reporting probes) —
+  // but ALWAYS returns an empty statements array, even for genuinely
+  // valid input. A parser that reports diagnostics correctly but returns
+  // a structurally wrong/empty AST would silently misfire every
+  // downstream ban-walk and binding count.
+  createSourceFile(fileName, text) {
+    const isMalformed = text.includes("= ;") || text.includes(": ;");
+    return {
+      fileName,
+      text,
+      kind: "SourceFile",
+      statements: [], // degenerate: always empty, regardless of input validity
+      forEachChildResult: undefined,
+      parseDiagnostics: isMalformed ? [{ messageText: "malformed" }] : [],
+    };
+  },
+  forEachChild(node, cb) {
+    // Faithfully walk whatever "statements" the (degenerate) SourceFile
+    // reports — an empty array yields zero children, exactly the
+    // real-world symptom this probe must catch.
+    for (const s of node.statements ?? []) cb(s);
+  },
+};
+`,
+      "utf8",
+    );
+
+    const { code, stderr } = await run(driver, [
+      JSON.stringify(["createSourceFile", "ScriptTarget", "ScriptKind", "forEachChild"]),
+    ]);
+    expect(code).not.toBe(0);
+    expect(stderr).toContain("CANON ERROR [test-driver]");
+  });
 });

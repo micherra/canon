@@ -162,13 +162,43 @@ costs of its own.
   without ever declaring `ScriptTarget`, rather than silently working around it). The three
   callers' own `parseDiagnostics` derefs were also hardened from short-circuiting (`?? []`,
   `if (parseDiags && ...)`) to positive assert-and-fail, so a contract violation past the probe is
-  still loud, not silently skipped. See `mcp-server/src/__tests__/ts-compiler-seam.test.ts`
-  ("Case A" / "Case B") for the regression tests covering both the original degraded-parser shape
-  and the narrower-gate shape. **This does not make the pin self-verifying against every possible
-  future degradation** — it closes the demonstrated classes. Any future `typescript-parser`
-  version bump should re-run this probe (it runs automatically, for any caller that parses, on
-  every invocation of the three scripts) and, ideally, re-run the adversarial stub tests manually
-  as a spot-check that the probe itself still discriminates real from degraded.
+  still loud, not silently skipped.
+
+  **A fresh adversarial review (post-gate-fix) found the probe still checked only ONE fixture.**
+  A stub could special-case the exact string `"const x = ;"` — reporting real diagnostics only
+  for that literal input and empty diagnostics for everything else — and pass cleanly (executed,
+  confirmed exit 0). This is outside the version-drift threat model the probe defends against
+  (defeating one memorized fixture is deliberate sabotage, not the incidental degradation an alias
+  bump would cause), so it was a WARNING, not a BLOCKING finding — closed anyway before ship. The
+  same review separately noted the probe never checked that a *valid* parse returns a real,
+  walkable tree — a parser could report `parseDiagnostics` correctly (passing every probe above)
+  and still return a structurally wrong or empty AST, silently breaking the ban-walk and
+  binding-count logic in all three scripts even while "looking" healthy.
+
+  The seam now runs **three** probes for any caller that declared `createSourceFile`, each gated
+  identically (never narrowed to a subset of callers) and each explicitly asserting its own
+  required member before use (never folded into the outer gate, per the correction above):
+  1. **Probe A** — the original malformed-JS fixture (`"const x = ;"`, `ScriptKind` inferred from
+     the `.js` probe filename).
+  2. **Probe B** — a structurally DIFFERENT malformed fixture (`"interface Foo { bar: ; }"`,
+     explicit `ScriptKind.TS`) — a distinct diagnostic message ("Type expected." vs. Probe A's
+     "Expression expected."), confirmed by invoking the real parser. Defeating both A and B
+     requires special-casing two unrelated strings across two `ScriptKind`s, not one memorized
+     answer.
+  3. **Probe C** — an AST-shape assertion: parse a known-VALID source (`"const y = 1;"`) and
+     require both the exact expected statement count AND a non-zero `forEachChild` walk over it —
+     the same API the three real callers use for their own AST walks — proving the tree is real
+     and walkable, not merely that some object came back.
+
+  See `mcp-server/src/__tests__/ts-compiler-seam.test.ts` ("Case A" / "Case B" for the gating
+  correction; "Case C" / "Case D" for the two adversarially-motivated hardening probes) for the
+  regression tests covering all four failure shapes. **This still does not make the pin
+  self-verifying against every possible future degradation** — it closes every demonstrated class
+  to date. Any future `typescript-parser` version bump should re-run these probes (they run
+  automatically, for any caller that parses, on every invocation of the three scripts — measured
+  overhead: negligible, well under a second total per invocation) and, ideally, re-run the
+  adversarial stub tests manually as a spot-check that the probes still discriminate real from
+  degraded.
 - A second, dev-only copy of TypeScript ships in `node_modules` (~30MB), used only by the three
   lint/gate scripts.
 - **The repo-root `tsconfig.json` required the same `baseUrl` removal, with one deliberate
