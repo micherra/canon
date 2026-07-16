@@ -6,7 +6,7 @@
  * `run-summary.json`. Archives written while the violations parser was broken carry a
  * frozen `violations: []` that no parser fix can reach — the raw `reviews/REVIEW.md`
  * is still on disk, but nothing re-reads it. This script re-derives the frozen
- * interpretation from that surviving source (ADR-0057).
+ * interpretation from that surviving source (ADR-0059).
  *
  * Violations only. The honored side is parsed on READ, so the parser fix is already
  * retroactive there and needs no backfill.

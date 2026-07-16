@@ -309,7 +309,7 @@ describe("summaryToOutcomeSignals — Bug 1: verdict from violation-bearing revi
 // Context (fix-review-1, contract juror WARNING/LOW): `review_results[].violations[]` was `[]`
 // across all 584 archived builds, so the `matchingReviews` primary branch of
 // summaryToOutcomeSignals had NEVER executed in production — only the `review_results[0]`
-// fallback ran. The ADR-0057 violations backfill re-derives `violations[]` from REVIEW.md
+// fallback ran. The ADR-0059 violations backfill re-derives `violations[]` from REVIEW.md
 // across 351 archives, activating this branch for real for the first time. These tests exercise
 // that previously-dead branch with the realistic post-backfill shape: MULTIPLE review_results,
 // each carrying a POPULATED violations[] array.

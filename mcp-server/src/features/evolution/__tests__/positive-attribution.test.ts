@@ -244,7 +244,7 @@ describe("parseHonoredId — the charset guard rejects prose, never coerces it",
   });
 });
 
-describe("parseHonoredId — parse is not resolve (ADR-0056)", () => {
+describe("parseHonoredId — parse is not resolve (ADR-0058)", () => {
   it("a charset-valid RETIRED id parses and is retained, not resolved away", () => {
     // `thin-handlers` no longer exists on disk. Resolving against disk would erase
     // 340 real historical citations across 176 retired ids (PROBE-FINDINGS Finding 6).

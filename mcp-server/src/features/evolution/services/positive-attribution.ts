@@ -12,7 +12,7 @@
  * (run-summary-extractors.ts) deliberately does NOT parse them (changing it would break
  * determinism against already-archived strings, ADR-0051). The bare-id parse lives here,
  * at read time — which makes a fix to it retroactive across every archived build with no
- * backfill (ADR-0057).
+ * backfill (ADR-0059).
  *
  * Byte-identity trap (mirrors attribution-join.ts PROBE §1): hash verification calls
  * hashContent(rawBody) where rawBody is the UNTRIMMED current file content — NOT a

@@ -1,12 +1,12 @@
 ---
-adr: "0056"
+adr: "0058"
 title: "Citation parsing validates a closed charset but never resolves against on-disk principles"
 status: accepted
 date: "2026-07-15"
 build: "fix-the-violations-extraction-parsertemplate-mismatch-f1-and-the"
 ---
 
-# ADR-0056: Citation parsing validates a closed charset but never resolves against on-disk principles
+# ADR-0058: Citation parsing validates a closed charset but never resolves against on-disk principles
 
 ## Context
 
