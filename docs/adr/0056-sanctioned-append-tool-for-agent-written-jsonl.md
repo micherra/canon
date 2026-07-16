@@ -266,39 +266,76 @@ timestamped dir beneath it) is itself a symlink can redirect a read, rename,
 or `learning.jsonl` append outside the resolved scope — reproduced with a
 control fixture during this build's adversarial review.
 
-**True containment guarantee, stated precisely:**
-- `project_dir` — contained, symlink-safe (`isPathContainedViaResolver`, round 1/2).
-- `project_dir/.canon` — re-contained, symlink-safe (`isPathContainedResolvingAncestor`, round 3).
-- `appendLearningRecord`'s actual write target (`.canon/learning.jsonl`) —
-  fully re-contained (the `.canon` check above IS the write-target check for
-  this tool). No known residual here.
+**True containment guarantee, stated precisely — empirically verified with
+control fixtures against both handlers, not inferred:**
+- `project_dir` — contained, symlink-safe (`isPathContainedViaResolver`,
+  round 1/2). Verified: `.canon` itself as a symlink (dangling or resolving
+  to a real out-of-scope path) is correctly rejected by both handlers.
+- `project_dir/.canon` — re-contained, symlink-safe
+  (`isPathContainedResolvingAncestor`, round 3) **when `.canon/learning.jsonl`
+  either does not exist at all, or already exists as a real file or a
+  symlink resolving to an already-existing target.** Verified: a *pre-existing*
+  symlink at `.canon/learning.jsonl` pointing at an already-existing
+  out-of-scope file IS correctly rejected — `realpath` follows the symlink to
+  its real target during the check, and that target fails containment.
+- **`appendLearningRecord` — residual confirmed, narrower than first
+  suspected:** a *dangling* symlink at `.canon/learning.jsonl` (the symlink
+  object exists; its target path does not exist yet) bypasses the check.
+  `isPathContainedResolvingAncestor`'s ancestor-walk cannot distinguish "no
+  file here at all" (the legitimate not-yet-created first-run case it must
+  tolerate) from "a symlink exists here but its target hasn't been created
+  yet" — both make `realpath` throw `ENOENT`, so both cause the walk to fall
+  back to the nearest existing ancestor (`.canon`, real and in-scope) and
+  pass. `appendJsonlLine`'s subsequent `open`/`appendFile` then follows the
+  symlink and CREATES the attacker-chosen file at the dangling target,
+  writing the caller's record into it — confirmed against a live (non-dry-run)
+  control fixture: a `.canon/learning.jsonl` symlink dangling to an
+  out-of-scope, not-yet-existing path was created and populated with the
+  appended record. This does not require a pre-existing victim file, which
+  makes it broader than a "victim file already there" framing would suggest
+  — any writable absolute path the attacker can name is reachable.
 - `reconcileLearnings`'s actual read/rename targets
   (`.canon/proposed-learnings/{ts}/...`, and the `applied/`/`stale/` rename
   destinations under each) — **NOT re-contained.** A symlink at or below
-  `.canon/proposed-learnings` is not caught by any existing check.
+  `.canon/proposed-learnings` is not caught by any existing check. Verified:
+  a real, in-scope `.canon` whose `proposed-learnings` child is a symlink to
+  a real out-of-scope directory both (a) surfaces that directory's proposal
+  file content through the tool's `skipped`/`flagged_stale` output, and (b)
+  on a live (non-dry-run) call, renames a stale proposal into an
+  `applied`/`stale` subdirectory actually created inside the out-of-scope
+  target — a genuine filesystem mutation outside the resolved scope. A
+  *dangling* `.canon` symlink (one level higher) is separately, correctly
+  rejected for this handler: `readDir` on a `.canon` that doesn't really
+  resolve fails closed with nothing found, so this handler's dangling-symlink
+  exposure is confined to the already-documented deeper-path class, not the
+  `.canon`-ancestor level.
 
-**Accepted, not closed.** This residual grants no capability an agent lacks:
-both grantee agents (`learner`, `writer`) already hold `Bash`, so an agent
-that wanted to write outside scope via a symlink could already do so
-directly — the same parity argument already accepted for the Bash-bypass
-residual documented in Consequences above (an agent can always `printf ... >>`
-past either tool). The severity is therefore no privilege escalation over an
-existing grant, not a new capability. The user has ratified this as a
-documented, accepted gap rather than a build-blocking defect — this build's
-scope was limited to correcting the documentation to state the true
-guarantee; the escape itself is not closed here (see Follow-up below).
+**Accepted, not closed — for both tools.** This residual grants no capability
+an agent lacks: both grantee agents (`learner`, `writer`) already hold
+`Bash`, so an agent that wanted to write outside scope via a symlink could
+already do so directly — the same parity argument already accepted for the
+Bash-bypass residual documented in Consequences above (an agent can always
+`printf ... >>` past either tool). The severity is therefore no privilege
+escalation over an existing grant, not a new capability, for either tool's
+residual. The user has ratified this as a documented, accepted gap rather
+than a build-blocking defect — this build's scope was limited to correcting
+the documentation to state the true guarantee; the escape itself is not
+closed here for either tool (see Follow-up below).
 
-Any earlier text in this document that could read as claiming `reconcileLearnings`'s
-containment chain is complete — including phrases like "the narrow contract
-IS the security property" applied without qualification — refers only to
-`project_dir` and the `.canon` ancestor, not to `reconcileLearnings`'s true
-write targets several levels deeper. That stronger claim does not hold and is
-corrected by this amendment.
+Any earlier text in this document that could read as claiming either
+handler's containment chain is complete — including phrases like "the narrow
+contract IS the security property" applied without qualification — refers
+only to `project_dir`, the `.canon` ancestor, and (for `appendLearningRecord`
+specifically) an already-existing or absent `.canon/learning.jsonl`. It does
+NOT cover a dangling symlink at that leaf (`appendLearningRecord`) or
+`reconcileLearnings`'s true write targets several levels deeper. Both
+stronger claims do not hold and are corrected by this amendment.
 
 ## Follow-up (deferred, ratified 2026-07-16)
 
 Root-cause fix for a future build — not undertaken here, since this build is a
-documentation-only correction:
+documentation-only correction. Two distinct mechanisms, both traced to the
+same underlying gap in the shared primitive:
 
 - Collapse the four overlapping containment primitives in
   `worktree-guard.ts` — `isPathContained`, `isPathInWorktree`,
@@ -306,6 +343,18 @@ documentation-only correction:
 - Validate the fully-resolved realpath of every write/rename TARGET against
   scope in ONE place, rather than re-containing each ancestor depth as it is
   separately discovered by each caller.
-- `reconcile-learnings.ts:336` and `:408` are the unvalidated join sites; the
-  rename targets constructed at `reconcile-learnings.ts:511-534` are the
-  unvalidated mutation sites.
+- `reconcile-learnings.ts:336` and `:408` are the unvalidated join sites for
+  the deeper-path class; the rename targets constructed at
+  `reconcile-learnings.ts:511-534` are the unvalidated mutation sites.
+- **`isPathContainedResolvingAncestor` itself needs to distinguish "nothing
+  exists at this path" from "a symlink exists at this path but its target
+  doesn't."** The current ancestor-walk treats any `realpath` throw the same
+  way, which is correct for the former (the legitimate not-yet-created
+  first-run case) and wrong for the latter (a dangling symlink, which is
+  itself a filesystem object placeable by an attacker without needing a
+  pre-existing victim file). The fix should `lstat` the leaf first: if it
+  exists as a symlink (dangling or not), reject or resolve its link target
+  explicitly rather than falling through to the ancestor-walk fallback; only
+  a genuinely absent path should walk up. This is the mechanism behind
+  `appendLearningRecord`'s confirmed residual above and should be fixed once
+  in the shared primitive rather than patched per-caller.

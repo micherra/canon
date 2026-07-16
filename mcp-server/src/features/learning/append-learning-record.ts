@@ -24,13 +24,8 @@
  * a narrow, single-file append seam into a general arbitrary-directory-write
  * primitive callable by any agent granted this tool — a far larger surface
  * than the bug being fixed, and one reachable by overlay-influenced content
- * (`agent-never-trust-overlay-tier`). The narrow contract is a large part of
- * why this tool's own write target ends up fully re-contained (see below) —
- * do not add a path parameter for flexibility, and do not drop the
- * scope-containment check (see ADR-0056). This tool's containment is
- * complete for its own single write target; it is not a claim about the
- * sibling `reconcileLearnings` tool, which has a documented residual below
- * `.canon` — see ADR-0056 "Amendment: fix-review round 4".
+ * (`agent-never-trust-overlay-tier`). Do not add a path parameter for
+ * flexibility, and do not drop the scope-containment check (see ADR-0056).
  *
  * `project_dir` containment alone is NOT sufficient: a genuine, in-scope
  * `project_dir` can still have a `project_dir/.canon` that is itself a
@@ -42,7 +37,28 @@
  * target (this tool creates `.canon/` on a legitimate first run) while still
  * rejecting a `.canon` that resolves outside the caller's scope. Because
  * `learning.jsonl` sits directly under `.canon`, this check runs on the
- * actual write target itself, not merely an ancestor of it.
+ * resolved path of the actual write target, not merely an ancestor of it —
+ * confirmed by control fixture: a *pre-existing* symlink at
+ * `.canon/learning.jsonl` pointing at an already-existing out-of-scope file
+ * IS correctly rejected (`realpath` follows it to the real target, which
+ * fails containment).
+ *
+ * NOT re-contained (documented, accepted residual — ADR-0056 "Amendment:
+ * fix-review round 4"): a *dangling* symlink at `.canon/learning.jsonl` —
+ * the symlink object exists, but its target path does not exist yet —
+ * bypasses this check. `isPathContainedResolvingAncestor`'s ancestor-walk
+ * cannot distinguish "nothing here at all" (the legitimate not-yet-created
+ * first-run case) from "a symlink exists here but its target hasn't been
+ * created yet"; both make `realpath` throw, so both fall back to the
+ * nearest existing ancestor (`.canon`, real and in-scope) and pass.
+ * `appendJsonlLine`'s subsequent `open`/`appendFile` then follows the
+ * symlink and CREATES the attacker-chosen file at the dangling target with
+ * the caller's record — confirmed live against a control fixture. This
+ * grants no capability beyond the `Bash` grant this tool's callers already
+ * hold. See ADR-0056 "Amendment: fix-review round 4" for the full writeup
+ * and the deferred root-cause follow-up (a leaf `lstat` in the shared
+ * primitive to detect a symlink object before falling through to the
+ * ancestor-walk fallback).
  */
 
 import { mkdir, realpath } from "node:fs/promises";
@@ -79,7 +95,11 @@ export type AppendLearningRecordOutput = {
  * (`project_dir/.canon/learning.jsonl`) against `defaultProjectDir`. That
  * check tolerates the target (or `.canon` itself) not existing yet — this
  * function creates `.canon/` on a legitimate first run — while still
- * rejecting a `.canon` that resolves out of scope via a symlink.
+ * rejecting a `.canon` that resolves out of scope via a symlink, or a
+ * pre-existing `learning.jsonl` symlink resolving to an already-existing
+ * out-of-scope file. It does NOT reject a *dangling* `learning.jsonl`
+ * symlink (target not yet existing) — see module docblock and ADR-0056
+ * "Amendment: fix-review round 4" for the confirmed, accepted residual.
  *
  * The newline check (a record that serializes but cannot form a single
  * JSONL line) runs BEFORE any I/O and is the only checked,
