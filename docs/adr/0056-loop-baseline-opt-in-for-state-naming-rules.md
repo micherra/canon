@@ -94,8 +94,11 @@ new. Both must stay blind. ADR-0002 is right about these.
 ### Option C (chosen): A per-rule `fire_on_baseline` opt-in, mechanically constrained
 
 Add `fire_on_baseline?: boolean` to `TransitionRuleSchema`, admissible **iff** `to` is set AND
-`from` is unset AND `append` is not `true` — enforced by a `superRefine` at parse time. A rule
-that opts in fires on a baseline tick if and only if the observed value equals its declared `to:`.
+`from` is unset AND `append` is not `true` AND `terminate` is not `true` — enforced by a
+`superRefine` at parse time. A rule that opts in fires on a baseline tick if and only if the
+observed value equals its declared `to:`. The `terminate` bar was added during review (finding
+A11): a baseline-fired rule that also sets `terminate: true` would terminate the loop on its
+first tick, before it establishes a watch — the worst property a watchdog can have.
 
 **Pros:**
 - Upholds ADR-0002's default for every rule that does not opt in.
@@ -113,8 +116,10 @@ that opts in fires on a baseline tick if and only if the observed value equals i
   rules this build opts in, all of which name a state (`BEHIND`, `DIRTY`, `true`) rather than an
   event, but a future author *could* opt a noisy edge-shaped rule in by mistake and the schema
   would not stop them. The `superRefine` additionally bars the any-change shape (no `to:` →
-  rejected) and the `from:`-contradiction shape (`from:` set → rejected) — neither of which
-  ADR-0002 named as noise, but both barred as a matter of this opt-in's own design.
+  rejected), the `from:`-contradiction shape (`from:` set → rejected), and the `terminate: true`
+  shape (a baseline-fired rule would self-terminate the loop before it establishes a watch) —
+  none of which ADR-0002 named as noise, but all three barred as a matter of this opt-in's own
+  design.
 - **A healthy baseline still surfaces nothing, structurally, for the opted-in set** — the rule
   fires only when the observed value equals its declared `to:`, which a healthy snapshot does
   not match. This mechanical equality-gate holds for any to:-only rule regardless of whether the
@@ -201,8 +206,9 @@ ADR-0045 ledger, so adding the flag would emit the directive twice on tick 1.
 - **ADR-0002's flood sub-class is now structurally inexpressible; its to:-matching false-fire
   sub-class is not.** ADR-0002 names two noise sub-classes, not three (§ Options Considered,
   Option C Pros has the full accounting from ADR-0002's own text). The `superRefine` bars the
-  flood sub-class (`append: true` → rejected) and additionally bars the any-change and
-  `from:`-contradiction shapes, neither of which ADR-0002 named as noise. The to:-matching
+  flood sub-class (`append: true` → rejected) and additionally bars the any-change,
+  `from:`-contradiction, and `terminate: true` shapes, none of which ADR-0002 named as noise.
+  The to:-matching
   false-fire — ADR-0002's own first named example — remains schema-admissible and is governed
   by author judgment plus review, not by the `superRefine`. This correction was caught by the
   review's correctness juror invoking `parseLoopDefinition` directly (`{ to: "failure",
