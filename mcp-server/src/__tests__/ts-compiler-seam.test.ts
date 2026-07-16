@@ -142,7 +142,7 @@ describe("ts-compiler.mjs — fail-loud parser seam", () => {
     writeFileSync(
       driverPath,
       `import { loadTsCompiler } from "./ts-compiler.mjs";
-const ts = await loadTsCompiler("test-driver", ["createSourceFile", "ScriptTarget", "SyntaxKind", "forEachChild"]);
+const ts = await loadTsCompiler("test-driver", ["createSourceFile", "ScriptTarget", "ScriptKind", "SyntaxKind", "forEachChild"]);
 process.stdout.write("OK:" + typeof ts.createSourceFile + "\\n");
 process.exit(0);
 `,
@@ -156,5 +156,59 @@ process.exit(0);
     } finally {
       rmSync(driverPath, { force: true });
     }
+  });
+
+  // -------------------------------------------------------------------
+  // Case 4 (security finding): surface-complete but BEHAVIORALLY degraded
+  // parser — every top-level API member the caller declared is present
+  // (so the existing surface assertion passes cleanly), but the returned
+  // SourceFile's `parseDiagnostics` is undefined. This is the exact shape
+  // a reviewer-constructed adversarial stub demonstrated silently passing
+  // workflows-lint.mjs's `sf.parseDiagnostics ?? []` fallback (real parser:
+  // exits 1 naming a parse error; degraded parser: exits 0, no output).
+  // `parseDiagnostics` is a property of the object createSourceFile
+  // RETURNS, not a top-level `ts.*` member, so the plain surface assertion
+  // structurally cannot see this gap — and it is absent from
+  // typescript-parser's public .d.ts (an internal, undocumented API),
+  // exactly the class of surface that can vanish across an alias bump.
+  // -------------------------------------------------------------------
+  test("surface-complete, parseDiagnostics unreported: non-zero exit (behavioral probe)", async () => {
+    const { dir, driver } = setupDriver("degraded-parsediagnostics");
+    const nodeModulesDir = join(dir, "node_modules", "typescript-parser");
+    mkdirSync(nodeModulesDir, { recursive: true });
+    writeFileSync(
+      join(nodeModulesDir, "package.json"),
+      JSON.stringify({
+        name: "typescript-parser",
+        version: "0.0.0-stub",
+        type: "module",
+        main: "index.js",
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(nodeModulesDir, "index.js"),
+      `export default {
+  version: "0.0.0-stub",
+  ScriptTarget: { Latest: 99 },
+  ScriptKind: { JS: 1 },
+  // Fully present and callable — passes the top-level surface assertion —
+  // but the SourceFile it returns never reports parseDiagnostics, no
+  // matter how malformed the input. This is the degradation the surface
+  // assertion alone cannot catch.
+  createSourceFile(fileName, text) {
+    return { fileName, text, kind: "SourceFile" };
+  },
+};
+`,
+      "utf8",
+    );
+
+    const { code, stderr } = await run(driver, [
+      JSON.stringify(["createSourceFile", "ScriptTarget", "ScriptKind"]),
+    ]);
+    expect(code).not.toBe(0);
+    expect(stderr).toContain("CANON ERROR [test-driver]");
+    expect(stderr).toContain("parseDiagnostics");
   });
 });

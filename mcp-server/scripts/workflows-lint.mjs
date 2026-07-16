@@ -142,7 +142,20 @@ function parse(filePath, src) {
     return { parseError: `internal parse throw: ${err.message}`, diags: [] };
   }
 
-  const diags = sf.parseDiagnostics ?? [];
+  // The seam (scripts/lib/ts-compiler.mjs) probes at load time that
+  // createSourceFile reports parseDiagnostics for known-malformed input — so
+  // by the time we reach here, sf.parseDiagnostics being anything other than
+  // an array is a contract violation, not a case to silently tolerate.
+  // `?? []` here would recreate the exact silent-pass vulnerability the seam
+  // probe exists to close (security finding: a surface-complete-but-degraded
+  // parser would make the linter parse everything as clean). Fail loud.
+  if (!Array.isArray(sf.parseDiagnostics)) {
+    throw new Error(
+      `internal contract violation: 'typescript-parser'.createSourceFile did not return an array ` +
+        `'parseDiagnostics' (the seam probe should have caught this at load time) — got: ${typeof sf.parseDiagnostics}`,
+    );
+  }
+  const diags = sf.parseDiagnostics;
   if (diags.length > 0) {
     const first = diags[0];
     const msg =

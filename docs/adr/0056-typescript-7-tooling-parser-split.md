@@ -119,14 +119,38 @@ costs of its own.
 - `mcp-server` typechecks under TypeScript 7.0.2; `npm run build` and CI's `build` job benefit from
   the native Go compiler.
 - All three fail-closed safety gates (`workflows-lint`, `dead-wire-gate`, `tool-surfacing-check`)
-  continue to work, and continue to fail closed — including on a new failure mode this migration
-  itself introduces (parser unresolvable), which is now test-covered.
+  continue to work, and continue to fail closed — including on two new failure modes this
+  migration itself introduces (parser unresolvable; parser surface-complete but
+  behaviorally degraded on `parseDiagnostics` — see Negative/trade-offs), both test-covered.
 - The substrate choice is localized to one seam module. A future parser swap (see below) is a
   one-file change, not a three-script rewrite.
 
 **Negative / trade-offs:**
 - The AST-tooling parser is frozen on TypeScript 6.0.3 indefinitely, tracked via the
   `typescript-parser` alias rather than a normal semver range on `typescript`.
+- **`parseDiagnostics` is an internal, undocumented API the seam cannot assert structurally —
+  bumping `typescript-parser` requires re-verifying it manually or via the probe.** The seam's
+  surface assertion (`scripts/lib/ts-compiler.mjs`) only checks top-level `ts.*` members; all three
+  fail-closed gates depend on `sourceFile.parseDiagnostics`, a property of the object
+  `createSourceFile` *returns* — structurally outside what a top-level assertion can see, and
+  absent from `typescript-parser`'s public `.d.ts`. A security review demonstrated this
+  concretely: a parser stub exporting every declared top-level member (passing the surface
+  assertion cleanly) but whose `createSourceFile` never populated `parseDiagnostics` made
+  `workflows-lint.mjs`'s original `sf.parseDiagnostics ?? []` fallback silently treat every
+  malformed input as clean (exit 0, no output) — the exact silent-pass failure mode this whole
+  migration exists to prevent. Fixed by adding a BEHAVIORAL probe to the seam: after the surface
+  assertion passes, for any caller that declared `createSourceFile`/`ScriptTarget`/`ScriptKind`,
+  the seam itself parses a known-malformed source and requires a populated `parseDiagnostics`
+  array, `fail()`-ing otherwise — closing the gap structurally rather than relying on each
+  caller's own downstream check. The three callers' own `parseDiagnostics` derefs were also
+  hardened from short-circuiting (`?? []`, `if (parseDiags && ...)`) to positive
+  assert-and-fail, so a contract violation past the probe is still loud, not silently skipped.
+  See `mcp-server/src/__tests__/ts-compiler-seam.test.ts` ("surface-complete, parseDiagnostics
+  unreported" case) for the regression test. **This does not make the pin self-verifying against
+  every possible future degradation** — it closes the one demonstrated class. Any future
+  `typescript-parser` version bump should re-run this probe (it runs automatically on every
+  invocation of the three scripts) and, ideally, re-run the adversarial stub test manually as a
+  spot-check that the probe itself still discriminates real from degraded.
 - A second, dev-only copy of TypeScript ships in `node_modules` (~30MB), used only by the three
   lint/gate scripts.
 - `workflows-lint` and `tool-surfacing-extract` are syntax-only consumers that *could* eventually

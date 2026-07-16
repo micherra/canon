@@ -22,6 +22,11 @@
  */
 const PARSER_SPECIFIER = "typescript-parser";
 
+// Members needed to construct the parseDiagnostics behavioral probe below.
+// Only a caller that declared all three actually calls createSourceFile, so
+// only such a caller has a real dependency on parseDiagnostics to verify.
+const PARSE_PROBE_DEPS = ["createSourceFile", "ScriptTarget", "ScriptKind"];
+
 function fail(scriptName, msg) {
   process.stderr.write(`CANON ERROR [${scriptName}]: ${msg}\n`);
   process.exit(1); // fail-closed: no fallback, no return
@@ -61,5 +66,36 @@ export async function loadTsCompiler(scriptName, requiredApis) {
         `(TypeScript 7 removed the JS compiler API from the 'typescript' main entry — see docs/adr/0056.)`,
     );
   }
+
+  // BEHAVIORAL probe: parseDiagnostics is a property of the object
+  // createSourceFile RETURNS, not a top-level `ts.*` member — the surface
+  // assertion above cannot see it. It is also absent from typescript-parser's
+  // public .d.ts (an internal, undocumented API), so it is exactly the class
+  // of API that can silently vanish across an alias bump — which is this
+  // seam's whole premise. Every caller that actually parses (workflows-lint,
+  // dead-wire-internal-use, tool-surfacing-extract) depends on
+  // parseDiagnostics to detect malformed input; a parser whose
+  // createSourceFile never reports it must be refused, not silently
+  // accepted. Positive assertion: parse a KNOWN-malformed source and require
+  // a populated parseDiagnostics array — not a try/catch, not an optional
+  // chain over the result.
+  if (PARSE_PROBE_DEPS.every((k) => requiredApis.includes(k))) {
+    const probe = ts.createSourceFile(
+      "__canon_parse_probe__.js",
+      "const x = ;",
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.JS,
+    );
+    if (!Array.isArray(probe.parseDiagnostics) || probe.parseDiagnostics.length === 0) {
+      fail(
+        scriptName,
+        `'${PARSER_SPECIFIER}' createSourceFile does not report parseDiagnostics for known-malformed ` +
+          `input — refusing to run (fail-closed). parseDiagnostics is an internal API absent from the ` +
+          `public .d.ts; re-verify this probe after any typescript-parser version bump — see docs/adr/0056.`,
+      );
+    }
+  }
+
   return ts;
 }

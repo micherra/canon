@@ -164,8 +164,23 @@ async function main() {
   // syntactic parse-error list populated by the scanner/parser (NOT semantic
   // diagnostics, which would false-DEAD valid files referencing lib types).
   // A non-empty parseDiagnostics list → bail fail-closed (exit 1, DEAD).
+  // The seam (scripts/lib/ts-compiler.mjs) probes at load time that
+  // createSourceFile reports parseDiagnostics for known-malformed input, so
+  // by the time we reach here, parseDiagnostics being anything other than an
+  // array is a contract violation, not something to short-circuit past.
+  // `if (parseDiags && ...)` would silently SKIP this guard entirely on
+  // `undefined` — the same silent-pass shape the seam probe exists to close
+  // (security finding: today that skip is masked only by an unrelated
+  // downstream TypeError, not by design). Fail loud, non-short-circuiting.
   const parseDiags = sourceFile.parseDiagnostics;
-  if (parseDiags && parseDiags.length > 0) {
+  if (!Array.isArray(parseDiags)) {
+    process.stderr.write(
+      `CANON ERROR [dead-wire-internal-use]: internal contract violation: parseDiagnostics is not an ` +
+        `array for '${filePath}' (the seam probe should have caught this at load time) — got: ${typeof parseDiags}\n`,
+    );
+    process.exit(1);
+  }
+  if (parseDiags.length > 0) {
     const firstMsg =
       typeof parseDiags[0]?.messageText === "string"
         ? parseDiags[0].messageText
