@@ -27,13 +27,24 @@
  * (`agent-never-trust-overlay-tier`). The narrow contract IS the security
  * property; do not add a path parameter for flexibility, and do not drop
  * the scope-containment check (see ADR-0056).
+ *
+ * `project_dir` containment alone is NOT sufficient: a genuine, in-scope
+ * `project_dir` can still have a `project_dir/.canon` that is itself a
+ * symlink resolving out of scope — the exact write target this tool joins
+ * onto (round-3 adversarial finding, ADR-0056 amendment). The write target
+ * (`.canon/learning.jsonl`) is re-contained via
+ * `isPathContainedResolvingAncestor` — the SAME primitive `reconcileLearnings`
+ * uses for its own `.canon`-subpath check — which tolerates a not-yet-created
+ * target (this tool creates `.canon/` on a legitimate first run) while still
+ * rejecting a `.canon` that resolves outside the caller's scope.
  */
 
+import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { appendJsonlLine } from "@shared/lib/jsonl-append.ts";
 import { isSafeProjectDirInput } from "@shared/lib/safe-project-dir.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
-import { isPathInWorktree } from "@shared/lib/worktree-guard.ts";
+import { isPathContainedResolvingAncestor, isPathInWorktree } from "@shared/lib/worktree-guard.ts";
 
 export type AppendLearningRecordInput = {
   project_dir: string;
@@ -56,7 +67,13 @@ export type AppendLearningRecordOutput = {
  * scope (`resolveScope(extra)` at the registration seam) — fail-closed
  * `INVALID_INPUT` with zero writes on an out-of-scope `project_dir`. The
  * allow-list barrier alone is not containment (see module docblock); this
- * second check is what actually confines the write.
+ * second check is what actually confines `project_dir`, but NOT the
+ * `.canon` subpath joined onto it — a THIRD check, via
+ * `isPathContainedResolvingAncestor`, re-contains the actual write target
+ * (`project_dir/.canon/learning.jsonl`) against `defaultProjectDir`. That
+ * check tolerates the target (or `.canon` itself) not existing yet — this
+ * function creates `.canon/` on a legitimate first run — while still
+ * rejecting a `.canon` that resolves out of scope via a symlink.
  *
  * The newline check (a record that serializes but cannot form a single
  * JSONL line) runs BEFORE any I/O and is the only checked,
@@ -92,6 +109,18 @@ export async function appendLearningRecord(
 
   const path = join(input.project_dir, ".canon", "learning.jsonl");
 
+  // project_dir containment alone does not stop project_dir/.canon itself
+  // being a symlink escape one level down (round-3 finding) — re-contain
+  // the actual write target. Tolerates .canon/learning.jsonl not existing
+  // yet (this function creates .canon/ below on a legitimate first run).
+  if (!(await isPathContainedResolvingAncestor(defaultProjectDir, path, realpath))) {
+    return toolError(
+      "INVALID_INPUT",
+      `append_learning_record: ".canon" under project_dir "${input.project_dir}" escapes the resolved project scope "${defaultProjectDir}"`,
+      false,
+    );
+  }
+
   const line = JSON.stringify(input.record);
   if (line.includes("\n")) {
     return toolError(
@@ -102,6 +131,7 @@ export async function appendLearningRecord(
   }
 
   try {
+    await mkdir(join(input.project_dir, ".canon"), { recursive: true });
     const { healed } = await appendJsonlLine(path, input.record);
     return toolOk<AppendLearningRecordOutput>({ appended: true, healed, path });
   } catch (err) {

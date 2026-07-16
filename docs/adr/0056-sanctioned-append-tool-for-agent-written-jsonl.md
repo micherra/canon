@@ -211,3 +211,32 @@ arm), `write-principle/SKILL.md` (2, previously unlisted), and `writer.md`
 name `append_learning_record` and forbid hand-rolled shell redirection; the
 "four sites" literal throughout this document is corrected to the true
 count.
+
+## Amendment: fix-review round 3 (`.canon`-subpath escape, one level deeper)
+
+A fresh adversarial re-review found that round 2's `project_dir` containment
+left the exact same escape class open one directory level down: both
+handlers `join(input.project_dir, ".canon", ...)` without re-validating that
+joined subpath, so a genuine, in-scope `project_dir` whose own
+`project_dir/.canon` is a symlink pointing outside scope reproduced the
+identical round-1 impact (out-of-scope proposal rename, out-of-scope
+`learning.jsonl` append) — the round-2 PoC closed, not the vulnerability
+class.
+
+Fixed by re-containing the actual write target (not just `project_dir`) in
+both handlers via one new shared primitive,
+`isPathContainedResolvingAncestor` (`@shared/lib/worktree-guard.ts`). Unlike
+`isPathInWorktree`/`isPathContainedViaResolver` — both of which fail closed
+the instant a target doesn't yet exist, which is correct for validating an
+already-existing path but wrong for a path a caller is about to *create* —
+this primitive walks up from the target to its nearest EXISTING ancestor and
+requires that ancestor to be contained. This is what lets
+`appendLearningRecord` legitimately create a project's first `.canon/`
+(previously it silently assumed `.canon/` already existed and never created
+it — closed alongside this fix, since a naive tightening without the
+create-path would have made the first-run case indistinguishable from the
+symlink-escape case) while still rejecting a `.canon` that resolves out of
+scope via a symlink. `reconcileLearnings`, which never creates `.canon/`,
+gets the same zero-false-reject property for free: an absent `.canon`
+resolves its nearest existing ancestor (`project_dir`, already validated)
+and passes, and `buildPlan`'s `readDir` already no-ops on that absence.

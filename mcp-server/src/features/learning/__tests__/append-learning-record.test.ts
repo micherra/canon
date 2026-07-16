@@ -7,7 +7,7 @@
  * mkdtemp per test — never the repo's real `.canon/` (drift-db-leak-guard).
  */
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -159,5 +159,62 @@ describe("appendLearningRecord", () => {
       projectDir,
     );
     expect(result.ok).toBe(true);
+  });
+
+  it("rejects a project_dir/.canon symlink that resolves outside the resolved scope, with zero out-of-scope writes (round-3 PoC — same class as reconcileLearnings, one directory level down)", async () => {
+    // project_dir is a genuine in-scope directory (passes the round-2
+    // project_dir-level guard) — the escape moves to project_dir/.canon,
+    // which the round-2 fix never re-validated after joining onto it.
+    const outsideDir = await mkdtemp(join(tmpdir(), "append-learning-record-canon-victim-"));
+
+    // The pre-created .canon/ from beforeEach must be removed first — a
+    // symlink cannot be created where a real directory already exists.
+    await rm(join(projectDir, ".canon"), { force: true, recursive: true });
+    await symlink(outsideDir, join(projectDir, ".canon"));
+
+    try {
+      const result = await appendLearningRecord(
+        { project_dir: projectDir, record: { action: "accepted", attacker: "controlled" } },
+        projectDir,
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected the .canon symlink escape to be rejected");
+      expect(result.error_code).toBe("INVALID_INPUT");
+
+      await expect(readFile(join(outsideDir, "learning.jsonl"), "utf-8")).rejects.toThrow();
+    } finally {
+      await rm(outsideDir, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("appendLearningRecord — fresh project with no pre-existing .canon/ (first-run)", () => {
+  // Deliberately does NOT pre-create .canon/ (unlike the top-level
+  // `beforeEach` above) — this is the exact case the round-2 fix's
+  // predecessor worried a naive containment tightening would wrongly
+  // reject. It must still succeed after the round-3 fix.
+  let freshProjectDir: string;
+
+  beforeEach(async () => {
+    freshProjectDir = await mkdtemp(join(tmpdir(), "append-learning-record-firstrun-"));
+  });
+
+  afterEach(async () => {
+    await rm(freshProjectDir, { force: true, recursive: true });
+  });
+
+  it("still succeeds and creates .canon/learning.jsonl when .canon/ does not exist yet", async () => {
+    const result = await appendLearningRecord(
+      { project_dir: freshProjectDir, record: { run_id: "first_run" } },
+      freshProjectDir,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`expected ok, got ${result.error_code}: ${result.message}`);
+    expect(result.appended).toBe(true);
+
+    const raw = await readFile(join(freshProjectDir, ".canon", "learning.jsonl"), "utf-8");
+    expect(JSON.parse(raw.trim())).toEqual({ run_id: "first_run" });
   });
 });

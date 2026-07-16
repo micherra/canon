@@ -36,7 +36,11 @@
 import { join } from "node:path";
 import { isSafeProjectDirInput } from "@shared/lib/safe-project-dir.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
-import { isPathContained, isPathContainedViaResolver } from "@shared/lib/worktree-guard.ts";
+import {
+  isPathContained,
+  isPathContainedResolvingAncestor,
+  isPathContainedViaResolver,
+} from "@shared/lib/worktree-guard.ts";
 import { classifyProposal } from "./actionability.ts";
 import {
   defaultFsSeam,
@@ -539,11 +543,13 @@ const DEFAULT_SEAMS = { fs: defaultFsSeam, git: defaultGitSeam };
  * Reconciles the `.canon/proposed-learnings/{ts}/` review surface: auto-moves
  * shipped actionable proposals to `applied/`, auto-archives stale
  * informational-only sets to `stale/`. Idempotent, fail-open, append-only,
- * move-never-delete. `project_dir` is validated (`validate-at-trust-boundaries`)
- * then symlink-safe-contained within `defaultProjectDir` via
- * `isPathContainedViaResolver` (`@shared/lib/worktree-guard.ts`, composed
- * over the seam's `realpath`) — fail-closed `INVALID_INPUT`, zero mutations,
- * on escape; mirrors `sync_indexes`. Errors are caught and returned typed.
+ * move-never-delete. `project_dir` is validated (`validate-at-trust-boundaries`),
+ * symlink-safe-contained via `isPathContainedViaResolver`, then its `.canon`
+ * subpath is RE-contained via `isPathContainedResolvingAncestor` — closes the
+ * round-3 `project_dir/.canon`-symlink escape one level down; see that
+ * function's docblock for the shared (with `appendLearningRecord`)
+ * zero-false-reject semantics. Fail-closed `INVALID_INPUT`/zero mutations on
+ * either escape (mirrors `sync_indexes`). Errors are caught and returned typed.
  */
 export async function reconcileLearnings(
   input: ReconcileLearningsInput,
@@ -556,6 +562,15 @@ export async function reconcileLearnings(
 
   if (!(await isPathContainedViaResolver(defaultProjectDir, input.project_dir, seams.fs.realpath)))
     return toolError("INVALID_INPUT", `project_dir "${input.project_dir}" outside scope`, false);
+
+  const canonDir = join(input.project_dir, ".canon");
+  if (!(await isPathContainedResolvingAncestor(defaultProjectDir, canonDir, seams.fs.realpath))) {
+    return toolError(
+      "INVALID_INPUT",
+      `".canon" under project_dir "${input.project_dir}" escapes the resolved project scope "${defaultProjectDir}"`,
+      false,
+    );
+  }
 
   const freshnessDays = input.freshness_days ?? FRESHNESS_DAYS;
   if (!Number.isFinite(freshnessDays) || freshnessDays <= 0) {

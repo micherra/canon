@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   isPathContained,
+  isPathContainedResolvingAncestor,
   isPathContainedViaResolver,
   isPathInWorktree,
 } from "../worktree-guard.ts";
@@ -234,6 +235,88 @@ describe("isPathContainedViaResolver", () => {
     expect(await isPathContainedViaResolver("/fake/project", "/fake/project", identity)).toBe(true);
     expect(
       await isPathContainedViaResolver("/fake/project", "/fake/outside-project", identity),
+    ).toBe(false);
+  });
+});
+
+// isPathContainedResolvingAncestor — symlink-safe containment for a target
+// that may not yet exist (the caller is about to CREATE it), e.g.
+// `project_dir/.canon` on a project's first `append_learning_record` call.
+// Shared by `appendLearningRecord` and `reconcileLearnings` for their
+// `.canon`-subpath check (round-2 adversarial finding on ADR-0056).
+
+describe("isPathContainedResolvingAncestor", () => {
+  let tmpDir: string;
+  let worktree: string;
+  let outside: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "worktree-guard-ancestor-test-"));
+    worktree = join(tmpDir, "worktree");
+    outside = join(tmpDir, "outside");
+    await mkdir(worktree, { recursive: true });
+    await mkdir(outside, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { force: true, recursive: true });
+  });
+
+  it("returns true for a real, existing target inside the container", async () => {
+    const target = join(worktree, ".canon");
+    await mkdir(target);
+    expect(await isPathContainedResolvingAncestor(worktree, target, realpath)).toBe(true);
+  });
+
+  it("returns false for a symlink inside the container that resolves outside it", async () => {
+    const evilCanon = join(worktree, ".canon");
+    await symlink(outside, evilCanon);
+    expect(await isPathContainedResolvingAncestor(worktree, evilCanon, realpath)).toBe(false);
+  });
+
+  it("returns true for a NOT-YET-CREATED target whose nearest existing ancestor is genuinely contained (first-run case)", async () => {
+    // Nothing exists at worktree/.canon or worktree/.canon/learning.jsonl —
+    // this must NOT be rejected; the nearest existing ancestor is `worktree`
+    // itself, which is contained.
+    const notYetCreated = join(worktree, ".canon", "learning.jsonl");
+    expect(await isPathContainedResolvingAncestor(worktree, notYetCreated, realpath)).toBe(true);
+  });
+
+  it("returns false for a NOT-YET-CREATED target whose nearest existing ancestor is a symlink escape", async () => {
+    // .canon exists as a symlink to `outside`; learning.jsonl under it does
+    // not exist yet. The walk must resolve `.canon` itself (which succeeds,
+    // since it's a real symlink) and see that its resolution escapes —
+    // it must NOT walk past a resolvable-but-escaping ancestor up to
+    // `worktree` and wrongly pass.
+    const evilCanon = join(worktree, ".canon");
+    await symlink(outside, evilCanon);
+    const notYetCreated = join(evilCanon, "learning.jsonl");
+    expect(await isPathContainedResolvingAncestor(worktree, notYetCreated, realpath)).toBe(false);
+  });
+
+  it("returns false for a logical traversal, without ever calling the resolver", async () => {
+    let called = false;
+    const resolver = async (p: string) => {
+      called = true;
+      return p;
+    };
+    expect(
+      await isPathContainedResolvingAncestor(worktree, join(worktree, "..", "outside"), resolver),
+    ).toBe(false);
+    expect(called).toBe(false);
+  });
+
+  it("supports an identity resolver for fixture paths that never exist on real disk", async () => {
+    const identity = async (p: string) => p;
+    expect(
+      await isPathContainedResolvingAncestor("/fake/project", "/fake/project/.canon", identity),
+    ).toBe(true);
+    expect(
+      await isPathContainedResolvingAncestor(
+        "/fake/project",
+        "/fake/outside-project/.canon",
+        identity,
+      ),
     ).toBe(false);
   });
 });
