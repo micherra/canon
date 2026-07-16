@@ -171,9 +171,12 @@ process.exit(0);
   // structurally cannot see this gap — and it is absent from
   // typescript-parser's public .d.ts (an internal, undocumented API),
   // exactly the class of surface that can vanish across an alias bump.
+  //
+  // Case A: caller declares createSourceFile + ScriptTarget + ScriptKind
+  // (the shape every current real caller uses).
   // -------------------------------------------------------------------
-  test("surface-complete, parseDiagnostics unreported: non-zero exit (behavioral probe)", async () => {
-    const { dir, driver } = setupDriver("degraded-parsediagnostics");
+  test("Case A — declares createSourceFile+ScriptTarget+ScriptKind: non-zero exit (behavioral probe)", async () => {
+    const { dir, driver } = setupDriver("degraded-parsediagnostics-case-a");
     const nodeModulesDir = join(dir, "node_modules", "typescript-parser");
     mkdirSync(nodeModulesDir, { recursive: true });
     writeFileSync(
@@ -206,6 +209,57 @@ process.exit(0);
 
     const { code, stderr } = await run(driver, [
       JSON.stringify(["createSourceFile", "ScriptTarget", "ScriptKind"]),
+    ]);
+    expect(code).not.toBe(0);
+    expect(stderr).toContain("CANON ERROR [test-driver]");
+    expect(stderr).toContain("parseDiagnostics");
+  });
+
+  // -------------------------------------------------------------------
+  // Case B (review finding — the gate itself was wrong): caller declares
+  // ONLY createSourceFile + ScriptTarget — `ScriptKind` is an OPTIONAL
+  // parameter of `createSourceFile`, so a caller can legitimately parse
+  // without ever declaring it. Gating the probe on all three (the
+  // sec-fix-1 shape) was STRICTER than the actual condition ("does this
+  // caller parse?") and left this narrower shape unprobed — a plain-object
+  // stub identical to Case A's, minus `ScriptKind`, demonstrated the probe
+  // does NOT fire and the silent pass returns. The seam must gate on
+  // `createSourceFile` alone.
+  // -------------------------------------------------------------------
+  test("Case B — declares createSourceFile+ScriptTarget only (ScriptKind omitted): non-zero exit", async () => {
+    const { dir, driver } = setupDriver("degraded-parsediagnostics-case-b");
+    const nodeModulesDir = join(dir, "node_modules", "typescript-parser");
+    mkdirSync(nodeModulesDir, { recursive: true });
+    writeFileSync(
+      join(nodeModulesDir, "package.json"),
+      JSON.stringify({
+        name: "typescript-parser",
+        version: "0.0.0-stub",
+        type: "module",
+        main: "index.js",
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(nodeModulesDir, "index.js"),
+      `export default {
+  version: "0.0.0-stub",
+  ScriptTarget: { Latest: 99 },
+  // No ScriptKind export at all — this caller never declared it.
+  // createSourceFile is valid without a scriptKind argument (it is
+  // optional) — fully present and callable, passes the top-level surface
+  // assertion for this caller's declared requiredApis — but the returned
+  // SourceFile never reports parseDiagnostics.
+  createSourceFile(fileName, text) {
+    return { fileName, text, kind: "SourceFile" };
+  },
+};
+`,
+      "utf8",
+    );
+
+    const { code, stderr } = await run(driver, [
+      JSON.stringify(["createSourceFile", "ScriptTarget"]),
     ]);
     expect(code).not.toBe(0);
     expect(stderr).toContain("CANON ERROR [test-driver]");

@@ -32,14 +32,23 @@ deletes the JS parser API from the surface those three scripts depended on:
 - `mcp-server/scripts/dead-wire-internal-use.mjs` (backs `hooks/dead-wire-gate.sh`)
 - `mcp-server/scripts/tool-surfacing-extract.mjs` (backs `hooks/tool-surfacing-check.sh`, ADR-0048)
 
-All three are fail-closed safety gates. The probe additionally found: `tsconfig.json`'s `baseUrl`
-+ non-relative `paths` aliases are rejected outright by TS 7 (`TS5102`/`TS5090`); the breakage tail
-was NOT bounded to the two symptoms the PRD started from (two more broken scripts, 49 downstream
-test failures, masked by CI's `lint` job failing first and short-circuiting `build`/`test`); and
-TS 7's surviving `unstable/*` API is an IPC client to a Go server process, `Project`/`Program`
-oriented, with **no string→AST parse entry point at all** — there is no way to migrate the three
-scripts onto TS 7's own API without spawning a Go server per lint invocation against an
-explicitly-unstable interface.
+All three are fail-closed safety gates. The probe additionally found: `mcp-server/tsconfig.json`'s
+`baseUrl` + non-relative `paths` aliases are rejected outright by TS 7 (`TS5102`/`TS5090`); the
+breakage tail was NOT bounded to the two symptoms the PRD started from (two more broken scripts,
+49 downstream test failures, masked by CI's `lint` job failing first and short-circuiting
+`build`/`test`); and TS 7's surviving `unstable/*` API is an IPC client to a Go server process,
+`Project`/`Program` oriented, with **no string→AST parse entry point at all** — there is no way to
+migrate the three scripts onto TS 7's own API without spawning a Go server per lint invocation
+against an explicitly-unstable interface.
+
+**A third config, missed on the first pass:** the repo has THREE `tsconfig.json` files —
+`mcp-server/tsconfig.json` (migrated above), `mcp-server/tsconfig.lint.json` (`extends` the first,
+inherits the fix for free), and the **repo-root** `tsconfig.json`, which `extends` `mcp-server/tsconfig.json`
+but re-declares its own `baseUrl`/`paths` (TypeScript does not merge `paths` across `extends` —
+the child's own `paths` fully replaces the parent's). Neither CI (which only ever resolves
+`mcp-server/tsconfig.json`) nor the original probe (run from inside `mcp-server/`) could see this
+config; a review caught it. See Negative/trade-offs below for the fix and the one deliberate,
+behavior-preserving deviation it required.
 
 ## Options Considered
 
@@ -139,20 +148,46 @@ costs of its own.
   `workflows-lint.mjs`'s original `sf.parseDiagnostics ?? []` fallback silently treat every
   malformed input as clean (exit 0, no output) — the exact silent-pass failure mode this whole
   migration exists to prevent. Fixed by adding a BEHAVIORAL probe to the seam: after the surface
-  assertion passes, for any caller that declared `createSourceFile`/`ScriptTarget`/`ScriptKind`,
-  the seam itself parses a known-malformed source and requires a populated `parseDiagnostics`
-  array, `fail()`-ing otherwise — closing the gap structurally rather than relying on each
-  caller's own downstream check. The three callers' own `parseDiagnostics` derefs were also
-  hardened from short-circuiting (`?? []`, `if (parseDiags && ...)`) to positive
-  assert-and-fail, so a contract violation past the probe is still loud, not silently skipped.
-  See `mcp-server/src/__tests__/ts-compiler-seam.test.ts` ("surface-complete, parseDiagnostics
-  unreported" case) for the regression test. **This does not make the pin self-verifying against
-  every possible future degradation** — it closes the one demonstrated class. Any future
-  `typescript-parser` version bump should re-run this probe (it runs automatically on every
-  invocation of the three scripts) and, ideally, re-run the adversarial stub test manually as a
-  spot-check that the probe itself still discriminates real from degraded.
+  assertion passes, for any caller that declared `createSourceFile`, the seam itself parses a
+  known-malformed source and requires a populated `parseDiagnostics` array, `fail()`-ing
+  otherwise. **The probe's guarantee is conditional on what the caller declares, not
+  unconditional or structural** — a first version of this fix (gating on
+  `createSourceFile`/`ScriptTarget`/`ScriptKind` together) was itself found to be **stricter than
+  the actual condition** ("does this caller parse?"): `ScriptKind` is an OPTIONAL parameter of
+  `createSourceFile`, so a caller can legitimately parse without ever declaring it, and the
+  narrower gate left exactly that shape unprobed — a smaller instance of the same silent-pass
+  hole. Corrected to gate on `createSourceFile` alone (the one member whose *return value* the
+  probe actually inspects), with an explicit positive assertion that `ts.ScriptTarget.Latest` is
+  present before using it to construct the probe's own call (failing loudly if a caller parses
+  without ever declaring `ScriptTarget`, rather than silently working around it). The three
+  callers' own `parseDiagnostics` derefs were also hardened from short-circuiting (`?? []`,
+  `if (parseDiags && ...)`) to positive assert-and-fail, so a contract violation past the probe is
+  still loud, not silently skipped. See `mcp-server/src/__tests__/ts-compiler-seam.test.ts`
+  ("Case A" / "Case B") for the regression tests covering both the original degraded-parser shape
+  and the narrower-gate shape. **This does not make the pin self-verifying against every possible
+  future degradation** — it closes the demonstrated classes. Any future `typescript-parser`
+  version bump should re-run this probe (it runs automatically, for any caller that parses, on
+  every invocation of the three scripts) and, ideally, re-run the adversarial stub tests manually
+  as a spot-check that the probe itself still discriminates real from degraded.
 - A second, dev-only copy of TypeScript ships in `node_modules` (~30MB), used only by the three
   lint/gate scripts.
+- **The repo-root `tsconfig.json` required the same `baseUrl` removal, with one deliberate
+  deviation from a literal per-alias translation, to preserve `loadPathAliases`'s behavior
+  exactly.** `mcp-server/src/shared/lib/paths.ts`'s `loadPathAliases` reads the root
+  `tsconfig.json` as plain JSON (not through `tsc`) to resolve `@alias` imports for the knowledge
+  graph, combining `paths` + `baseUrl` itself via `parseTsconfigPaths`. The pre-migration root
+  config's `"@/*": ["*"]` entry has a latent quirk: `parseTsconfigPaths` only recognizes targets
+  ending in `/*`, and the bare `"*"` value does not — so this entry has **always** contributed
+  zero aliases to `loadPathAliases`'s output (unlike the other 8 named aliases, which do resolve).
+  Zero files in the repo import the bare `@/` prefix. A literal per-alias translation (mirroring
+  the other 8: `"@/*": ["./mcp-server/src/*"]`) would have newly matched the `/*`-suffix check and
+  introduced a `@/` alias that does not exist today — a real behavior change violating AC7, and
+  the opposite of what this migration promises for `src/**`. **Deliberately omitted the `@/*` key
+  from the root config's `paths` instead** — proven, not assumed: a throwaway probe computed
+  `parseTsconfigPaths`'s output for the old (`baseUrl`-based) and new (relative, `@/*`-omitted)
+  configs and confirmed byte-identical results for all 8 real aliases, with the `@/` gap preserved
+  on both sides. Locked in as a permanent regression test:
+  `mcp-server/src/shared/lib/__tests__/paths.test.ts`.
 - `workflows-lint` and `tool-surfacing-extract` are syntax-only consumers that *could* eventually
   move to a lighter, TypeScript-free parser (e.g. `oxc-parser`/`@swc/core`) without needing the
   pin at all — but `dead-wire-internal-use.mjs` cannot follow them, because its question (same-file

@@ -22,11 +22,6 @@
  */
 const PARSER_SPECIFIER = "typescript-parser";
 
-// Members needed to construct the parseDiagnostics behavioral probe below.
-// Only a caller that declared all three actually calls createSourceFile, so
-// only such a caller has a real dependency on parseDiagnostics to verify.
-const PARSE_PROBE_DEPS = ["createSourceFile", "ScriptTarget", "ScriptKind"];
-
 function fail(scriptName, msg) {
   process.stderr.write(`CANON ERROR [${scriptName}]: ${msg}\n`);
   process.exit(1); // fail-closed: no fallback, no return
@@ -79,13 +74,37 @@ export async function loadTsCompiler(scriptName, requiredApis) {
   // accepted. Positive assertion: parse a KNOWN-malformed source and require
   // a populated parseDiagnostics array — not a try/catch, not an optional
   // chain over the result.
-  if (PARSE_PROBE_DEPS.every((k) => requiredApis.includes(k))) {
+  //
+  // Gate: on `createSourceFile` ALONE. A caller that declared createSourceFile
+  // parses, and therefore depends on parseDiagnostics — that is the actual
+  // condition, not a proxy for it. `ScriptKind` is an OPTIONAL parameter of
+  // createSourceFile (a caller can parse without ever declaring it), so
+  // requiring it in the gate would be STRICTER than "does this caller
+  // parse?" and would leave a real caller shape unprobed — a narrower
+  // version of the exact silent-pass hole this probe exists to close. Do
+  // not add ScriptKind (or anything else) back into this gate.
+  if (requiredApis.includes("createSourceFile")) {
+    // The probe needs ts.ScriptTarget.Latest to construct its own call,
+    // regardless of whether the CALLER declared "ScriptTarget" — asserted
+    // explicitly (positive presence check, not a fallback) because a caller
+    // that parses without ever declaring ScriptTarget is itself a contract
+    // violation worth failing on loudly, not a case to route around.
+    if (ts?.ScriptTarget?.Latest === undefined) {
+      fail(
+        scriptName,
+        `cannot run the parseDiagnostics probe: '${PARSER_SPECIFIER}' is missing ScriptTarget.Latest, ` +
+          `required to construct a probe call to createSourceFile. This caller declared createSourceFile ` +
+          `but the parser dependency lacks a member the probe itself needs to verify it.`,
+      );
+    }
+    // ScriptKind is intentionally omitted — it is optional on
+    // createSourceFile, and TypeScript infers it from the probe's own
+    // filename extension (".js") when omitted.
     const probe = ts.createSourceFile(
       "__canon_parse_probe__.js",
       "const x = ;",
       ts.ScriptTarget.Latest,
       true,
-      ts.ScriptKind.JS,
     );
     if (!Array.isArray(probe.parseDiagnostics) || probe.parseDiagnostics.length === 0) {
       fail(
