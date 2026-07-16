@@ -8,6 +8,7 @@
   },
   "main": "src/app/index.ts",
   "scripts": {
+    "backfill:review-extraction": "tsx scripts/backfill-review-extraction.ts",
     "build": "tsc",
     "lint": "cd .. && biome check mcp-server/src/",
     "lint:deps": "depcruise --validate .dependency-cruiser.cjs src/",
