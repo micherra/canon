@@ -175,30 +175,55 @@ costs of its own.
   and still return a structurally wrong or empty AST, silently breaking the ban-walk and
   binding-count logic in all three scripts even while "looking" healthy.
 
-  The seam now runs **three** probes for any caller that declared `createSourceFile`, each gated
+  **A second adversarial review (ATTACK 4) found the AST-shape side was still JS-only.** The
+  caller audit is why that mattered: `workflows-lint.mjs` parses JS, but
+  `dead-wire-internal-use.mjs` and `tool-surfacing-extract.mjs` — both fail-closed safety hooks —
+  parse exclusively in TS/TSX mode. Probe C (below) guarded the mode 1 of the 3 callers uses; the
+  two safety-hook extractors' valid-tree integrity was unprobed. Executed: a stub correct on
+  diagnostics in both modes and correct-tree for valid JS, but returning a degenerate empty tree
+  for valid TS specifically, passed the seam cleanly (exit 0) — a WARNING, not blocking (defeating
+  it needs a `ScriptKind`-selective 3-way divergence, outside the version-bump threat model), but
+  closed anyway.
+
+  The seam now runs **four** probes for any caller that declared `createSourceFile`, each gated
   identically (never narrowed to a subset of callers) and each explicitly asserting its own
-  required member before use (never folded into the outer gate, per the correction above):
-  1. **Probe A** — the original malformed-JS fixture (`"const x = ;"`, `ScriptKind` inferred from
-     the `.js` probe filename).
-  2. **Probe B** — a structurally DIFFERENT malformed fixture (`"interface Foo { bar: ; }"`,
-     explicit `ScriptKind.TS`) — a distinct diagnostic message ("Type expected." vs. Probe A's
-     "Expression expected."), confirmed by invoking the real parser. Defeating both A and B
-     requires special-casing two unrelated strings across two `ScriptKind`s, not one memorized
-     answer.
-  3. **Probe C** — an AST-shape assertion: parse a known-VALID source (`"const y = 1;"`) and
-     require both the exact expected statement count AND a non-zero `forEachChild` walk over it —
-     the same API the three real callers use for their own AST walks — proving the tree is real
-     and walkable, not merely that some object came back.
+  required member before use (never folded into the outer gate, per the correction above) —
+  forming the complete `{malformed, valid} × {JS, TS}` matrix:
+  1. **Probe A** (malformed × JS) — `"const x = ;"`, `ScriptKind` inferred from the `.js` probe
+     filename.
+  2. **Probe B** (malformed × TS) — `"interface Foo { bar: ; }"`, explicit `ScriptKind.TS` — a
+     distinct diagnostic message ("Type expected." vs. Probe A's "Expression expected."),
+     confirmed by invoking the real parser. Defeating both A and B requires special-casing two
+     unrelated strings across two `ScriptKind`s, not one memorized answer.
+  3. **Probe C** (valid × JS) — an AST-shape assertion: parse a known-VALID JS source
+     (`"const y = 1;"`) and require both the exact expected statement count AND a non-zero
+     `forEachChild` walk over it — the same API the three real callers use for their own AST
+     walks — proving the tree is real and walkable, not merely that some object came back.
+  4. **Probe D** (valid × TS) — mirrors Probe C for a known-VALID, type-annotated TS source
+     (`"const y: number = 1;"`, explicit `ScriptKind.TS`, reusing the `ScriptKind.TS` presence
+     already asserted for Probe B) — the mode `dead-wire-internal-use` and
+     `tool-surfacing-extract` actually parse in. (Aside, confirmed by invoking the real parser
+     while choosing this fixture: this TS 6.x parser is lenient about type-annotation syntax even
+     in JS mode — it emits no diagnostic either way — so no fixture is "TS-exclusive" at the
+     diagnostic level. Probe D's value is exercising the TS-mode code path with realistic
+     type-annotated input, matching the safety hooks' actual input domain — not diagnostic
+     exclusivity, which this parser version doesn't offer.)
+
+  **This completes the axis by design, not by arbitrary stopping.** The three callers span exactly
+  two `ScriptKind`s (JS and TS/TSX — `tool-surfacing-extract` and `dead-wire-internal-use` both
+  branch `TSX` vs. `TS` off the file extension, but the parse-integrity question the shape probes
+  ask is the same for either); both are now probed on both the malformed and valid axis. There is
+  no third `ScriptKind` any real caller uses, so there is no further cell in this matrix to add.
 
   See `mcp-server/src/__tests__/ts-compiler-seam.test.ts` ("Case A" / "Case B" for the gating
-  correction; "Case C" / "Case D" for the two adversarially-motivated hardening probes) for the
-  regression tests covering all four failure shapes. **This still does not make the pin
-  self-verifying against every possible future degradation** — it closes every demonstrated class
-  to date. Any future `typescript-parser` version bump should re-run these probes (they run
-  automatically, for any caller that parses, on every invocation of the three scripts — measured
-  overhead: negligible, well under a second total per invocation) and, ideally, re-run the
-  adversarial stub tests manually as a spot-check that the probes still discriminate real from
-  degraded.
+  correction; "Case C" / "Case D" for the first hardening round's two probes; "Case E" for ATTACK
+  4 / Probe D) for the regression tests covering all five failure shapes. **This still does not
+  make the pin self-verifying against every possible future degradation** — it closes every
+  demonstrated class to date. Any future `typescript-parser` version bump should re-run these
+  probes (they run automatically, for any caller that parses, on every invocation of the three
+  scripts — measured overhead: negligible, ~0.2s total per invocation with all four probes active)
+  and, ideally, re-run the adversarial stub tests manually as a spot-check that the probes still
+  discriminate real from degraded.
 - A second, dev-only copy of TypeScript ships in `node_modules` (~30MB), used only by the three
   lint/gate scripts.
 - **The repo-root `tsconfig.json` required the same `baseUrl` removal, with one deliberate

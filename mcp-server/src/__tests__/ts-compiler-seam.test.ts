@@ -387,4 +387,85 @@ process.exit(0);
     expect(code).not.toBe(0);
     expect(stderr).toContain("CANON ERROR [test-driver]");
   });
+
+  // -------------------------------------------------------------------
+  // Case E (adversarial review, ATTACK 4 — harden-2): the shape-probe
+  // symmetry gap. Probe C validates the valid-tree walk under ScriptKind.JS
+  // alone — but two of the three real callers (dead-wire-internal-use,
+  // tool-surfacing-extract, both fail-closed safety hooks) parse
+  // exclusively in TS/TSX mode. A stub correct on diagnostics in BOTH
+  // modes, and correct-tree for valid JS, but returning a degenerate empty
+  // tree specifically for valid TS passed the seam cleanly — the exact
+  // mode the two safety-hook extractors actually use was unprobed. Closed
+  // by mirroring Probe C for TypeScript: a known-valid TS source
+  // (`"const y: number = 1;"`, explicit ScriptKind.TS) must also produce
+  // the expected statement count and a walkable tree.
+  // -------------------------------------------------------------------
+  test("Case E — stub correct for valid JS but degenerate for valid TS: non-zero exit (TS shape probe)", async () => {
+    const { dir, driver } = setupDriver("degenerate-valid-ts-stub");
+    const nodeModulesDir = join(dir, "node_modules", "typescript-parser");
+    mkdirSync(nodeModulesDir, { recursive: true });
+    writeFileSync(
+      join(nodeModulesDir, "package.json"),
+      JSON.stringify({
+        name: "typescript-parser",
+        version: "0.0.0-stub",
+        type: "module",
+        main: "index.js",
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(nodeModulesDir, "index.js"),
+      `export default {
+  version: "0.0.0-stub",
+  ScriptTarget: { Latest: 99 },
+  ScriptKind: { JS: 1, TS: 3 },
+  // Correctly reports diagnostics for BOTH malformed fixtures (passes
+  // Probes A+B) and returns a correct, walkable tree for valid JS (passes
+  // Probe C) — but returns a degenerate empty statements array
+  // specifically for valid TS input. A stub tuned to defeat only the
+  // JS-mode shape probe while remaining correct everywhere else the seam
+  // already checks.
+  createSourceFile(fileName, text) {
+    const isMalformedJs = text === "const x = ;";
+    const isMalformedTs = text === "interface Foo { bar: ; }";
+    const isValidJs = text === "const y = 1;";
+
+    if (isMalformedJs || isMalformedTs) {
+      return {
+        fileName,
+        text,
+        kind: "SourceFile",
+        statements: [{ kind: 244 }],
+        parseDiagnostics: [{ messageText: "malformed" }],
+      };
+    }
+    if (isValidJs) {
+      return {
+        fileName,
+        text,
+        kind: "SourceFile",
+        statements: [{ kind: 244 }],
+        parseDiagnostics: [],
+      };
+    }
+    // Everything else (including the valid-TS shape-probe fixture) gets a
+    // degenerate, empty tree.
+    return { fileName, text, kind: "SourceFile", statements: [], parseDiagnostics: [] };
+  },
+  forEachChild(node, cb) {
+    for (const s of node.statements ?? []) cb(s);
+  },
+};
+`,
+      "utf8",
+    );
+
+    const { code, stderr } = await run(driver, [
+      JSON.stringify(["createSourceFile", "ScriptTarget", "ScriptKind", "forEachChild"]),
+    ]);
+    expect(code).not.toBe(0);
+    expect(stderr).toContain("CANON ERROR [test-driver]");
+  });
 });

@@ -147,49 +147,96 @@ export async function loadTsCompiler(scriptName, requiredApis) {
       );
     }
 
-    // Probe C — AST shape. A parser could pass both diagnostic probes above
-    // (correctly detect malformed input) yet still return a structurally
-    // wrong or empty tree for VALID input, silently breaking every
-    // downstream ban-walk and binding count even while "looking" healthy.
-    // Parse a known-valid, single-statement source and require both the
-    // expected statement count AND a real, walkable tree via the same
-    // forEachChild API real callers use for their own AST walks — not just
-    // that some object came back. forEachChild is explicitly asserted
-    // present, same discipline as the others.
+    // Probes C+D — AST shape, one per mode. A parser could pass both
+    // diagnostic probes above (correctly detect malformed input) yet still
+    // return a structurally wrong or empty tree for VALID input, silently
+    // breaking every downstream ban-walk and binding count even while
+    // "looking" healthy. The three real callers span exactly two
+    // ScriptKinds: workflows-lint parses JS; dead-wire-internal-use and
+    // tool-surfacing-extract (both fail-closed safety hooks) parse
+    // TS/TSX exclusively. A JS-only shape probe leaves the mode those two
+    // safety hooks actually use unverified, so this axis is probed in
+    // BOTH modes — the same {malformed, valid} × {JS, TS} symmetry the
+    // diagnostic probes above already have. forEachChild is explicitly
+    // asserted present once, shared by both.
     if (ts?.forEachChild === undefined) {
       fail(
         scriptName,
-        `cannot run the AST-shape probe: '${PARSER_SPECIFIER}' is missing forEachChild, required to ` +
+        `cannot run the AST-shape probes: '${PARSER_SPECIFIER}' is missing forEachChild, required to ` +
           `verify the returned tree is walkable. This caller declared createSourceFile but the parser ` +
-          `dependency lacks a member the probe itself needs.`,
+          `dependency lacks a member the probes themselves need.`,
       );
     }
-    const shapeSrc = "const y = 1;";
-    const shapeProbe = ts.createSourceFile(
-      "__canon_ast_shape_probe__.js",
-      shapeSrc,
+
+    // Probe C — JS shape. Parse a known-valid, single-statement JS source
+    // and require both the expected statement count AND a real, walkable
+    // tree via the same forEachChild API real callers use for their own
+    // AST walks — not just that some object came back.
+    const shapeSrcJs = "const y = 1;";
+    const shapeProbeJs = ts.createSourceFile(
+      "__canon_ast_shape_probe_js__.js",
+      shapeSrcJs,
       ts.ScriptTarget.Latest,
       true,
     );
-    if (!Array.isArray(shapeProbe.statements) || shapeProbe.statements.length !== 1) {
+    if (!Array.isArray(shapeProbeJs.statements) || shapeProbeJs.statements.length !== 1) {
       fail(
         scriptName,
-        `'${PARSER_SPECIFIER}' returned a structurally wrong AST for a known-valid source ('${shapeSrc}') ` +
-          `— expected exactly 1 top-level statement. Refusing to run (fail-closed): a parser that ` +
-          `misreports statement structure could silently misfire downstream ban-walks and binding ` +
-          `counts even while parseDiagnostics behaves correctly. See docs/adr/0056.`,
+        `'${PARSER_SPECIFIER}' returned a structurally wrong AST for a known-valid JS source ` +
+          `('${shapeSrcJs}') — expected exactly 1 top-level statement. Refusing to run (fail-closed): a ` +
+          `parser that misreports statement structure could silently misfire downstream ban-walks and ` +
+          `binding counts even while parseDiagnostics behaves correctly. See docs/adr/0056.`,
       );
     }
-    let shapeChildCount = 0;
-    ts.forEachChild(shapeProbe, () => {
-      shapeChildCount++;
+    let shapeChildCountJs = 0;
+    ts.forEachChild(shapeProbeJs, () => {
+      shapeChildCountJs++;
     });
-    if (shapeChildCount === 0) {
+    if (shapeChildCountJs === 0) {
       fail(
         scriptName,
         `'${PARSER_SPECIFIER}' returned a SourceFile whose forEachChild walk reached zero children for ` +
-          `a known-valid single-statement source ('${shapeSrc}') — the tree is not walkable. Refusing ` +
-          `to run (fail-closed). See docs/adr/0056.`,
+          `a known-valid single-statement JS source ('${shapeSrcJs}') — the tree is not walkable. ` +
+          `Refusing to run (fail-closed). See docs/adr/0056.`,
+      );
+    }
+
+    // Probe D — TS shape, mirroring Probe C. A type-annotated, known-valid
+    // TS source parsed under explicit ScriptKind.TS (already asserted
+    // present above, for Probe B — reused here, not re-asserted) — the
+    // mode dead-wire-internal-use and tool-surfacing-extract actually
+    // parse in. This is the natural terminus of the {malformed, valid} ×
+    // {JS, TS} matrix: the three callers span exactly these two
+    // ScriptKinds, so once both are probed on both axes there is no third
+    // mode left to add — this is complete by design, not arbitrarily
+    // stopped.
+    const shapeSrcTs = "const y: number = 1;";
+    const shapeProbeTs = ts.createSourceFile(
+      "__canon_ast_shape_probe_ts__.ts",
+      shapeSrcTs,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    if (!Array.isArray(shapeProbeTs.statements) || shapeProbeTs.statements.length !== 1) {
+      fail(
+        scriptName,
+        `'${PARSER_SPECIFIER}' returned a structurally wrong AST for a known-valid TS source ` +
+          `('${shapeSrcTs}') — expected exactly 1 top-level statement. Refusing to run (fail-closed): a ` +
+          `parser that misreports statement structure could silently misfire downstream ban-walks and ` +
+          `binding counts even while parseDiagnostics behaves correctly. See docs/adr/0056.`,
+      );
+    }
+    let shapeChildCountTs = 0;
+    ts.forEachChild(shapeProbeTs, () => {
+      shapeChildCountTs++;
+    });
+    if (shapeChildCountTs === 0) {
+      fail(
+        scriptName,
+        `'${PARSER_SPECIFIER}' returned a SourceFile whose forEachChild walk reached zero children for ` +
+          `a known-valid single-statement TS source ('${shapeSrcTs}') — the tree is not walkable. ` +
+          `Refusing to run (fail-closed). See docs/adr/0056.`,
       );
     }
   }
