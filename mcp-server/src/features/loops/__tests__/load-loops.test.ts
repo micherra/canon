@@ -458,12 +458,27 @@ describe("loadLoopsFromDir — ship-watch orchestrator_action directives", () =>
 // frontmatter declares fire_on_baseline: true but whose body never mentions it risks the
 // body's own prose silently overriding the frontmatter (a real defect this test pins —
 // session-watch.md shipped with fire_on_baseline: true on kg_stale while its body still
-// asserted, unconditionally, that no on_transition rule fires on tick 1). This is a proxy,
-// not a full semantic check: it cannot prove the body's prose is *correct*, only that the
-// body was updated to be AWARE of the opt-in. A full check would require executing the
+// asserted, unconditionally, that no on_transition rule fires on tick 1). The test checks
+// two things: the body mentions the flag, AND the body does not ALSO carry a categorical
+// first-tick denial that would contradict the opt-in (mentioning the flag is compatible with
+// contradicting it — a body can say "fire_on_baseline" in passing while still asserting
+// elsewhere that no rule fires on tick 1, which is exactly what shipped and stayed green).
+// This remains a proxy, not a full semantic check: it cannot prove the body's prose is
+// *correct*, only that it is AWARE of the opt-in and free of the two known categorical
+// phrasings that previously contradicted it. A full check would require executing the
 // agentic runner itself, which is out of reach for a unit test (see loop-runner-first-tick.test.ts
 // header — the same limitation the ADR-0002 proof suite already documents).
 describe("loadLoopsFromDir — fire_on_baseline body↔frontmatter consistency (ADR-0056)", () => {
+  // Categorical first-tick denial phrasings that would contradict a fire_on_baseline: true
+  // opt-in if present in the same body. Case-insensitive; covers the two known phrasings.
+  // The second alternative carries a negative lookahead excluding a nearby "exception"
+  // qualifier — session-watch's real, correct body legitimately says "no `on_transition`
+  // rule fires — **with one exception**: `kg_stale` declares fire_on_baseline..." and must
+  // NOT be flagged; only an UNQUALIFIED denial (the actual A10 bug: "ADR-0002 first-tick
+  // guard is always active", with no exception carve-out) should trip this.
+  const CATEGORICAL_FIRST_TICK_DENIAL =
+    /first-tick guard is always active|no `?on_transition`? rules?,? fire(?!.{0,80}exception)/i;
+
   it("every loop with a fire_on_baseline: true rule mentions fire_on_baseline in its own body", async () => {
     const { valid, validBodies } = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
     const loopsWithBaselineOptIn = valid.filter((def) =>
@@ -485,6 +500,28 @@ describe("loadLoopsFromDir — fire_on_baseline body↔frontmatter consistency (
           `mentions "fire_on_baseline" — the body is the operative runner instruction ` +
           `(ADR-0017) and can silently override the frontmatter's intent.`,
       ).toContain("fire_on_baseline");
+    }
+  });
+
+  it("every loop with a fire_on_baseline: true rule does NOT categorically deny first-tick firing in its body", async () => {
+    const { valid, validBodies } = await loadLoopsFromDir(WORKTREE_LOOPS_DIR);
+    const loopsWithBaselineOptIn = valid.filter((def) =>
+      def.surface.on_transition.some(
+        (rule) => (rule as { fire_on_baseline?: boolean }).fire_on_baseline === true,
+      ),
+    );
+
+    for (const def of loopsWithBaselineOptIn) {
+      const body = validBodies?.[def.id];
+      expect(body, `${def.id} has no body`).toBeDefined();
+      expect(
+        body,
+        `${def.id} declares fire_on_baseline: true in its frontmatter but its body contains ` +
+          `a categorical first-tick denial ("...guard is always active" / "no on_transition ` +
+          `rule(s) fire..."), which directly contradicts the opt-in. Mentioning the flag ` +
+          `(the assertion above) does not catch this — a body can mention it while still ` +
+          `denying it elsewhere.`,
+      ).not.toMatch(CATEGORICAL_FIRST_TICK_DENIAL);
     }
   });
 });
