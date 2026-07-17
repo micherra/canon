@@ -405,6 +405,7 @@ export const RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD = 3;
  * `reinforce` nominations of these ids are NOT blocked (a confidence signal
  * on a load-bearing rule is correct, not dangerous).
  */
+// canon:allow-unwired: used internally at the retire guard (this file) + exported for never-pruneable-parity.test.ts byte-parity assertion
 export const NEVER_PRUNEABLE_PRINCIPLE_IDS: ReadonlySet<string> = new Set([
   "fail-closed-by-default",
   "hooks-fail-closed",
