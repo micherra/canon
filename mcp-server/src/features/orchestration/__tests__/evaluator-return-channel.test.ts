@@ -162,13 +162,31 @@ describe("CLAUDE.md evaluator-gate block invariants (ADR-0058)", () => {
         "no tool to perform (ADR-0058).",
     ).toMatch(/run_in_background:\s*false/);
 
+    // Format-agnostic: reject ANY name: directive for the evaluator spawn, regardless of
+    // quoting style or the specific name string chosen. A literal-string check here (e.g.
+    // .not.toMatch(/name:\s*["'`]?evaluator-eval/)) has a hole: a future contributor could
+    // "tidy" the spawn back to a named form using a DIFFERENT name (e.g. `name: eval-gate-x`)
+    // and this guard would stay silent while structurally reviving the exact mailbox-only
+    // silent-verdict-loss bug ADR-0058 fixes. Match any `name:` token followed by an
+    // identifier-shaped value (bare or quoted) — that's a directive, not prose. The adjacent
+    // "Do not pass `name:`." instruction sentence does NOT match: nothing identifier-shaped
+    // follows "name:" there — just a closing backtick then a period.
     expect(
       block,
-      "Step 3 must NOT mandate a name: for the evaluator spawn. canon:evaluator has no " +
-        "SendMessage and no write tool, so a named (teammate) spawn has no channel to return " +
-        "its verdict — this is the root cause ADR-0058 fixes. If you are re-adding a name: " +
-        "here, read ADR-0058 first; this is exactly the 'tidying' regression it warns about.",
-    ).not.toMatch(/name:\s*["'`]?evaluator-eval/);
+      "Step 3 must NOT mandate a name: directive (in ANY format — bare, quoted, or " +
+        "backticked) for the evaluator spawn. canon:evaluator has no SendMessage and no " +
+        "write tool, so a named (teammate) spawn has no channel to return its verdict — " +
+        "this is the root cause ADR-0058 fixes. If you are re-adding a name: here under any " +
+        "spelling, read ADR-0058 first; this is exactly the 'tidying' regression it warns " +
+        "about, and a literal-string check would not have caught it.",
+    ).not.toMatch(/name:\s*["'`]?[A-Za-z0-9_-]+/);
+
+    expect(
+      block,
+      "Step 3 must retain the explicit 'Do not pass name:' instruction — silently dropping " +
+        "the directive without its accompanying prose warning would regress the next time " +
+        "someone edits this block without reading ADR-0058 first.",
+    ).toMatch(/Do not pass `name:`/);
   });
 
   it("dc-03: step 7 keeps the fail-open PASS_parse_fallback mapping", () => {
