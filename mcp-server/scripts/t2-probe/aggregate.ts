@@ -22,6 +22,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
+import type { CheckerFinding } from "./checker.ts";
 import type { CheckerRunRecord } from "./record.ts";
 
 const TARGET_PRINCIPLE = "leave-touched-files-better";
@@ -61,10 +62,31 @@ function normalizePath(path: string): string {
 }
 
 /**
+ * Element-level guard for `CheckerFinding` — every findings[] entry must
+ * carry a string `file_path`, a string `description`, and a `line` that is
+ * either a number or null (checker.ts's `parseFindings` always sets one or
+ * the other, never omits the key). A findings element failing this check
+ * fails the WHOLE record (W2) — `scoreRecords` reads `f.file_path` for every
+ * finding unconditionally, so admitting a shape-invalid element would crash
+ * the aggregate CLI on hand-edited or cross-version-skewed JSONL instead of
+ * degrading gracefully to the `malformed` counter.
+ */
+function isCheckerFinding(value: unknown): value is CheckerFinding {
+  if (typeof value !== "object" || value === null) return false;
+  const f = value as Record<string, unknown>;
+  return (
+    typeof f.file_path === "string" &&
+    typeof f.description === "string" &&
+    (typeof f.line === "number" || f.line === null)
+  );
+}
+
+/**
  * Named type guard for JSON.parse output — the record is only trusted once
  * every required field's shape is verified (never cast through `unknown`
- * blindly). Unknown/extra fields are ignored; missing/mistyped required
- * fields count the line as malformed.
+ * blindly), INCLUDING every `findings[]` element's shape (W2). Unknown/extra
+ * fields are ignored; missing/mistyped required fields count the line as
+ * malformed.
  */
 function isCheckerRunRecord(value: unknown): value is CheckerRunRecord {
   if (typeof value !== "object" || value === null) return false;
@@ -78,6 +100,7 @@ function isCheckerRunRecord(value: unknown): value is CheckerRunRecord {
     typeof v.head_sha === "string" &&
     Array.isArray(v.touched_files) &&
     Array.isArray(v.findings) &&
+    v.findings.every(isCheckerFinding) &&
     typeof v.failed_open === "boolean" &&
     typeof v.checker_elapsed_ms === "number" &&
     typeof v.rubric_hash === "string"

@@ -77,6 +77,65 @@ describe("parseRecords", () => {
   });
 });
 
+// ---- parseRecords: findings[] element validation (W2) ----
+
+describe("parseRecords — findings element shape (W2)", () => {
+  it("a findings element missing file_path counts the whole line as malformed, not a record", () => {
+    const badRecord = {
+      ...record({ record_id: "r1" }),
+      findings: [{ description: "no file_path here" }],
+    };
+    const lines = [JSON.stringify(badRecord)];
+
+    expect(() => {
+      const { malformed, records } = parseRecords(lines);
+      expect(records).toHaveLength(0);
+      expect(malformed).toBe(1);
+    }).not.toThrow();
+  });
+
+  it("a findings element missing description counts the line as malformed", () => {
+    const badRecord = {
+      ...record({ record_id: "r1" }),
+      findings: [{ file_path: "a.ts", line: 1 }],
+    };
+    const { malformed, records } = parseRecords([JSON.stringify(badRecord)]);
+    expect(records).toHaveLength(0);
+    expect(malformed).toBe(1);
+  });
+
+  it("a findings element with a wrong-type line (not number|null) counts the line as malformed", () => {
+    const badRecord = {
+      ...record({ record_id: "r1" }),
+      findings: [{ description: "d", file_path: "a.ts", line: "not-a-number" }],
+    };
+    const { malformed, records } = parseRecords([JSON.stringify(badRecord)]);
+    expect(records).toHaveLength(0);
+    expect(malformed).toBe(1);
+  });
+
+  it("a well-formed findings element (including line:null) still parses as a valid record", () => {
+    const goodRecord = {
+      ...record({ record_id: "r1" }),
+      findings: [{ description: "d", file_path: "a.ts", line: null }],
+    };
+    const { malformed, records } = parseRecords([JSON.stringify(goodRecord)]);
+    expect(records).toHaveLength(1);
+    expect(malformed).toBe(0);
+  });
+
+  it("a record with a malformed findings element never reaches scoreRecords via the normal pipeline, so it cannot crash it", () => {
+    const badRecord = {
+      ...record({ record_id: "r1", touched_files: ["a.ts"] }),
+      findings: [{ description: "no file_path" }],
+    };
+    const { records } = parseRecords([JSON.stringify(badRecord)]);
+    // The malformed record was filtered out by parseRecords — nothing reaches
+    // joinRecordsToReviews/scoreRecords, so there is nothing left that could throw.
+    expect(records).toHaveLength(0);
+  });
+});
+
 // ---- dedupeRecords ----
 
 describe("dedupeRecords", () => {
