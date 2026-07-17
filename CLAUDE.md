@@ -125,12 +125,16 @@ the security-intent row's post-safety-hook-fix adversarial mandate, watch_CCCCCC
 evaluated even when signal-gathering otherwise fails (fail-safe branch), so it survives total drift.db/KG
 outage. The authoritative deny-list is `SENSITIVE_PATH_DENY_LIST` in
 `mcp-server/src/features/orchestration/services/confidence-scorer.ts`.
-Categories: `canon-safety-hooks`, `ci-config`, `secrets-credentials`, `auth`, `drift-store-schema`, `mcp-tool-contract`, `principles-rules-config`, `settings-permissions`, `autonomy-tier-control`.
+Categories: `canon-safety-hooks`, `ci-config`, `secrets-credentials`, `auth`, `drift-store-schema`, `mcp-tool-contract`, `principles-rules-config`, `settings-permissions`, `autonomy-tier-control`, `loop-runner-guardrail`.
 The `autonomy-tier-control` category floors the self-governance TRIPOD — the three
 co-dependent files a build could edit to silently weaken the floor: the deny-list's own
 source (`confidence-scorer.ts`), the floor-application logic (`compute-autonomy-tier.ts`),
 and the `matchGlob` matcher every pattern above is evaluated through (`glob-matcher.ts`) —
 so a build touching any leg of the control is itself supervised + adversarially re-reviewed.
+The `loop-runner-guardrail` category (ADR-0057) floors the sole mechanical enforcement point
+of the loop framework's dc-05 determinism guardrail and dc-06 read-only-runner invariant:
+`mcp-server/src/features/loops/loop-schema.ts` and `mcp-server/src/features/loops/date-shell-guard.ts`
+— two exact patterns, not a `features/loops/**` glob (which would over-floor routine loop work).
 
 ### Per-Message Re-Classification (L1)
 
@@ -319,6 +323,7 @@ checkpoint, Incomplete-step surfacing (cliff detected), merge conflict, gate fai
 ### Post-Step Effects
 
 - **After reviewer**: call `store_pr_review` or `write_review`. Spawn prompt must include `WORKSPACE={workspace_path}` (root, not worktree) and diff base `git diff {base_commit}..HEAD`. Then spawn renderer (mandatory) — renderer reads REVIEW.md + `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md` → `${WORKSPACE}/artifacts/review.html`. Publish the local file via the `Artifact` tool and present the returned claude.ai URL before the HITL verdict; on any `Artifact` failure, fall back to localhost `open_artifact({ workspace, artifact_name: "review.html" })` (see `references/hitl-patterns.md` Review verdict bullet). **Dogfood-render obligation (watch_OOOOO2)**: when `git diff {base_commit}..HEAD --name-only` includes `templates/renderer-*.md` or renderer-consumed snippets (`mcp-server/src/ui/snippets/*.html` or `mcp-server/src/ui/snippets/DESIGN-SYSTEM.md`), the mandatory renderer spawn MUST use the changed template/snippet files from the build worktree (not the installed plugin copies) so the build's own review.html is rendered through its own renderer changes before the review step closes; record `dogfood_render: true` in the review step's `log_step` outcome. Builds changing only renderer data inputs (REVIEW.md, DESIGN.md) are exempt.
+  **T2 live-forward checker (advisory instrument)**: immediately after the initial full review completes (before any fix commits move HEAD), capture `{reviewed_sha}` = `git rev-parse HEAD` in the worktree, then run `npx tsx mcp-server/scripts/t2-probe/record.ts --worktree {worktree_path} --base {base_commit} --head {reviewed_sha} --slug {slug} --root {main_repo_root}` (append `--review-id {id}` when `store_pr_review` returned one) via Bash `run_in_background: true`. `--root {main_repo_root}` (the main checkout root, NOT `{worktree_path}`) is required — without it the recorder's persistence falls back to script-location resolution and records land in the worktree's `.canon/`, where they are destroyed when the worktree is torn down. `--head {reviewed_sha}` pins the joined SHA against background-run HEAD races (a fix commit landing before the recorder's own `rev-parse` would otherwise shift it). Never wait on it, never block on it, never surface its failure as a build issue — it records advisory T2-checker measurement data to `.canon/t2-probe/checker-runs.jsonl` (see `mcp-server/scripts/t2-probe/`). Aggregate/verdict: `npx tsx mcp-server/scripts/t2-probe/aggregate.ts --root {main_repo_root}`.
 - **After engineer (implement)**: Run `bash hooks/summary-diff-check.sh {summary_path} {base_commit} [worktree_path]` per `*-SUMMARY.md` (pass `worktree_path` when not invoked with the worktree as CWD — see CWD for diff hooks in Step Enforcement Contracts). **Phantom claims BLOCK** (non-zero exit) — surface the named phantom claim to the user and do NOT proceed to review until resolved. **Unreported changes are advisory** — surface the `ADVISORY:` lines but proceed. Log the result in `log_step` outcome as `summary_diff_check: { phantom: N, advisory: M }`. For multi-task DAG builds, run per summary; any phantom in any summary blocks.
 - **After engineer (implement/fix), before verify — evaluator gate (post-step effect, NOT a runbook step):**
   1. Call `evaluate_step({ workspace, slug, base_commit, worktree_path, declared_files })`. `declared_files` = the task plan's `files:` frontmatter; for trivial/inferred runbooks with no task plan, pass the engineer's summary-declared files (fall back to `[]`, which makes file-scope drift advisory-only).
@@ -504,7 +509,7 @@ initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named life
 - `run-learner`: fires on harness-watch `learner_due`; supervised → ask user first; autonomous/light-touch → auto-spawn.
 - `run-evolve`: fires on the `evolve` loop's `evolve_due`; supervised → ask user first; autonomous/light-touch → auto-spawn after a cost-visibility `PushNotification`. Proposals are HITL-gated regardless of tier.
 - `auto-enable-merge`: fires on `ci_conclusion` pending→success while PR OPEN & not-already-armed → orchestrator runs `gh pr merge --auto --squash`; autonomous/light-touch unattended, supervised ASK-FIRST; runner read-only (dc-06).
-- `auto-update-branch`: fires on `merge_state` transitioning to `BEHIND`/`DIRTY` while PR OPEN → orchestrator merges `origin/main` into the PR branch and pushes; generated-artifact-only conflicts auto-resolved by regeneration, SOURCE conflicts always HITL; unattended in all tiers for the clean/generated-only path; runner read-only (dc-06).
+- `auto-update-branch`: fires on `merge_state` reaching `BEHIND`/`DIRTY` — on a transition, or on ship-watch's first tick for a PR already in that state (`fire_on_baseline`, ADR-0056) — while PR OPEN → orchestrator merges `origin/main` into the PR branch and pushes; generated-artifact-only conflicts auto-resolved by regeneration, SOURCE conflicts always HITL; unattended in all tiers for the clean/generated-only path; runner read-only (dc-06).
 - `auto-staleness-refresh`: fires on `session-watch` docs/KG staleness episodes (`field=docs_stale|kg_age`, ADR-0045) — `kg_age` runs a local `codebase_graph` refresh (no PR); `docs_stale` dispatches an ephemeral `init_workspace` → scribe → shipper → PR (dec-03, no direct-push-to-main). Both fields unattended in ALL tiers — autonomous, light-touch, AND supervised — per an explicit plan-approval user override of the architect's ask-first-under-supervised recommendation (dec-04); the PR remains the human review gate regardless of tier. Notifies what was refreshed after completion. Runner read-only (dc-06).
 
 Read `references/loop-framework.md` BEFORE dispatching any loop or consuming an `ORCHESTRATOR_ACTION` line.
@@ -537,13 +542,13 @@ canon/
 │       │   ├── diagnostics/     # get_drift_report, record_agent_metrics, store_summaries, wiki_lint, sync_indexes, check_context_staleness
 │       │   ├── evolution/       # evaluate_candidate fitness gate + attribute_failure attribution consumer — §7 holdout (ADR-0022); provenance⋈failure join, content_hash byte-identity (ADR-0023); record_applied_evolution + get_evolution_outcomes post-apply regression detection — applied_evolutions v12 (ADR-0034); backfill_applying_commit closes the applying_commit seam from Canon-Evolution git trailers (Inc-3)
 │       │   ├── routines/        # list_routines, get_routine, sync_routines — managed routine artifact class
-│       │   └── learning/        # reconcile_learnings — reconcile-on-read for .canon/proposed-learnings/{ts}/ (ADR-0050), closes the learning-resolution orphan leak
+│       │   └── learning/        # reconcile_learnings — reconcile-on-read for .canon/proposed-learnings/{ts}/ (ADR-0050), closes the learning-resolution orphan leak; append_learning_record — sanctioned newline-safe append seam for .canon/learning.jsonl (ADR-0058)
 │       ├── platform/     # Job manager, infrastructure
 │       └── shared/       # Constants, matcher, parser, schema, utility libs; overlay trust boundary (UntrustedText opaque box, closed-domain validators, linear-time glob matcher — ADR-0026/ADR-0027)
 ├── loops/                # Loop registry — one loops/<id>.md per loop; read via list_loops (Phase E: _probe + _probe-self-paced + ship-watch + session-watch + harness-watch + evolve + evolution-regression-watch)
 ├── routines/             # Managed routine definitions (tracked YAML+md; .canon/routines/** override; generated index at routines/.claude/CLAUDE.md)
 ├── workflows/            # Managed workflow-script library — Canon's 6th managed-artifact class; plain-JS scripts invoked on-demand via Workflow `scriptPath`; lint enforced by `hooks/workflows-lint.sh`
-├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test)
+├── scripts/              # Project utility scripts (install-sim-smoke.mjs — faithful install simulation smoke test; repair-jsonl-merged-lines.mjs — repairs a JSONL file whose newline-less predecessor line merged with the next append, ADR-0058)
 ├── principles/           # Built-in principles (68 total: 6 rules, 37 strong-opinions, 25 conventions — `ls principles/rules/*.md principles/strong-opinions/*.md principles/conventions/*.md | wc -l`); 38 Canon-internal principles in .canon/principles/ (portable: false — `ls .canon/principles/rules/*.md .canon/principles/conventions/*.md | wc -l`)
 │   ├── rules/
 │   ├── strong-opinions/

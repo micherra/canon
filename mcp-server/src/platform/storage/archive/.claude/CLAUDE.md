@@ -6,17 +6,17 @@
 Platform-level build-archive persistence: copies workspace artifacts to `.canon/history/{slug}/`, assembles `run-summary.json` for cross-run analysis, and records manifest entries in drift.db. Relocated from `features/history/services/` (ADR-0003) — features may now depend on this as a platform service without violating bounded-context boundaries.
 
 ## Architecture
-<!-- last-updated: 2026-06-12 -->
+<!-- last-updated: 2026-07-16 -->
 
 | File | Responsibility |
 |------|---------------|
 | `archive-types.ts` | Shared types owned by this module: `RunbookStep`, `PlannerContext`, `StepOutcome`, `ReviewViolation`, `ReviewResult`, `ArtifactInventory`, `RunSummary`; re-exports `ContextProvenanceSummary` from `@domains/workspaces/context-provenance`; `features/history/history-types.ts` re-exports these for backward compat. Updated 2026-06-24. |
 | `archive-service.ts` | `archiveWorkspace(input)` — copies artifact dirs + files, generates `run-summary.json`, records `ArchiveManifestEntry` in drift.db; async, never throws (returns `{ archived: false, error }` on any failure) |
-| `run-summary-builder.ts` | `buildRunSummary(input)` — assembles a `RunSummary` from workspace files; always returns a valid object (never throws); composes extractors; calls `extractContextProvenance` to populate `context_provenance` field. Updated 2026-06-24. |
-| `run-summary-extractors.ts` | `parsePlanningBrief`, `parseReviewFile`, `parseRunbookSteps`, `extractNotableResolution` — pure text-parsing helpers; no I/O; never throw; return partial/empty data on parse errors |
+| `run-summary-builder.ts` | `buildRunSummary(input)` — assembles a `RunSummary` from workspace files; always returns a valid object (never throws); composes extractors; calls `extractContextProvenance` to populate `context_provenance` field. `extractReviewResults(workspacePath)` is EXPORTED (reused by `scripts/backfill-review-extraction.ts` — one shared parser, no second writer). Updated 2026-07-16. |
+| `run-summary-extractors.ts` | `parsePlanningBrief`, `parseReviewFile`, `parseRunbookSteps`, `extractNotableResolution` — pure text-parsing helpers; no I/O; never throw; return partial/empty data on parse errors. Exports `isPrincipleIdShaped` + `PRINCIPLE_ID_PATTERN` (see Contracts). |
 
 ## Contracts
-<!-- last-updated: 2026-07-10 (StepOutcome.metrics: recorded execution_states.metrics joined at archive time) -->
+<!-- last-updated: 2026-07-16 (violation parser now table-based; isPrincipleIdShaped exported; extractReviewResults exported for backfill) -->
 
 **`archiveWorkspace(input: ArchiveWorkspaceInput)`** → `Promise<ArchiveWorkspaceResult>` — archives workspace to `.canon/history/{slug}/`; fail-open (archive failure must not block workspace pruning); `archived: false` + `error` on any path; `run_summary_generated: false` when summary assembly fails (archive still proceeds).
 
@@ -26,7 +26,9 @@ Platform-level build-archive persistence: copies workspace artifacts to `.canon/
 
 **`buildRunSummary`** — never throws; each extraction sub-call is independently wrapped; missing files return `null` / empty arrays.
 
-**`parsePlanningBrief` / `parseReviewFile` / `parseRunbookSteps`** — pure; no I/O; never throw.
+**`parsePlanningBrief` / `parseReviewFile` / `parseRunbookSteps`** — pure; no I/O; never throw. `parseReviewFile`'s internal `extractViolationsSection` parses markdown violation TABLES (six real header shapes, name-based column lookup, escaped-pipe split) — NOT the legacy `**principle-id**:` bullet, which appears 0× in the real corpus; signature and module-private status unchanged.
+
+**`isPrincipleIdShaped(token)` / `PRINCIPLE_ID_PATTERN`** (`run-summary-extractors.ts`, exported) — charset guard `^[a-z0-9][a-z0-9-]{2,}$`; the parse-time fabrication boundary shared by both the violation parser and the honored-citation parser (`features/evolution/services/positive-attribution.ts` imports it — one closed domain, one writer). Validates SHAPE only; never resolves an id against on-disk principles, so an archived file parses identically regardless of which principles exist that day (ADR-0060 parse ≠ resolve, ADR-0059 honored is derive-on-read).
 
 **`extractNotableResolution(summaryContent, designContent?)`** — pure, no I/O, never throws; ≤200-char single-line output (whitespace collapsed, newlines stripped). Source precedence: engineer SUMMARY `### Decisions` table (Rationale cell of first data row) → SUMMARY `### Deviations` (reason text of first item) → DESIGN.md `### Decisions made` (first bullet) → `""`. Backs the build-digest `### Notable Resolution` section (`digest-writer.ts`, `features/orchestration/`). Shares the internal `extractSectionBody(content, headingText)` helper with the other section-scoped extractors — finds the next-heading index directly rather than an `m`-flag `$` lookahead, which previously truncated Decisions/Deviations bodies to their first line.
 

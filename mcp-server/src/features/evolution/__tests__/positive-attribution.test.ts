@@ -155,6 +155,45 @@ describe("attributeHonored", () => {
     ]);
   });
 
+  it("a no-colon **id** bold span (real majority format) parses + attributes", () => {
+    const provenance = [makeProvenance("review", ["errors-are-values"])];
+    const honored = [makeHonored("**errors-are-values**")];
+
+    const result = attributeHonored({ honored, provenance, readCurrentBody: readsRuleBody });
+
+    expect(result.attributions).toHaveLength(1);
+    expect(result.unattributed).toHaveLength(0);
+    expect(result.flagged).toHaveLength(0);
+    expect(result.attributions[0].target_artifact.id).toBe("errors-are-values");
+    expect(result.attributions[0].target_artifact.hash_verified).toBe(true);
+  });
+
+  it("a trailing paren-loc + colon (colon after the paren, not the bold) parses to the bare id", () => {
+    const provenance = [makeProvenance("review", ["errors-are-values"])];
+    const honored = [
+      makeHonored(
+        "**errors-are-values** (`rules/errors-are-values.md:12`): consistently used typed results",
+      ),
+    ];
+
+    const result = attributeHonored({ honored, provenance, readCurrentBody: readsRuleBody });
+
+    expect(result.attributions).toHaveLength(1);
+    expect(result.attributions[0].target_artifact.id).toBe("errors-are-values");
+  });
+
+  it("a non-id descriptor label with no matching provenance -> no_in_context_artifact, zero attributions (AC#3)", () => {
+    const provenance = [makeProvenance("review", ["errors-are-values"])];
+    const honored = [makeHonored("**complete-excision-verified**")];
+
+    const result = attributeHonored({ honored, provenance, readCurrentBody: readsRuleBody });
+
+    expect(result.attributions).toHaveLength(0);
+    expect(result.unattributed).toEqual([
+      { honored: honored[0], reason: "no_in_context_artifact" },
+    ]);
+  });
+
   it("empty inputs -> empty buckets, no throw", () => {
     expect(() =>
       attributeHonored({ honored: [], provenance: [], readCurrentBody: readsRuleBody }),
@@ -169,5 +208,98 @@ describe("attributeHonored", () => {
     expect(result.unattributed).toEqual([]);
     expect(result.flagged).toEqual([]);
     expect(result.meta).toEqual({ hash_checks: 0, honored_seen: 0, provenance_steps: 0 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Honored-citation shape census (PROBE-FINDINGS Finding 5)
+//
+// Every string below is a MEASURED shape from the 1,793 archived honored
+// citations, not an invented fixture. The colon the old pattern required is
+// carried by only 20.4% of them.
+// ---------------------------------------------------------------------------
+
+/** Parse `raw` in isolation: returns the parsed id, or null when it lands in unattributed. */
+function parseVia(raw: string): string | null {
+  const provenance = [makeProvenance("review", ["errors-are-values"])];
+  const result = attributeHonored({
+    honored: [makeHonored(raw)],
+    provenance,
+    readCurrentBody: readsRuleBody,
+  });
+
+  if (result.unattributed.length > 0) {
+    expect(result.unattributed[0].reason).toBe("unparseable_honored");
+    return null;
+  }
+  return result.attributions[0]?.target_artifact.id ?? null;
+}
+
+describe("parseHonoredId — the four measured honored shapes", () => {
+  it("bare `**id**` with no colon parses (74.4% of the corpus)", () => {
+    expect(parseVia("**errors-are-values**")).toBe("errors-are-values");
+  });
+
+  it("`**id**: desc` still parses — no regression on the working 20.4%", () => {
+    expect(parseVia("**errors-are-values**: All 9 changes are minimal")).toBe("errors-are-values");
+  });
+
+  it("`**id** — desc` (em-dash trailer) parses", () => {
+    expect(parseVia("**errors-are-values** — All 9 changes are minimal")).toBe("errors-are-values");
+  });
+
+  it("bare plain `id (rule)` with no bold stays unparseable (documented 5/1,793 residual)", () => {
+    // Deliberately NOT chased: matching bare text would re-open the prose-fabrication
+    // hole the charset guard closes.
+    expect(parseVia("secrets-never-in-code (rule)")).toBeNull();
+  });
+});
+
+describe("parseHonoredId — the charset guard rejects prose, never coerces it", () => {
+  it("every measured prose token lands in unattributed with reason unparseable_honored", () => {
+    for (const prose of [
+      "**DOCUMENTED FAIL-OPEN on the new git-log call**",
+      "**errors-are-values / define-errors-out-of-existence**",
+      "**noExcessiveLinesPerFile**",
+      "**Robust git-failure degradation**",
+    ]) {
+      expect(parseVia(prose)).toBeNull();
+    }
+  });
+
+  it("a mixed honored[] yields ids in attributions and prose in unattributed, never a throw", () => {
+    const provenance = [makeProvenance("review", ["errors-are-values"])];
+    const honored = [
+      makeHonored("**errors-are-values**"),
+      makeHonored("**Robust git-failure degradation**"),
+      makeHonored("**noExcessiveLinesPerFile**"),
+    ];
+
+    const result = attributeHonored({ honored, provenance, readCurrentBody: readsRuleBody });
+
+    expect(result.attributions.map((a) => a.target_artifact.id)).toEqual(["errors-are-values"]);
+    expect(result.unattributed).toHaveLength(2);
+    expect(result.unattributed.every((u) => u.reason === "unparseable_honored")).toBe(true);
+  });
+});
+
+describe("parseHonoredId — parse is not resolve (ADR-0060)", () => {
+  it("a charset-valid RETIRED id parses and is retained, not resolved away", () => {
+    // `thin-handlers` no longer exists on disk. Resolving against disk would erase
+    // 340 real historical citations across 176 retired ids (PROBE-FINDINGS Finding 6).
+    // It parses; the join then honestly reports no in-context artifact.
+    const provenance = [makeProvenance("review", ["errors-are-values"])];
+    const result = attributeHonored({
+      honored: [makeHonored("**thin-handlers**")],
+      provenance,
+      readCurrentBody: readsRuleBody,
+    });
+
+    expect(result.unattributed).toEqual([
+      {
+        honored: { raw: "**thin-handlers**", step_id: "review" },
+        reason: "no_in_context_artifact",
+      },
+    ]);
   });
 });
