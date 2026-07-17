@@ -81,9 +81,17 @@ function makeOkResult(passed: number, total = 3): ProcessResult {
 
 const PRINCIPLE_PATH = "principles/rules/some-principle.md";
 const PRINCIPLE_BODY = "# Some Principle\n\nOriginal content, before any retirement.";
+/**
+ * Real principle files always carry frontmatter (principle-format.md); the on-disk
+ * baseline needs it too so the principle-wording frontmatter guard's `archived`-only
+ * exception (checkPrincipleFrontmatterImmutable) can be exercised faithfully — every
+ * OTHER frontmatter field (id/severity) matches ARCHIVED_CANDIDATE's exactly.
+ */
+const PRINCIPLE_FRONTMATTER = "---\nid: some-principle\nseverity: convention\n---\n\n";
+const PRINCIPLE_ON_DISK = `${PRINCIPLE_FRONTMATTER}${PRINCIPLE_BODY}`;
 
 /** The candidate the SKILL.md Step 0.3 procedure now produces: archived:true (loader-honored). */
-const ARCHIVED_CANDIDATE = `---\nid: some-principle\narchived: true\n---\n\n${PRINCIPLE_BODY}\n\n> RETIRED: trust-weighted evidence shows this principle no longer earns its keep.`;
+const ARCHIVED_CANDIDATE = `---\nid: some-principle\nseverity: convention\narchived: true\n---\n\n${PRINCIPLE_BODY}\n\n> RETIRED: trust-weighted evidence shows this principle no longer earns its keep.`;
 
 function makeStronglyNegativeScore(): TrustWeightedScore {
   return {
@@ -136,7 +144,10 @@ describe("retire candidate emission (offline — no eval tokens, drives the REAL
     proposedLearningsDir = join(projectDir, ".canon", "proposed-learnings", "20260711T000000Z");
 
     await mkdir(join(projectDir, "principles", "rules"), { recursive: true });
-    await writeFile(join(projectDir, "principles", "rules", "some-principle.md"), PRINCIPLE_BODY);
+    await writeFile(
+      join(projectDir, "principles", "rules", "some-principle.md"),
+      PRINCIPLE_ON_DISK,
+    );
 
     // Guardrail eval surface (required by withInjectedGuardrailCandidate)
     await mkdir(join(projectDir, "skills", "canon", "evals"), { recursive: true });
@@ -209,7 +220,7 @@ describe("retire candidate emission (offline — no eval tokens, drives the REAL
       join(projectDir, "principles", "rules", "some-principle.md"),
       "utf-8",
     );
-    expect(stillOnDisk).toBe(PRINCIPLE_BODY);
+    expect(stillOnDisk).toBe(PRINCIPLE_ON_DISK);
   });
 
   it("AC#6 (REAL gate): archived:true candidate that REGRESSES the holdout → no proposal emission", async () => {
@@ -250,7 +261,7 @@ describe("retire candidate emission (offline — no eval tokens, drives the REAL
       join(projectDir, "principles", "rules", "some-principle.md"),
       "utf-8",
     );
-    expect(stillOnDisk).toBe(PRINCIPLE_BODY);
+    expect(stillOnDisk).toBe(PRINCIPLE_ON_DISK);
   });
 
   it("reinforce is NEVER run through evaluate_candidate — emitted directly as an ungated confidence signal (Gap 3 L3 fix)", async () => {
@@ -290,6 +301,6 @@ describe("retire candidate emission (offline — no eval tokens, drives the REAL
       join(projectDir, "principles", "rules", "some-principle.md"),
       "utf-8",
     );
-    expect(stillOnDisk).toBe(PRINCIPLE_BODY);
+    expect(stillOnDisk).toBe(PRINCIPLE_ON_DISK);
   });
 });

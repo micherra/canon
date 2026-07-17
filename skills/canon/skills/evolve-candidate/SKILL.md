@@ -211,7 +211,18 @@ about other agents or files — it is a text proposal only.
 
 ## Step 3 — Evaluate each candidate (holdout gate)
 
-For each target + candidate text pair:
+**Overlay principle-wording routing (checked FIRST, before the gate call below):** for a
+target whose `target.target_path` starts with `.canon/` — an overlay `.canon/principles/**`
+target (`trust_tier: "untrusted-project-local"` / `holdout_exempt: true`, stamped at
+selection) — **SKIP `evaluate_candidate` entirely** (it fail-closed rejects any `.canon/**`
+target with `guard_rejection.reason: "overlay_not_sandboxable"` anyway — ADR-0027 forbids
+copying untrusted overlay content into the eval sandbox). Emit the proposal UNGATED, exactly
+like the reinforce path: `evalResult: null` → Step 4 with `gated: false` and null holdout
+fields. The HITL Accept in `/canon:review-learnings` is the trust gate for this target, not
+the holdout eval. Built-in `principles/**` targets (`trust_tier: "trusted"`) run the gate
+normally below — unchanged.
+
+For each remaining (non-overlay) target + candidate text pair:
 
 Call `mcp__canon__evaluate_candidate` with:
 - `candidate_text` — the candidate rewrite from Step 2

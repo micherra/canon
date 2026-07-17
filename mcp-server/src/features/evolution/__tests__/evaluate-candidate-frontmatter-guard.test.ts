@@ -120,3 +120,117 @@ describe("evaluateCandidate frontmatter-reject guard (TASK-003, dc-08)", () => {
     expect(mockRunShell).toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Overlay fail-closed reject (dc-02, dc-06 — ADR-0027 sandbox exclusion)
+// ---------------------------------------------------------------------------
+
+const BASELINE_PRINCIPLE =
+  "---\nid: some-principle\nseverity: convention\n---\n\n# Some Principle\n\nOriginal body.\n";
+
+describe("evaluateCandidate overlay fail-closed reject (dc-02, dc-06)", () => {
+  let projectDir: string;
+
+  beforeEach(async () => {
+    const { mkdtemp } = await import("node:fs/promises");
+    projectDir = await mkdtemp(join(tmpdir(), "canon-overlay-guard-test-"));
+    await mkdir(join(projectDir, "skills", "canon", "evals"), { recursive: true });
+    await writeFile(
+      join(projectDir, "skills", "canon", "evals", "run-evals.sh"),
+      "#!/bin/bash\necho test",
+    );
+    await mkdir(join(projectDir, "principles", "conventions"), { recursive: true });
+    await writeFile(
+      join(projectDir, "principles", "conventions", "some-principle.md"),
+      BASELINE_PRINCIPLE,
+    );
+    await mkdir(join(projectDir, ".canon", "principles", "rules"), { recursive: true });
+    await writeFile(join(projectDir, ".canon", "principles", "rules", "x.md"), BASELINE_PRINCIPLE);
+
+    vi.clearAllMocks();
+    mockRunShell.mockReturnValue(makeOkResult());
+  });
+
+  afterEach(async () => {
+    const { rm } = await import("node:fs/promises");
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  it("a .canon/principles/rules/x.md target is rejected fail-closed, zero runShell calls", async () => {
+    const result = await evaluateCandidate({
+      candidate_text: "# edited overlay principle body",
+      project_dir: projectDir,
+      target_path: ".canon/principles/rules/x.md",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.accepted).toBe(false);
+    expect(result.guard_rejection?.reason).toBe("overlay_not_sandboxable");
+    expect(mockRunShell).not.toHaveBeenCalled();
+  });
+
+  it("any .canon/** target (not just principles) is rejected fail-closed, zero runShell calls", async () => {
+    await mkdir(join(projectDir, ".canon", "kg-languages"), { recursive: true });
+    await writeFile(join(projectDir, ".canon", "kg-languages", "x.json"), "{}");
+
+    const result = await evaluateCandidate({
+      candidate_text: "{}",
+      project_dir: projectDir,
+      target_path: ".canon/kg-languages/x.json",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.guard_rejection?.reason).toBe("overlay_not_sandboxable");
+    expect(mockRunShell).not.toHaveBeenCalled();
+  });
+
+  it("a built-in principles/ target with a MUTATED frontmatter block is rejected (frontmatter_modified)", async () => {
+    const candidate =
+      "---\nid: some-principle\nseverity: rule\n---\n\n# Some Principle\n\nOriginal body.\n";
+
+    const result = await evaluateCandidate({
+      candidate_text: candidate,
+      project_dir: projectDir,
+      target_path: "principles/conventions/some-principle.md",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.guard_rejection?.reason).toBe("frontmatter_modified");
+    expect(mockRunShell).not.toHaveBeenCalled();
+  });
+
+  it("a body-only built-in principles/ candidate proceeds to scoring", async () => {
+    const candidate =
+      "---\nid: some-principle\nseverity: convention\n---\n\n# Some Principle\n\nBETTER body.\n";
+
+    const result = await evaluateCandidate({
+      candidate_text: candidate,
+      project_dir: projectDir,
+      target_path: "principles/conventions/some-principle.md",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.guard_rejection).toBeUndefined();
+    expect(mockRunShell).toHaveBeenCalled();
+  });
+
+  it("a principles/ candidate that ONLY adds archived:true proceeds to scoring (ADR-0052 retire exception)", async () => {
+    const candidate =
+      "---\nid: some-principle\nseverity: convention\narchived: true\n---\n\n# Some Principle\n\nOriginal body.\n";
+
+    const result = await evaluateCandidate({
+      candidate_text: candidate,
+      project_dir: projectDir,
+      target_path: "principles/conventions/some-principle.md",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.guard_rejection).toBeUndefined();
+    expect(mockRunShell).toHaveBeenCalled();
+  });
+});

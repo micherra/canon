@@ -61,6 +61,47 @@ export function checkFrontmatterImmutable(
   };
 }
 
+/**
+ * checkPrincipleFrontmatterImmutable — principle-wording frontmatter guard.
+ *
+ * A principle-wording REWRITE candidate is body-only by contract (mirrors the
+ * agent-def posture above). But ADR-0052's retirement track (`proposal_kind: "retire"`)
+ * legitimately mutates ONE field — `archived: true` — the sole loader-honored retirement
+ * flag (`write-principle`'s `--archive` mode; `shared/matcher.ts` excludes
+ * `archived: true` principles from every review/get_principles/review_code call).
+ * `evaluate_candidate` has no `proposal_kind` input to distinguish a rewrite candidate
+ * from a retire candidate, so this guard tolerates `archived` uniformly for every
+ * `principles/`-first-segment target: every OTHER top-level field (id/severity/scope/
+ * tags/etc.) must stay byte-identical, but a change isolated to `archived` passes.
+ *
+ * Field-level (not raw-block) comparison — unlike `checkFrontmatterImmutable`'s
+ * byte-for-byte block compare — because the one sanctioned mutation must be excludable.
+ * Fail-closed on unparseable YAML, same as `checkFrontmatterImmutable`. Never throws.
+ */
+export function checkPrincipleFrontmatterImmutable(
+  baselineText: string,
+  candidateText: string,
+): FrontmatterGuardResult {
+  let baselineData: Record<string, unknown>;
+  let candidateData: Record<string, unknown>;
+
+  try {
+    baselineData = splitFrontmatter(baselineText).data;
+    candidateData = splitFrontmatter(candidateText).data;
+  } catch {
+    return { ok: false, reason: "frontmatter_unverifiable" };
+  }
+
+  const changed = diffFrontmatterFields(baselineData, candidateData).filter(
+    (field) => field !== "archived",
+  );
+  if (changed.length === 0) {
+    return { ok: true };
+  }
+
+  return { fields: changed, ok: false, reason: "frontmatter_modified" };
+}
+
 /** Best-effort diagnostic: top-level YAML keys whose value differs. Never the sole basis of the guard. */
 function diffFrontmatterFields(
   baseline: Record<string, unknown>,

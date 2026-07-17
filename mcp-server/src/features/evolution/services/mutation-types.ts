@@ -12,6 +12,7 @@
  *   - no-llm-calls-in-mcp-tools: selection is pure deterministic join+rank, no model calls
  */
 
+import type { ArtifactTrustTier } from "@domains/workspaces/context-provenance.ts";
 import type {
   AttributionConfidence,
   FailureAttribution,
@@ -94,6 +95,14 @@ export type ScoreProvenance = {
  * violation-based join — it has no FailureAttribution and no FailureKind to report.
  * `proposal_kind`/`score_provenance` are optional and absent for the unchanged
  * "rewrite" path.
+ *
+ * `trust_tier`/`holdout_exempt` (principle-wording mutation class): stamped by
+ * `buildMutationTarget` from the target path — `"untrusted-project-local"` +
+ * `true` for an overlay `.canon/principles/**` target (never holdout-gated,
+ * ADR-0027 — the eval sandbox never sees overlay content), `"trusted"` + `false`
+ * for every other target (unchanged, holdout-gated as before). Optional/omitted
+ * at every OTHER existing construction site (retire/reinforce scores mode) —
+ * default/omitted is equivalent to `false`/`"trusted"`.
  */
 export type MutationTarget = {
   target_path: string;
@@ -110,6 +119,10 @@ export type MutationTarget = {
   proposal_kind?: MutationProposalKind;
   /** Present only for retire/reinforce targets — the trust-weighted audit trace. */
   score_provenance?: ScoreProvenance;
+  /** Reuses the ArtifactTrustTier vocabulary (context-provenance.ts). Defaults to "trusted" when omitted. */
+  trust_tier?: ArtifactTrustTier;
+  /** True ONLY for an overlay principle target — it can never be holdout-gated. Defaults to false when omitted. */
+  holdout_exempt?: boolean;
 };
 
 // ---------------------------------------------------------------------------
