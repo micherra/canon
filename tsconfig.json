@@ -1,17 +1,15 @@
 {
   "extends": "./mcp-server/tsconfig.json",
   "compilerOptions": {
-    "baseUrl": "mcp-server/src",
     "paths": {
-      "@/*": ["*"],
-      "@app/*": ["app/*"],
-      "@domains/*": ["domains/*"],
-      "@features/*": ["features/*"],
-      "@graph/*": ["graph/*"],
-      "@platform/*": ["platform/*"],
-      "@shared/*": ["shared/*"],
-      "@tests/*": ["tests/*"],
-      "@ui/*": ["ui/*"]
+      "@app/*": ["./mcp-server/src/app/*"],
+      "@domains/*": ["./mcp-server/src/domains/*"],
+      "@features/*": ["./mcp-server/src/features/*"],
+      "@graph/*": ["./mcp-server/src/graph/*"],
+      "@platform/*": ["./mcp-server/src/platform/*"],
+      "@shared/*": ["./mcp-server/src/shared/*"],
+      "@tests/*": ["./mcp-server/src/tests/*"],
+      "@ui/*": ["./mcp-server/src/ui/*"]
     },
     "rootDir": "mcp-server/src"
   },
