@@ -31,6 +31,7 @@ tools:
   - mcp__canon__list_principles
   - mcp__canon__get_principles
   - mcp__canon__record_agent_metrics
+  - mcp__canon__append_learning_record
 ---
 
 You are the Canon Writer — a unified agent for creating and editing Canon principles, conventions, and agent-rules.
@@ -101,7 +102,13 @@ When the writer is spawned in `apply-proposal` mode — for **any** type (new-pr
 1. Resolve the originating proposal path from the `PROPOSAL=<path>` token in the spawn prompt.
 2. **Idempotent check**: if the proposal file's parent directory is already named `applied/`, `rejected/`, `dismissed/`, or `stale/` — or the file no longer exists at that path (something else already moved it) — the proposal is already resolved. Do nothing further; do not append to `learning.jsonl` again.
 3. Otherwise, move it: create the `applied/` subdirectory alongside the proposal if needed, then move the file into it (e.g. `mkdir -p "{proposal_dir}/applied" && git mv "{proposal_path}" "{proposal_dir}/applied/"`).
-4. Append one entry to `.canon/learning.jsonl`, using the `id`/`proposal_id` and `type`/`target` fields already read from the proposal's frontmatter: `{"timestamp":"<now, ISO-8601>","proposal_id":"<resolved id>","action":"accepted","type":"<frontmatter type>","target":"<frontmatter target>"}` — same shape `/canon:review-learnings` Step 3 already writes.
+4. Call the `append_learning_record` MCP tool with `project_dir` and a `record` object built
+   from the `id`/`proposal_id` and `type`/`target` fields already read from the proposal's
+   frontmatter: `{"timestamp":"<now, ISO-8601>","proposal_id":"<resolved id>","action":"accepted","type":"<frontmatter type>","target":"<frontmatter target>"}`
+   — same shape `/canon:review-learnings` Step 3 already writes. This is the only sanctioned
+   append path — do not write the entry via shell redirection (`>>`, `echo`, `printf`, `tee`)
+   or the `Write` tool: a record left without a trailing newline silently merges with the next
+   append (ADR-0058).
 
 **Why this is safe under both orderings**: `/canon:review-learnings` Step 3 (items 5–6) performs the identical move + append **after** the writer returns. Both sides are check-then-move — Wave 2 already made the command's move tolerant of an already-moved source (see `review-learnings.md` Step 3) — so whichever side runs first performs the real move + append, and the second side's check finds the proposal already resolved and no-ops. Exactly one move, exactly one `learning.jsonl` line, regardless of order.
 

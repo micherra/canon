@@ -7,11 +7,12 @@
  * Join: honoredId == provenance artifact.id — structurally symmetric with the negative
  * path's `violation.principle_id == artifact.id` join (PROBE-FINDINGS Q1). The one real
  * gap is a read-time parse: `honored[]` entries are markdown-wrapped strings
- * (`- **{principle-id}**` — the reviewer template's trailing `: {how honored}` is followed
- * only ~20% of the time in practice; 79.5% of real lines omit the colon, PROBE-FINDINGS Q1/Q3),
- * not bare ids — extractHonoredSection (run-summary-extractors.ts) deliberately does NOT
- * parse them (changing it would break determinism against already-archived strings, ADR-0048).
- * The bare-id parse (colon-optional) lives here, at read time.
+ * (`- **{principle-id}**` — the trailing `: {how honored}` the template prescribes is
+ * present on only 20.4% of real citations), not bare ids — extractHonoredSection
+ * (run-summary-extractors.ts) deliberately does NOT parse them (changing it would break
+ * determinism against already-archived strings, ADR-0051). The bare-id parse lives here,
+ * at read time — which makes a fix to it retroactive across every archived build with no
+ * backfill (ADR-0059).
  *
  * Byte-identity trap (mirrors attribution-join.ts PROBE §1): hash verification calls
  * hashContent(rawBody) where rawBody is the UNTRIMMED current file content — NOT a
@@ -37,6 +38,7 @@ import type {
   ContextProvenanceSummary,
 } from "@domains/workspaces/context-provenance.ts";
 import { hashContent } from "@domains/workspaces/context-provenance.ts";
+import { isPrincipleIdShaped } from "../../../platform/storage/archive/run-summary-extractors.ts";
 import type {
   AttributedArtifact,
   FlaggedAttribution,
@@ -75,7 +77,7 @@ export type PositiveAttribution = {
 /** A honored line that could not be attributed to an in-context artifact. */
 export type UnattributedHonored = {
   honored: HonoredEntry;
-  /** "unparseable_honored" — no `**id**` bold span parsed.
+  /** "unparseable_honored" — no bolded, id-shaped `**id**` prefix (the colon is optional).
    *  "no_in_context_artifact" — parsed id has no matching provenance artifact. */
   reason: "unparseable_honored" | "no_in_context_artifact";
 };
@@ -170,21 +172,24 @@ export function attributeHonored(input: AttributeHonoredInput): AttributeHonored
 // ---------------------------------------------------------------------------
 
 /**
- * Match the FIRST bold span's inner text as the candidate id. The trailing colon is OPTIONAL:
- * 79.5% of real archived honored lines are `- **id**` (no colon) — `**id**`, `**id** — desc`,
- * `**id** (`file:line`): desc` — while ~20% use the template's `**id**: desc`. Both parse here.
- * See plans/.../PROBE-FINDINGS.md (Q1/Q3): relaxing the colon lifts real-id resolution 285->1363
- * over the real corpus with zero regressions. Parsing a token is NOT attribution — a non-id label
- * still resolves to no in-context artifact downstream (findArtifactCandidates), so no false
- * positive is created (PRD AC#3).
+ * Matches a bolded principle id at the start of an honored bullet. The colon and any
+ * trailing description are optional — 74% of real reviews write the bare `**id**` form,
+ * and requiring the colon parsed only 20.4% of the archived corpus.
  */
-const HONORED_ID_PATTERN = /\*\*([^*]+)\*\*/;
+const HONORED_ID_PATTERN = /^\s*\*\*([^*]+)\*\*/;
 
-/** Parse the bare principle id from a `**{id}**` / `**{id}** — desc` honored line. Returns null if unparseable. */
+/**
+ * Parse the bare principle id from a `**{id}**` honored line. Returns null if unparseable.
+ *
+ * The charset guard is what makes the relaxed pattern safe: without it the pattern matches
+ * ANY bold span, which over the real corpus yields 79 prose tokens as principle ids
+ * ("Robust git-failure degradation", "noExcessiveLinesPerFile"). Recording those is
+ * fabrication. The guard is imported, never re-declared — one closed domain, one writer.
+ */
 function parseHonoredId(raw: string): string | null {
   const match = raw.match(HONORED_ID_PATTERN);
   const id = match?.[1]?.trim();
-  return id !== undefined && id.length > 0 ? id : null;
+  return id !== undefined && isPrincipleIdShaped(id) ? id : null;
 }
 
 type ArtifactCandidate = {
