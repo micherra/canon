@@ -203,16 +203,20 @@ costs of its own.
   The seam now runs **five** probes for any caller that declared `createSourceFile`, each gated
   identically (never narrowed to a subset of callers) and each explicitly asserting its own
   required member before use (never folded into the outer gate, per the correction above):
-  1. **Probe A** (malformed × JS) — `"const x = ;"`, `ScriptKind` inferred from the `.js` probe
-     filename.
+  1. **Probe A** (malformed × JS) — `"const x = ;"`, explicit `ScriptKind.JS` as the 5th
+     `createSourceFile` argument — matching `workflows-lint.mjs:140`'s real call shape exactly
+     (corrected from an earlier 4-argument call that left `ScriptKind` `undefined`; see the
+     call-shape-parity finding below).
   2. **Probe B** (malformed × TS) — `"interface Foo { bar: ; }"`, explicit `ScriptKind.TS` — a
      distinct diagnostic message ("Type expected." vs. Probe A's "Expression expected."),
      confirmed by invoking the real parser. Defeating both A and B requires special-casing two
      unrelated strings across two `ScriptKind`s, not one memorized answer.
   3. **Probe C** (valid × JS) — an AST-shape assertion: parse a known-VALID JS source
-     (`"const y = 1;"`) and require both the exact expected statement count AND a non-zero
-     `forEachChild` walk over it — the same API the three real callers use for their own AST
-     walks — proving the tree is real and walkable, not merely that some object came back.
+     (`"const y = 1;"`) under explicit `ScriptKind.JS` (matching `workflows-lint.mjs:140`'s real
+     call shape; see the call-shape-parity finding below) and require both the exact expected
+     statement count AND a non-zero `forEachChild` walk over it — the same API the three real
+     callers use for their own AST walks — proving the tree is real and walkable, not merely that
+     some object came back.
   4. **Probe D** (valid × TS) — mirrors Probe C for a known-VALID, type-annotated TS source
      (`"const y: number = 1;"`, explicit `ScriptKind.TS`, reusing the `ScriptKind.TS` presence
      already asserted for Probe B). (Aside, confirmed by invoking the real parser while choosing
@@ -235,12 +239,59 @@ costs of its own.
   modes). `ScriptKind` is a closed TypeScript enum whose only other members — `JSX`, `JSON`,
   `Deferred`, `External`, `Unknown` — are used by **none** of the three callers, so this is a
   complete cover **by enumeration over the callers' actual usage**, not an assumption that no
-  further mode exists in the abstract.
+  further mode exists in the abstract. As of the fourth adversarial review (below), each probe's
+  `createSourceFile` call also matches its real caller's exact argument vector — arg count,
+  `ScriptTarget`, `setParentNodes`, and `ScriptKind` — verified directly against all three
+  consuming scripts' call sites, not assumed from the `ScriptKind` coverage alone.
+
+  **A fourth adversarial review found the most severe gap of this migration — a LIVE silent pass,
+  not a latent one, proven by execution.** Every prior finding on this axis was about *which*
+  `ScriptKind` value a probe used; this one is about whether a probe's `createSourceFile` call uses
+  the **same argument vector** — arg count, `ScriptTarget`, `setParentNodes`, and `ScriptKind`
+  together — as its real caller. Probe C (valid × JS shape) called `createSourceFile` with only 4
+  arguments, leaving `scriptKind` `undefined`. But `workflows-lint.mjs:140`, the probe's real
+  caller, **always** passes `ts.ScriptKind.JS` explicitly as a 5th argument — never omits it, even
+  though the parameter is optional. Probe A (malformed × JS) had the identical 4-vs-5-argument gap
+  on the diagnostic axis. Executed: a stub correct on every probe exactly as the seam issued it
+  (including keying valid/malformed JS to `scriptKind === undefined`, matching Probes A/C's pre-fix
+  calls, and TS/TSX correctly to their explicit values) but degenerate for the *same* source parsed
+  under explicit `ScriptKind.JS` passed the seam cleanly (exit 0) — then, replaying
+  `workflows-lint.mjs:140`'s exact call shape against that stub on real workflow source, produced
+  `statements.length: 0` and zero `forEachChild` children. A parser drift keying degeneracy off
+  omitted-vs-explicit `ScriptKind.JS` would make `workflows-lint` — which lints
+  `workflows/canon-probe.js` and `workflows/canon-waves.js` today — silently pass every ban rule on
+  both tracked files, **today**, not hypothetically. Strictly more severe than the TSX finding
+  (which had zero tracked `.tsx` files to affect).
+
+  Fixed by making Probe A and Probe C issue `createSourceFile` with the exact argument vector
+  `workflows-lint.mjs:140` uses: `ts.ScriptTarget.Latest`, `true`, and `ts.ScriptKind.JS` explicit
+  as the 5th argument — asserted present once (reusing the existing per-member presence-assertion
+  discipline), not folded into the outer gate. The class-level question this raised — does *every*
+  probe's call shape match its real caller's, on every argument — was checked directly against all
+  three consuming scripts (`workflows-lint.mjs`, `dead-wire-internal-use.mjs`,
+  `tool-surfacing-extract.mjs`), not inferred:
+
+  | Probe | Axis | Real caller(s) | Caller's call (fileName, src, target, setParentNodes, scriptKind) | Probe's call (same params) | Parity |
+  |---|---|---|---|---|---|
+  | A | malformed × JS | `workflows-lint.mjs:140` | `(filePath, src, ScriptTarget.Latest, true, ScriptKind.JS)` | `(fixture, "const x = ;", ScriptTarget.Latest, true, ScriptKind.JS)` | Fixed this round (was 4-arg, `ScriptKind` omitted) |
+  | B | malformed × TS | `dead-wire-internal-use.mjs:142`, `tool-surfacing-extract.mjs:149` | `(filePath, src, ScriptTarget.Latest, true, scriptKind∈{TS,TSX})` | `(fixture, "interface Foo { bar: ; }", ScriptTarget.Latest, true, ScriptKind.TS)` | Already matched |
+  | C | valid × JS | `workflows-lint.mjs:140` | same as A | `(fixture, "const y = 1;", ScriptTarget.Latest, true, ScriptKind.JS)` | Fixed this round (was 4-arg, `ScriptKind` omitted — **the live exploit**) |
+  | D | valid × TS | `dead-wire-internal-use.mjs:142`, `tool-surfacing-extract.mjs:149` | same as B | `(fixture, "const y: number = 1;", ScriptTarget.Latest, true, ScriptKind.TS)` | Already matched |
+  | E | valid × TSX | `dead-wire-internal-use.mjs:142`, `tool-surfacing-extract.mjs:149` (TSX branch) | same as B (TSX branch) | `(fixture, "const y: number = 1;", ScriptTarget.Latest, true, ScriptKind.TSX)` | Already matched |
+
+  All three real callers use `ts.ScriptTarget.Latest` and `setParentNodes: true` uniformly — the
+  only argument that ever diverged between a probe and its caller was `ScriptKind`, and only for
+  Probes A and C (both tied to the JS caller). Probes B, D, and E already issued 5-argument calls
+  with the caller's exact explicit `ScriptKind`; that was verified, not assumed, by re-reading the
+  three consuming scripts' call sites directly. **After this fix, no probe can be distinguished
+  from its real caller by any `createSourceFile` argument** — this closes the argument-vector-parity
+  class this build kept finding one `ScriptKind` at a time, not merely this one instance of it.
 
   See `mcp-server/src/__tests__/ts-compiler-seam.test.ts` ("Case A" / "Case B" for the gating
   correction; "Case C" / "Case D" for the first hardening round's two probes; "Case E" for ATTACK
-  4 / Probe D; "Case F" for the TSX finding / Probe E) for the regression tests covering all six
-  failure shapes. **This still does not make the pin self-verifying against every possible future
+  4 / Probe D; "Case F" for the TSX finding / Probe E; "Case G" for the call-shape-parity finding /
+  Probes A+C) for the regression tests covering all seven failure shapes. **This still does not
+  make the pin self-verifying against every possible future
   degradation** — it closes every demonstrated class to date, over the `ScriptKind` values the
   callers actually invoke. Any future `typescript-parser` version bump should re-run these probes
   (they run automatically, for any caller that parses, on every invocation of the three scripts)

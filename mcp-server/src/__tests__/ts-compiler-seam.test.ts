@@ -549,4 +549,92 @@ process.exit(0);
     expect(code).not.toBe(0);
     expect(stderr).toContain("CANON ERROR [test-driver]");
   });
+
+  // -------------------------------------------------------------------
+  // Case G (adversarial review — harden-4, LIVE not latent): the call-shape
+  // parity gap. Probe C (valid-JS AST shape) called createSourceFile with
+  // ONLY 4 args, so `scriptKind` was `undefined` — but the real caller,
+  // workflows-lint.mjs:140, ALWAYS passes ts.ScriptKind.JS (1) explicitly
+  // as the 5th arg. A stub correct on every probe exactly as the seam
+  // issued it (including keying valid-JS to `scriptKind === undefined`,
+  // matching Probe C's pre-fix call) but degenerate for the SAME source
+  // parsed under explicit ScriptKind.JS passed the seam cleanly — while
+  // silently returning an empty, unwalkable tree for workflows-lint's own
+  // real call shape. The reviewer proved this executable: replaying
+  // workflows-lint.mjs:140's exact 5-arg call against this stub on real
+  // workflow source yields `statements.length: 0`, zero forEachChild
+  // children — the ban-walk would see an empty, "clean" file. Closed by
+  // making Probe C (and Probe A, the same 4-vs-5-arg gap on the malformed-
+  // diagnostic axis) issue createSourceFile with the exact argument vector
+  // its real caller uses: ts.ScriptTarget.Latest, true, ts.ScriptKind.JS.
+  // -------------------------------------------------------------------
+  test("Case G — stub correct for scriptKind===undefined but degenerate under explicit ScriptKind.JS: non-zero exit", async () => {
+    const { dir, driver } = setupDriver("degenerate-explicit-js-scriptkind-stub");
+    const nodeModulesDir = join(dir, "node_modules", "typescript-parser");
+    mkdirSync(nodeModulesDir, { recursive: true });
+    writeFileSync(
+      join(nodeModulesDir, "package.json"),
+      JSON.stringify({
+        name: "typescript-parser",
+        version: "0.0.0-stub",
+        type: "module",
+        main: "index.js",
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(nodeModulesDir, "index.js"),
+      `export default {
+  version: "0.0.0-stub",
+  ScriptTarget: { Latest: 99 },
+  ScriptKind: { JS: 1, TS: 3, TSX: 4 },
+  // Correct for every probe call shape the seam issues TODAY (pre-fix):
+  // Probe A/C key valid/malformed JS to scriptKind === undefined (the
+  // 4-arg call); Probe B/D/E key TS/TSX to explicit scriptKind 3/4. A
+  // stub tuned exactly to those shapes — degenerate for anything else,
+  // including the real caller's explicit ScriptKind.JS (1).
+  createSourceFile(fileName, text, languageVersion, setParentNodes, scriptKind) {
+    const isMalformedJs = text === "const x = ;" && scriptKind === undefined;
+    const isMalformedTs = text === "interface Foo { bar: ; }" && scriptKind === 3;
+    const isValidJs = text === "const y = 1;" && scriptKind === undefined;
+    const isValidTs = text === "const y: number = 1;" && scriptKind === 3;
+    const isValidTsx = text === "const y: number = 1;" && scriptKind === 4;
+
+    if (isMalformedJs || isMalformedTs) {
+      return {
+        fileName,
+        text,
+        kind: "SourceFile",
+        statements: [{ kind: 244 }],
+        parseDiagnostics: [{ messageText: "malformed" }],
+      };
+    }
+    if (isValidJs || isValidTs || isValidTsx) {
+      return {
+        fileName,
+        text,
+        kind: "SourceFile",
+        statements: [{ kind: 244 }],
+        parseDiagnostics: [],
+      };
+    }
+    // Everything else — including valid JS parsed under EXPLICIT
+    // ScriptKind.JS (the real workflows-lint.mjs:140 call shape) — gets a
+    // degenerate, empty, unwalkable tree.
+    return { fileName, text, kind: "SourceFile", statements: [], parseDiagnostics: [] };
+  },
+  forEachChild(node, cb) {
+    for (const s of node.statements ?? []) cb(s);
+  },
+};
+`,
+      "utf8",
+    );
+
+    const { code, stderr } = await run(driver, [
+      JSON.stringify(["createSourceFile", "ScriptTarget", "ScriptKind", "forEachChild"]),
+    ]);
+    expect(code).not.toBe(0);
+    expect(stderr).toContain("CANON ERROR [test-driver]");
+  });
 });

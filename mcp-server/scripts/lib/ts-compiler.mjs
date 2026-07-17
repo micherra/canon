@@ -99,14 +99,29 @@ export async function loadTsCompiler(scriptName, requiredApis) {
       );
     }
 
-    // Probe A — malformed JS. ScriptKind is intentionally omitted here; it
-    // is optional on createSourceFile, and TypeScript infers it from the
-    // probe's own filename extension (".js") when omitted.
+    // Probe A — malformed JS. ScriptKind.JS is explicitly asserted present
+    // and passed as the 5th createSourceFile argument — matching the real
+    // JS caller's exact call shape (workflows-lint.mjs:140 always passes
+    // ts.ScriptKind.JS explicitly; it is never omitted in practice, even
+    // though the parameter is optional). A probe that omits an argument
+    // its real caller always supplies asks a DIFFERENT question of the
+    // parser than the one that matters — see the call-shape-parity note
+    // above Probe C, which is where this was caught (harden-4).
+    if (ts?.ScriptKind?.JS === undefined) {
+      fail(
+        scriptName,
+        `cannot run the JS-mode parseDiagnostics probe: '${PARSER_SPECIFIER}' is missing ScriptKind.JS, ` +
+          `required to construct the probe's call to createSourceFile with the same argument vector the ` +
+          `real JS caller (workflows-lint.mjs) uses. This caller declared createSourceFile but the parser ` +
+          `dependency lacks a member the probe itself needs.`,
+      );
+    }
     const probeJs = ts.createSourceFile(
       "__canon_parse_probe_js__.js",
       "const x = ;",
       ts.ScriptTarget.Latest,
       true,
+      ts.ScriptKind.JS,
     );
     if (!Array.isArray(probeJs.parseDiagnostics) || probeJs.parseDiagnostics.length === 0) {
       fail(
@@ -171,12 +186,29 @@ export async function loadTsCompiler(scriptName, requiredApis) {
     // and require both the expected statement count AND a real, walkable
     // tree via the same forEachChild API real callers use for their own
     // AST walks — not just that some object came back.
+    //
+    // CALL-SHAPE PARITY (harden-4): this probe must issue createSourceFile
+    // with the EXACT argument vector its real caller uses, not merely a
+    // call that happens to produce the same result today. workflows-lint.mjs
+    // line 140 always passes ts.ScriptKind.JS explicitly as the 5th
+    // argument — never omits it. A probe that omits ScriptKind (leaving it
+    // `undefined`) asks the parser a structurally DIFFERENT question than
+    // the real caller does; a drifted/degraded parser can answer those two
+    // questions differently even though today's real parser does not. A
+    // reviewer proved this executable: a stub correct for every probe
+    // call as issued (keyed to `scriptKind === undefined` here) but
+    // degenerate for the SAME source under explicit ScriptKind.JS passed
+    // this seam cleanly while returning an empty, unwalkable tree when
+    // workflows-lint.mjs's own real call shape was replayed against real
+    // workflow source. ScriptKind.JS is asserted present once, above (for
+    // Probe A), and reused here — not re-asserted.
     const shapeSrcJs = "const y = 1;";
     const shapeProbeJs = ts.createSourceFile(
       "__canon_ast_shape_probe_js__.js",
       shapeSrcJs,
       ts.ScriptTarget.Latest,
       true,
+      ts.ScriptKind.JS,
     );
     if (!Array.isArray(shapeProbeJs.statements) || shapeProbeJs.statements.length !== 1) {
       fail(
