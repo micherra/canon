@@ -30,7 +30,7 @@ Design assumptions that are not empirically verified carry hidden implementation
 
 **Failure mode 3 — the defect class recurs at every assertion surface, not only design freeze.** PR #509 (ADR-0002 baseline-blindness fix) set out to fix a loop's tick-1 diff blindness. While fixing it, the exact class it exists to prevent — asserting a mechanically-checkable property instead of invoking the check — recurred **five times**, at five different roles, inside that one build's own artifacts. Only one of the five fell inside this convention's original scope (`**/plans/**/DESIGN.md` / `**/plans/**/PROBE-FINDINGS.md`):
 
-1. **ADR authorship.** `docs/adr/0045-session-start-staleness-auto-refresh-mechanism.md` line 100 asserted `loop-schema.ts` is on the ADR-0044 sensitive-path deny-list (`mcp-tool-contract` category). This was false: `grep -in "loop" confidence-scorer.ts` returns zero matches, and the file went unfloored for five days. Source: `PROBE-FINDINGS.md` Findings 1–2 of the PR #509 build. Out of the convention's original scope — an ADR is not `DESIGN.md`/`PROBE-FINDINGS.md`.
+1. **ADR authorship.** `docs/adr/0045-session-start-staleness-auto-refresh-mechanism.md` line 100 asserted `loop-schema.ts` is on the ADR-0044 sensitive-path deny-list (`mcp-tool-contract` category). This was false at the time: `grep -in "loop" confidence-scorer.ts` returned zero matches, and the file went unfloored for five days. (This same build's own ADR-0057 later added `loop-schema.ts` to a brand-new `loop-runner-guardrail` deny-list category — the claim's truth value was inverted by a later change to the very file it described; see the Fresh-Reprobe facet's temporal-anchoring note below.) Source: `PROBE-FINDINGS.md` Findings 1–2 of the PR #509 build. Out of the convention's original scope — an ADR is not `DESIGN.md`/`PROBE-FINDINGS.md`.
 2. **Architect DESIGN.md** — inherited claim #1 verbatim into the design's Tier Consequence section. Caught when the orchestrator ran the real tool: `compute_autonomy_tier` returned `tier=supervised` but `floor_engaged: false` (score-driven, not floor-driven). This is the one instance the convention's original scope covered.
 3. **Security review.** `SECURITY.md` reported "7/7 smuggling attempts blocked," implying ADR-0002's noise class was inexpressible — but all seven probed shapes attacked `append`/`from`/no-`to`. Nobody tested `{ to: "failure", fire_on_baseline: true }`, ADR-0002's own first named noise example, which `parseLoopDefinition` accepts cleanly. Out of scope — review artifacts.
 4. **Orchestrator triage.** Three unchecked claims were asserted at HITL gates during the same build (a test file was claimed not to exist when it did; a SUMMARY was claimed to need committing when it was already outside the repo; a `.canon/loops/` attack path was claimed to exist when it did not). No artifact class exists to scope a file-pattern to this recurrence — triage claims live in the orchestrator's own gate messages, not a file the review pipeline reads. See Exceptions.
@@ -89,6 +89,8 @@ A claim that is **narrowed** under review pressure — rather than retracted or 
 Instance 2 is the load-bearing evidence: it demonstrates the failure is not self-correcting even immediately after the author was told about instance 1 in the same review cycle. A narrower-sounding claim is not evidence of verification — only invocation is.
 
 **Rule:** when a fix round responds to a finding by narrowing a claim's scope, quantity, or strength, treat the narrowed claim exactly as Parts 1–3 treat a fresh `confidence: medium`/`unknown` assumption — it requires its own probe or call-site check before it can be trusted, regardless of how much more careful it sounds than the claim it replaces.
+
+**Temporal anchoring — a sibling hazard the same PR #509 build demonstrated on this very principle's own draft.** A checkable claim probed correctly at write-time can still be inverted later if the thing it describes changes and the claim was written in bare present tense. ADR-0045's "`loop-schema.ts` is not on the deny-list" was true when checked — until this same build's own ADR-0057 added `loop-schema.ts` to a new deny-list category minutes after a draft of this principle asserted the old grep result as an unqualified fact. Anchor a probed historical fact to the moment, category, or version it was checked against ("was X, as of Y") rather than asserting it in the present tense as if it can never change; a present-tense claim about a mutable target is a standing Fresh-Reprobe liability even when it was true the day it was written.
 
 ## Examples
 
@@ -186,19 +188,19 @@ PROBE-FINDINGS.md committed. Design updated: LSP diagnostic capability is UNAVAI
   + adversarially re-reviewed.
 ```
 
-*False, and never checked.* `grep -in "loop" confidence-scorer.ts` (the deny-list's own source) returns zero matches. The claim conflated two surfaces: `register-loops.ts` (the tool contract) IS on the deny-list; `loop-schema.ts` (the guardrail) is not. The false belief was laundered into a tracked ADR and then inherited verbatim by a later DESIGN.md, going unchecked for five days.
+*False, and never checked, at the time it was written.* `grep -in "loop" confidence-scorer.ts` (the deny-list's own source) returned zero matches when ADR-0045 asserted this claim. The claim conflated two surfaces: `register-loops.ts` (the tool contract) IS on the deny-list; `loop-schema.ts` (the guardrail) was not, under any category, at the time. The false belief was laundered into a tracked ADR and then inherited verbatim by a later DESIGN.md, going unchecked for five days.
 
-**Good — ADR claim verified by invoking the actual gate:**
+**Good — ADR claim verified by invoking the actual gate, and anchored to when it was checked:**
 
 ```
 $ grep -in "loop" mcp-server/src/features/orchestration/services/confidence-scorer.ts
-(no matches)
+(no matches — as of the ADR-0045 incident)
 
 $ echo '{ file_paths: ["loop-schema.ts"], override_tier: "autonomous" }' | compute_autonomy_tier
 → floor_engaged: false, tier: supervised (score: 37, score-driven not floor-driven)
 ```
 
-*The ADR now states the checked fact*: `loop-schema.ts` is not on the sensitive-path deny-list; the build was supervised by score, not by floor. A future reader gets the true safety picture instead of an inherited false one.
+*The ADR now states the checked fact, dated to the moment it was checked*: as of the ADR-0045 incident, `loop-schema.ts` was not on the sensitive-path deny-list under any category, and the build was supervised by score, not by floor. This dating matters: a present-tense claim in a durable artifact is itself a probe-decay hazard — this same PR #509 build's own ADR-0057 later added `loop-schema.ts` to a NEW `loop-runner-guardrail` category, and `grep -in "loop" confidence-scorer.ts` against the current tree now returns 9 matches, not 0. A reader who trusted an un-anchored "is not on the deny-list" claim from ADR-0045 would be wrong today. Anchoring the claim to its check-moment ("was not on the deny-list as of the ADR-0045 incident, under the `mcp-tool-contract` category it named") keeps the ADR true forever; asserting it in bare present tense does not.
 
 **Bad — narrowed claim treated as safer without re-probing (Fresh-Reprobe violation):**
 
