@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.23.0](https://github.com/micherra/canon/compare/v2.22.0...v2.23.0) (2026-07-17)
+
+
+### Features
+
+* **loops:** fire_on_baseline opt-in for state-naming rules + loop-runner-guardrail floor (ADR-0056/0057) ([#509](https://github.com/micherra/canon/issues/509)) ([46a5a99](https://github.com/micherra/canon/commit/46a5a99c092671a7e60e09c475c0153d2dbbe458))
+* **t2-probe:** live-forward T2 checker measurement — advisory recorder, layered-join aggregator, frozen-threshold verdict ([#513](https://github.com/micherra/canon/issues/513)) ([a9255c3](https://github.com/micherra/canon/commit/a9255c3b984249b63d5986887f331ec5f83619cd))
+* **workflows:** DAG→Workflow compilation probe — Canon DAGs run as Workflow scripts ([#498](https://github.com/micherra/canon/issues/498)) ([120d035](https://github.com/micherra/canon/commit/120d03541b2c39cd1e9d25ab77c119d9b150519e))
+
+
+### Bug Fixes
+
+* **evolution:** fix violations + honored parsers, backfill the corpus ([#511](https://github.com/micherra/canon/issues/511)) ([58aac0c](https://github.com/micherra/canon/commit/58aac0cb7e824b6c44d163317d53f5aee220eaaf))
+* **evolution:** make honored-citation id parse accept the no-colon majority format ([#508](https://github.com/micherra/canon/issues/508)) ([296f4ae](https://github.com/micherra/canon/commit/296f4ae9d1ffb14530b73eee989e8345ff1a6a30))
+* **learning:** close .canon/learning.jsonl non-atomic append corruption (ADR-0056) ([#510](https://github.com/micherra/canon/issues/510)) ([958b313](https://github.com/micherra/canon/commit/958b313a6231a52f0ebbd3cc9b3e29e9b04fb68e))
+
 ## [2.22.0](https://github.com/micherra/canon/compare/v2.21.0...v2.22.0) (2026-07-15)
 
 
