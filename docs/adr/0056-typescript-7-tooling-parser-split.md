@@ -301,6 +301,43 @@ costs of its own.
   Real per-invocation wall-clock time is dominated by the fixed cost of importing the ~30MB pinned
   `typescript-parser` package (present since this ADR's first version, not something the probes
   add), which varies with ambient system load rather than with probe count.
+
+  **Scope boundary: what is behaviorally probed vs. presence-asserted only.** This is a stated
+  design decision, not an oversight — drawn explicitly after the call-shape-parity finding above
+  raised the question of whether the same gap exists on another API surface.
+
+  *Behaviorally probed* (the five load-time probes, described above): `createSourceFile` +
+  `parseDiagnostics` + AST shape, across `{JS, TS, TSX} × {malformed, valid}`, each issued at
+  caller call-shape parity (the same argument vector — arg count, `ScriptTarget`,
+  `setParentNodes`, `ScriptKind` — the real callers use). This surface earns runtime verification
+  because `parseDiagnostics` is an internal, undocumented API absent from `typescript-parser`'s
+  public `.d.ts` — exactly the kind of surface that can silently change shape across a version
+  bump without a type error ever surfacing it.
+
+  *Presence-asserted only* (declared in a caller's `requiredApis`, checked for existence, never
+  behaviorally exercised): `createProgram`, `getTypeChecker`, `getSymbolAtLocation`,
+  `getExportsOfModule`, `getAliasedSymbol`, `getShorthandAssignmentValueSymbol` — the semantic
+  checker-resolution path `dead-wire-internal-use.mjs` uses to derive its same-file-use count
+  (`createSourceFile`'s own return value is used there only for the malformed-input guard and to
+  locate a declaration node; the count itself comes from the checker). These are core, stable,
+  publicly documented TypeScript compiler API — not the drift-prone, undocumented surface the
+  behavioral probes exist for. Behaviorally probing them would mean standing up a full `ts.Program`
+  (via `createProgram` + `getTypeChecker`) at **load time**, in a fail-closed safety hook invoked
+  on every gate run, materially heavier than the current five `createSourceFile` calls — a cost
+  and complexity increase judged disproportionate to a surface that isn't the one drifting.
+
+  **Residual risk, named plainly, not buried:** a drifted `typescript-parser` whose
+  `createSourceFile` is fully healthy (passes all five probes) but whose checker over-resolves —
+  for example, collapsing distinct same-named identifiers across different scopes into one
+  symbol — could make `dead-wire-internal-use.mjs` report a same-file use count `≥ 1` for a symbol
+  with zero real uses. That is a false-WIRE, the fail-open direction: genuinely dead code would
+  ship past `dead-wire-gate.sh` undetected by this probe set. **The compensating control is the
+  exact `typescript-parser@6.0.3` pin plus lockfile integrity** — the checker cannot drift silently
+  in production; it can only change via a deliberate, reviewed `package-lock.json` update. The
+  "any future `typescript-parser` version bump should re-run these probes" guidance above is
+  extended by this scope-boundary note: a version bump must also re-verify the checker path
+  (`createProgram`/`getTypeChecker`/`getSymbolAtLocation` resolution behavior) manually before the
+  pin is advanced, not only the five automated probes.
 - A second, dev-only copy of TypeScript ships in `node_modules` (~30MB), used only by the three
   lint/gate scripts.
 - **The repo-root `tsconfig.json` required the same `baseUrl` removal, with one deliberate
