@@ -4,8 +4,9 @@
  * The evaluator gate never delivered a verdict: canon:evaluator was spawned as a
  * NAMED (teammate) agent, but its tool grant (`tools: [Read]`) has no SendMessage
  * and no write tool — a named spawn returns output only via mailbox, and the
- * evaluator has no mailbox. See PROBE-FINDINGS.md and
- * decisions/evaluator-return-channel.md for the root-cause probe.
+ * evaluator has no mailbox. See
+ * docs/adr/0058-evaluator-verdict-returns-by-tool-result-not-mailbox.md
+ * (ADR-0058) for the root-cause probe.
  *
  * This test encodes the general invariant behind the fix, not just the literal
  * fix: an agent whose `tools:` grant confers no write capability (Write/Edit/
@@ -196,8 +197,7 @@ describe("CLAUDE.md evaluator-gate block invariants (ADR-0058)", () => {
       block,
       "The evaluator-gate block must mandate surfacing a one-line advisory when a " +
         "non-evaluation branch fires — a prose instruction to shout that itself goes " +
-        "unenforced is exactly the disease this bug exhibited (see " +
-        "decisions/evaluator-return-channel.md D2).",
+        "unenforced is exactly the disease this bug exhibited (see ADR-0058).",
     ).toMatch(/surface[^.]*advisory/i);
   });
 });

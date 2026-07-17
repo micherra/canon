@@ -208,7 +208,7 @@ export type FinalizeWorkspaceResult = {
    */
   steps_ghost: string[];
   /**
-   * Non-evaluations of the post-implement/fix evaluator gate (ADR-0058 D2/D5,
+   * Non-evaluations of the post-implement/fix evaluator gate (ADR-0058,
    * Layer 2): step IDs paired with the reason the gate did not render a real
    * PASS/FAIL verdict — a skip (`tool_unavailable` | `tool_error`, step 2) or
    * a parse failure that fell open (`PASS_parse_fallback`, step 7).

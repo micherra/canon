@@ -1,6 +1,6 @@
 /**
  * finalize-workspace-gate-non-evaluations — tests for the gate_non_evaluations
- * field (evaluator-gate Layer 2, ADR-0058 D2/D5).
+ * field (evaluator-gate Layer 2, ADR-0058).
  *
  * Split out of finalize-workspace.test.ts (sibling file, same target) to stay
  * under the noExcessiveLinesPerFile limit — mirrors the codebase's own
@@ -35,7 +35,7 @@ afterEach(async () => {
   await rm(projectDir, { force: true, recursive: true });
 });
 
-describe("finalizeWorkspace — gate_non_evaluations field (evaluator-gate Layer 2, ADR-0058 D2/D5)", () => {
+describe("finalizeWorkspace — gate_non_evaluations field (evaluator-gate Layer 2, ADR-0058)", () => {
   test("empty default: no evaluator_gate outcomes at all", async () => {
     await logStep({
       agent_id: "test-agent-gate-empty",

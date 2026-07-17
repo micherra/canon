@@ -12,7 +12,7 @@ import type { JournalStep } from "../tools/orchestration-journal.ts";
 
 /**
  * The three distinct evaluator-gate outcomes that mean "the gate did not
- * render a real verdict, and the build proceeded anyway" (ADR-0058 D2/D5).
+ * render a real verdict, and the build proceeded anyway" (ADR-0058).
  * A real `verdict: "PASS"` or `"FAIL"` is NOT a non-evaluation.
  */
 export type GateNonEvaluationReason = "tool_unavailable" | "tool_error" | "PASS_parse_fallback";
@@ -23,7 +23,7 @@ export type GateNonEvaluation = {
 };
 
 /**
- * Layer-2 loudness backstop (ADR-0058 D2/D5): scans each step's logged
+ * Layer-2 loudness backstop (ADR-0058): scans each step's logged
  * `outcome.evaluator_gate` for a non-evaluation marker — a skip
  * (`tool_unavailable` | `tool_error`) or a parse-failure fallback
  * (`PASS_parse_fallback`). Keys on the DISTINCT non-evaluation values, never

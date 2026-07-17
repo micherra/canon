@@ -1,7 +1,7 @@
 /**
  * evaluator-gate-schema-boundary — closes the gap the engineer's own
  * DONE_WITH_CONCERNS finding identified after evalfix-01 (commit 10ad363b):
- * Layer 2 (gate_non_evaluations[], ADR-0058 D2/D5) is production-inert
+ * Layer 2 (gate_non_evaluations[], ADR-0058) is production-inert
  * because register-journal.ts's stepOutcomeSchema silently stripped the
  * evaluator_gate outcome key at the MCP boundary.
  *
