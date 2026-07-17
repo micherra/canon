@@ -6,17 +6,16 @@
 
     "outDir": "dist",
     "rootDir": "src",
-    "baseUrl": "src",
     "paths": {
-      "@/*": ["*"],
-      "@app/*": ["app/*"],
-      "@domains/*": ["domains/*"],
-      "@features/*": ["features/*"],
-      "@graph/*": ["graph/*"],
-      "@platform/*": ["platform/*"],
-      "@shared/*": ["shared/*"],
-      "@tests/*": ["tests/*"],
-      "@ui/*": ["ui/*"]
+      "@/*": ["./src/*"],
+      "@app/*": ["./src/app/*"],
+      "@domains/*": ["./src/domains/*"],
+      "@features/*": ["./src/features/*"],
+      "@graph/*": ["./src/graph/*"],
+      "@platform/*": ["./src/platform/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@tests/*": ["./src/tests/*"],
+      "@ui/*": ["./src/ui/*"]
     },
 
     "strict": true,
