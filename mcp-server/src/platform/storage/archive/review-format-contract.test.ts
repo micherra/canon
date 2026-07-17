@@ -89,7 +89,7 @@ function templateHonoredLine(): string {
  *
  * The template's literal cells carry `{id}` / `{principle-id}`, which the dec-02 charset
  * guard CORRECTLY rejects (braces are outside the closed domain). Substituting realistic
- * values is the fix; weakening the guard to make a placeholder parse would defeat ADR-0058
+ * values is the fix; weakening the guard to make a placeholder parse would defeat ADR-0060
  * to satisfy a test. The `{HIGH\|MEDIUM\|LOW\|INSUFFICIENT\|—}` confidence cell is left
  * VERBATIM on purpose — it is not a machine-read column, and keeping it proves an escaped
  * pipe does not shift the columns that are.

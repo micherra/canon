@@ -13,7 +13,7 @@ import type { ReviewResult, ReviewViolation, RunbookStep } from "./archive-types
 
 /**
  * Closed-domain principle-id charset. Rejects prose extracted from free-text reviews,
- * which is the fabrication boundary for both citation parsers (ADR-0058).
+ * which is the fabrication boundary for both citation parsers (ADR-0060).
  */
 export const PRINCIPLE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,}$/;
 
@@ -24,7 +24,7 @@ export const PRINCIPLE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,}$/;
  * resolve. Resolution is owned downstream by `select_mutation_targets`, which buckets
  * misses as `skipped[reason:"artifact_unresolved"]`. Validating against disk here would
  * erase real historical citations to retired ids and make parsing depend on mutable
- * state (ADR-0058).
+ * state (ADR-0060).
  *
  * This is the ONE guard for the domain — `positive-attribution.ts` imports it rather
  * than carrying a second copy.

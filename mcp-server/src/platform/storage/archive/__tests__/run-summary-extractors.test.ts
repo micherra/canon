@@ -130,7 +130,7 @@ Line three of the reason
 });
 
 // ---------------------------------------------------------------------------
-// isPrincipleIdShaped — the closed-domain charset guard (ADR-0058)
+// isPrincipleIdShaped — the closed-domain charset guard (ADR-0060)
 // ---------------------------------------------------------------------------
 
 describe("isPrincipleIdShaped", () => {
@@ -290,7 +290,7 @@ describe("extractViolationsSection — escaped pipes (PROBE-FINDINGS Finding 2)"
   });
 });
 
-describe("extractViolationsSection — the charset guard never coerces (ADR-0058)", () => {
+describe("extractViolationsSection — the charset guard never coerces (ADR-0060)", () => {
   test("every measured prose cell is skipped, not recorded", () => {
     const violations = violationsOf(`| Principle | Severity | Location |
 |-----------|----------|----------|
