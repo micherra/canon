@@ -102,7 +102,12 @@ This step enhances the existing file — it does NOT rewrite it from scratch. Al
 
 ### Step 4: Append to learning log
 
-After finalizing the report, append a structured entry to `.canon/learning.jsonl` using the schema in `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`.
+After finalizing the report, call the `append_learning_record` MCP tool with `project_dir` and
+a `record` object built to the schema in
+`${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`. This is the only sanctioned append
+path for `.canon/learning.jsonl` — do not append via shell redirection (`>>`, `echo`, `printf`,
+`tee`) or the `Write` tool: a record left without a trailing newline silently merges with the
+next append, which is exactly the defect the tool exists to make impossible (ADR-0058).
 
 ### Step 5: Write structured proposals (auto-trigger mode only)
 

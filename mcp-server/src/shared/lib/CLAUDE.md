@@ -89,6 +89,47 @@ Added `atomicWritePair` 2026-06-24.
 
 ---
 
+### `jsonl-append.ts` — Newline-Safe JSONL Append Primitive (ADR-0058)
+
+**Exports:**
+- `appendJsonlLine(filePath, record): Promise<{ healed: boolean }>` — serializes `record` (rejects a serialized form containing a raw `\n` — a JSONL record must be single-line), then heals-and-appends via `appendRawLineHealing`
+- `appendRawLineHealing(filePath, rawLine): Promise<{ healed: boolean }>` — lower-level engine for a caller that already holds a fully-formatted, newline-terminated line string (e.g. `reconcile-learnings.ts`'s string-based `ReconcileFsSeam.appendFile`); reads the file's last byte, prefixes a healing `\n` when the predecessor left the line open, then appends via `fs.appendFile` (O_APPEND)
+
+**Key pattern:** Root cause closed — an append that omits its trailing newline leaves the file's last line "open"; the *next* append, even a perfectly correct one, lands on that open line and the two records merge into one unparseable line (not a concurrency bug — 200 concurrent appends produced 0 merges in testing). `appendJsonlLine` HEALS a bad predecessor rather than throwing — throwing would strand the caller's own record, turning a cosmetic scar into data loss. A missing file is not a healing case (`ENOENT` on the last-byte read means no predecessor to heal; `healed: false`, file created fresh).
+
+**Deliberately NOT built on `atomic-write.ts`**: `atomicWriteFile`/`atomicWritePair` are write-temp-then-RENAME, which *replaces* the target file wholesale — correct for a single-current-value file (REVIEW.md, config) but wrong for append-only data, where a rename-based write would silently discard any append that happened between another writer's read and its rename. `appendJsonlLine` uses `fs.appendFile` (O_APPEND) so concurrent appends interleave safely instead of racing a replace. Do not consolidate the two modules — they solve different problems.
+
+Sole production callers: `append_learning_record` (`features/learning/append-learning-record.ts`) and `reconcile-learnings.ts`'s `defaultFsSeam.appendFile` (via `appendRawLineHealing`, avoiding a lossy JSON.stringify/JSON.parse round-trip through the object-based `appendJsonlLine`).
+
+Added 2026-07-15.
+
+---
+
+### `worktree-guard.ts` — Path Containment / Symlink-Escape Prevention
+
+Four containment primitives, each shaped for a distinct existence/injection scenario. Do not reach for a stronger or weaker check than the scenario calls for — see the decision table below.
+
+**Exports:**
+- `isPathContained(containerDir, targetPath): boolean` — pure, no fs access; normalizes both paths via `resolve` and checks `relative()` does not escape via `..`/absolute. Same-path is treated as contained. Use for in-memory/fake-seam callers whose fixture paths never exist on real disk.
+- `isPathInWorktree(filePath, worktreePath): Promise<ToolResult<{ contained: true }>>` — logical containment (`isPathContained`) THEN symlink resolution via real `node:fs/promises` `realpath`; falls back to checking the parent directory when the target itself doesn't exist yet (single-level only). The original two-layer guard (ADR-014a).
+- `isPathContainedViaResolver(containerDir, targetDir, resolvePath): Promise<boolean>` — same two-layer shape as `isPathInWorktree`, but the `realpath`-equivalent resolver is caller-supplied, for seam-injected callers whose unit tests need fully in-memory fakes. A resolver failure (either path doesn't exist) fails closed (`false`).
+- `isPathContainedResolvingAncestor(containerDir, targetPath, resolvePath): Promise<boolean>` — for a write target that may legitimately not exist YET (a project's first `.canon/` dir, or its first file inside one). Walks UP from `targetPath` to the nearest EXISTING ancestor and requires *that* ancestor to be contained; a target that DOES exist but resolves outside `containerDir` via symlink is still caught directly. Added for ADR-0058 (round 3): `isPathInWorktree`/`isPathContainedViaResolver` both fail closed the instant the target doesn't exist, which is correct for validating an already-existing path but wrong for a path about to be created — it would reject every legitimate first run.
+
+**Decision table:**
+
+| Scenario | Use |
+|---|---|
+| Target must already exist; real fs; no injectable seam | `isPathInWorktree` |
+| Target must already exist; fully seam-injected (fakes with non-existent fixture paths) | `isPathContainedViaResolver` |
+| Target may not exist yet (about to be created); either real fs or seam-injected | `isPathContainedResolvingAncestor` |
+| Pure string check with no fs access at all (e.g. inside another already-fs-checked call) | `isPathContained` |
+
+**Known residual (documented, accepted — ADR-0058 "Amendment: fix-review round 4")**: `isPathContainedResolvingAncestor` cannot distinguish "nothing exists at this path" (the legitimate not-yet-created case it must tolerate) from "a symlink exists at this path but its target doesn't" (a dangling symlink) — both make the resolver throw `ENOENT`, so both fall back to the ancestor-walk and pass if the ancestor is contained. A dangling symlink at the exact leaf path is therefore not caught. Deferred root-cause fix: `lstat` the leaf first to detect a symlink object before falling through to the ancestor-walk.
+
+Added `isPathContainedViaResolver` and `isPathContainedResolvingAncestor` 2026-07-15 (ADR-0058).
+
+---
+
 ### `subsystem-key.ts` — Area Memory Subsystem Key Derivation
 
 **Exports:**

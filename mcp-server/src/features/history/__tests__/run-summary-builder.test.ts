@@ -300,7 +300,9 @@ principles-checked: 12
 
 #### Violations
 
-- **principle-id**: errors-are-values — **severity**: strong-opinion — **file**: src/foo.ts — Missing error handling
+| Principle | Severity | Location | Confidence |
+|-----------|----------|----------|------------|
+| errors-are-values | strong-opinion | \`src/foo.ts\` | HIGH |
 
 #### Honored
 

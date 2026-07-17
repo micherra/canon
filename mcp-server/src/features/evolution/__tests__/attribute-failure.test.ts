@@ -129,7 +129,9 @@ principles-checked: 10
 
 #### Violations
 
-- **principle-id**: ${RULE_ID} — **severity**: BLOCKING — **file**: src/foo.ts — Tests not written first.
+| Principle | Severity | Location | Description |
+|-----------|----------|----------|-------------|
+| ${RULE_ID} | BLOCKING | \`src/foo.ts\` | Tests not written first. |
 
 #### Honored
 

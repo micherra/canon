@@ -118,8 +118,10 @@ principles-checked: 5
 
 #### Violations
 
-- **principle-id**: deep-modules — **severity**: rule — **file**: src/foo.ts — Violation message
-- **principle-id**: no-magic-numbers — **severity**: convention — **file**: src/bar.ts — Another violation
+| Principle | Severity | Location | Description |
+|-----------|----------|----------|-------------|
+| deep-modules | rule | \`src/foo.ts\` | Violation message |
+| no-magic-numbers | convention | \`src/bar.ts\` | Another violation |
 
 #### Honored
 
