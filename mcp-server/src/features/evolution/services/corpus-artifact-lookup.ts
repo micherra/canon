@@ -81,6 +81,37 @@ function readArtifactId(absPath: string): string | null {
   }
 }
 
+/** Non-throwing directory listing — missing dir -> empty contribution, no throw. */
+function readDirSafe(dirPath: string): string[] {
+  try {
+    return readdirSync(dirPath);
+  } catch {
+    return [];
+  }
+}
+
+type IndexOneFileArgs = {
+  dirPath: string;
+  filename: string;
+  root: string;
+  artifactClass: CorpusArtifactClass;
+  index: Map<string, DirScanEntry>;
+};
+
+/**
+ * indexOneFile — resolves + registers a single candidate file into `index`,
+ * if it is a non-README `.md` file with a valid frontmatter `id:` not already
+ * claimed. Extracted from scanRootDirs to keep its complexity under the
+ * Biome threshold.
+ */
+function indexOneFile({ dirPath, filename, root, artifactClass, index }: IndexOneFileArgs): void {
+  if (!filename.endsWith(".md") || filename === "README.md") return;
+  const absPath = join(dirPath, filename);
+  const id = readArtifactId(absPath);
+  if (!id || index.has(id)) return;
+  index.set(id, { absPath, artifactClass, root });
+}
+
 /**
  * scanRootDirs — indexes one root's four artifact dirs into `index`, in
  * DIR_CLASSES order. First writer wins: an id already present in `index` is
@@ -90,18 +121,8 @@ function readArtifactId(absPath: string): string | null {
 function scanRootDirs(root: string, index: Map<string, DirScanEntry>): void {
   for (const [dirName, artifactClass] of DIR_CLASSES) {
     const dirPath = join(root, dirName);
-    let entries: string[];
-    try {
-      entries = readdirSync(dirPath);
-    } catch {
-      continue; // missing dir — no throw, just an empty contribution
-    }
-    for (const filename of entries) {
-      if (!filename.endsWith(".md") || filename === "README.md") continue;
-      const absPath = join(dirPath, filename);
-      const id = readArtifactId(absPath);
-      if (!id || index.has(id)) continue;
-      index.set(id, { absPath, artifactClass, root });
+    for (const filename of readDirSafe(dirPath)) {
+      indexOneFile({ artifactClass, dirPath, filename, index, root });
     }
   }
 }
