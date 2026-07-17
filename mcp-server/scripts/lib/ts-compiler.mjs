@@ -147,18 +147,17 @@ export async function loadTsCompiler(scriptName, requiredApis) {
       );
     }
 
-    // Probes C+D — AST shape, one per mode. A parser could pass both
-    // diagnostic probes above (correctly detect malformed input) yet still
-    // return a structurally wrong or empty tree for VALID input, silently
-    // breaking every downstream ban-walk and binding count even while
-    // "looking" healthy. The three real callers span exactly two
-    // ScriptKinds: workflows-lint parses JS; dead-wire-internal-use and
-    // tool-surfacing-extract (both fail-closed safety hooks) parse
-    // TS/TSX exclusively. A JS-only shape probe leaves the mode those two
-    // safety hooks actually use unverified, so this axis is probed in
-    // BOTH modes — the same {malformed, valid} × {JS, TS} symmetry the
-    // diagnostic probes above already have. forEachChild is explicitly
-    // asserted present once, shared by both.
+    // Probes C+D+E — AST shape, one per ScriptKind the real callers use.
+    // A parser could pass both diagnostic probes above (correctly detect
+    // malformed input) yet still return a structurally wrong or empty tree
+    // for VALID input, silently breaking every downstream ban-walk and
+    // binding count even while "looking" healthy. The three real callers
+    // span exactly THREE ScriptKinds: workflows-lint parses JS;
+    // dead-wire-internal-use and tool-surfacing-extract (both fail-closed
+    // safety hooks) branch per file extension to either TS or TSX — a
+    // distinct enum value selecting the JSX grammar, not a variant of TS.
+    // All three modes are probed on this axis. forEachChild is explicitly
+    // asserted present once, shared by all three.
     if (ts?.forEachChild === undefined) {
       fail(
         scriptName,
@@ -203,13 +202,9 @@ export async function loadTsCompiler(scriptName, requiredApis) {
 
     // Probe D — TS shape, mirroring Probe C. A type-annotated, known-valid
     // TS source parsed under explicit ScriptKind.TS (already asserted
-    // present above, for Probe B — reused here, not re-asserted) — the
-    // mode dead-wire-internal-use and tool-surfacing-extract actually
-    // parse in. This is the natural terminus of the {malformed, valid} ×
-    // {JS, TS} matrix: the three callers span exactly these two
-    // ScriptKinds, so once both are probed on both axes there is no third
-    // mode left to add — this is complete by design, not arbitrarily
-    // stopped.
+    // present above, for Probe B — reused here, not re-asserted) — one of
+    // the two modes dead-wire-internal-use and tool-surfacing-extract
+    // actually parse in.
     const shapeSrcTs = "const y: number = 1;";
     const shapeProbeTs = ts.createSourceFile(
       "__canon_ast_shape_probe_ts__.ts",
@@ -236,6 +231,52 @@ export async function loadTsCompiler(scriptName, requiredApis) {
         scriptName,
         `'${PARSER_SPECIFIER}' returned a SourceFile whose forEachChild walk reached zero children for ` +
           `a known-valid single-statement TS source ('${shapeSrcTs}') — the tree is not walkable. ` +
+          `Refusing to run (fail-closed). See docs/adr/0056.`,
+      );
+    }
+
+    // Probe E — TSX shape, mirroring Probe D under the JSX grammar.
+    // ScriptKind.TSX (4) is a distinct createSourceFile argument from
+    // ScriptKind.TS (3) — both real TS-mode callers branch to it for
+    // ".tsx" files. Reuses the same JSX-free, type-annotated fixture as
+    // Probe D on purpose: the only variable this probe isolates is the
+    // ScriptKind argument itself, so a parser that keys correctly off
+    // source text but not off ScriptKind cannot pass by accident.
+    // ScriptKind.TSX is explicitly asserted present, same discipline as
+    // ScriptKind.TS above — not folded into the outer gate.
+    if (ts?.ScriptKind?.TSX === undefined) {
+      fail(
+        scriptName,
+        `cannot run the TSX-mode AST-shape probe: '${PARSER_SPECIFIER}' is missing ScriptKind.TSX, ` +
+          `required to construct the probe's TSX-mode call to createSourceFile. This caller declared ` +
+          `createSourceFile but the parser dependency lacks a member the probe itself needs.`,
+      );
+    }
+    const shapeProbeTsx = ts.createSourceFile(
+      "__canon_ast_shape_probe_tsx__.tsx",
+      shapeSrcTs,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    if (!Array.isArray(shapeProbeTsx.statements) || shapeProbeTsx.statements.length !== 1) {
+      fail(
+        scriptName,
+        `'${PARSER_SPECIFIER}' returned a structurally wrong AST for a known-valid TSX source ` +
+          `('${shapeSrcTs}') — expected exactly 1 top-level statement. Refusing to run (fail-closed): a ` +
+          `parser that misreports statement structure could silently misfire downstream ban-walks and ` +
+          `binding counts even while parseDiagnostics behaves correctly. See docs/adr/0056.`,
+      );
+    }
+    let shapeChildCountTsx = 0;
+    ts.forEachChild(shapeProbeTsx, () => {
+      shapeChildCountTsx++;
+    });
+    if (shapeChildCountTsx === 0) {
+      fail(
+        scriptName,
+        `'${PARSER_SPECIFIER}' returned a SourceFile whose forEachChild walk reached zero children for ` +
+          `a known-valid single-statement TSX source ('${shapeSrcTs}') — the tree is not walkable. ` +
           `Refusing to run (fail-closed). See docs/adr/0056.`,
       );
     }

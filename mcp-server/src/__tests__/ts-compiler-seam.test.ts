@@ -468,4 +468,85 @@ process.exit(0);
     expect(code).not.toBe(0);
     expect(stderr).toContain("CANON ERROR [test-driver]");
   });
+
+  // -------------------------------------------------------------------
+  // Case F (adversarial review — harden-3): the third ScriptKind gap. Both
+  // TS-mode real callers (dead-wire-internal-use.mjs, tool-surfacing-extract.mjs)
+  // branch to ScriptKind.TSX for ".tsx" files — a distinct enum value (4,
+  // vs. TS's 3) selecting the JSX grammar. Probe D only exercised
+  // ScriptKind.TS; the callers' actual TSX code path was unprobed. A stub
+  // correct on every existing fixture (A/B/C/D) — including correctly
+  // keying its valid-TS response to ScriptKind.TS specifically, not just
+  // matching source text — but returning a degenerate empty tree for the
+  // same source parsed under ScriptKind.TSX passed the seam cleanly.
+  // Closed by mirroring Probe D under explicit ScriptKind.TSX.
+  // -------------------------------------------------------------------
+  test("Case F — stub correct on A/B/C/D but degenerate under ScriptKind.TSX: non-zero exit", async () => {
+    const { dir, driver } = setupDriver("degenerate-tsx-stub");
+    const nodeModulesDir = join(dir, "node_modules", "typescript-parser");
+    mkdirSync(nodeModulesDir, { recursive: true });
+    writeFileSync(
+      join(nodeModulesDir, "package.json"),
+      JSON.stringify({
+        name: "typescript-parser",
+        version: "0.0.0-stub",
+        type: "module",
+        main: "index.js",
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(nodeModulesDir, "index.js"),
+      `export default {
+  version: "0.0.0-stub",
+  ScriptTarget: { Latest: 99 },
+  ScriptKind: { JS: 1, TS: 3, TSX: 4 },
+  // Correctly reports diagnostics for BOTH malformed fixtures and returns
+  // a correct, walkable tree for BOTH valid-JS and valid-TS (Probes A-D
+  // all pass) — keying the valid-TS branch to ScriptKind.TS specifically,
+  // not merely the source text, so a naive "same text = same handling"
+  // stub-detector would not catch it. Only a TSX-mode parse of the exact
+  // same valid-TS source gets a degenerate, empty tree.
+  createSourceFile(fileName, text, languageVersion, setParentNodes, scriptKind) {
+    const isMalformedJs = text === "const x = ;";
+    const isMalformedTs = text === "interface Foo { bar: ; }" && scriptKind === 3;
+    const isValidJs = text === "const y = 1;" && scriptKind === undefined;
+    const isValidTs = text === "const y: number = 1;" && scriptKind === 3;
+
+    if (isMalformedJs || isMalformedTs) {
+      return {
+        fileName,
+        text,
+        kind: "SourceFile",
+        statements: [{ kind: 244 }],
+        parseDiagnostics: [{ messageText: "malformed" }],
+      };
+    }
+    if (isValidJs || isValidTs) {
+      return {
+        fileName,
+        text,
+        kind: "SourceFile",
+        statements: [{ kind: 244 }],
+        parseDiagnostics: [],
+      };
+    }
+    // Everything else — including the same valid-TS source parsed under
+    // ScriptKind.TSX — gets a degenerate, empty tree.
+    return { fileName, text, kind: "SourceFile", statements: [], parseDiagnostics: [] };
+  },
+  forEachChild(node, cb) {
+    for (const s of node.statements ?? []) cb(s);
+  },
+};
+`,
+      "utf8",
+    );
+
+    const { code, stderr } = await run(driver, [
+      JSON.stringify(["createSourceFile", "ScriptTarget", "ScriptKind", "forEachChild"]),
+    ]);
+    expect(code).not.toBe(0);
+    expect(stderr).toContain("CANON ERROR [test-driver]");
+  });
 });

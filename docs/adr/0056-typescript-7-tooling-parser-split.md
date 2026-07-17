@@ -185,10 +185,24 @@ costs of its own.
   it needs a `ScriptKind`-selective 3-way divergence, outside the version-bump threat model), but
   closed anyway.
 
-  The seam now runs **four** probes for any caller that declared `createSourceFile`, each gated
+  **A third adversarial review found the resulting "complete 2×2 matrix" claim was FALSE, and
+  BLOCKED on it.** `ScriptKind.TS` and `ScriptKind.TSX` are distinct `createSourceFile` arguments
+  (enum values 3 and 4, selecting different grammars), not one mode with two names — and both
+  `dead-wire-internal-use.mjs` and `tool-surfacing-extract.mjs` branch to `ScriptKind.TSX` for
+  `.tsx` files (`filePath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS`). So the real
+  callers span **three** `ScriptKind`s, not two, and Probe D left TSX unprobed on both axes.
+  Executed: a stub correct on all four existing probe fixtures — including correctly keying its
+  valid-TS response to `ScriptKind.TS` specifically, not just matching source text — but
+  returning a degenerate tree for the identical valid-TS source parsed under `ScriptKind.TSX`,
+  passed the seam cleanly (exit 0). The exploit itself was WARNING-class (zero tracked `.tsx`
+  files today, `git ls-files "*.tsx"` = 0, so the branch is latent); what actually blocked was
+  that this ADR asserted a **factually false completeness invariant** in a fail-closed safety
+  seam's durable record — that must be corrected before ship regardless of the exploit's
+  immediate severity.
+
+  The seam now runs **five** probes for any caller that declared `createSourceFile`, each gated
   identically (never narrowed to a subset of callers) and each explicitly asserting its own
-  required member before use (never folded into the outer gate, per the correction above) —
-  forming the complete `{malformed, valid} × {JS, TS}` matrix:
+  required member before use (never folded into the outer gate, per the correction above):
   1. **Probe A** (malformed × JS) — `"const x = ;"`, `ScriptKind` inferred from the `.js` probe
      filename.
   2. **Probe B** (malformed × TS) — `"interface Foo { bar: ; }"`, explicit `ScriptKind.TS` — a
@@ -201,29 +215,41 @@ costs of its own.
      walks — proving the tree is real and walkable, not merely that some object came back.
   4. **Probe D** (valid × TS) — mirrors Probe C for a known-VALID, type-annotated TS source
      (`"const y: number = 1;"`, explicit `ScriptKind.TS`, reusing the `ScriptKind.TS` presence
-     already asserted for Probe B) — the mode `dead-wire-internal-use` and
-     `tool-surfacing-extract` actually parse in. (Aside, confirmed by invoking the real parser
-     while choosing this fixture: this TS 6.x parser is lenient about type-annotation syntax even
-     in JS mode — it emits no diagnostic either way — so no fixture is "TS-exclusive" at the
-     diagnostic level. Probe D's value is exercising the TS-mode code path with realistic
-     type-annotated input, matching the safety hooks' actual input domain — not diagnostic
-     exclusivity, which this parser version doesn't offer.)
+     already asserted for Probe B). (Aside, confirmed by invoking the real parser while choosing
+     this fixture: this TS 6.x parser is lenient about type-annotation syntax even in JS mode —
+     it emits no diagnostic either way — so no fixture is "TS-exclusive" at the diagnostic level.
+     Probe D's value is exercising the TS-mode code path with realistic type-annotated input,
+     matching the safety hooks' actual input domain — not diagnostic exclusivity, which this
+     parser version doesn't offer.)
+  5. **Probe E** (valid × TSX) — mirrors Probe D under explicit `ScriptKind.TSX`, reusing the
+     identical `"const y: number = 1;"` fixture on purpose: the only variable this probe isolates
+     is the `ScriptKind` argument itself, so a parser that keys correctly off source text but not
+     off `ScriptKind` (the exact ATTACK 4 shape) cannot pass by accident. `ScriptKind.TSX` is
+     explicitly asserted present, same discipline as `ScriptKind.TS`.
 
-  **This completes the axis by design, not by arbitrary stopping.** The three callers span exactly
-  two `ScriptKind`s (JS and TS/TSX — `tool-surfacing-extract` and `dead-wire-internal-use` both
-  branch `TSX` vs. `TS` off the file extension, but the parse-integrity question the shape probes
-  ask is the same for either); both are now probed on both the malformed and valid axis. There is
-  no third `ScriptKind` any real caller uses, so there is no further cell in this matrix to add.
+  **The accurate invariant, stated precisely:** the three real callers span exactly three
+  `ScriptKind` values — `JS` (`workflows-lint.mjs`), `TS`, and `TSX` (the latter two, branched by
+  `dead-wire-internal-use.mjs` and `tool-surfacing-extract.mjs` per file extension). All three are
+  now probed on both the malformed-diagnostic axis (Probes A/B, JS/TS — TSX's diagnostic behavior
+  is not separately probed; see Revisit-If) and the valid-AST-shape axis (Probes C/D/E, all three
+  modes). `ScriptKind` is a closed TypeScript enum whose only other members — `JSX`, `JSON`,
+  `Deferred`, `External`, `Unknown` — are used by **none** of the three callers, so this is a
+  complete cover **by enumeration over the callers' actual usage**, not an assumption that no
+  further mode exists in the abstract.
 
   See `mcp-server/src/__tests__/ts-compiler-seam.test.ts` ("Case A" / "Case B" for the gating
   correction; "Case C" / "Case D" for the first hardening round's two probes; "Case E" for ATTACK
-  4 / Probe D) for the regression tests covering all five failure shapes. **This still does not
-  make the pin self-verifying against every possible future degradation** — it closes every
-  demonstrated class to date. Any future `typescript-parser` version bump should re-run these
-  probes (they run automatically, for any caller that parses, on every invocation of the three
-  scripts — measured overhead: negligible, ~0.2s total per invocation with all four probes active)
+  4 / Probe D; "Case F" for the TSX finding / Probe E) for the regression tests covering all six
+  failure shapes. **This still does not make the pin self-verifying against every possible future
+  degradation** — it closes every demonstrated class to date, over the `ScriptKind` values the
+  callers actually invoke. Any future `typescript-parser` version bump should re-run these probes
+  (they run automatically, for any caller that parses, on every invocation of the three scripts)
   and, ideally, re-run the adversarial stub tests manually as a spot-check that the probes still
-  discriminate real from degraded.
+  discriminate real from degraded. **On overhead**: the probe computation itself is negligible —
+  measured in-process at ~1.5ms for all five probes combined once the parser module is loaded.
+  Real per-invocation wall-clock time is dominated by the fixed cost of importing the ~30MB pinned
+  `typescript-parser` package (present since this ADR's first version, not something the probes
+  add), which varies with ambient system load rather than with probe count.
 - A second, dev-only copy of TypeScript ships in `node_modules` (~30MB), used only by the three
   lint/gate scripts.
 - **The repo-root `tsconfig.json` required the same `baseUrl` removal, with one deliberate
@@ -257,6 +283,14 @@ costs of its own.
 
 ## Revisit-If
 
+- **The malformed-diagnostic axis (Probes A/B) covers `ScriptKind.JS` and `.TS` but not `.TSX`
+  separately** — only the valid-AST-shape axis (Probes C/D/E) was extended to all three modes in
+  this round, per the reviewing scope that motivated it. `.tsx` files are syntactically a superset
+  of `.ts` (JSX productions added on top), so a `.ts`-mode malformed-diagnostic fixture failing to
+  parse is expected to fail identically under `.tsx` mode for the same reason — but this has not
+  been separately probed the way the valid-shape axis now is. Revisit if a future adversarial pass
+  finds a `ScriptKind.TSX`-specific diagnostic-reporting gap, or add a Probe F (malformed × TSX)
+  proactively if the cost of doing so ever becomes cheap relative to the residual risk.
 - **TS 7's API drops the `unstable/` namespace** (i.e. the compiler API is declared stable). At
   that point, re-evaluate whether `unstable/sync`'s `Checker.getSymbolAtLocation` (reachable today
   only through the API→Project→Program→Checker IPC graph) can replace the pinned TS 6 parser for
