@@ -120,7 +120,12 @@ export function runCheckerOnDiff(
   return parseVerdict(result.stdout);
 }
 
-/** Parse the delimited verdict block; fail open on any structural mismatch. */
+/**
+ * Parse the delimited verdict block; fail open on any structural mismatch.
+ * Delimiters without a FINDINGS section are a malformed verdict → failed_open,
+ * never a clean pass (P2(c)/dc-06). A present-but-empty `FINDINGS:` list is
+ * still a clean pass — that is the rubric's documented PASS shape.
+ */
 function parseVerdict(stdout: string): CheckerResult {
   const startIdx = stdout.indexOf(VERDICT_START);
   const endIdx = stdout.indexOf(VERDICT_END);
@@ -129,6 +134,10 @@ function parseVerdict(stdout: string): CheckerResult {
   }
 
   const block = stdout.slice(startIdx + VERDICT_START.length, endIdx);
+  if (block.indexOf("FINDINGS:") === -1) {
+    return { failed_open: true, findings: [] };
+  }
+
   return { failed_open: false, findings: parseFindings(block) };
 }
 
