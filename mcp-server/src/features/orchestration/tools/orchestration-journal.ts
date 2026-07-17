@@ -46,11 +46,19 @@ import { enforceWriteReceipt } from "../services/write-receipt.ts";
 export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
 
 export type JournalOutcome = {
-  /** Post-implement/fix evaluator-gate result logged onto a step's outcome (ADR-0058). */
+  /**
+   * Post-implement/fix evaluator-gate result logged onto a step's outcome
+   * (ADR-0058). skipped/verdict are typed as string, not a literal union —
+   * the MCP-boundary schema (stepOutcomeSchema, register-journal.ts)
+   * deliberately admits any string so a future legitimate value is never
+   * silently stripped at the wire boundary; computeGateNonEvaluations
+   * (finalize-helpers.ts) narrows via plain string equality, the sole
+   * consumer of these fields.
+   */
   evaluator_gate?: {
     advisory?: number;
-    skipped?: "tool_unavailable" | "tool_error";
-    verdict?: "PASS" | "FAIL" | "PASS_parse_fallback";
+    skipped?: string;
+    verdict?: string;
   };
   fix_iterations?: number;
   review_verdict?: string;

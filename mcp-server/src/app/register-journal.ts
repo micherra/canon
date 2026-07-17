@@ -11,8 +11,31 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { gatedWrapHandler, resolveScope } from "./server-state.ts";
 
+/**
+ * Post-implement/fix evaluator-gate result (CLAUDE.md Post-Step Effects,
+ * ADR-0058). Two shapes are written by the orchestrator today:
+ *   - verdict form: { verdict, advisory? } — verdict is PASS / FAIL /
+ *     PASS_parse_fallback (and future PASS_* fallback variants)
+ *   - skip form: { skipped } — tool_unavailable / tool_error
+ * verdict/skipped are typed as z.string() rather than z.enum(...) so a
+ * future legitimate value is never silently stripped by validation — the
+ * exact class of bug this schema previously had (a future new value would
+ * fail an enum and vanish at this boundary the same way the whole key did).
+ * Plain z.object (no .strict()/.passthrough()) quietly drops unrecognized
+ * nested keys instead of hard-failing or admitting arbitrary passthrough.
+ */
+const evaluatorGateOutcomeSchema = z
+  .object({
+    advisory: z.number().optional(),
+    skipped: z.string().optional(),
+    verdict: z.string().optional(),
+  })
+  .optional()
+  .describe("Evaluator-gate verdict or skip reason (ADR-0058)");
+
 const stepOutcomeSchema = z
   .object({
+    evaluator_gate: evaluatorGateOutcomeSchema,
     fix_iterations: z.number().optional(),
     review_verdict: z.string().optional(),
     test_pass_rate: z.number().optional(),
@@ -24,7 +47,16 @@ const stepStatusSchema = z
   .enum(["planned", "started", "completed", "skipped"])
   .describe("Step execution status");
 
-const stepEntrySchema = z
+/**
+ * Exported for boundary testing — validates the registered input schema
+ * directly, the same way the MCP SDK parses a real log_step/batch_log_steps
+ * call. Tests that use this schema exercise the actual rejection/stripping
+ * point, not just the impl (same convention as reconcileWorkspaceInputSchema
+ * above). Shared by both log_step's inputSchema (outcome: stepOutcomeSchema)
+ * and batch_log_steps's inputSchema (steps: z.array(stepEntrySchema)) — one
+ * schema change here covers both tools.
+ */
+export const stepEntrySchema = z
   .object({
     agent_id: z
       .string()
