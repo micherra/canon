@@ -24,6 +24,8 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
   }),
 }));
 
+import { assertOk } from "@shared/lib/tool-result.ts";
+import { initGitFixtureRepo } from "../../../tests/git-fixture.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
 // Scope: Tests runbook_content and brief_content params — both files persisted to plans/${slug}/ at init time, backward compat when omitted.
@@ -54,13 +56,15 @@ const baseInput = {
 describe("init_workspace — runbook and brief persistence (NF-7)", () => {
   it("persists runbook_content to plans/${slug}/runbook.md when provided", async () => {
     const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
     const runbookContent = "# Runbook\n\nStep 1: do the thing\n";
 
     const result = await initWorkspaceFlow(
-      { ...baseInput, runbook_content: runbookContent },
+      { ...baseInput, base_commit: baseCommit, runbook_content: runbookContent },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.created).toBe(true);
     const runbookPath = join(result.workspace, "plans", result.slug, "runbook.md");
@@ -70,13 +74,15 @@ describe("init_workspace — runbook and brief persistence (NF-7)", () => {
 
   it("persists brief_content to plans/${slug}/planning-brief.md when provided", async () => {
     const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
     const briefContent = "# Planning Brief\n\nContext: fix all the things\n";
 
     const result = await initWorkspaceFlow(
-      { ...baseInput, brief_content: briefContent },
+      { ...baseInput, base_commit: baseCommit, brief_content: briefContent },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.created).toBe(true);
     const briefPath = join(result.workspace, "plans", result.slug, "planning-brief.md");
@@ -86,14 +92,21 @@ describe("init_workspace — runbook and brief persistence (NF-7)", () => {
 
   it("persists both runbook and brief when both params are provided", async () => {
     const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
     const runbookContent = "# Runbook\n\nstep: implement\n";
     const briefContent = "# Brief\n\ngoal: ship it\n";
 
     const result = await initWorkspaceFlow(
-      { ...baseInput, brief_content: briefContent, runbook_content: runbookContent },
+      {
+        ...baseInput,
+        base_commit: baseCommit,
+        brief_content: briefContent,
+        runbook_content: runbookContent,
+      },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.created).toBe(true);
     const plansDir = join(result.workspace, "plans", result.slug);
@@ -103,8 +116,14 @@ describe("init_workspace — runbook and brief persistence (NF-7)", () => {
 
   it("does not create runbook.md or planning-brief.md when neither param is provided (backward compat)", async () => {
     const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
 
-    const result = await initWorkspaceFlow({ ...baseInput }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
+    assertOk(result);
 
     expect(result.created).toBe(true);
     const plansDir = join(result.workspace, "plans", result.slug);
