@@ -14,6 +14,7 @@ import { join } from "node:path";
  * Initialize a real git repo with one commit in `dir`. Returns the HEAD sha,
  * suitable for use as `base_commit` in `initWorkspaceFlow` calls.
  */
+// canon:allow-unwired: test-only fixture, referenced exclusively from *.test.ts files (56 call sites across 11 test files); dead-wire-gate.sh deliberately excludes *.test.ts from reference counting
 export function initGitFixtureRepo(dir: string): string {
   spawnSync("git", ["init"], { cwd: dir });
   spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: dir });
