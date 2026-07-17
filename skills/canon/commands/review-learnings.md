@@ -170,7 +170,7 @@ For each accepted proposal:
    `{"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"..."}`.
    This is the only sanctioned append path for `.canon/learning.jsonl` — do not write the entry
    via shell redirection (`>>`, `echo`, `printf`, `tee`) or the `Write` tool: a record left
-   without a trailing newline silently merges with the next append (ADR-0056).
+   without a trailing newline silently merges with the next append (ADR-0058).
 
 **Arm R — retire (Gap 3 L3, `proposal_kind: "retire"`, invalidate-don't-delete):**
 
@@ -211,7 +211,7 @@ this arm NEVER deletes.
 4. After the writer completes, move the proposal file to
    `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl`
    via the `append_learning_record` MCP tool (never shell redirection like `>>`/`echo`/
-   `printf`/`tee`, and never the `Write` tool — ADR-0056) with `proposal_kind: "retire"`
+   `printf`/`tee`, and never the `Write` tool — ADR-0058) with `proposal_kind: "retire"`
    and `apply_channel: "writer"` included.
 
 **Arm N — reinforce (Gap 3 L3, `proposal_kind: "reinforce"`, informational, no deletion):**
@@ -244,7 +244,7 @@ passed an automated quality bar.
 3. After the writer completes (or no-ops), move the proposal file to
    `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl`
    via the `append_learning_record` MCP tool (never shell redirection like `>>`/`echo`/
-   `printf`/`tee`, and never the `Write` tool — ADR-0056) with `proposal_kind: "reinforce"`
+   `printf`/`tee`, and never the `Write` tool — ADR-0058) with `proposal_kind: "reinforce"`
    and `apply_channel: "writer"` included.
 
 **Arm M — primer / agent / template direct-write:**
@@ -276,11 +276,11 @@ passed an automated quality bar.
          Canon-Evolution: {proposal_id}
          ```
          This lands on the current branch (local only — push/PR stays a manual, unchanged step). The full Canon trailer block keeps `post-commit-trailers.sh` quiet.
-     - Then move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl` via the `append_learning_record` MCP tool (never shell redirection like `>>`/`echo`/`printf`/`tee`, and never the `Write` tool — ADR-0056) with `artifact_class` and `apply_channel` included, a `record` shaped:
+     - Then move the proposal file to `.canon/proposed-learnings/{timestamp}/applied/` and append to `.canon/learning.jsonl` via the `append_learning_record` MCP tool (never shell redirection like `>>`/`echo`/`printf`/`tee`, and never the `Write` tool — ADR-0058) with `artifact_class` and `apply_channel` included, a `record` shaped:
      ```json
      {"timestamp":"...","proposal_id":"...","action":"accepted","type":"...","target":"...","artifact_class":"...","apply_channel":"engineer-build-flow"}
      ```
-   - **Reject**: Ask for a reason. Move to `.canon/proposed-learnings/{timestamp}/rejected/`. Append via the `append_learning_record` MCP tool (never shell redirection or the `Write` tool — ADR-0056), a `record` shaped `{"timestamp":"...","proposal_id":"...","action":"rejected","reason":"...","artifact_class":"...","apply_channel":"engineer-build-flow"}`
+   - **Reject**: Ask for a reason. Move to `.canon/proposed-learnings/{timestamp}/rejected/`. Append via the `append_learning_record` MCP tool (never shell redirection or the `Write` tool — ADR-0058), a `record` shaped `{"timestamp":"...","proposal_id":"...","action":"rejected","reason":"...","artifact_class":"...","apply_channel":"engineer-build-flow"}`
    - **Skip**: Leave the proposal file in place; do not append to `learning.jsonl`.
 
 **Arm T — tool-description surface-only (never auto-write):**

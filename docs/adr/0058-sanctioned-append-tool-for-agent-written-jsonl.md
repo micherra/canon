@@ -1,12 +1,12 @@
 ---
-adr: "0056"
+adr: "0058"
 title: "Sanctioned append tool for agent-written JSONL"
 status: accepted
 date: "2026-07-15"
 build: "fix-the-learningjsonl-non-atomic-append-bug-that-concatenated-two"
 ---
 
-# ADR-0056: Sanctioned append tool for agent-written JSONL
+# ADR-0058: Sanctioned append tool for agent-written JSONL
 
 ## Context
 

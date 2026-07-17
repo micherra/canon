@@ -32,7 +32,7 @@
  * caller (the command treats a non-ok result as "reconcile unavailable,
  * proceed with the un-reconciled surface").
  *
- * Containment scope, stated precisely (ADR-0056 amendment round 4, accepted
+ * Containment scope, stated precisely (ADR-0058 amendment round 4, accepted
  * residual): `project_dir` is re-contained via `isPathContainedViaResolver`,
  * and the `project_dir/.canon` ancestor is separately re-contained via
  * `isPathContainedResolvingAncestor` — both symlink-safe. Neither check
@@ -43,7 +43,7 @@
  * below `.canon/proposed-learnings` is not caught by any check in this
  * module. This is a documented, ratified residual — not a closed gap. It
  * grants no capability beyond the `Bash` grant this tool's callers already
- * hold. See ADR-0056 "Amendment: fix-review round 4" for the full writeup
+ * hold. See ADR-0058 "Amendment: fix-review round 4" for the full writeup
  * and the deferred root-cause follow-up.
  */
 
@@ -565,7 +565,7 @@ const DEFAULT_SEAMS = { fs: defaultFsSeam, git: defaultGitSeam };
  * zero-false-reject semantics. Fail-closed `INVALID_INPUT`/zero mutations on
  * either escape (mirrors `sync_indexes`). Errors are caught and returned typed.
  *
- * NOT re-contained (documented, accepted residual — ADR-0056 Amendment round
+ * NOT re-contained (documented, accepted residual — ADR-0058 Amendment round
  * 4): the `.canon` check above stops at the `.canon` ancestor. The deeper
  * paths this function actually reads and renames files under —
  * `.canon/proposed-learnings/{ts}/...` and its `applied/`/`stale/` rename

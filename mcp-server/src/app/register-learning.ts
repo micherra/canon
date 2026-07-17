@@ -36,7 +36,7 @@ export function registerLearningTools(server: McpServer): void {
     "append_learning_record",
     {
       description:
-        "The sanctioned append seam for .canon/learning.jsonl (ADR-0056). The tool serializes and newline-terminates the record — the agent never touches bytes, so a malformed or merged JSONL line is not something it can express. Writes to a fixed path under project_dir; there is no target-path parameter (a deliberate security decision, not an oversight — see ADR-0056). Heals a newline-less predecessor left by a prior writer instead of merging onto it (healed: true in the result means this call detected and repaired that condition).",
+        "The sanctioned append seam for .canon/learning.jsonl (ADR-0058). The tool serializes and newline-terminates the record — the agent never touches bytes, so a malformed or merged JSONL line is not something it can express. Writes to a fixed path under project_dir; there is no target-path parameter (a deliberate security decision, not an oversight — see ADR-0058). Heals a newline-less predecessor left by a prior writer instead of merging onto it (healed: true in the result means this call detected and repaired that condition).",
       inputSchema: {
         project_dir: z.string().describe("Project root directory path"),
         record: z

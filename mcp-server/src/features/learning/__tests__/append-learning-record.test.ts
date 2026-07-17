@@ -1,6 +1,6 @@
 /**
  * `appendLearningRecord` — the sanctioned agent-facing append seam for
- * `.canon/learning.jsonl` (ADR-0056). Barrier-validated, no target-path
+ * `.canon/learning.jsonl` (ADR-0058). Barrier-validated, no target-path
  * parameter (see append-learning-record.ts doc comment for why), routes
  * through `appendJsonlLine` for the newline-safe write.
  *

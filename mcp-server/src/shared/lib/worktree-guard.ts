@@ -112,7 +112,7 @@ export const isPathContainedViaResolver = async (
  * symlink escape — replaces two independently-drifted call-site idioms that
  * caused a real defect (a `project_dir`-level containment fix left the
  * `project_dir/.canon` subpath unchecked one level down, round-2 adversarial
- * review on ADR-0056).
+ * review on ADR-0058).
  *
  * Distinct from both siblings above by design, not oversight:
  * - `isPathInWorktree` / `isPathContainedViaResolver` both fail CLOSED the

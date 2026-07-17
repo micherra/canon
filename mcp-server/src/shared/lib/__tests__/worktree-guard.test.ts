@@ -243,7 +243,7 @@ describe("isPathContainedViaResolver", () => {
 // that may not yet exist (the caller is about to CREATE it), e.g.
 // `project_dir/.canon` on a project's first `append_learning_record` call.
 // Shared by `appendLearningRecord` and `reconcileLearnings` for their
-// `.canon`-subpath check (round-2 adversarial finding on ADR-0056).
+// `.canon`-subpath check (round-2 adversarial finding on ADR-0058).
 
 describe("isPathContainedResolvingAncestor", () => {
   let tmpDir: string;

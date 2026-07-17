@@ -107,7 +107,7 @@ a `record` object built to the schema in
 `${CLAUDE_PLUGIN_ROOT}/references/learner-dimensions.md`. This is the only sanctioned append
 path for `.canon/learning.jsonl` — do not append via shell redirection (`>>`, `echo`, `printf`,
 `tee`) or the `Write` tool: a record left without a trailing newline silently merges with the
-next append, which is exactly the defect the tool exists to make impossible (ADR-0056).
+next append, which is exactly the defect the tool exists to make impossible (ADR-0058).
 
 ### Step 5: Write structured proposals (auto-trigger mode only)
 

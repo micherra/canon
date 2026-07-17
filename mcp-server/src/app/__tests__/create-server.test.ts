@@ -65,7 +65,7 @@ function getToolNames(server: McpServer): Set<string> {
 //   +1 compile_waves               (this build, registerOrchestrationTools — canon-waves compiler, Inc-5 Increment 1)
 //   +1 attribute_outcomes         (this build, registerEvolutionTools — Gap 3 Layer 2 trust-weighted scoring)
 //   +1 append_learning_record (this build, registerLearningTools — sanctioned agent append
-//      seam, ADR-0056)
+//      seam, ADR-0058)
 //   New total: 71 tools (computed from a live run, not hand-counted)
 //
 // To recount: run this test — the received value in the failure message is authoritative.

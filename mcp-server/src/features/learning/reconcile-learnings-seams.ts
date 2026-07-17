@@ -126,7 +126,7 @@ export const defaultFsSeam: ReconcileFsSeam = {
   appendFile: async (path, data) => {
     const { healed } = await appendRawLineHealing(path, data);
     if (healed)
-      console.warn(`[reconcile-learnings] healed a bypassed append at ${path} (ADR-0056)`);
+      console.warn(`[reconcile-learnings] healed a bypassed append at ${path} (ADR-0058)`);
   },
   fileExists: fileExistsDefault,
   mkdir: (path) => fs.mkdir(path, { recursive: true }).then(() => undefined),

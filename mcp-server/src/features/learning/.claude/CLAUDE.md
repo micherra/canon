@@ -9,7 +9,7 @@ learning ships out-of-band (batch-promotion PRs, direct writer
 subdir, so already-shipped learnings masqueraded as a live backlog
 indefinitely.
 
-Also owns `append_learning_record` (ADR-0056), the sanctioned agent-facing
+Also owns `append_learning_record` (ADR-0058), the sanctioned agent-facing
 seam for appending to `.canon/learning.jsonl` — closes a separate corruption
 mode where agents executing freeform Bash against prose instructions
 improvised shell append idioms with no newline-termination guarantee, merging
@@ -22,7 +22,7 @@ two records onto one unparseable line.
 | `actionability.ts` | Shared classifier: `classifyProposal({ filename, frontmatter })` -> `{ actionability, reason }`. Pure, no I/O. Single source of truth for `ACTIONABLE_TYPES`/`INFORMATIONAL_TYPES` — consumed by both this tool and the `/canon:review-learnings` command. |
 | `reconcile-learnings.ts` | `reconcile_learnings` MCP tool handler + service. Scans the TIMESTAMPED-DIR surface only (never the loose top-level `.md` files, PROBE-FINDINGS P4). |
 | `reconcile-learnings-seams.ts` | `ReconcileFsSeam`/`ReconcileGitSeam` types, `DirEntry`/`CommitEvidence` types, `defaultFsSeam`/`defaultGitSeam` implementations — extracted out of `reconcile-learnings.ts` (which sits at the `noExcessiveLinesPerFile` budget) and re-exported unchanged from there. `ReconcileFsSeam` carries a `realpath` member so production wiring is symlink-safe while in-memory test fakes supply an identity resolver. |
-| `append-learning-record.ts` | `append_learning_record` MCP tool handler + service (ADR-0056). Serializes and newline-terminates a caller-supplied `record` object via `appendJsonlLine` (`@shared/lib/jsonl-append.ts`) — no target-path parameter, no byte-level control left in the caller's hands. |
+| `append-learning-record.ts` | `append_learning_record` MCP tool handler + service (ADR-0058). Serializes and newline-terminates a caller-supplied `record` object via `appendJsonlLine` (`@shared/lib/jsonl-append.ts`) — no target-path parameter, no byte-level control left in the caller's hands. |
 | `index.ts` | Barrel export — the one import path for `app/register-learning.ts` and future consumers. |
 
 ## Contracts
@@ -97,7 +97,7 @@ tests supply fakes directly rather than mocking modules.
   residual one-proposal window (a crash between that proposal's own rename
   and its append) is inherent to non-atomic filesystem operations and is not
   eliminated (`explicit-transaction-boundaries`). `ReconcileFsSeam.appendFile`
-  (the real, non-test implementation) is newline-safe (ADR-0056): it routes
+  (the real, non-test implementation) is newline-safe (ADR-0058): it routes
   through `appendRawLineHealing` (`@shared/lib/jsonl-append.ts`), the same
   healing engine `appendJsonlLine` uses, so a predecessor writer that left the
   file's last line open (missing `\n`) is healed before this append lands
@@ -108,7 +108,7 @@ tests supply fakes directly rather than mocking modules.
   special-casing needed.
 - **`dry_run: true`**: returns the computed plan with zero filesystem
   mutations (used by tests and by the command to preview).
-- **`validate-at-trust-boundaries`** (ADR-0056 amendments): three checks, in
+- **`validate-at-trust-boundaries`** (ADR-0058 amendments): three checks, in
   order, before any filesystem walk. (1) `project_dir` validated via
   `isSafeProjectDirInput` (rejects path-escape/non-absolute input — an
   allow-list barrier, not containment on its own). (2) `project_dir` is
@@ -121,7 +121,7 @@ tests supply fakes directly rather than mocking modules.
   re-contained via `isPathContainedResolvingAncestor` — closes a round-3
   finding where a genuine, in-scope `project_dir` whose own `.canon` was a
   symlink escaped one level down. `freshness_days` validated as a positive
-  finite number. **Documented, accepted residual (ADR-0056 "Amendment:
+  finite number. **Documented, accepted residual (ADR-0058 "Amendment:
   fix-review round 4")**: this handler's true write/rename targets —
   `.canon/proposed-learnings/{ts}/...` and the `applied/`/`stale/` rename
   destinations beneath it — are NOT re-contained past the `.canon` ancestor
@@ -130,7 +130,7 @@ tests supply fakes directly rather than mocking modules.
   the residual grants no capability beyond an existing grant.
 
 **`appendLearningRecord(input, defaultProjectDir)`** (`append-learning-record.ts`,
-ADR-0056) — `{ project_dir, record: Record<string, unknown> }` ->
+ADR-0058) — `{ project_dir, record: Record<string, unknown> }` ->
 `ToolResult<{ appended: true, path, healed: boolean }>`. The sanctioned
 agent-facing append seam for `.canon/learning.jsonl` — the tool serializes and
 newline-terminates `record` via `appendJsonlLine` (`@shared/lib/jsonl-append.ts`);
@@ -153,13 +153,13 @@ parameter by design (`agent-never-trust-overlay-tier`) — writes to a fixed
 - **`healed: true`** in the result means this call detected a newline-less
   predecessor and repaired it before appending — an observability signal that
   something bypassed the tool (or an earlier corruption is being healed).
-- **Documented, accepted residual (ADR-0056 "Amendment: fix-review round
+- **Documented, accepted residual (ADR-0058 "Amendment: fix-review round
   4")**: a *dangling* symlink at `.canon/learning.jsonl` (the symlink object
   exists; its target does not exist yet) bypasses the ancestor-walk check —
   `isPathContainedResolvingAncestor` cannot distinguish "nothing here" (the
   legitimate first-run case) from "a symlink exists here but its target
   hasn't been created yet." Accepted for the same Bash-parity reason as
-  `reconcileLearnings`'s residual above; see `docs/adr/0056-*.md` Follow-up
+  `reconcileLearnings`'s residual above; see `docs/adr/0058-*.md` Follow-up
   for the deferred root-cause fix (an `lstat` on the leaf before the
   ancestor-walk fallback).
 - **I/O failures are `UNEXPECTED`/`recoverable: true`**, not `INVALID_INPUT`:
@@ -180,4 +180,4 @@ parameter by design (`agent-never-trust-overlay-tier`) — writes to a fixed
 - Any code that writes `.canon/learning.jsonl` must go through
   `appendJsonlLine`/`appendRawLineHealing` (`@shared/lib/jsonl-append.ts`) —
   never a raw `fs.appendFile`/shell `>>` — and agent-facing instructions must
-  name `append_learning_record` as the only sanctioned append path (ADR-0056).
+  name `append_learning_record` as the only sanctioned append path (ADR-0058).

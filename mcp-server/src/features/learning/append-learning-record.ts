@@ -1,6 +1,6 @@
 /**
  * `append_learning_record` MCP tool — the sanctioned agent-facing seam for
- * appending to `.canon/learning.jsonl` (ADR-0056).
+ * appending to `.canon/learning.jsonl` (ADR-0058).
  *
  * Why a whole tool for one line to one file: the writer of learning.jsonl
  * is an AGENT executing freeform Bash against prose instructions, not code
@@ -25,12 +25,12 @@
  * primitive callable by any agent granted this tool — a far larger surface
  * than the bug being fixed, and one reachable by overlay-influenced content
  * (`agent-never-trust-overlay-tier`). Do not add a path parameter for
- * flexibility, and do not drop the scope-containment check (see ADR-0056).
+ * flexibility, and do not drop the scope-containment check (see ADR-0058).
  *
  * `project_dir` containment alone is NOT sufficient: a genuine, in-scope
  * `project_dir` can still have a `project_dir/.canon` that is itself a
  * symlink resolving out of scope — the exact write target this tool joins
- * onto (round-3 adversarial finding, ADR-0056 amendment). The write target
+ * onto (round-3 adversarial finding, ADR-0058 amendment). The write target
  * (`.canon/learning.jsonl`) is re-contained via
  * `isPathContainedResolvingAncestor` — the SAME primitive `reconcileLearnings`
  * uses for its own `.canon`-subpath check — which tolerates a not-yet-created
@@ -43,7 +43,7 @@
  * IS correctly rejected (`realpath` follows it to the real target, which
  * fails containment).
  *
- * NOT re-contained (documented, accepted residual — ADR-0056 "Amendment:
+ * NOT re-contained (documented, accepted residual — ADR-0058 "Amendment:
  * fix-review round 4"): a *dangling* symlink at `.canon/learning.jsonl` —
  * the symlink object exists, but its target path does not exist yet —
  * bypasses this check. `isPathContainedResolvingAncestor`'s ancestor-walk
@@ -55,7 +55,7 @@
  * symlink and CREATES the attacker-chosen file at the dangling target with
  * the caller's record — confirmed live against a control fixture. This
  * grants no capability beyond the `Bash` grant this tool's callers already
- * hold. See ADR-0056 "Amendment: fix-review round 4" for the full writeup
+ * hold. See ADR-0058 "Amendment: fix-review round 4" for the full writeup
  * and the deferred root-cause follow-up (a leaf `lstat` in the shared
  * primitive to detect a symlink object before falling through to the
  * ancestor-walk fallback).
@@ -98,7 +98,7 @@ export type AppendLearningRecordOutput = {
  * rejecting a `.canon` that resolves out of scope via a symlink, or a
  * pre-existing `learning.jsonl` symlink resolving to an already-existing
  * out-of-scope file. It does NOT reject a *dangling* `learning.jsonl`
- * symlink (target not yet existing) — see module docblock and ADR-0056
+ * symlink (target not yet existing) — see module docblock and ADR-0058
  * "Amendment: fix-review round 4" for the confirmed, accepted residual.
  *
  * The newline check (a record that serializes but cannot form a single

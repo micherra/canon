@@ -795,14 +795,14 @@ If a dimension was not requested (flags), omit its section entirely.
 ## Learning Log Schema
 
 After writing the report, call the `append_learning_record` MCP tool — the sanctioned append
-path for `.canon/learning.jsonl` (ADR-0056). Pass `project_dir` and a `record` argument built
+path for `.canon/learning.jsonl` (ADR-0058). Pass `project_dir` and a `record` argument built
 to the field shape below; the tool serializes and newline-terminates it, so you hand over a
 structured object and never touch bytes:
 
 **Do not append by hand.** Shell redirection (`>>`, `echo`, `printf`, `tee`) or the `Write`
 tool against `.canon/learning.jsonl` is not permitted: a record written without a trailing
 newline silently merges with the next append — the tool exists precisely to make that
-impossible. See ADR-0056.
+impossible. See ADR-0058.
 
 The `record` object's fields (not bytes to write — the tool formats them):
 

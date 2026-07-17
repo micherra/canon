@@ -108,7 +108,7 @@ When the writer is spawned in `apply-proposal` mode — for **any** type (new-pr
    — same shape `/canon:review-learnings` Step 3 already writes. This is the only sanctioned
    append path — do not write the entry via shell redirection (`>>`, `echo`, `printf`, `tee`)
    or the `Write` tool: a record left without a trailing newline silently merges with the next
-   append (ADR-0056).
+   append (ADR-0058).
 
 **Why this is safe under both orderings**: `/canon:review-learnings` Step 3 (items 5–6) performs the identical move + append **after** the writer returns. Both sides are check-then-move — Wave 2 already made the command's move tolerant of an already-moved source (see `review-learnings.md` Step 3) — so whichever side runs first performs the real move + append, and the second side's check finds the proposal already resolved and no-ops. Exactly one move, exactly one `learning.jsonl` line, regardless of order.
 
