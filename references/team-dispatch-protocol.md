@@ -53,7 +53,7 @@ Spawn N reviewers in parallel via `Agent()`, each with:
 - `WORKSPACE={workspace_path}` (workspace root, not worktree)
 - An explicit diff base: "Diff against commit {base_commit}: use `git diff {base_commit}..HEAD` instead of `git diff main..HEAD`"
 - Their assigned file list
-- Their reviewer number: "You are reviewer {N} of {total}. Write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md`."
+- Their reviewer number: "You are reviewer {N} of {total}. Call `write_review` with `step_id: "r{N}"` (writes `${WORKSPACE}/reviews/REVIEW-r{N}.md`)."
 - No `isolation` parameter (reviewers run in the shared workspace, not a worktree)
 
 #### Phase 3 — Consolidate
@@ -72,7 +72,7 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and consolidate int
 4. **Union**: Merge honored lists from all reviewers.
 5. **Score**: Sum scores across reviewers, adjusting for deduplicated violations.
 6. **Verdict**: Take worst-case verdict across all reviewers (BLOCKING > WARNING > CLEAN). Minority-verified findings count toward the verdict.
-7. Write using the `write_review` MCP tool.
+7. Write using the `write_review` MCP tool **without `step_id`** — the no-`step_id` call is the only writer of the canonical `REVIEW.md` pair (ADR-0063); pass the consolidated six-stage prose (incl. Stage 5 AC Verification) as `body`.
 
 ## Vertical Diverse-Lens Jury
 
@@ -96,7 +96,7 @@ Spawn N `canon:reviewer` (one per lens — currently N=3), each with:
 - `WORKSPACE={workspace_path}` (workspace root, not worktree)
 - An explicit diff base, as in Phase 2
 - The FULL changed-file set (not a partition)
-- A **lens-primacy directive**: "You are the {lens} juror. Run all six review stages, but weight {lens} as PRIMARY for prioritization, depth, and ordering. Write your review to `${WORKSPACE}/reviews/REVIEW-{lens}.md`."
+- A **lens-primacy directive**: "You are the {lens} juror. Run all six review stages, but weight {lens} as PRIMARY for prioritization, depth, and ordering. Write your review via `write_review` with `step_id: "{lens}"` (writes `${WORKSPACE}/reviews/REVIEW-{lens}.md`, exclusively — never the canonical `REVIEW.md`, ADR-0063)."
 - No stage-scoping — every juror runs the full six-stage `canon:reviewer` (Stages 1–6), keeping the free correctness scan and cross-requirement coverage; only which stages are weighted primary differs by lens.
 
 Use the reviewer's `M0…MV` module contract table (`agents/reviewer.md:842–891`) as the lens→stage map that the directive names:
@@ -116,4 +116,4 @@ Reuse the Phase 3 dedupe MECHANISM — group findings by `(file_path, principle_
 1. **Single-lens findings are promoted FIRST-CLASS.** A finding surfaced by only one lens is NOT routed to the horizontal minority-verification probe (Phase 3, step 2–3) — on the vertical axis a lone finding is the expected case (each lens is authoritative in its own domain), not a suspect minority.
 2. **Overlap = N-of-M agreement/confidence signal.** When ≥2 jurors flag the same `(file_path, principle_id, line_number)`, annotate the finding with the agreement count as a confidence boost — it is a signal, not a dedup-and-forget.
 3. **Verdict = any-juror-blocks.** Any rule-severity finding from ANY lens → BLOCKING, regardless of whether other lenses also caught it. Agreement across lenses RAISES confidence; disagreement or lack of overlap NEVER downgrades a rule-severity finding below BLOCKING. This strengthens, and never weakens, the existing worst-case-verdict rule (Phase 3, step 6).
-4. Union honored lists, sum scores, and write using the `write_review` MCP tool — same mechanics as Phase 3, steps 4–5 and 7.
+4. Union honored lists, sum scores, and write using the `write_review` MCP tool **without `step_id`** — same mechanics as Phase 3, steps 4–5 and 7: the consolidation call is the sole writer of the canonical `REVIEW.md` pair, carrying the consolidated six-stage prose (incl. Stage 5 AC Verification) as `body`.
