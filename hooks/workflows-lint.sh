@@ -21,7 +21,7 @@ LINT_HELPER="$REPO_ROOT/mcp-server/scripts/workflows-lint.mjs"
 WORKFLOWS_DIR="$REPO_ROOT/workflows"
 # The linter obtains its TypeScript compiler API via scripts/lib/ts-compiler.mjs,
 # which resolves the "typescript-parser" alias (pinned typescript@6.0.3) — not
-# the "typescript" package directly. See docs/adr/0056-typescript-7-tooling-parser-split.md.
+# the "typescript" package directly. See docs/adr/0061-typescript-7-tooling-parser-split.md.
 TS_DEP="$REPO_ROOT/mcp-server/node_modules/typescript-parser"
 
 # ── Fail-closed dependency checks (hooks-fail-closed) ───────────────────────

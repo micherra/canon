@@ -12,7 +12,7 @@
  * only { version, versionMajorMinor } — the entire JS compiler API is gone
  * from the main entry. The parser API lives on in typescript@6 via the
  * `typescript-parser` alias declared in mcp-server/package.json. See
- * docs/adr/0056-typescript-7-tooling-parser-split.md.
+ * docs/adr/0061-typescript-7-tooling-parser-split.md.
  *
  * MODULE RESOLUTION
  *   The bare specifier below is resolved by Node relative to THIS file's
@@ -58,7 +58,7 @@ export async function loadTsCompiler(scriptName, requiredApis) {
       scriptName,
       `'${PARSER_SPECIFIER}' API surface incomplete — missing: ${missing.join(", ")}. ` +
         `The parser dependency is wrong or degraded; refusing to parse. ` +
-        `(TypeScript 7 removed the JS compiler API from the 'typescript' main entry — see docs/adr/0056.)`,
+        `(TypeScript 7 removed the JS compiler API from the 'typescript' main entry — see docs/adr/0061.)`,
     );
   }
 
@@ -128,7 +128,7 @@ export async function loadTsCompiler(scriptName, requiredApis) {
         scriptName,
         `'${PARSER_SPECIFIER}' createSourceFile does not report parseDiagnostics for known-malformed ` +
           `JS input — refusing to run (fail-closed). parseDiagnostics is an internal API absent from the ` +
-          `public .d.ts; re-verify this probe after any typescript-parser version bump — see docs/adr/0056.`,
+          `public .d.ts; re-verify this probe after any typescript-parser version bump — see docs/adr/0061.`,
       );
     }
 
@@ -158,7 +158,7 @@ export async function loadTsCompiler(scriptName, requiredApis) {
       fail(
         scriptName,
         `'${PARSER_SPECIFIER}' createSourceFile does not report parseDiagnostics for known-malformed ` +
-          `TS input — refusing to run (fail-closed). See docs/adr/0056.`,
+          `TS input — refusing to run (fail-closed). See docs/adr/0061.`,
       );
     }
 
@@ -216,7 +216,7 @@ export async function loadTsCompiler(scriptName, requiredApis) {
         `'${PARSER_SPECIFIER}' returned a structurally wrong AST for a known-valid JS source ` +
           `('${shapeSrcJs}') — expected exactly 1 top-level statement. Refusing to run (fail-closed): a ` +
           `parser that misreports statement structure could silently misfire downstream ban-walks and ` +
-          `binding counts even while parseDiagnostics behaves correctly. See docs/adr/0056.`,
+          `binding counts even while parseDiagnostics behaves correctly. See docs/adr/0061.`,
       );
     }
     let shapeChildCountJs = 0;
@@ -228,7 +228,7 @@ export async function loadTsCompiler(scriptName, requiredApis) {
         scriptName,
         `'${PARSER_SPECIFIER}' returned a SourceFile whose forEachChild walk reached zero children for ` +
           `a known-valid single-statement JS source ('${shapeSrcJs}') — the tree is not walkable. ` +
-          `Refusing to run (fail-closed). See docs/adr/0056.`,
+          `Refusing to run (fail-closed). See docs/adr/0061.`,
       );
     }
 
@@ -251,7 +251,7 @@ export async function loadTsCompiler(scriptName, requiredApis) {
         `'${PARSER_SPECIFIER}' returned a structurally wrong AST for a known-valid TS source ` +
           `('${shapeSrcTs}') — expected exactly 1 top-level statement. Refusing to run (fail-closed): a ` +
           `parser that misreports statement structure could silently misfire downstream ban-walks and ` +
-          `binding counts even while parseDiagnostics behaves correctly. See docs/adr/0056.`,
+          `binding counts even while parseDiagnostics behaves correctly. See docs/adr/0061.`,
       );
     }
     let shapeChildCountTs = 0;
@@ -263,7 +263,7 @@ export async function loadTsCompiler(scriptName, requiredApis) {
         scriptName,
         `'${PARSER_SPECIFIER}' returned a SourceFile whose forEachChild walk reached zero children for ` +
           `a known-valid single-statement TS source ('${shapeSrcTs}') — the tree is not walkable. ` +
-          `Refusing to run (fail-closed). See docs/adr/0056.`,
+          `Refusing to run (fail-closed). See docs/adr/0061.`,
       );
     }
 
@@ -297,7 +297,7 @@ export async function loadTsCompiler(scriptName, requiredApis) {
         `'${PARSER_SPECIFIER}' returned a structurally wrong AST for a known-valid TSX source ` +
           `('${shapeSrcTs}') — expected exactly 1 top-level statement. Refusing to run (fail-closed): a ` +
           `parser that misreports statement structure could silently misfire downstream ban-walks and ` +
-          `binding counts even while parseDiagnostics behaves correctly. See docs/adr/0056.`,
+          `binding counts even while parseDiagnostics behaves correctly. See docs/adr/0061.`,
       );
     }
     let shapeChildCountTsx = 0;
@@ -309,7 +309,7 @@ export async function loadTsCompiler(scriptName, requiredApis) {
         scriptName,
         `'${PARSER_SPECIFIER}' returned a SourceFile whose forEachChild walk reached zero children for ` +
           `a known-valid single-statement TSX source ('${shapeSrcTs}') — the tree is not walkable. ` +
-          `Refusing to run (fail-closed). See docs/adr/0056.`,
+          `Refusing to run (fail-closed). See docs/adr/0061.`,
       );
     }
   }

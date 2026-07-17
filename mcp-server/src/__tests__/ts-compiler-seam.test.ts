@@ -1,6 +1,6 @@
 /**
  * Tests for mcp-server/scripts/lib/ts-compiler.mjs — the fail-loud parser seam
- * introduced by the TypeScript 7 migration (docs/adr/0056-*.md).
+ * introduced by the TypeScript 7 migration (docs/adr/0061-*.md).
  *
  * The seam's `PARSER_SPECIFIER` ("typescript-parser") is a bare ESM specifier,
  * which Node resolves relative to the importing file's own directory — not

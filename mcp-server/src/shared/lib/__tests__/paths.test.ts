@@ -1,6 +1,6 @@
 /**
  * Regression guard for `loadPathAliases` against the REAL, committed root
- * `tsconfig.json` (docs/adr/0056-*.md's TypeScript 7 migration, Finding 2).
+ * `tsconfig.json` (docs/adr/0061-*.md's TypeScript 7 migration, Finding 2).
  *
  * `loadPathAliases` reads the root tsconfig.json as plain JSON — not through
  * `tsc` — so removing `baseUrl` from that file (required for TS 7, which

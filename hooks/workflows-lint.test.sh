@@ -261,7 +261,7 @@ run_lint_on_dir 0 "$GOOD_ARGS_TMPDIR" "good-args-parsed.js (defensive parse pres
 rm -rf "$GOOD_ARGS_TMPDIR"
 
 # ---------------------------------------------------------------------------
-# Missing-parser adversarial case (D2 seam, docs/adr/0056-typescript-7-*):
+# Missing-parser adversarial case (D2 seam, docs/adr/0061-typescript-7-*):
 # renders the pinned typescript-parser alias unresolvable and asserts the
 # linter still exits non-zero — the new failure mode this TS 7 migration
 # introduces (a linter that cannot resolve its parser must fail, not pass).

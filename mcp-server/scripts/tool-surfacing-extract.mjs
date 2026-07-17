@@ -67,7 +67,7 @@
  *   "typescript-parser" resolves against mcp-server/node_modules (ESM
  *   resolves bare specifiers relative to the importing file, not cwd). The
  *   TypeScript compiler API is obtained via scripts/lib/ts-compiler.mjs, not
- *   a direct `import("typescript")` — see docs/adr/0056-*.md.
+ *   a direct `import("typescript")` — see docs/adr/0061-*.md.
  *
  * EXIT CODES
  *   0  Success: rows printed to stdout (may be zero rows).
@@ -120,7 +120,7 @@ async function main() {
   }
 
   // Load TypeScript compiler API via the fail-loud seam (scripts/lib/ts-compiler.mjs).
-  // See docs/adr/0056-typescript-7-tooling-parser-split.md.
+  // See docs/adr/0061-typescript-7-tooling-parser-split.md.
   const ts = await loadTsCompiler("tool-surfacing-extract", [
     "ScriptKind",
     "ScriptTarget",

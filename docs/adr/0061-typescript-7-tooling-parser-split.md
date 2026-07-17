@@ -1,12 +1,12 @@
 ---
-adr: "0056"
+adr: "0061"
 title: "TypeScript 7 migration: split the compiler (typechecking) from the tooling parser (AST lint tools)"
 status: accepted
 date: "2026-07-15"
 build: "migrate-mcp-server-to-typescript-702-tsconfig-baseurl-removal-relative"
 ---
 
-# ADR-0056: TypeScript 7 migration — split the compiler from the tooling parser
+# ADR-0061: TypeScript 7 migration — split the compiler from the tooling parser
 
 ## Context
 
