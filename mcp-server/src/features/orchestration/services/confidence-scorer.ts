@@ -82,7 +82,8 @@ export type DenyCategory =
   | "mcp-tool-contract"
   | "principles-rules-config"
   | "settings-permissions"
-  | "autonomy-tier-control";
+  | "autonomy-tier-control"
+  | "loop-runner-guardrail";
 
 export type DenyListEntry = { category: DenyCategory; pattern: string };
 export type DenyListMatch = { category: DenyCategory; pattern: string; matched_path: string };
@@ -148,6 +149,21 @@ export const SENSITIVE_PATH_DENY_LIST: readonly DenyListEntry[] = [
   {
     category: "autonomy-tier-control",
     pattern: "mcp-server/src/shared/lib/glob-matcher.ts",
+  },
+  // loop-runner-guardrail (ADR-0057): the sole mechanical enforcement point of the dc-05
+  // determinism guardrail and the dc-06 read-only-runner invariant — mutates_build
+  // enforcement, BUILTIN_MUTATION_TOOLS, BUILTIN_FORBIDDEN_MCP, READ_ONLY_SHELL_COMMANDS +
+  // the Bash read-only carve-out (loop-schema.ts), and the fail-closed `date`
+  // mutating-flag allowlist (date-shell-guard.ts, already wrong twice per its own header).
+  // Two exact patterns only — NOT a mcp-server/src/features/loops/** glob, which would
+  // over-floor list-loops.ts/load-loops.ts/every test file (ADR-0057 Option D, rejected).
+  {
+    category: "loop-runner-guardrail",
+    pattern: "mcp-server/src/features/loops/loop-schema.ts",
+  },
+  {
+    category: "loop-runner-guardrail",
+    pattern: "mcp-server/src/features/loops/date-shell-guard.ts",
   },
 ];
 

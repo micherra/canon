@@ -125,12 +125,16 @@ the security-intent row's post-safety-hook-fix adversarial mandate, watch_CCCCCC
 evaluated even when signal-gathering otherwise fails (fail-safe branch), so it survives total drift.db/KG
 outage. The authoritative deny-list is `SENSITIVE_PATH_DENY_LIST` in
 `mcp-server/src/features/orchestration/services/confidence-scorer.ts`.
-Categories: `canon-safety-hooks`, `ci-config`, `secrets-credentials`, `auth`, `drift-store-schema`, `mcp-tool-contract`, `principles-rules-config`, `settings-permissions`, `autonomy-tier-control`.
+Categories: `canon-safety-hooks`, `ci-config`, `secrets-credentials`, `auth`, `drift-store-schema`, `mcp-tool-contract`, `principles-rules-config`, `settings-permissions`, `autonomy-tier-control`, `loop-runner-guardrail`.
 The `autonomy-tier-control` category floors the self-governance TRIPOD — the three
 co-dependent files a build could edit to silently weaken the floor: the deny-list's own
 source (`confidence-scorer.ts`), the floor-application logic (`compute-autonomy-tier.ts`),
 and the `matchGlob` matcher every pattern above is evaluated through (`glob-matcher.ts`) —
 so a build touching any leg of the control is itself supervised + adversarially re-reviewed.
+The `loop-runner-guardrail` category (ADR-0057) floors the sole mechanical enforcement point
+of the loop framework's dc-05 determinism guardrail and dc-06 read-only-runner invariant:
+`mcp-server/src/features/loops/loop-schema.ts` and `mcp-server/src/features/loops/date-shell-guard.ts`
+— two exact patterns, not a `features/loops/**` glob (which would over-floor routine loop work).
 
 ### Per-Message Re-Classification (L1)
 
@@ -505,7 +509,7 @@ initiates the scheduling call (`CronCreate` or `ScheduleWakeup`) at a named life
 - `run-learner`: fires on harness-watch `learner_due`; supervised → ask user first; autonomous/light-touch → auto-spawn.
 - `run-evolve`: fires on the `evolve` loop's `evolve_due`; supervised → ask user first; autonomous/light-touch → auto-spawn after a cost-visibility `PushNotification`. Proposals are HITL-gated regardless of tier.
 - `auto-enable-merge`: fires on `ci_conclusion` pending→success while PR OPEN & not-already-armed → orchestrator runs `gh pr merge --auto --squash`; autonomous/light-touch unattended, supervised ASK-FIRST; runner read-only (dc-06).
-- `auto-update-branch`: fires on `merge_state` transitioning to `BEHIND`/`DIRTY` while PR OPEN → orchestrator merges `origin/main` into the PR branch and pushes; generated-artifact-only conflicts auto-resolved by regeneration, SOURCE conflicts always HITL; unattended in all tiers for the clean/generated-only path; runner read-only (dc-06).
+- `auto-update-branch`: fires on `merge_state` reaching `BEHIND`/`DIRTY` — on a transition, or on ship-watch's first tick for a PR already in that state (`fire_on_baseline`, ADR-0056) — while PR OPEN → orchestrator merges `origin/main` into the PR branch and pushes; generated-artifact-only conflicts auto-resolved by regeneration, SOURCE conflicts always HITL; unattended in all tiers for the clean/generated-only path; runner read-only (dc-06).
 - `auto-staleness-refresh`: fires on `session-watch` docs/KG staleness episodes (`field=docs_stale|kg_age`, ADR-0045) — `kg_age` runs a local `codebase_graph` refresh (no PR); `docs_stale` dispatches an ephemeral `init_workspace` → scribe → shipper → PR (dec-03, no direct-push-to-main). Both fields unattended in ALL tiers — autonomous, light-touch, AND supervised — per an explicit plan-approval user override of the architect's ask-first-under-supervised recommendation (dec-04); the PR remains the human review gate regardless of tier. Notifies what was refreshed after completion. Runner read-only (dc-06).
 
 Read `references/loop-framework.md` BEFORE dispatching any loop or consuming an `ORCHESTRATOR_ACTION` line.
