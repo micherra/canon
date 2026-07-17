@@ -167,3 +167,9 @@ Not the cheapest win — the most *falsifying* one. It directly tests the PAW cl
 **Reject:**
 5. **`compilation_level` as a first-class scalar principle attribute** — category error (Finding A). A binary `compilable_predicate: y/n` is the coherent version, and it already exists implicitly in the gate convention's Exceptions.
 6. **Compiled-vs-derived ratio as a north-star metric** — not measurable without new instrumentation, and rewards over-compiling fuzzy judgment into brittle gates, a failure mode Canon has lived at least 3 times (Finding B). If a metric is wanted, scope it to *mechanically-verifiable* checks only.
+
+---
+
+## Status update (follow-up #1, 2026-07-16)
+
+The Section D probe first ran as a **batch-replay** against historical review archives (`docs/t2-probe-results.md`) and came back INCONCLUSIVE: 0/96 reviews had a retrievable diff to join against, so recall/FP were uncomputable — the historical corpus doesn't retain the artifacts the join needs, not a finding about T2 itself. Follow-up #1 retired that batch-replay harness (`measure.ts`, deleted) and replaced it with a **live-forward** recorder + aggregator (`mcp-server/scripts/t2-probe/record.ts`, `aggregate.ts`) wired into every build's review step going forward as a total-fail-open advisory instrument (see root `CLAUDE.md` § Post-Step Effects, "T2 live-forward checker"). Each build now appends one record to `.canon/t2-probe/checker-runs.jsonl` at review time instead of relying on reconstructing history after the fact; `aggregate.ts` computes the same recall/FP/PASS-FALSIFY-CONTINUE verdict once enough live records accumulate. The historical batch-replay report (`docs/t2-probe-results.md`) is preserved as-is for context, not superseded in place — the live-forward report writes to a separate path (`docs/t2-probe-live-results.md`) as data accrues.
