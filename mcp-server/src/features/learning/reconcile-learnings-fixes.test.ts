@@ -67,6 +67,10 @@ function makeFakeFs(opts: {
     async appendFile(path: string, data: string) {
       appended.push({ path, data });
     },
+    // Identity resolver — see the base test file's `makeFakeFs` for why.
+    async realpath(path: string) {
+      return path;
+    },
   };
 }
 
@@ -149,7 +153,7 @@ describe("reconcileLearnings — fix-review round 2", () => {
       modify: { hash: "churn2", message: "chore: unrelated churn to a frequently-edited file" },
     });
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -177,7 +181,7 @@ describe("reconcileLearnings — fix-review round 2", () => {
       modify: { hash: "churn3", message: "chore: unrelated churn to a frequently-edited file" },
     });
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -220,7 +224,7 @@ describe("reconcileLearnings — fix-review round 2", () => {
       latestCommitSince: () => null,
     };
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     // TS_DIR is "2026-05-29T22-00-00Z" -> real-instant ISO "2026-05-29T22:00:00Z".
@@ -250,7 +254,7 @@ describe("reconcileLearnings — fix-review round 2", () => {
     });
     const git = makeFakeGit(true, { createdFile: true, hash: "deadbeef" });
 
-    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, { fs, git });
+    const result = await reconcileLearnings({ project_dir: PROJECT_DIR }, PROJECT_DIR, { fs, git });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");

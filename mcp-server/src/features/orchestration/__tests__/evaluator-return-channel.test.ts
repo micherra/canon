@@ -1,12 +1,12 @@
 /**
- * evaluator-return-channel — dc-05 regression guard (ADR-0058).
+ * evaluator-return-channel — dc-05 regression guard (ADR-0061).
  *
  * The evaluator gate never delivered a verdict: canon:evaluator was spawned as a
  * NAMED (teammate) agent, but its tool grant (`tools: [Read]`) has no SendMessage
  * and no write tool — a named spawn returns output only via mailbox, and the
  * evaluator has no mailbox. See
- * docs/adr/0058-evaluator-verdict-returns-by-tool-result-not-mailbox.md
- * (ADR-0058) for the root-cause probe.
+ * docs/adr/0061-evaluator-verdict-returns-by-tool-result-not-mailbox.md
+ * (ADR-0061) for the root-cause probe.
  *
  * This test encodes the general invariant behind the fix, not just the literal
  * fix: an agent whose `tools:` grant confers no write capability (Write/Edit/
@@ -87,7 +87,7 @@ function hasReturnChannel(tools: string[]): boolean {
   );
 }
 
-describe("zero-return-channel agent set (dc-05, ADR-0058)", () => {
+describe("zero-return-channel agent set (dc-05, ADR-0061)", () => {
   const repoRoot = findRepoRoot(import.meta.dirname);
 
   it("is exactly ['evaluator']", () => {
@@ -107,9 +107,9 @@ describe("zero-return-channel agent set (dc-05, ADR-0058)", () => {
     expect(
       zeroChannel,
       "The zero-return-channel agent set changed. If a NEW agent has no SendMessage and no " +
-        "write capability, it must never be spawned named (see ADR-0058) — CLAUDE.md's spawn " +
+        "write capability, it must never be spawned named (see ADR-0061) — CLAUDE.md's spawn " +
         "config for it needs the same unnamed+synchronous treatment as the evaluator. If " +
-        "'evaluator' gained a channel, ADR-0058's constraint has dissolved (see its " +
+        "'evaluator' gained a channel, ADR-0061's constraint has dissolved (see its " +
         "Revisit-If section) and this expectation should be updated deliberately, not silenced.",
     ).toEqual(["evaluator"]);
   });
@@ -149,7 +149,7 @@ function extractEvaluatorGateBlock(claudeMd: string): string {
   return claudeMd.slice(blockStart, endIdx);
 }
 
-describe("CLAUDE.md evaluator-gate block invariants (ADR-0058)", () => {
+describe("CLAUDE.md evaluator-gate block invariants (ADR-0061)", () => {
   const repoRoot = findRepoRoot(import.meta.dirname);
   const claudeMd = readFileSync(join(repoRoot, "CLAUDE.md"), "utf-8");
   const block = extractEvaluatorGateBlock(claudeMd);
@@ -159,7 +159,7 @@ describe("CLAUDE.md evaluator-gate block invariants (ADR-0058)", () => {
       block,
       "Step 3 must specify run_in_background: false so the evaluator's final message returns " +
         "as the Agent tool result rather than requiring a SendMessage mailbox delivery it has " +
-        "no tool to perform (ADR-0058).",
+        "no tool to perform (ADR-0061).",
     ).toMatch(/run_in_background:\s*false/);
 
     // Format-agnostic: reject ANY name: directive for the evaluator spawn, regardless of
@@ -167,7 +167,7 @@ describe("CLAUDE.md evaluator-gate block invariants (ADR-0058)", () => {
     // .not.toMatch(/name:\s*["'`]?evaluator-eval/)) has a hole: a future contributor could
     // "tidy" the spawn back to a named form using a DIFFERENT name (e.g. `name: eval-gate-x`)
     // and this guard would stay silent while structurally reviving the exact mailbox-only
-    // silent-verdict-loss bug ADR-0058 fixes. Match any `name:` token followed by an
+    // silent-verdict-loss bug ADR-0061 fixes. Match any `name:` token followed by an
     // identifier-shaped value (bare or quoted) — that's a directive, not prose. The adjacent
     // "Do not pass `name:`." instruction sentence does NOT match: nothing identifier-shaped
     // follows "name:" there — just a closing backtick then a period.
@@ -176,8 +176,8 @@ describe("CLAUDE.md evaluator-gate block invariants (ADR-0058)", () => {
       "Step 3 must NOT mandate a name: directive (in ANY format — bare, quoted, or " +
         "backticked) for the evaluator spawn. canon:evaluator has no SendMessage and no " +
         "write tool, so a named (teammate) spawn has no channel to return its verdict — " +
-        "this is the root cause ADR-0058 fixes. If you are re-adding a name: here under any " +
-        "spelling, read ADR-0058 first; this is exactly the 'tidying' regression it warns " +
+        "this is the root cause ADR-0061 fixes. If you are re-adding a name: here under any " +
+        "spelling, read ADR-0061 first; this is exactly the 'tidying' regression it warns " +
         "about, and a literal-string check would not have caught it.",
     ).not.toMatch(/name:\s*["'`]?[A-Za-z0-9_-]+/);
 
@@ -185,7 +185,7 @@ describe("CLAUDE.md evaluator-gate block invariants (ADR-0058)", () => {
       block,
       "Step 3 must retain the explicit 'Do not pass name:' instruction — silently dropping " +
         "the directive without its accompanying prose warning would regress the next time " +
-        "someone edits this block without reading ADR-0058 first.",
+        "someone edits this block without reading ADR-0061 first.",
     ).toMatch(/Do not pass `name:`/);
   });
 
@@ -194,7 +194,7 @@ describe("CLAUDE.md evaluator-gate block invariants (ADR-0058)", () => {
       block,
       "Step 7 must still map a parse failure to PASS_parse_fallback and proceed. Converting " +
         "this to a blocking/fail-closed branch would violate the deliberate fail-open posture " +
-        "of this advisory quality gate (ADR-0058 Consequences; fail-closed-by-default governs " +
+        "of this advisory quality gate (ADR-0061 Consequences; fail-closed-by-default governs " +
         "*safety* gates only).",
     ).toMatch(/PASS_parse_fallback/);
   });
@@ -215,7 +215,7 @@ describe("CLAUDE.md evaluator-gate block invariants (ADR-0058)", () => {
       block,
       "The evaluator-gate block must mandate surfacing a one-line advisory when a " +
         "non-evaluation branch fires — a prose instruction to shout that itself goes " +
-        "unenforced is exactly the disease this bug exhibited (see ADR-0058).",
+        "unenforced is exactly the disease this bug exhibited (see ADR-0061).",
     ).toMatch(/surface[^.]*advisory/i);
   });
 });

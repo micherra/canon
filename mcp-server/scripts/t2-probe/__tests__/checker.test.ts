@@ -121,6 +121,38 @@ FINDINGS:
   });
 });
 
+describe("runCheckerOnDiff — malformed verdict (P2(c) / dc-06)", () => {
+  it("returns failed_open:true when delimiters are present but the FINDINGS section is absent", () => {
+    const stdout = `---VERDICT---
+VERDICT: PASS
+SUMMARY: No misses found.
+---END_VERDICT---
+`;
+    const shellRunner = () => processResult({ ok: true, stdout });
+
+    const result = runCheckerOnDiff(FAKE_DIFF, FAKE_RUBRIC_PATH, { shellRunner });
+
+    expect(result).toEqual({ failed_open: true, findings: [] });
+  });
+
+  it("returns failed_open:true when the FINDINGS header is renamed (e.g. singular FINDING:)", () => {
+    const stdout = `---VERDICT---
+VERDICT: FINDINGS
+SUMMARY: 1 miss found.
+FINDING:
+- file_path: src/foo.ts
+  line: 2
+  description: "Should be renamed."
+---END_VERDICT---
+`;
+    const shellRunner = () => processResult({ ok: true, stdout });
+
+    const result = runCheckerOnDiff(FAKE_DIFF, FAKE_RUBRIC_PATH, { shellRunner });
+
+    expect(result).toEqual({ failed_open: true, findings: [] });
+  });
+});
+
 describe("advisory invariant", () => {
   it("exports no function that returns a pass/fail gate signal — only findings + failed_open", () => {
     const exportedNames = Object.keys(checkerModule);
