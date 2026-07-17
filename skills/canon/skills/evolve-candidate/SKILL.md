@@ -122,9 +122,17 @@ them straight to Step 0.5).
 
 Exactly Step 3 below, called per `retire` target from Step 0.2/0.3: `mcp__canon__evaluate_candidate`
 with `candidate_text`, `target_path: target.target_path`, `project_dir`,
-`splits: ["holdout"]`. **`evolution-hard-gate` invariant unchanged**: only proceed to
-Step 0.5 when `accepted === true`. A `retire` candidate that regresses the holdout is
-NEVER emitted — the artifact stays as-is.
+`proposal_kind: target.proposal_kind` (always `"retire"` at this step — see the
+gate-vs-apply soundness note below), `splits: ["holdout"]`. **`evolution-hard-gate`
+invariant unchanged**: only proceed to Step 0.5 when `accepted === true`. A `retire`
+candidate that regresses the holdout is NEVER emitted — the artifact stays as-is.
+
+**`proposal_kind` is required here, not optional.** The frontmatter guard's
+`archived: true` tolerance (the flag this step's candidate legitimately sets — see
+Step 0.3) is RETIRE-ONLY: omitting `proposal_kind` is fail-closed treated as a
+wording-rewrite, and a rewrite that flips `archived` is rejected before any subprocess
+runs. Passing `target.proposal_kind` (already `"retire"` from Step 0.2's selection)
+is what tells the guard this candidate's `archived: true` is sanctioned.
 
 ### Step 0.5 — Shape and emit retire/reinforce proposals
 

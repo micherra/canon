@@ -218,7 +218,7 @@ describe("evaluateCandidate overlay fail-closed reject (dc-02, dc-06)", () => {
     expect(mockRunShell).toHaveBeenCalled();
   });
 
-  it("a principles/ candidate that ONLY adds archived:true proceeds to scoring (ADR-0052 retire exception)", async () => {
+  it("a REWRITE candidate (no proposal_kind) that flips archived:true is REJECTED — gate-vs-apply soundness fix", async () => {
     const candidate =
       "---\nid: some-principle\nseverity: convention\narchived: true\n---\n\n# Some Principle\n\nOriginal body.\n";
 
@@ -230,7 +230,45 @@ describe("evaluateCandidate overlay fail-closed reject (dc-02, dc-06)", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
+    // Missing proposal_kind is fail-closed treated as "rewrite" — the archived exception
+    // is RETIRE-ONLY. A wording-rewrite candidate that flips archived is a frontmatter
+    // mutation, which the rewrite contract forbids.
+    expect(result.guard_rejection?.reason).toBe("frontmatter_modified");
+    expect(result.guard_rejection?.fields).toContain("archived");
+    expect(mockRunShell).not.toHaveBeenCalled();
+  });
+
+  it("a principles/ RETIRE candidate (proposal_kind: 'retire') that adds archived:true proceeds to scoring (ADR-0052 retire exception)", async () => {
+    const candidate =
+      "---\nid: some-principle\nseverity: convention\narchived: true\n---\n\n# Some Principle\n\nOriginal body.\n";
+
+    const result = await evaluateCandidate({
+      candidate_text: candidate,
+      project_dir: projectDir,
+      proposal_kind: "retire",
+      target_path: "principles/conventions/some-principle.md",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
     expect(result.guard_rejection).toBeUndefined();
     expect(mockRunShell).toHaveBeenCalled();
+  });
+
+  it("a principles/ REINFORCE candidate (proposal_kind: 'reinforce') that flips archived:true is REJECTED — only 'retire' tolerates archived", async () => {
+    const candidate =
+      "---\nid: some-principle\nseverity: convention\narchived: true\n---\n\n# Some Principle\n\nOriginal body.\n";
+
+    const result = await evaluateCandidate({
+      candidate_text: candidate,
+      project_dir: projectDir,
+      proposal_kind: "reinforce",
+      target_path: "principles/conventions/some-principle.md",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.guard_rejection?.reason).toBe("frontmatter_modified");
+    expect(mockRunShell).not.toHaveBeenCalled();
   });
 });

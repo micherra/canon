@@ -184,6 +184,7 @@ describe("retire candidate emission (offline — no eval tokens, drives the REAL
     const evalResult = await evaluateCandidate({
       candidate_text: ARCHIVED_CANDIDATE,
       project_dir: projectDir,
+      proposal_kind: target.proposal_kind,
       target_path: target.target_path,
       splits: ["holdout"],
     });
@@ -241,6 +242,7 @@ describe("retire candidate emission (offline — no eval tokens, drives the REAL
     const evalResult = await evaluateCandidate({
       candidate_text: ARCHIVED_CANDIDATE,
       project_dir: projectDir,
+      proposal_kind: target.proposal_kind,
       target_path: target.target_path,
       splits: ["holdout"],
     });

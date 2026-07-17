@@ -50,6 +50,16 @@ export const EvaluateCandidateInputSchema = z.object({
       "Path relative to project_dir where the candidate file should be injected " +
         "(e.g. 'skills/canon/evals/eval-set.json')",
     ),
+  proposal_kind: z
+    .enum(["rewrite", "retire", "reinforce"])
+    .optional()
+    .describe(
+      "Distinguishes a wording-REWRITE candidate from an ADR-0052 RETIRE candidate. " +
+        "Only affects the principles/ frontmatter guard's archived:true exception — " +
+        "ONLY 'retire' tolerates a candidate that flips archived; omitted/'rewrite'/" +
+        "'reinforce' all reject it (fail-closed default; a reinforce candidate never " +
+        "reaches this gate in practice — it is emitted ungated, see mutation-proposal.ts).",
+    ),
 });
 
 type EvaluateCandidateInput = z.input<typeof EvaluateCandidateInputSchema>;
@@ -280,7 +290,9 @@ function isOverlayTarget(targetPath: string): boolean {
  *
  * - agent-def (`agents/`) → `checkFrontmatterImmutable` (raw byte-for-byte, unchanged).
  * - built-in principle (`principles/`) → `checkPrincipleFrontmatterImmutable` (field-level,
- *   tolerates `archived` — the ADR-0052 retire exception).
+ *   tolerates `archived` ONLY when `proposalKind === "retire"` — the ADR-0052 retire
+ *   exception, narrowed to retire-only per the gate-vs-apply soundness fix; fail-closed
+ *   for a missing/`"rewrite"`/`"reinforce"` `proposalKind`).
  * - every other target → `{ ok: true }` (no guard; unchanged behavior). Overlay
  *   `.canon/principles/**` targets never reach this — `isOverlayTarget` rejects them earlier.
  */
@@ -288,12 +300,17 @@ function checkTargetFrontmatterImmutable(
   targetPath: string,
   baselineText: string,
   candidateText: string,
+  proposalKind: "rewrite" | "retire" | "reinforce" | undefined,
 ): FrontmatterGuardResult {
   if (isAgentDefTarget(targetPath)) {
     return checkFrontmatterImmutable(baselineText, candidateText);
   }
   if (isPrincipleDefTarget(targetPath)) {
-    return checkPrincipleFrontmatterImmutable(baselineText, candidateText);
+    return checkPrincipleFrontmatterImmutable(
+      baselineText,
+      candidateText,
+      proposalKind === "retire",
+    );
   }
   return { ok: true };
 }
@@ -465,7 +482,8 @@ function buildAcceptedResult(
 export async function evaluateCandidate(
   input: EvaluateCandidateInput,
 ): Promise<ToolResult<EvaluateCandidateResult>> {
-  const { candidate_text, project_dir, splits: requestedSplits, target_path } = input;
+  const { candidate_text, project_dir, proposal_kind, splits: requestedSplits, target_path } =
+    input;
   const requestedSplitsOrDefault: Array<"train" | "val" | "holdout"> = requestedSplits ?? [
     "train",
     "val",
@@ -494,7 +512,12 @@ export async function evaluateCandidate(
   // principle candidates are rejected BEFORE any subprocess if their frontmatter differs
   // from baseline. Fail-closed, never throws. Overlay principle targets never reach here —
   // isOverlayTarget already rejected them above.
-  const fmResult = checkTargetFrontmatterImmutable(target_path, realContent, candidate_text);
+  const fmResult = checkTargetFrontmatterImmutable(
+    target_path,
+    realContent,
+    candidate_text,
+    proposal_kind,
+  );
   if (!fmResult.ok) {
     return toolOk(buildGuardRejectionResult(fmResult.reason, fmResult.fields));
   }
