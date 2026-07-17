@@ -1,7 +1,7 @@
 /**
  * evaluator-gate-schema-boundary — closes the gap the engineer's own
  * DONE_WITH_CONCERNS finding identified after evalfix-01 (commit 10ad363b):
- * Layer 2 (gate_non_evaluations[], ADR-0061) is production-inert
+ * Layer 2 (gate_non_evaluations[], ADR-0062) is production-inert
  * because register-journal.ts's stepOutcomeSchema silently stripped the
  * evaluator_gate outcome key at the MCP boundary.
  *
@@ -46,7 +46,7 @@ afterEach(async () => {
   await rm(projectDir, { force: true, recursive: true });
 });
 
-describe("evaluator_gate survives the real stepEntrySchema MCP boundary (ADR-0061 Layer 2 closure)", () => {
+describe("evaluator_gate survives the real stepEntrySchema MCP boundary (ADR-0062 Layer 2 closure)", () => {
   test("a skip-form outcome parses through stepEntrySchema and reaches gate_non_evaluations end-to-end", async () => {
     const rawInput = {
       agent_id: "test-agent-boundary-skip",

@@ -39,7 +39,7 @@ If an implementation summary or acceptance criteria are absent from your spawn p
 
 ## Return Channel
 
-This agent holds `tools: [Read]` — no `SendMessage`, no write tool — so it has exactly one way to return its verdict: as the final message of an **unnamed, synchronous** subagent spawn, returned to the orchestrator as the Agent tool result. It must therefore never be spawned with a `name:`; a named spawn makes it a teammate, and teammates return output only via `SendMessage`, which this agent does not have. Every other Canon agent returns via a durable artifact (`write_review`, `write_implementation_summary`, etc.); this one does not, by deliberate design (ADR-0061) — its verdict is ephemeral, and the *decision* it drives is durably recorded by the orchestrator via `log_step`/`log_decision` instead. The frontmatter `tools: [Read]` and `permissionMode: plan` above are unchanged by this constraint.
+This agent holds `tools: [Read]` — no `SendMessage`, no write tool — so it has exactly one way to return its verdict: as the final message of an **unnamed, synchronous** subagent spawn, returned to the orchestrator as the Agent tool result. It must therefore never be spawned with a `name:`; a named spawn makes it a teammate, and teammates return output only via `SendMessage`, which this agent does not have. Every other Canon agent returns via a durable artifact (`write_review`, `write_implementation_summary`, etc.); this one does not, by deliberate design (ADR-0062) — its verdict is ephemeral, and the *decision* it drives is durably recorded by the orchestrator via `log_step`/`log_decision` instead. The frontmatter `tools: [Read]` and `permissionMode: plan` above are unchanged by this constraint.
 
 ## Evaluation Dimensions
 

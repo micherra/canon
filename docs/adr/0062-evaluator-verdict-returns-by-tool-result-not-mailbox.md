@@ -1,12 +1,12 @@
 ---
-adr: "0061"
+adr: "0062"
 title: "The evaluator's verdict returns by tool result, not by mailbox — so it is spawned unnamed"
 status: accepted
 date: "2026-07-15"
 build: "diagnose-and-fix-the-evaluator-gates-verdict-capture-channel-the"
 ---
 
-# ADR-0061: The evaluator's verdict returns by tool result, not by mailbox — so it is spawned unnamed
+# ADR-0062: The evaluator's verdict returns by tool result, not by mailbox — so it is spawned unnamed
 
 ## Context
 

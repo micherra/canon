@@ -48,7 +48,7 @@ export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
 export type JournalOutcome = {
   /**
    * Post-implement/fix evaluator-gate result logged onto a step's outcome
-   * (ADR-0061). skipped/verdict are typed as string, not a literal union —
+   * (ADR-0062). skipped/verdict are typed as string, not a literal union —
    * the MCP-boundary schema (stepOutcomeSchema, register-journal.ts)
    * deliberately admits any string so a future legitimate value is never
    * silently stripped at the wire boundary; computeGateNonEvaluations
@@ -208,7 +208,7 @@ export type FinalizeWorkspaceResult = {
    */
   steps_ghost: string[];
   /**
-   * Non-evaluations of the post-implement/fix evaluator gate (ADR-0061,
+   * Non-evaluations of the post-implement/fix evaluator gate (ADR-0062,
    * Layer 2): step IDs paired with the reason the gate did not render a real
    * PASS/FAIL verdict — a skip (`tool_unavailable` | `tool_error`, step 2) or
    * a parse failure that fell open (`PASS_parse_fallback`, step 7).
