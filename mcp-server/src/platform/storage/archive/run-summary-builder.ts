@@ -210,11 +210,20 @@ function joinRecordedMetrics(workspacePath: string, stepOutcomes: StepOutcome[])
 }
 
 /**
- * Extract review results from workspace/reviews/ directory.
- * Parses YAML frontmatter and violation/honored sections from .md files.
- * Returns empty array when reviews/ is missing.
+ * Extract review results from a `reviews/` directory beside `workspacePath`.
+ *
+ * Parses YAML frontmatter and violation/honored sections from every `.md` file.
+ * Returns an empty array when `reviews/` is missing or unreadable; individual
+ * unreadable files are skipped. Never throws.
+ *
+ * Exported so `scripts/backfill-review-extraction.ts` can re-derive `review_results`
+ * for already-archived runs through the SAME extractor that runs at archive time.
+ * Archive directories mirror the workspace layout (`reviews/` beside
+ * `run-summary.json`), so it runs unmodified against an archive path. A second
+ * copy of this parsing would re-create the drift this build repairs
+ * (`single-source-of-truth`).
  */
-function extractReviewResults(workspacePath: string): ReviewResult[] {
+export function extractReviewResults(workspacePath: string): ReviewResult[] {
   const reviewsDir = join(workspacePath, "reviews");
   if (!existsSync(reviewsDir)) {
     return [];
