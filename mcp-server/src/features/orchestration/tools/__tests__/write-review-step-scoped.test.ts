@@ -1,12 +1,19 @@
 /**
- * TDD tests for S4 — step_id support in write_review.
+ * TDD tests for step_id support in write_review.
+ *
+ * ADR-0063: step_id writes are now EXCLUSIVE — the canonical pair is written
+ * ONLY by a no-step_id call (solo reviewer, or the orchestrator's
+ * consolidation call). Jurors/partition reviewers never touch REVIEW.md.
  *
  * Tests:
  * 1. When step_id is provided, a step-scoped REVIEW-{step_id}.md pair is written.
- * 2. The fixed canonical pair (REVIEW.md + REVIEW.meta.json) is always written/refreshed.
+ * 2. The fixed canonical pair is NOT written/refreshed when step_id is provided (inverted).
  * 3. When step_id is omitted, only the fixed canonical pair is written (backward compat).
  * 4. atomicWritePair: crash simulation — no partial-write divergence on fixed pair.
- * 5. Sequential calls with different step_ids produce separate files.
+ * 5. Sequential step_id calls produce separate step-scoped files AND no canonical file;
+ *    a final no-step_id call then writes the canonical pair.
+ * 6. Jury integration: two step_id jurors + one consolidation call — canonical reflects
+ *    the consolidation, per-lens files are untouched by later calls.
  */
 
 import { existsSync } from "node:fs";
@@ -70,8 +77,9 @@ describe("write_review step_id support (S4)", () => {
     expect(existsSync(join(reviewsDir, "REVIEW-review-01.meta.json"))).toBe(true);
   });
 
-  // Test 2: fixed canonical pair is always written/refreshed
-  it("always writes/refreshes REVIEW.md and REVIEW.meta.json regardless of step_id", async () => {
+  // Test 2 (INVERTED, ADR-0063): step_id writes are exclusive — the
+  // canonical pair is NOT written/refreshed when step_id is provided.
+  it("does NOT write/refresh the canonical pair when step_id is provided", async () => {
     const workspace = await makeTmpWorkspace();
     tmpDirs.push(workspace);
 
@@ -80,8 +88,8 @@ describe("write_review step_id support (S4)", () => {
     expect(result.ok).toBe(true);
 
     const reviewsDir = join(workspace, "reviews");
-    expect(existsSync(join(reviewsDir, "REVIEW.md"))).toBe(true);
-    expect(existsSync(join(reviewsDir, "REVIEW.meta.json"))).toBe(true);
+    expect(existsSync(join(reviewsDir, "REVIEW.md"))).toBe(false);
+    expect(existsSync(join(reviewsDir, "REVIEW.meta.json"))).toBe(false);
   });
 
   // Test 3: when step_id is omitted, only fixed canonical pair is written
@@ -121,8 +129,10 @@ describe("write_review step_id support (S4)", () => {
     expect(c2).toBe("content-2");
   });
 
-  // Test 5: sequential calls with different step_ids produce separate step-scoped files
-  it("sequential calls produce separate step-scoped files per step_id", async () => {
+  // Test 5 (UPDATED, ADR-0063): sequential step_id calls produce separate
+  // step-scoped files AND no canonical file; a final no-step_id call then
+  // writes the canonical pair.
+  it("sequential step_id calls produce separate step-scoped files and no canonical file; a final no-step_id call writes canonical", async () => {
     const workspace = await makeTmpWorkspace();
     tmpDirs.push(workspace);
 
@@ -134,7 +144,81 @@ describe("write_review step_id support (S4)", () => {
     expect(existsSync(join(reviewsDir, "REVIEW-r1.meta.json"))).toBe(true);
     expect(existsSync(join(reviewsDir, "REVIEW-r2.md"))).toBe(true);
     expect(existsSync(join(reviewsDir, "REVIEW-r2.meta.json"))).toBe(true);
-    // Fixed canonical pair reflects the latest call
+    // No canonical pair yet — neither step_id call touches it.
+    expect(existsSync(join(reviewsDir, "REVIEW.md"))).toBe(false);
+    expect(existsSync(join(reviewsDir, "REVIEW.meta.json"))).toBe(false);
+
+    // Consolidation: a call WITHOUT step_id writes the canonical pair.
+    await writeReview(makeInput(workspace, { verdict: "changes_required" }));
     expect(existsSync(join(reviewsDir, "REVIEW.md"))).toBe(true);
+    expect(existsSync(join(reviewsDir, "REVIEW.meta.json"))).toBe(true);
+    // The per-lens files are untouched by the consolidation call.
+    expect(existsSync(join(reviewsDir, "REVIEW-r1.md"))).toBe(true);
+    expect(existsSync(join(reviewsDir, "REVIEW-r2.md"))).toBe(true);
+  });
+
+  // Test 6 (NEW, ADR-0063 AC 2): jury integration — two step_id jurors +
+  // one consolidation call. Consumers must never read a race-winner lens as
+  // the consolidated verdict.
+  it("jury integration: two step_id jurors + a consolidation call — canonical is BLOCKING with AC-verification body, per-lens pairs untouched", async () => {
+    const workspace = await makeTmpWorkspace();
+    tmpDirs.push(workspace);
+    const reviewsDir = join(workspace, "reviews");
+
+    // Juror A: correctness lens, blocked.
+    await writeReview(
+      makeInput(workspace, {
+        step_id: "lens-correctness",
+        verdict: "blocked",
+        violations: [
+          {
+            principle_id: "errors-are-values",
+            severity: "rule",
+            file_path: "src/foo.ts",
+            description: "throws instead of returning",
+            fix: "return a ToolResult error",
+          },
+        ],
+      }),
+    );
+    const jurorAContentBefore = await readFile(
+      join(reviewsDir, "REVIEW-lens-correctness.md"),
+      "utf-8",
+    );
+
+    // Juror B: clarity lens, approved.
+    await writeReview(makeInput(workspace, { step_id: "lens-clarity", verdict: "approved" }));
+
+    // Consolidation: no step_id, any-juror-blocks -> BLOCKING, carries the
+    // full six-stage body via the new `body` param.
+    const consolidatedBody = "### Acceptance Criteria Verification\n\nAC 1: met.\n";
+    const consolidation = await writeReview(
+      makeInput(workspace, {
+        verdict: "blocked",
+        violations: [
+          {
+            principle_id: "errors-are-values",
+            severity: "rule",
+            file_path: "src/foo.ts",
+            description: "throws instead of returning",
+            fix: "return a ToolResult error",
+          },
+        ],
+        body: consolidatedBody,
+      }),
+    );
+    expect(consolidation.ok).toBe(true);
+
+    const canonicalMd = await readFile(join(reviewsDir, "REVIEW.md"), "utf-8");
+    expect(canonicalMd).toContain("verdict: BLOCKING");
+    expect(canonicalMd).toContain("### Acceptance Criteria Verification");
+
+    // Both per-lens pairs exist untouched by the consolidation call.
+    const jurorAContentAfter = await readFile(
+      join(reviewsDir, "REVIEW-lens-correctness.md"),
+      "utf-8",
+    );
+    expect(jurorAContentAfter).toBe(jurorAContentBefore);
+    expect(existsSync(join(reviewsDir, "REVIEW-lens-clarity.md"))).toBe(true);
   });
 });

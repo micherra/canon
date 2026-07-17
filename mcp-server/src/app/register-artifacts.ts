@@ -4,10 +4,16 @@ import { writeContextSync } from "@features/orchestration/tools/write-context-sy
 import { writeDesign } from "@features/orchestration/tools/write-design.ts";
 import { writeImplementationSummary } from "@features/orchestration/tools/write-implementation-summary.ts";
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
-import { type ConfidenceAdapter, writeReview } from "@features/orchestration/tools/write-review.ts";
+import {
+  type ConfidenceAdapter,
+  type WriteReviewInput,
+  writeReview,
+} from "@features/orchestration/tools/write-review.ts";
 import { writeSecurityAssessment } from "@features/orchestration/tools/write-security-assessment.ts";
 import { writeTestReport } from "@features/orchestration/tools/write-test-report.ts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { ConfidenceAnnotationSchema } from "@shared/lib/confidence.ts";
 import { z } from "zod";
@@ -91,75 +97,84 @@ function registerPlanTools(server: McpServer): void {
   );
 }
 
+/** `write_review` inputSchema — extracted so registerWriteReviewTool stays under the line-count limit. */
+const WRITE_REVIEW_INPUT_SCHEMA = {
+  body: z
+    .string()
+    .optional()
+    .describe(
+      "Full review prose body (stages beyond Principle Compliance, per " +
+        "templates/review.md) rendered verbatim after the Score section and " +
+        "persisted to the sidecar. Reviewers: author your six-stage body here — " +
+        "never Bash-append to REVIEW.md.",
+    ),
+  files: z.array(z.string()),
+  honored: z.array(z.string()),
+  score: z.object({
+    conventions: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
+    opinions: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
+    rules: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
+  }),
+  slug: z.string(),
+  step_id: z
+    .string()
+    .optional()
+    .describe(
+      "Step identifier for multi-reviewer flows. When provided, the tool writes ONLY a " +
+        "step-scoped pair (REVIEW-{step_id}.md + REVIEW-{step_id}.meta.json) — it does " +
+        "NOT touch the canonical REVIEW.md. Jurors and partition reviewers MUST pass it " +
+        "(e.g. the lens name or 'r{N}'); solo reviewers and the orchestrator's " +
+        "consolidation call MUST omit it (the no-step_id call is what produces the " +
+        "canonical REVIEW.md consumers read).",
+    ),
+  verdict: z.enum(["approved", "approved_with_concerns", "changes_required", "blocked", "pending"]),
+  violations: z.array(
+    z.object({
+      confidence: ConfidenceAnnotationSchema.optional(),
+      description: z.string().optional(),
+      file_path: z.string().optional(),
+      fix: z.string().optional(),
+      principle_id: z.string(),
+      severity: z.string(),
+    }),
+  ),
+  workspace: z.string(),
+};
+
+async function handleWriteReviewCall(
+  input: WriteReviewInput,
+  extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+) {
+  const dir = resolveScope(extra);
+  const driftDb = dir ? getDriftDb(dir) : undefined;
+  const signals = driftDb?.getSignals();
+  const adapter: ConfidenceAdapter | undefined = signals
+    ? { computeViolationConfidence: (v) => computeViolationConfidence(v, signals) }
+    : undefined;
+  const areaMemoryWriter = (() => {
+    try {
+      return driftDb?.getAreaMemory();
+    } catch {
+      return undefined;
+    }
+  })();
+  const result = await writeReview(input, signals, adapter, areaMemoryWriter);
+  // Reconcile predictions after review is persisted (non-blocking; app layer owns this)
+  if (result.ok && signals) {
+    reconcilePredictions({ reviewedFiles: input.files, violations: input.violations }, signals);
+  }
+  return result;
+}
+
 function registerWriteReviewTool(server: McpServer): void {
   server.registerTool(
     "write_review",
     {
       description:
-        "Write a structured code review. Accepts typed review data with verdict, violations, and scores. Maps ADR-010 verdict vocabulary to DriftStore vocabulary. Produces REVIEW.md + .meta.json sidecar. When step_id is provided, also writes a step-scoped pair (REVIEW-{step_id}.md + REVIEW-{step_id}.meta.json) to prevent concurrent reviewer overwrite races.",
-      inputSchema: {
-        files: z.array(z.string()),
-        honored: z.array(z.string()),
-        score: z.object({
-          conventions: z.object({
-            passed: z.number().int().min(0),
-            total: z.number().int().min(0),
-          }),
-          opinions: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
-          rules: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
-        }),
-        slug: z.string(),
-        step_id: z
-          .string()
-          .optional()
-          .describe(
-            "Step identifier for multi-reviewer concurrency safety. When provided, writes a " +
-              "step-scoped review pair (REVIEW-{step_id}.md + REVIEW-{step_id}.meta.json) in " +
-              "addition to the fixed canonical pair (REVIEW.md + REVIEW.meta.json). Use with " +
-              "the reviewer number in team-dispatch flows (e.g. 'reviewer-1', 'reviewer-2') so " +
-              "concurrent reviewers write to distinct paths instead of overwriting each other.",
-          ),
-        verdict: z.enum([
-          "approved",
-          "approved_with_concerns",
-          "changes_required",
-          "blocked",
-          "pending",
-        ]),
-        violations: z.array(
-          z.object({
-            confidence: ConfidenceAnnotationSchema.optional(),
-            description: z.string().optional(),
-            file_path: z.string().optional(),
-            fix: z.string().optional(),
-            principle_id: z.string(),
-            severity: z.string(),
-          }),
-        ),
-        workspace: z.string(),
-      },
+        "Write a structured code review. Accepts typed review data with verdict, violations, and scores. Maps ADR-010 verdict vocabulary to DriftStore vocabulary. Produces REVIEW.md + .meta.json sidecar. When step_id is provided, writes ONLY a step-scoped pair (REVIEW-{step_id}.md + REVIEW-{step_id}.meta.json) — the canonical pair is written exclusively by a call without step_id (ADR-0063).",
+      inputSchema: WRITE_REVIEW_INPUT_SCHEMA,
     },
-    gatedWrapHandler(async (input, extra) => {
-      const dir = resolveScope(extra);
-      const driftDb = dir ? getDriftDb(dir) : undefined;
-      const signals = driftDb?.getSignals();
-      const adapter: ConfidenceAdapter | undefined = signals
-        ? { computeViolationConfidence: (v) => computeViolationConfidence(v, signals) }
-        : undefined;
-      const areaMemoryWriter = (() => {
-        try {
-          return driftDb?.getAreaMemory();
-        } catch {
-          return undefined;
-        }
-      })();
-      const result = await writeReview(input, signals, adapter, areaMemoryWriter);
-      // Reconcile predictions after review is persisted (non-blocking; app layer owns this)
-      if (result.ok && signals) {
-        reconcilePredictions({ reviewedFiles: input.files, violations: input.violations }, signals);
-      }
-      return result;
-    }),
+    gatedWrapHandler(handleWriteReviewCall),
   );
 }
 

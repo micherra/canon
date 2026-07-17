@@ -153,6 +153,19 @@ describe("writeReview — file output", () => {
     const content = await readFile(result.path, "utf-8");
     expect(content).toBeTruthy();
   });
+
+  // Non-jury regression (AC 3, ADR-0063): a no-step_id call is unaffected by
+  // the step-scoped-exclusivity change — it writes only the canonical pair.
+  it("non-jury regression: a no-step_id call writes only the canonical pair, no step-scoped files", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
+    seedExecution(tmpDir);
+    const result = await writeReview(makeInput());
+
+    assertOk(result);
+    expect(result.path.replaceAll("\\", "/")).toMatch(/reviews\/REVIEW\.md$/);
+    expect(existsSync(join(tmpDir, "reviews", "REVIEW.md"))).toBe(true);
+    expect(existsSync(join(tmpDir, "reviews", "REVIEW.meta.json"))).toBe(true);
+  });
 });
 
 // Verdict mapping
@@ -235,6 +248,7 @@ describe("writeReview — markdown content", () => {
         violations: [
           {
             description: "throws instead of returning",
+            fix: "return a ToolResult error",
             file_path: "src/foo.ts",
             principle_id: "errors-are-values",
             severity: "rule",
@@ -249,6 +263,9 @@ describe("writeReview — markdown content", () => {
     expect(md).toContain("errors-are-values");
     expect(md).toContain("rule");
     expect(md).toContain("src/foo.ts");
+    // Description/Fix columns (dc-04)
+    expect(md).toContain("throws instead of returning");
+    expect(md).toContain("return a ToolResult error");
   });
 
   it("includes honored list section", async () => {

@@ -153,16 +153,27 @@ export type WriteReviewInput = {
   };
   files: string[];
   /**
-   * Optional step identifier for multi-reviewer concurrency safety. When provided,
-   * `write_review` writes a step-scoped pair (`REVIEW-{step_id}.md` +
-   * `REVIEW-{step_id}.meta.json`) AND refreshes the fixed canonical pair
-   * (`REVIEW.md` + `REVIEW.meta.json`). The step-scoped pair eliminates the
-   * overwrite race when concurrent reviewer agents write to the same workspace
-   * (R0–R2 each write to distinct paths). The fixed pair is refreshed so the
-   * consolidator has a stable well-known read target.
-   * When omitted, only the fixed pair is written (single-reviewer backward compat).
+   * Optional step identifier for multi-reviewer concurrency safety (ADR-0063).
+   * When provided, `write_review` writes ONLY the step-scoped pair
+   * (`REVIEW-{step_id}.md` + `REVIEW-{step_id}.meta.json`) — the canonical
+   * pair (`REVIEW.md` + `REVIEW.meta.json`) is NOT touched. The canonical
+   * pair is produced exclusively by a call WITHOUT `step_id` — a solo
+   * reviewer, or the orchestrator's consolidation call in team-dispatched
+   * reviews (see `references/team-dispatch-protocol.md`). This eliminates
+   * the last-writer-wins race where N jurors calling the tool serially left
+   * an arbitrary lens's verdict at the canonical path (watch_reviewclobber1).
+   * When omitted, the canonical pair is written (single-reviewer backward compat).
    */
   step_id?: string;
+  /**
+   * Optional review prose body — the stages beyond Principle Compliance
+   * (Code Quality, Compliance Cross-Check, Drift from Plan, Acceptance
+   * Criteria Verification, Cross-Requirement Consistency, Build
+   * Verification — see templates/review.md). Rendered VERBATIM into the
+   * review markdown after the Score section; also persisted to the
+   * .meta.json sidecar. Intentional markdown — not escaped.
+   */
+  body?: string;
 };
 
 export type WriteReviewResult = {
@@ -260,13 +271,15 @@ function generateMarkdown(
   // Violations section
   lines.push("#### Violations");
   lines.push("");
-  lines.push("| Principle | Severity | Location | Confidence |");
-  lines.push("|-----------|----------|----------|------------|");
+  lines.push("| Principle | Severity | Location | Confidence | Description | Fix |");
+  lines.push("|-----------|----------|----------|------------|--------------|-----|");
   for (const v of input.violations) {
     const filePath = v.file_path ?? "(none)";
     const confidenceTier = v.confidence ? v.confidence.tier.toUpperCase() : "—";
+    const description = escapeMdCell(v.description ?? "—");
+    const fix = escapeMdCell(v.fix ?? "—");
     lines.push(
-      `| ${escapeMdCell(v.principle_id)} | ${escapeMdCell(v.severity)} | ${escapeMdCell(filePath)} | ${confidenceTier} |`,
+      `| ${escapeMdCell(v.principle_id)} | ${escapeMdCell(v.severity)} | ${escapeMdCell(filePath)} | ${confidenceTier} | ${description} | ${fix} |`,
     );
   }
   lines.push("");
@@ -288,6 +301,14 @@ function generateMarkdown(
     `| overall | ${input.score.rules.passed} / ${input.score.rules.total} | ${input.score.opinions.passed} / ${input.score.opinions.total} | ${input.score.conventions.passed} / ${input.score.conventions.total} |`,
   );
   lines.push("");
+
+  // Optional prose body (the stages beyond Principle Compliance) — rendered
+  // verbatim, not escaped. Re-establish the single trailing newline after
+  // appending it (dc-03).
+  if (input.body) {
+    lines.push(input.body.trimEnd());
+    lines.push("");
+  }
 
   return lines.join("\n");
 }
@@ -481,10 +502,12 @@ export type ConfidenceAdapter = {
 };
 
 /**
- * Write the review artifact pair(s) to disk.
- * Always writes the canonical pair (REVIEW.md + REVIEW.meta.json).
- * When step_id is provided, also writes a step-scoped pair so concurrent
- * reviewer agents do not overwrite each other's output.
+ * Write the review artifact pair(s) to disk (ADR-0063).
+ *
+ * step_id present -> EXCLUSIVE step-scoped pair (jurors / partition
+ * reviewers never touch the canonical pair). Canonical pair is written only
+ * by a call WITHOUT step_id (solo reviewer, or the orchestrator's
+ * consolidation call per team-dispatch-protocol Phase 3/3V).
  */
 async function writeReviewArtifacts(
   reviewsDir: string,
@@ -493,18 +516,16 @@ async function writeReviewArtifacts(
   stepId: string | undefined,
 ): Promise<{ reviewPath: string; metaPath: string }> {
   await mkdir(reviewsDir, { recursive: true });
-  const reviewPath = join(reviewsDir, "REVIEW.md");
-  const metaPath = join(reviewsDir, "REVIEW.meta.json");
 
-  // Write the step-scoped pair first when step_id is provided.
   if (stepId) {
     const stepReviewPath = join(reviewsDir, `REVIEW-${stepId}.md`);
     const stepMetaPath = join(reviewsDir, `REVIEW-${stepId}.meta.json`);
     await atomicWritePair(stepReviewPath, markdown, stepMetaPath, metaJson);
+    return { metaPath: stepMetaPath, reviewPath: stepReviewPath };
   }
 
-  // Always refresh the fixed canonical pair so the consolidator and renderer
-  // have a stable well-known read target.
+  const reviewPath = join(reviewsDir, "REVIEW.md");
+  const metaPath = join(reviewsDir, "REVIEW.meta.json");
   await atomicWritePair(reviewPath, markdown, metaPath, metaJson);
   return { metaPath, reviewPath };
 }
@@ -580,6 +601,7 @@ export async function writeReview(
     verdict: mappedVerdict,
     verdict_original: input.verdict,
     violations: input.violations,
+    ...(input.body ? { body: input.body } : {}),
   };
   const { metaPath, reviewPath } = await writeReviewArtifacts(
     reviewsDir,
