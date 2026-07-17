@@ -33,6 +33,7 @@ ac-criteria-passed: {N}
 
 #### Honored
 <!-- Brief notes on principles the code follows well. -->
+<!-- The bolded principle id is the machine-read token; the trailing description is optional. -->
 - **{principle-id}**: {how honored}
 
 #### Score

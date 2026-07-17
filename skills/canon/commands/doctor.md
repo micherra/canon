@@ -223,11 +223,31 @@ Check if `CLAUDE.md` exists and contains a Canon section.
 
 #### Check 9: Data file integrity
 
-For each `.jsonl` file (`.canon/reviews.jsonl`, `.canon/learning.jsonl`):
-- If it exists, try parsing each line as JSON
-- Flag lines that fail to parse
+**This is the primary net for append corruption** (ADR-0058 D7): `append_learning_record`
+makes the sanctioned path safe, but its grantees still hold `Bash`, and nothing mechanically
+stops a hand-rolled `>>` append from bypassing the tool. This check is what catches that
+bypass — do not trim it as redundant now that the tool exists.
 
+For each of the five active append-target stores — `.canon/learning.jsonl`,
+`.canon/reviews.jsonl`, `.canon/learning-pending.jsonl`, `.canon/flow-runs.jsonl`,
+`.canon/patterns.jsonl` — if the file exists:
+- **Leading indicator**: check whether the file ends with a trailing newline. A missing final
+  newline is a merge that hasn't happened yet — the next append will land on the open line.
+- **Lagging indicator**: try parsing each line as JSON. Flag lines that fail to parse. Skip
+  blank lines first (a line that is empty or whitespace-only is not a parse failure) — the
+  sanctioned append primitive's healing TOCTOU (`jsonl-append.ts`) can legitimately produce a
+  blank line when two concurrent appends both observe a non-newline last byte and both prefix a
+  healing `\n`; that is strictly better than the pre-ADR-0058 merge it replaces and must not be
+  flagged as corruption.
+
+**WARN** for a missing final newline: "{file}: does not end with a newline — the next append
+will merge onto this line."
 **WARN** for malformed lines: "{file}: Line {N} is not valid JSON"
+
+**Scope exclusion**: do NOT extend either check to `.canon/history/**/transcripts/*.jsonl`.
+Those files are write-once and never re-appended, so a missing final newline there is
+harmless — flagging them would bury this check under a large volume of false positives and
+train reviewers to ignore it.
 
 #### Check 10: Convention bloat
 

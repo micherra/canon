@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.22.0](https://github.com/micherra/canon/compare/v2.21.0...v2.22.0) (2026-07-15)
+
+
+### Features
+
+* **evolution:** trust-weighted attribution consumer over the decisions ledger (Gap 3, ADR-0051/0052) ([#502](https://github.com/micherra/canon/issues/502)) ([bb61407](https://github.com/micherra/canon/commit/bb614075d3036014c7379643d4ebe24f0a2f9409))
+* **history:** per-agent cache-efficiency rollup + fix(orchestration): retire dead cache_prefix subsystem ([#495](https://github.com/micherra/canon/issues/495)) ([709335d](https://github.com/micherra/canon/commit/709335da4b04d3b10981dddb56e4bafa0eeac8b3))
+* **hooks:** warn on concurrent-open-PR ADR-number collisions in adr-number-check.sh ([#497](https://github.com/micherra/canon/issues/497)) ([3da59cb](https://github.com/micherra/canon/commit/3da59cb4fd59ff27ebfab46df97af09ae32be304))
+* **learning:** reconcile-on-read closes the learning-resolution leak (ADR-0048) ([#494](https://github.com/micherra/canon/issues/494)) ([2e41576](https://github.com/micherra/canon/commit/2e4157683f91a0fa112bd4b2e7a3f82ba772dab0))
+* **orchestration:** canon-waves Increment 1 — compile a runbook/task-DAG into a Workflow (SYNTHESIS Inc-5) ([#504](https://github.com/micherra/canon/issues/504)) ([4488b4c](https://github.com/micherra/canon/commit/4488b4c4de82de35e639464bf8703fac07642acf))
+* **orchestration:** retire the forecast_base_advance MCP tool (Inc-0 kill-criterion met) ([#505](https://github.com/micherra/canon/issues/505)) ([f32bb40](https://github.com/micherra/canon/commit/f32bb4093df6380a68ccf57780785088bdd01a4c))
+
+
+### Bug Fixes
+
+* **hooks:** bounded /health retry in SessionStart server guard ([#500](https://github.com/micherra/canon/issues/500)) ([4e78947](https://github.com/micherra/canon/commit/4e789473e32f7fc858d6c28f1e8e447960638de3))
+* **mcp-http:** harden resolveScope against daemon-restart scope loss via spec-compliant 404 ([#503](https://github.com/micherra/canon/issues/503)) ([cefa8e8](https://github.com/micherra/canon/commit/cefa8e8fcb9d6b3f2e2b34b875134525a184e5b3))
+* **orchestration:** repair named-agent transcript capture via session-scoped resolver fallback ([#499](https://github.com/micherra/canon/issues/499)) ([6cb3505](https://github.com/micherra/canon/commit/6cb35059f53b567396bf941f79e16bc9ce04bdb4))
+* **tests:** resolve latent noUnsafeOptionalChaining bug in context-provenance agent-def test ([#506](https://github.com/micherra/canon/issues/506)) ([1bc6c10](https://github.com/micherra/canon/commit/1bc6c10f458d95b2dd1be545fd3d4943b57516e4))
+
 ## [2.21.0](https://github.com/micherra/canon/compare/v2.20.0...v2.21.0) (2026-07-11)
 
 
