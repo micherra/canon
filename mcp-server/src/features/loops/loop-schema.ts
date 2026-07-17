@@ -117,15 +117,55 @@ const ObserveSchema = z.object({
   tools: z.array(z.string()).default([]),
 });
 
-const TransitionRuleSchema = z.object({
-  append: z.boolean().optional(),
-  field: z.string(),
-  from: z.string().optional(),
-  message: z.string(),
-  orchestrator_action: z.enum(ORCHESTRATOR_ACTIONS).optional(),
-  terminate: z.boolean().optional(),
-  to: z.string().optional(),
-});
+// ADR-0056: fire_on_baseline opt-in — admissible ONLY on a to:-only, non-append,
+// non-from: rule. ADR-0002 names TWO noise sub-classes, not three: a to:-matching
+// false-fire and an append-mode flood. The superRefine below bars ONE of them
+// structurally: `append: true` → rejected (flood). It additionally bars the
+// any-change shape (no `to:` → rejected) and the from:-contradiction shape
+// (`from:` set → rejected) — neither of which ADR-0002 named as noise. It does
+// NOT bar the to:-matching false-fire — ADR-0002's own first named example — which
+// is schema-admissible regardless of whether the value it names is "alerting" or
+// "healthy"; the schema has no such concept, only equality. That sub-class is
+// governed by per-rule author judgment plus review, not by this guard — see
+// ADR-0056 § Consequences.
+const TransitionRuleSchema = z
+  .object({
+    append: z.boolean().optional(),
+    field: z.string(),
+    fire_on_baseline: z.boolean().optional(),
+    from: z.string().optional(),
+    message: z.string(),
+    orchestrator_action: z.enum(ORCHESTRATOR_ACTIONS).optional(),
+    terminate: z.boolean().optional(),
+    to: z.string().optional(),
+  })
+  .superRefine((rule, ctx) => {
+    // Intra-rule check — needs no outer context, so it lives on TransitionRuleSchema
+    // itself rather than the outer LoopDefinitionSchema superRefine (simplicity-first).
+    if (rule.fire_on_baseline !== true) return;
+    const reasons: string[] = [];
+    if (rule.to === undefined) {
+      reasons.push("requires 'to' to be set (any-change rules cannot opt in)");
+    }
+    if (rule.from !== undefined) {
+      reasons.push("requires 'from' to be unset (a baseline has no prior to assert against)");
+    }
+    if (rule.append === true) {
+      reasons.push("requires 'append' to not be true (the flood/append class cannot opt in)");
+    }
+    if (rule.terminate === true) {
+      reasons.push(
+        "requires 'terminate' to not be true (a baseline-fired rule would terminate the loop before it establishes a watch)",
+      );
+    }
+    if (reasons.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `fire_on_baseline: true on field '${rule.field}' is inadmissible — ${reasons.join("; ")}`,
+        path: ["fire_on_baseline"],
+      });
+    }
+  });
 
 const SurfaceSchema = z.object({
   on_transition: z

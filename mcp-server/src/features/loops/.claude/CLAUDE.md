@@ -61,6 +61,34 @@ Derive-from-const: `ORCHESTRATOR_ACTIONS = ["auto-triage-fix", "auto-plugin-upda
   when the transition fires; the orchestrator reads and acts on it
 - See CLAUDE.md § Loop Framework, "Consuming `orchestrator_action`" for the seven consumption contracts
 
+## `fire_on_baseline` on `TransitionRuleSchema` (ADR-0056)
+
+`fire_on_baseline` — optional `z.boolean()` field on a transition rule, admissible **iff**
+`to` is set AND `from` is unset AND `append` is not `true` AND `terminate` is not `true`,
+enforced by a `superRefine` on `TransitionRuleSchema` itself (not the outer
+`LoopDefinitionSchema` cross-field check — this constraint is intra-rule).
+
+- **Omitted or `false`** → both mean "off" (no `.default()` — deliberately, so `undefined` and
+  `false` stay distinguishable at the type level but identical in effect); existing loops parse
+  unchanged
+- **Inadmissible combination** (`append: true`, or no `to`, or `from` set, or `terminate: true`,
+  with the flag `true`) → parse-time rejection, flows through `parseLoopDefinition`'s
+  `{ ok: false }` path into `invalid[]` (fail-closed), never a runtime warning. The
+  `terminate: true` bar (added post-review) closes a latent gap: without it, a baseline-fired
+  rule could terminate the loop before it establishes a watch — the worst property a watchdog
+  can have. No shipped rule combines them.
+- **What it does**: on a tick with an absent prior (first tick, or the field missing from a
+  partial prior snapshot), a rule carrying `fire_on_baseline: true` fires if the observed value
+  already equals the rule's `to:` — the runner's one exception to the ADR-0002 first-tick guard
+  (`skills/canon/commands/loop-tick.md` Step 5). Every rule without the flag keeps ADR-0002's
+  default exactly: absent prior → never a transition.
+- **What it does NOT bar**: the `superRefine` makes the flood/`append` and any-change noise
+  sub-classes structurally inexpressible, but a to:-matching false-fire (e.g. a hypothetical
+  `to: "failure"` rule) remains schema-admissible — see ADR-0056 § Consequences for the full,
+  corrected statement.
+- Shipped on 3 rules: `ship-watch.merge_state` (`to: BEHIND`, `to: DIRTY`) and
+  `session-watch.kg_stale` (`to: "true"`)
+
 ## Phase Boundary
 
 Phase A: schema + loader + tools + `_probe` demo loop; no production loop fires.

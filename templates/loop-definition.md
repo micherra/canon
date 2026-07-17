@@ -63,6 +63,11 @@ surface:
       message: "Field changed to expected value."   # [REQUIRED]
       terminate: false     # true → loop ends when this rule fires
       append: false        # true → append to log instead of replacing
+      # fire_on_baseline: true   # [ADR-0056] opt-in; admissible ONLY when to is set, from is
+                                  # unset, append is not true, and terminate is not true — this
+                                  # example rule has a `from:` above, so uncommenting as-is would
+                                  # be rejected at parse time. See "First-tick semantics" below
+                                  # before using.
 
 terminate:
   when:                    # [REQUIRED] at least one condition
@@ -96,11 +101,27 @@ no per-loop branching should exist in the runner.
 
 ### Diff against snapshot
 
-**First-tick semantics (ADR-0002):** The first tick establishes a baseline and surfaces
-nothing. A field with no prior value is never treated as a transition. Author transition
-rules assuming they fire only on a *change from a known prior* (tick 2+). If a loop must
-surface an already-true condition at arm time, that requires an explicit opt-in (not
-available in Phase C).
+**First-tick semantics (ADR-0002, amended by ADR-0056):** The first tick establishes a
+baseline and surfaces nothing by default. A field with no prior value is never treated as a
+transition. Author transition rules assuming they fire only on a *change from a known prior*
+(tick 2+) — unless the rule opts in.
+
+If a loop must surface an already-true condition at arm time, declare `fire_on_baseline: true`
+on the rule. Admissible **iff** `to` is set, `from` is unset, `append` is not `true`, and
+`terminate` is not `true` — any other combination is a **parse-time rejection** (fail-closed;
+the flag can't be added to an any-change, `append`/flood, `from:`-bearing edge, or terminating
+rule even by mistake). The `terminate` bar exists because a baseline-fired rule that also
+terminates the loop would self-kill it before it establishes a watch — the worst property a
+watchdog can have. A rule that opts in fires on the baseline tick when the observed value
+already equals its `to:`; a healthy baseline still surfaces nothing. Fires once — tick 2's
+ordinary diff sees no change and does not re-fire.
+
+```yaml
+    - field: merge_state       # [PHASE C] example: surface an already-BEHIND PR at arm time
+      to: BEHIND
+      fire_on_baseline: true   # valid here: to is set, from/terminate unset, append is not true
+      message: "PR branch is behind main."
+```
 
 Compare observed values against the last-seen snapshot (from the state file).
 
