@@ -136,6 +136,45 @@ describe("parseRecords — findings element shape (W2)", () => {
   });
 });
 
+// ---- parseRecords: touched_files[] element validation (residual W2 follow-up, REVIEW.md Fix-1 Verification) ----
+
+describe("parseRecords — touched_files element shape (residual W2 follow-up)", () => {
+  it("a touched_files element that is not a string counts the whole line as malformed, not a record", () => {
+    const badRecord = {
+      ...record({ record_id: "r1" }),
+      touched_files: ["a.ts", 42],
+    };
+    const lines = [JSON.stringify(badRecord)];
+
+    expect(() => {
+      const { malformed, records } = parseRecords(lines);
+      expect(records).toHaveLength(0);
+      expect(malformed).toBe(1);
+    }).not.toThrow();
+  });
+
+  it("a record with a non-string touched_files element never reaches scoreRecords via the normal pipeline, so it cannot crash it", () => {
+    const badRecord = {
+      ...record({ record_id: "r1" }),
+      touched_files: [{ not: "a string" }],
+    };
+    const { records } = parseRecords([JSON.stringify(badRecord)]);
+    // The malformed record was filtered out by parseRecords — nothing reaches
+    // joinRecordsToReviews/scoreRecords, so there is nothing left that could throw.
+    expect(records).toHaveLength(0);
+  });
+
+  it("a well-formed all-string touched_files array still parses as a valid record", () => {
+    const goodRecord = {
+      ...record({ record_id: "r1" }),
+      touched_files: ["a.ts", "b.ts"],
+    };
+    const { malformed, records } = parseRecords([JSON.stringify(goodRecord)]);
+    expect(records).toHaveLength(1);
+    expect(malformed).toBe(0);
+  });
+});
+
 // ---- dedupeRecords ----
 
 describe("dedupeRecords", () => {
@@ -168,6 +207,18 @@ describe("joinRecordsToReviews (AC4 / P2(b))", () => {
     if (result.status === "joined") {
       expect(result.layer).toBe(1);
       expect(result.review.review_id).toBe("rev_exact");
+    }
+  });
+
+  it("a record_id review_id with no matching review falls through to layer 2, not straight to unjoinable", () => {
+    const rec = record({ branch: "feat/x", head_sha: "sha2", record_id: "r1", review_id: "rev_stale_no_longer_exists" });
+    const shaMatch = review({ branch: "feat/x", last_reviewed_sha: "sha2", review_id: "rev_matching" });
+
+    const [result] = joinRecordsToReviews([rec], [shaMatch]);
+    expect(result.status).toBe("joined");
+    if (result.status === "joined") {
+      expect(result.layer).toBe(2);
+      expect(result.review.review_id).toBe("rev_matching");
     }
   });
 

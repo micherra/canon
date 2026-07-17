@@ -189,6 +189,74 @@ describe("runRecorder — total fail-open envelope (AC2 / dc-02)", () => {
     const record = JSON.parse(lines[0]);
     expect(record.failed_open).toBe(true);
   });
+
+  it("a throwing readRubric seam still appends a failed_open:true record (rubric-hash stage degrades)", () => {
+    const baseSha = spawnSync("git", ["rev-parse", "HEAD"], { cwd: tmpDir, encoding: "utf-8" }).stdout.trim();
+    const lines: string[] = [];
+
+    const result = runRecorder(
+      { base: baseSha, slug: "test-slug", worktree: tmpDir },
+      {
+        appendLine: (_path, line) => lines.push(line),
+        readRubric: () => {
+          throw new Error("ENOENT: rubric.md missing");
+        },
+        shellRunner: () => processResult({ ok: true, stdout: PASS_STDOUT }),
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    const record = JSON.parse(lines[0]);
+    expect(record.failed_open).toBe(true);
+    expect(record.rubric_hash).toBe("");
+  });
+
+  it("a failing head-resolution git call (--head omitted) still appends a failed_open:true record with head:\"unknown\"", () => {
+    const lines: string[] = [];
+
+    const result = runRecorder(
+      { base: "some-base", slug: "test-slug", worktree: tmpDir },
+      {
+        appendLine: (_path, line) => lines.push(line),
+        gitExecFn: (args) => {
+          if (args[0] === "rev-parse" && args[1] === "HEAD") {
+            return { duration_ms: 1, exitCode: 1, ok: false, stderr: "detached/unresolvable", stdout: "", timedOut: false };
+          }
+          return { duration_ms: 1, exitCode: 0, ok: true, stderr: "", stdout: "main", timedOut: false };
+        },
+        shellRunner: () => processResult({ ok: true, stdout: PASS_STDOUT }),
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    const record = JSON.parse(lines[0]);
+    expect(record.failed_open).toBe(true);
+    expect(record.head_sha).toBe("unknown");
+  });
+
+  it("a failing branch-resolution git call still appends a failed_open:true record with branch:\"unknown\"", () => {
+    const baseSha = spawnSync("git", ["rev-parse", "HEAD"], { cwd: tmpDir, encoding: "utf-8" }).stdout.trim();
+    const lines: string[] = [];
+
+    const result = runRecorder(
+      { base: baseSha, head: "deadbeef", slug: "test-slug", worktree: tmpDir },
+      {
+        appendLine: (_path, line) => lines.push(line),
+        gitExecFn: (args) => {
+          if (args[0] === "rev-parse" && args[1] === "--abbrev-ref") {
+            return { duration_ms: 1, exitCode: 1, ok: false, stderr: "no branch", stdout: "", timedOut: false };
+          }
+          return { duration_ms: 1, exitCode: 0, ok: true, stderr: "", stdout: "a.ts", timedOut: false };
+        },
+        shellRunner: () => processResult({ ok: true, stdout: PASS_STDOUT }),
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    const record = JSON.parse(lines[0]);
+    expect(record.failed_open).toBe(true);
+    expect(record.branch).toBe("unknown");
+  });
 });
 
 describe("runRecorder — CLI-level integration (AC2 induced-failure verification)", () => {

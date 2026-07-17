@@ -84,9 +84,10 @@ function isCheckerFinding(value: unknown): value is CheckerFinding {
 /**
  * Named type guard for JSON.parse output — the record is only trusted once
  * every required field's shape is verified (never cast through `unknown`
- * blindly), INCLUDING every `findings[]` element's shape (W2). Unknown/extra
- * fields are ignored; missing/mistyped required fields count the line as
- * malformed.
+ * blindly), INCLUDING every `findings[]` element's shape (W2) and every
+ * `touched_files[]` element's shape (residual W2 follow-up, REVIEW.md Fix-1
+ * Verification "Residual observation"). Unknown/extra fields are ignored;
+ * missing/mistyped required fields count the line as malformed.
  */
 function isCheckerRunRecord(value: unknown): value is CheckerRunRecord {
   if (typeof value !== "object" || value === null) return false;
@@ -99,6 +100,7 @@ function isCheckerRunRecord(value: unknown): value is CheckerRunRecord {
     typeof v.base_sha === "string" &&
     typeof v.head_sha === "string" &&
     Array.isArray(v.touched_files) &&
+    v.touched_files.every((t) => typeof t === "string") &&
     Array.isArray(v.findings) &&
     v.findings.every(isCheckerFinding) &&
     typeof v.failed_open === "boolean" &&
