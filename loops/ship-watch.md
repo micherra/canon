@@ -54,10 +54,12 @@ surface:
       message: "New external review comment(s) on the PR — surfacing for triage."
     - field: merge_state
       to: BEHIND
+      fire_on_baseline: true
       orchestrator_action: auto-update-branch
       message: "PR branch is behind main — surfacing auto-update-branch (orchestrator merges origin/main into the PR branch and pushes)."
     - field: merge_state
       to: DIRTY
+      fire_on_baseline: true
       orchestrator_action: auto-update-branch
       message: "PR branch conflicts with main — surfacing auto-update-branch (orchestrator merges origin/main into the PR branch and pushes)."
 terminate:
@@ -132,7 +134,8 @@ Compare each of the five fields against the last-seen value from `state.path`:
 
 ### Surface on transition
 
-Apply `surface.on_transition` rules (transition-only — silent on no-op ticks):
+Apply `surface.on_transition` rules (transition-only and silent on no-op ticks, with the two
+`merge_state` rules' `fire_on_baseline` tick-1 exception below — ADR-0056):
 
 1. **`ci_conclusion`: `pending` → `failure`** — emit the failure message and mark for
    termination. Optionally surface the failing job: `gh pr checks <pr-number>` to show
@@ -161,7 +164,9 @@ Apply `surface.on_transition` rules (transition-only — silent on no-op ticks):
    signal; it does NOT act on it.
 
 5. **`merge_state`: → `BEHIND`** — emit the auto-update-branch message. Carries
-   `orchestrator_action: auto-update-branch` — the ORCHESTRATOR merges `origin/main` into
+   `orchestrator_action: auto-update-branch` and `fire_on_baseline: true` (ADR-0056) — this
+   rule fires on tick 1 too, if the PR is already `BEHIND` the moment this loop arms, not
+   only on a later transition into `BEHIND`. The ORCHESTRATOR merges `origin/main` into
    the PR branch and pushes. No `terminate` on this rule — the loop keeps watching (the
    branch update may itself flip `merge_state` again, or CI/review transitions may still
    need to surface). The runner only surfaces the signal; it does NOT run any `git merge`
@@ -170,8 +175,9 @@ Apply `surface.on_transition` rules (transition-only — silent on no-op ticks):
 6. **`merge_state`: → `DIRTY`** — emit the auto-update-branch message (same action as
    `BEHIND`; `DIRTY` means the merge would produce real conflicts, which the ORCHESTRATOR's
    consumption contract handles by attempting a merge and routing genuine source conflicts
-   to HITL — see `references/loop-framework.md`). No `terminate` on this rule. The runner
-   only surfaces the signal; it does NOT run any `git merge` or `git push`.
+   to HITL — see `references/loop-framework.md`). Also carries `fire_on_baseline: true`
+   (ADR-0056) — same tick-1 exception as the `BEHIND` rule above. No `terminate` on this
+   rule. The runner only surfaces the signal; it does NOT run any `git merge` or `git push`.
 
 Ticks where no field changes: emit nothing. Silent on no-op is by construction.
 
@@ -180,16 +186,22 @@ Ticks where no field changes: emit nothing. Silent on no-op is by construction.
 `merge_state` transitioning to `BEHIND` or `DIRTY` means the watched PR's branch has
 fallen behind `origin/main` (or now conflicts with it) since the PR was opened or since
 the loop's last tick — this is exactly the failure mode that let PR #462 sit with an
-armed-but-stalled auto-merge until a human noticed. The loop's job stops at observation:
+armed-but-stalled auto-merge until a human noticed. Both `merge_state` rules also carry
+`fire_on_baseline: true` (ADR-0056): if the PR is ALREADY `BEHIND` or `DIRTY` the moment
+this loop arms (tick 1), the directive fires immediately rather than waiting for a
+departure-and-return transition that may never happen — the exact case that left PR #498
+silently unobserved before this fix. The loop's job stops at observation:
 it reads `mergeStateStatus` via the existing read-only `gh pr view` call (already on the
 `observe.shell_commands` allowlist — no allowlist change needed) and surfaces
-`ORCHESTRATOR_ACTION: auto-update-branch field=merge_state loop=ship-watch` when the
-transition fires. The runner never runs `git merge`, `git push`, or any other mutating
-command (dc-06; `guardrails.mutates_build` stays `false`, and no mutating `git`/`gh`
-subcommand is on this loop's `observe.shell_commands` allowlist). The ORCHESTRATOR
-performs the actual branch update — read-only precheck, fetch `origin` (fail-open), merge
-`origin/main` into the PR branch, resolve generated-artifact conflicts by regeneration,
-re-run the manifest gate, then push. Full consumer contract: `references/loop-framework.md`.
+`ORCHESTRATOR_ACTION: auto-update-branch field=merge_state loop=ship-watch` when the rule
+fires (transition OR tick-1 baseline match). The runner never runs `git merge`, `git push`,
+or any other mutating command (dc-06; `guardrails.mutates_build` stays `false`, and no
+mutating `git`/`gh` subcommand is on this loop's `observe.shell_commands` allowlist). The
+ORCHESTRATOR performs the actual branch update — read-only precheck, fetch `origin`
+(fail-open), merge `origin/main` into the PR branch, resolve generated-artifact conflicts
+by regeneration, re-run the manifest gate, then push. The same read-only precheck handles a
+baseline-fired directive identically to a tick-2+ one — no special-casing needed. Full
+consumer contract: `references/loop-framework.md`.
 
 ### Write snapshot
 

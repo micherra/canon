@@ -89,11 +89,25 @@ Record the updated snapshot values.
 
 ## Step 5: Diff against last snapshot
 
-**First-tick guard (ADR-0002):** A field whose *prior* value is absent — because there is no
-state file yet (first tick) or the field is missing from the prior snapshot — is NOT a
-transition. Such a field never matches any `on_transition` rule (not even an any-change or
-`to:`-matching rule). On the first tick, ALL fields have an absent prior, so zero rules fire;
-the tick still writes the baseline snapshot (Step 7) and reports a non-surfacing baseline tick.
+**First-tick guard (ADR-0002), with one exception (ADR-0056):** A field whose *prior* value is
+absent — because there is no state file yet (first tick) or the field is missing from the prior
+snapshot — is NOT a transition and matches no `on_transition` rule — **with one exception**: a
+rule declaring `fire_on_baseline: true` fires on a tick with an absent prior **if and only if**
+the observed value equals the rule's `to:` value. The schema guarantees such a rule has a `to:`,
+has no `from:`, is not `append`, and is not `terminate` — no other shape can carry the flag.
+Every rule WITHOUT
+`fire_on_baseline: true` keeps today's behavior exactly: on the first tick, its field has an
+absent prior, so it never fires, regardless of shape (any-change, `to:`-matching, or otherwise).
+
+Two points worth being explicit about, because an LLM executes this prose:
+- A `fire_on_baseline` rule whose observed baseline value does **not** equal its `to:` fires
+  nothing. This is what keeps a healthy first tick silent — ADR-0002's core motivation is
+  unaffected by this exception.
+- On tick 2+, a `fire_on_baseline` rule follows the **normal** rules below with no special
+  casing: e.g. `BEHIND` → `BEHIND` is not a change, so it does not re-fire. A condition surfaced
+  once via `fire_on_baseline` on tick 1 does not re-surface on a later no-op tick — the once-only
+  property falls out of the ordinary diff, with no new state or ledger. See ADR-0002 (default)
+  and ADR-0056 (the opt-in) for the full rationale.
 
 Compare each field in the updated snapshot against the last-seen values from Step 3.
 
@@ -127,7 +141,16 @@ For each fired transition rule (not already surfaced this run):
 
 Example output line: `[loop: _probe] Probe tick 3 reached — Loop Framework Phase A path proven.`
 
-**On a baseline (first) tick, surface nothing** — report:
+**On a baseline (first) tick, surface nothing EXCEPT rules that fired via `fire_on_baseline`
+(ADR-0056).** A baseline-fired rule uses the exact same surfacing path above — emit
+`rule.message`, and if the rule carries an `orchestrator_action`, emit the same
+`ORCHESTRATOR_ACTION:` line via the existing generic path. No per-action branching is added for
+this case; Step 6's contract (one instruction serves every vocabulary member) is unchanged.
+
+Report both the surface and the baseline capture, e.g.:
+`[loop: <id>] Tick 1 baseline captured (1 rule fired on baseline). Watching from next tick.`
+
+When no rule fires on a baseline tick (the common case), report:
 `[loop: <id>] Tick 1 baseline captured. Watching from next tick.`
 
 ## Step 7: Write the updated snapshot
@@ -142,6 +165,17 @@ Write the updated snapshot values back to `definition.state.path` (JSON format):
 ```
 
 Create parent directories if needed. Use atomic write (write to temp, rename) if possible.
+
+**Exposure for `fire_on_baseline` rules (ADR-0056, accepted trade-off, not fixed here):** a
+baseline-fired rule's once-only guarantee depends on this write actually landing. If the tick
+dies or this write fails between Step 6 (surface) and here, the next tick again sees an absent
+prior — the rule fires AGAIN, re-emitting its `ORCHESTRATOR_ACTION` line. Before this build a
+failed tick-1 write was unobservable (tick 1 always fired zero rules either way); now it can
+cause a re-fire. Deliberately NOT fixed by reordering Step 6 and Step 7 (surface-then-write
+stays the order for every rule, not just baseline-fired ones) — see ADR-0056 § Consequences for
+why a global reorder trades a self-healing failure mode (duplicate surface) for a worse,
+silent one (permanently lost surface) across every loop, for a benefit narrowly scoped to 3
+rules whose consumers already precheck idempotently.
 
 ## Step 8: Evaluate termination
 
@@ -191,6 +225,10 @@ Also terminate if any fired transition rule has `terminate: true`.
   (ScheduleWakeup). Both modes execute the same observe→diff→surface→write→evaluate pipeline.
 - **_probe is the runnable proof.** Invoking `/canon:loop-tick _probe` in the Phase A
   verify step demonstrates the full schema→registry→runtime path end-to-end (registered-install form).
-- **First-tick baseline (ADR-0002).** The first tick captures a baseline snapshot and surfaces
-  nothing — transition rules always compare against a known prior value (present from tick 2+).
-  This eliminates false-fires from conditions already true at arm time.
+- **First-tick baseline (ADR-0002, amended by ADR-0056).** The first tick captures a baseline
+  snapshot and surfaces nothing for any rule that has not opted in — transition rules always
+  compare against a known prior value (present from tick 2+), eliminating false-fires from
+  conditions already true at arm time. The one exception: a rule declaring
+  `fire_on_baseline: true` (admissible only on a `to:`-only, non-`append`, non-`from:`,
+  non-`terminate` rule)
+  fires on the baseline tick when the observed value already equals its `to:`. See Step 5.
