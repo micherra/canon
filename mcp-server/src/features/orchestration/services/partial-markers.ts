@@ -13,11 +13,23 @@
  *   `verdict: IN_PROGRESS` and `## Canon Review — Verdict: IN_PROGRESS`)
  * - `IN_PROGRESS` status — scribe skeleton (frontmatter `status: "IN_PROGRESS"`,
  *   the context-sync template's own status field, per `templates/context-sync.md`)
+ *
+ * **Marker [2] is heading-anchored (W-1 fix, 2026-07-17):** it exists solely
+ * to catch the reviewer stub's HEADING form (`## Canon Review — Verdict:
+ * IN_PROGRESS`) — the frontmatter form is already independently caught by
+ * marker [1]. It was originally unanchored + case-insensitive with no `^`,
+ * so it matched the substring "Verdict: IN_PROGRESS" ANYWHERE in the first
+ * 8192 chars, including inside a FINALIZED review body that merely quotes
+ * the marker string in prose (e.g. a review of Canon's own skeleton
+ * machinery). That false positive defeated `emitWriteReceipt` and the WR-02
+ * disk fallback for a legitimate class of finished reviews. Requiring the
+ * match to start a heading line (`^#{1,6}`, `m` flag) preserves detection of
+ * the real stub while no longer matching mid-prose quotation.
  */
 export const PARTIAL_MARKERS: readonly RegExp[] = [
   /^#{1,6}\s*Status:\s*Partial\b/im,
   /^verdict:\s*IN_PROGRESS\b/im,
-  /Verdict:\s*IN_PROGRESS\b/i,
+  /^#{1,6}\s.*Verdict:\s*IN_PROGRESS\b/im,
   /^status:\s*["']?IN_PROGRESS["']?\b/im,
 ];
 
