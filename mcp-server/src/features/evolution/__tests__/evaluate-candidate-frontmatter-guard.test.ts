@@ -186,6 +186,34 @@ describe("evaluateCandidate overlay fail-closed reject (dc-02, dc-06)", () => {
     expect(mockRunShell).not.toHaveBeenCalled();
   });
 
+  it("a case-varied .CANON/** target is rejected fail-closed the same as lowercase .canon", async () => {
+    const result = await evaluateCandidate({
+      candidate_text: "# edited overlay principle body",
+      project_dir: projectDir,
+      target_path: ".CANON/principles/rules/x.md",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.accepted).toBe(false);
+    expect(result.guard_rejection?.reason).toBe("overlay_not_sandboxable");
+    expect(mockRunShell).not.toHaveBeenCalled();
+  });
+
+  it("a mixed-case .Canon/** target is rejected fail-closed the same as lowercase .canon", async () => {
+    const result = await evaluateCandidate({
+      candidate_text: "# edited overlay principle body",
+      project_dir: projectDir,
+      target_path: ".Canon/principles/rules/x.md",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.accepted).toBe(false);
+    expect(result.guard_rejection?.reason).toBe("overlay_not_sandboxable");
+    expect(mockRunShell).not.toHaveBeenCalled();
+  });
+
   it("a built-in principles/ target with a MUTATED frontmatter block is rejected (frontmatter_modified)", async () => {
     const candidate =
       "---\nid: some-principle\nseverity: rule\n---\n\n# Some Principle\n\nOriginal body.\n";

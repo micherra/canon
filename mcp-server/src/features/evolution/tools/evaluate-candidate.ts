@@ -276,10 +276,17 @@ function isPrincipleDefTarget(targetPath: string): boolean {
  * excludes `.canon/` (PROBE-FINDINGS Probe 2 — `overlayCopied: false`); this is
  * defense-in-depth so no future caller path can inject overlay text into
  * `withInjectedGuardrailCandidate`/`withInjectedCandidate`.
+ *
+ * Case-insensitive comparison: the TRUE boundary against overlay content ever
+ * reaching the sandbox is the positive `isGuardrailTarget` allowlist plus the
+ * `PLUGIN_ARTIFACT_ROOTS` copy enumeration (both filesystem-case-immune) — this
+ * denylist is redundant defense-in-depth, made case-insensitive only to remove
+ * the cosmetic ambiguity of a `.CANON`/`.Canon` variant slipping past a strict
+ * string compare (ADR-0027).
  */
 function isOverlayTarget(targetPath: string): boolean {
   const normalized = normalize(targetPath);
-  return normalized.split(sep)[0] === ".canon";
+  return normalized.split(sep)[0].toLowerCase() === ".canon";
 }
 
 /**
