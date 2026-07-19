@@ -11,8 +11,7 @@
  * is now inside tryResumeWorkspace so any future caller gets it automatically.
  */
 
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -32,6 +31,8 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
   }),
 }));
 
+import { assertOk } from "@shared/lib/tool-result.ts";
+import { initGitFixtureRepo } from "../../../tests/git-fixture.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
 // Scope: Tests the task-identity guard in tryResumeWorkspace — DB manipulation simulates slug collisions; mismatched task blocks resume.
@@ -42,18 +43,6 @@ function makeTmpProjectDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "init-ws-task-identity-test-"));
   tmpDirs.push(dir);
   return dir;
-}
-
-function initGitRepo(dir: string): string {
-  spawnSync("git", ["init"], { cwd: dir });
-  spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: dir });
-  spawnSync("git", ["config", "user.name", "Test"], { cwd: dir });
-  writeFileSync(join(dir, "README.md"), "# test");
-  spawnSync("git", ["add", "."], { cwd: dir });
-  spawnSync("git", ["commit", "-m", "init"], { cwd: dir });
-
-  const result = spawnSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf-8" });
-  return result.stdout.trim();
 }
 
 afterEach(() => {
@@ -73,7 +62,7 @@ describe("initWorkspaceFlow — task-identity guard in tryResumeWorkspace", {
 }, () => {
   it("resumes the same workspace when task matches", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const input = {
       base_commit: baseCommit,
@@ -88,10 +77,12 @@ describe("initWorkspaceFlow — task-identity guard in tryResumeWorkspace", {
 
     // Create workspace
     const first = await initWorkspaceFlow(input, projectDir, "/fake/plugin");
+    assertOk(first);
     expect(first.created).toBe(true);
 
     // Resume with same task — should resume
     const second = await initWorkspaceFlow(input, projectDir, "/fake/plugin");
+    assertOk(second);
     expect(second.created).toBe(false);
     expect(second.workspace).toBe(first.workspace);
     expect(second.session.task).toBe("fix the authentication bug");
@@ -99,7 +90,7 @@ describe("initWorkspaceFlow — task-identity guard in tryResumeWorkspace", {
 
   it("does NOT resume when task differs (task-identity guard blocks wrong resume)", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     // Create workspace for task A
     const inputA = {
@@ -110,6 +101,7 @@ describe("initWorkspaceFlow — task-identity guard in tryResumeWorkspace", {
       tier: "small" as const,
     };
     const first = await initWorkspaceFlow(inputA, projectDir, "/fake/plugin");
+    assertOk(first);
     expect(first.created).toBe(true);
 
     // Now try to init with a different task but same slug prefix (simulating slug collision)
@@ -129,6 +121,7 @@ describe("initWorkspaceFlow — task-identity guard in tryResumeWorkspace", {
     // The guard lives in tryResumeWorkspace: when expectedTask !== session.task, return null.
     // We verify via initWorkspaceFlow: same slug resolution path but different task → creates new.
     const second = await initWorkspaceFlow(inputB, projectDir, "/fake/plugin");
+    assertOk(second);
 
     // A different task creates a new workspace (either via guard or slug difference)
     // The important thing: second.session.task should be the NEW task, not the old one
@@ -139,7 +132,7 @@ describe("initWorkspaceFlow — task-identity guard in tryResumeWorkspace", {
 
   it("guard prevents resume when slug collides but tasks differ (core invariant)", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     // Create workspace with task "fix the bug"
     const inputA = {
@@ -150,6 +143,7 @@ describe("initWorkspaceFlow — task-identity guard in tryResumeWorkspace", {
       tier: "small" as const,
     };
     const first = await initWorkspaceFlow(inputA, projectDir, "/fake/plugin");
+    assertOk(first);
     expect(first.created).toBe(true);
     expect(first.session.task).toBe("fix the bug");
 
@@ -165,6 +159,7 @@ describe("initWorkspaceFlow — task-identity guard in tryResumeWorkspace", {
     // Now call with the ORIGINAL task — the guard inside tryResumeWorkspace should
     // detect the mismatch (session.task !== expectedTask) and return null.
     const second = await initWorkspaceFlow(inputA, projectDir, "/fake/plugin");
+    assertOk(second);
 
     // The guard blocked the resume. initWorkspaceFlow creates a new workspace.
     expect(second.created).toBe(true);
