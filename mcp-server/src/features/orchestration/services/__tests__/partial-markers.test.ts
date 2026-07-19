@@ -120,3 +120,85 @@ describe("isSkeletonContent — false-positive regression (W-1)", () => {
     expect(marker.test("## Canon Review — Verdict: IN_PROGRESS")).toBe(true);
   });
 });
+
+describe("isSkeletonContent — leading-region scoping (W-2/W-3 round-2 fix)", () => {
+  it("a finalized review with a FENCED 'verdict: IN_PROGRESS' line in the body is NOT a skeleton", () => {
+    const content = [
+      "---",
+      "verdict: CLEAN",
+      "---",
+      "",
+      "## Canon Review — Verdict: CLEAN",
+      "",
+      "This review discusses the Early Output Protocol stub format below.",
+      "",
+      "```yaml",
+      "verdict: IN_PROGRESS",
+      "```",
+      "",
+    ].join("\n");
+
+    expect(isSkeletonContent(content)).toBe(false);
+  });
+
+  it('a finalized review with a FENCED status: "IN_PROGRESS" line in the body is NOT a skeleton', () => {
+    const content = [
+      "---",
+      "verdict: CLEAN",
+      "---",
+      "",
+      "## Canon Review — Verdict: CLEAN",
+      "",
+      "This review discusses the scribe stub's frontmatter shape below.",
+      "",
+      "```",
+      'status: "IN_PROGRESS"',
+      "```",
+      "",
+    ].join("\n");
+
+    expect(isSkeletonContent(content)).toBe(false);
+  });
+
+  it("a finalized review whose BODY (after substantive prose) contains a '## Status: Partial' heading is NOT a skeleton", () => {
+    const content = [
+      "---",
+      "verdict: CLEAN",
+      "---",
+      "",
+      "## Canon Review — Verdict: CLEAN",
+      "",
+      "The architect's Early Output Protocol stub writes a heading below as its first line.",
+      "",
+      "## Status: Partial",
+      "",
+      "That heading text is quoted verbatim from the stub template, not a real skeleton.",
+      "",
+    ].join("\n");
+
+    expect(isSkeletonContent(content)).toBe(false);
+  });
+
+  it("(W-3) a body heading that merely quotes 'Verdict: IN_PROGRESS' after substantive prose is NOT a skeleton", () => {
+    const content = [
+      "---",
+      "verdict: CLEAN",
+      "---",
+      "",
+      "## Canon Review — Verdict: CLEAN",
+      "",
+      "Round-1 anchored only PARTIAL_MARKERS[2] to a heading-line form, described below.",
+      "",
+      "### Marker [2]: the reviewer stub heading `## Canon Review — Verdict: IN_PROGRESS`",
+      "",
+      "This finding explains why that anchoring alone was insufficient.",
+      "",
+    ].join("\n");
+
+    expect(isSkeletonContent(content)).toBe(false);
+  });
+
+  it("still detects the genuine architect '## Status: Partial' stub with a preceding title heading (multi-heading leading region)", () => {
+    expect(isSkeletonContent("# Design\n\n## Status: Partial\n\n## Approach\n")).toBe(true);
+  });
+});

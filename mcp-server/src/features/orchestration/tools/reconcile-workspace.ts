@@ -24,7 +24,7 @@ import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import type { CliffCaptureOutcome } from "../services/cliff-transcript-capture.ts";
 import { captureCliffTranscripts } from "../services/cliff-transcript-capture.ts";
 import type { CliffCaptureAbsentReason } from "../services/cliff-transcript-source.ts";
-import { PARTIAL_MARKERS } from "../services/partial-markers.ts";
+import { isSkeletonContent, PARTIAL_MARKERS } from "../services/partial-markers.ts";
 import type { JournalStep } from "./orchestration-journal.ts";
 import {
   _journalPath as journalPath,
@@ -82,8 +82,10 @@ async function isPartialArtifact(workspace: string, artifact: string): Promise<b
     files.map(async (file) => {
       try {
         const content = await readFile(file, "utf-8");
-        const head = content.slice(0, 8192); // markers live in frontmatter / first heading
-        return PARTIAL_MARKERS.some((re) => re.test(head));
+        // Shared with write-receipt.ts's WR-02 fallback — see partial-markers.ts
+        // for why the scan is scoped to the leading frontmatter/heading region
+        // rather than the whole head (W-2/W-3 round-2 fix).
+        return isSkeletonContent(content);
       } catch {
         return false; // unreadable → not classifiable as partial here; missing-scan owns absence
       }
