@@ -63,10 +63,11 @@
  *     gap in scope for this rewrite and is now closed.
  *
  * MODULE RESOLUTION
- *   This script MUST reside under mcp-server/ so the bare specifier
- *   "typescript" resolves against mcp-server/node_modules (ESM resolves bare
- *   specifiers relative to the importing file, not cwd) — identical
- *   constraint to dead-wire-internal-use.mjs.
+ *   This script MUST reside under mcp-server/ so the seam's bare specifier
+ *   "typescript-parser" resolves against mcp-server/node_modules (ESM
+ *   resolves bare specifiers relative to the importing file, not cwd). The
+ *   TypeScript compiler API is obtained via scripts/lib/ts-compiler.mjs, not
+ *   a direct `import("typescript")` — see docs/adr/0061-*.md.
  *
  * EXIT CODES
  *   0  Success: rows printed to stdout (may be zero rows).
@@ -76,6 +77,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { loadTsCompiler } from "./lib/ts-compiler.mjs";
 
 const REGISTRATION_METHODS = new Set(["registerTool", "registerToolWithUi"]);
 const NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
@@ -117,13 +119,19 @@ async function main() {
     fail("expected at least 1 file argument, got 0");
   }
 
-  let ts;
-  try {
-    const mod = await import("typescript");
-    ts = mod.default ?? mod;
-  } catch (err) {
-    fail(`cannot import 'typescript': ${err.message}`);
-  }
+  // Load TypeScript compiler API via the fail-loud seam (scripts/lib/ts-compiler.mjs).
+  // See docs/adr/0061-typescript-7-tooling-parser-split.md.
+  const ts = await loadTsCompiler("tool-surfacing-extract", [
+    "ScriptKind",
+    "ScriptTarget",
+    "createSourceFile",
+    "forEachChild",
+    "isCallExpression",
+    "isElementAccessExpression",
+    "isIdentifier",
+    "isPropertyAccessExpression",
+    "isStringLiteral",
+  ]);
 
   const rows = [];
 
@@ -150,8 +158,22 @@ async function main() {
     // broken file can produce a partial/recovered AST where registration
     // calls silently fail to resolve as CallExpression nodes — the same
     // false-DEAD risk dead-wire-internal-use.mjs guards against.
+    // The seam (scripts/lib/ts-compiler.mjs) probes at load time that
+    // createSourceFile reports parseDiagnostics for known-malformed input, so
+    // by the time we reach here, parseDiagnostics being anything other than
+    // an array is a contract violation, not something to short-circuit past.
+    // `if (parseDiags && ...)` would silently SKIP this guard entirely on
+    // `undefined` — the same silent-pass shape the seam probe exists to
+    // close (security finding, identical pattern found in
+    // dead-wire-internal-use.mjs). Fail loud, non-short-circuiting.
     const parseDiags = sourceFile.parseDiagnostics;
-    if (parseDiags && parseDiags.length > 0) {
+    if (!Array.isArray(parseDiags)) {
+      fail(
+        `internal contract violation: parseDiagnostics is not an array for '${filePath}' ` +
+          `(the seam probe should have caught this at load time) — got: ${typeof parseDiags}`,
+      );
+    }
+    if (parseDiags.length > 0) {
       const firstMsg =
         typeof parseDiags[0]?.messageText === "string"
           ? parseDiags[0].messageText

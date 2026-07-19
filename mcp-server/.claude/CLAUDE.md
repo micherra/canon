@@ -223,7 +223,7 @@ src/
 **`evaluate_candidate` runtime frontmatter-reject guard (ADR-0031 amendment):** when `target_path`'s first segment is `agents` (an agent-def target), `checkFrontmatterImmutable` (`services/frontmatter-guard.ts`) runs BEFORE `checkScriptReachable`/any subprocess — a raw byte-for-byte comparison of the `---\n...\n---` frontmatter block against baseline. Differing blocks → rejects with `guard_rejection: { reason: "frontmatter_modified", fields? }` (best-effort list of changed top-level YAML keys); unparseable frontmatter on either side → fail-closed reject with `reason: "frontmatter_unverifiable"`; never throws. Body-only edits pass through to normal scoring unaffected.
 
 ## Dependencies
-<!-- last-updated: 2026-06-24 -->
+<!-- last-updated: 2026-07-15 -->
 
 | Package | Purpose |
 |---------|---------|
@@ -232,6 +232,8 @@ src/
 | `yaml` | YAML frontmatter parsing via `splitFrontmatter`/`readFrontmatter` seam in `shared/lib/frontmatter.ts` (replaced `gray-matter` — R0) |
 | `tsx` | TypeScript execution (runtime dependency — server launched via boot.sh → tsx) |
 | `vitest` | Unit testing (dev) |
+| `typescript` (7.0.2) | Typechecking only (`npm run build`, CI). TS 7 is the native Go port — `import "typescript"` yields only `{ version, versionMajorMinor }`, no JS compiler/parser API. |
+| `typescript-parser` (`npm:typescript@6.0.3`) | Aliased TS 6 pin — the sole source of the JS parser API (`createSourceFile`, `forEachChild`, etc.) that TS 7 dropped from `typescript`'s main entry; consumed only through `scripts/lib/ts-compiler.mjs` (see Scripts below). Two `typescript` deps is a deliberate split, not drift — see ADR-0061. |
 
 ## Invariants
 <!-- last-updated: 2026-06-12 -->
@@ -274,8 +276,9 @@ src/
 **Integration tests must use an isolated `projectDir`, never `process.cwd()`**: any test that drives the real `finalizeWorkspace` path (directly or via helpers that call it) must pass an isolated `mkdtemp` temp dir as `projectDir`. Passing `process.cwd()` reaches `appendFlowRun` -> `getDriftDb(projectDir)`, which opens `.canon/drift.db` at that literal path and writes a real `flow_runs` row into the repo's live drift DB. Enforced by the global `drift-db-leak-guard` (see Scripts / `src/tests/drift-db-leak-guard.ts`), which fails the suite on any growth in either protected `.canon/drift.db` (repo root or `mcp-server/`). Added 2026-07-02.
 
 ## Scripts
-<!-- last-updated: 2026-07-02 -->
+<!-- last-updated: 2026-07-15 -->
 
+- `scripts/lib/ts-compiler.mjs` — the ONE seam through which Canon's AST-lint tooling obtains a TypeScript compiler API. Exports `loadTsCompiler(scriptName, requiredApis)`: resolves the `typescript-parser` alias (not `typescript` — TS 7 dropped the JS parser API from `typescript`'s main entry, see Dependencies above and ADR-0061), asserts every caller-declared API name is present, then runs load-time behavioral probes (parse-diagnostics + AST-shape, across JS/TS/TSX × malformed/valid, at exact caller call-shape parity) before returning. Fail-closed contract: either returns a fully-functional API or exits the process non-zero — never a partial/stubbed API, never swallows an import failure. The three lint scripts below all obtain their parser exclusively through this module: `scripts/workflows-lint.mjs` (backs `hooks/workflows-lint.sh`), `scripts/dead-wire-internal-use.mjs` (backs `hooks/dead-wire-gate.sh`), `scripts/tool-surfacing-extract.mjs` (backs `hooks/tool-surfacing-check.sh`, ADR-0048).
 - `scripts/dead-wire-internal-use.mjs` — TS compiler-API same-file use resolver; invoked by `hooks/dead-wire-gate.sh` as `node dead-wire-internal-use.mjs <file> <symbol>`; returns integer code-ref count on stdout + exit 0 on success, non-zero on any error (fail-closed); counts an identifier as a use ONLY when `ts.TypeChecker.getSymbolAtLocation` resolves it to the top-level exported binding — member-property names, shadowing locals, declaration sites, strings, and comments are all correctly excluded by construction; bails fail-closed on non-empty `sourceFile.parseDiagnostics` (syntactic parse errors) before building the Program; no tsconfig dependency (`noResolve/noLib/types:[]` in-memory Program). <!-- last-updated: 2026-06-24 -->
 - `scripts/regen-context-manifest.ts` — regenerates `context-manifest.json` at repo root (default write mode); invoked as `npm run regen:context-manifest`; calls `buildContextManifest` from `features/diagnostics/services/context-manifest.ts`; committed output is the source-of-truth for `check_context_staleness`. Added 2026-06-25. **`--check` mode (sug_MANIFESTGAP1, added 2026-07-02)**: `npm run regen:context-manifest -- --check` builds fresh in memory and byte-compares against the committed manifest — never writes; exit 0 fresh, exit 1 stale-or-uncheckable (drift report via `renderManifestDrift`, printed with the fix command). `--root <dir>` overrides the scan root + manifest path for both modes (default: derived repo root). Invoked by `hooks/context-manifest-gate.sh`, the deterministic verify-step freshness gate.
 - `scripts/backfill-review-extraction.ts` — one-time idempotent corpus backfill of `review_results[].violations[]` inside archived `run-summary.json`; invoked as `npm run backfill:review-extraction -- [--dry-run] [--root <dir>]`; reuses the shipped `extractReviewResults` extractor (no second parser); only `review_results` is mutated (all other top-level keys preserved) and archived `reviews/REVIEW.md` is read-only; per-archive fail-open, dedupes drift.db rows by `archive_path`, never fabricates for a sourceless archive (reported `unbackfillable`). Added 2026-07-16.

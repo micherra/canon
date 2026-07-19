@@ -45,9 +45,11 @@
  *   Hooks-fail-closed: no 2>/dev/null || true silent pass.
  *
  * MODULE RESOLUTION
- *   This script MUST reside under mcp-server/ so the bare specifier "typescript"
- *   resolves against mcp-server/node_modules (ESM resolves bare specifiers
- *   relative to the importing file, not cwd).
+ *   This script MUST reside under mcp-server/ so the seam's bare specifier
+ *   "typescript-parser" resolves against mcp-server/node_modules (ESM
+ *   resolves bare specifiers relative to the importing file, not cwd). The
+ *   TypeScript compiler API is obtained via scripts/lib/ts-compiler.mjs, not
+ *   a direct `import("typescript")` — see docs/adr/0061-*.md.
  *
  * EXIT CODES
  *   0  All files clean (or targetDir empty/absent).
@@ -57,6 +59,7 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve, dirname, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadTsCompiler } from "./lib/ts-compiler.mjs";
 
 // ---------------------------------------------------------------------------
 // Resolve paths: this script lives at mcp-server/scripts/workflows-lint.mjs.
@@ -68,18 +71,36 @@ const REPO_ROOT = resolve(__dirname, "..", "..");
 const DEFAULT_TARGET_DIR = join(REPO_ROOT, "workflows");
 
 // ---------------------------------------------------------------------------
-// Import TypeScript compiler API (fail-closed: must resolve from mcp-server/)
+// Load TypeScript compiler API via the fail-loud seam (scripts/lib/ts-compiler.mjs).
+// See docs/adr/0061-typescript-7-tooling-parser-split.md.
 // ---------------------------------------------------------------------------
-let ts;
-try {
-  const mod = await import("typescript");
-  ts = mod.default ?? mod;
-} catch (err) {
-  process.stderr.write(
-    `CANON ERROR [workflows-lint]: cannot import 'typescript': ${err.message}\n`,
-  );
-  process.exit(1);
-}
+const ts = await loadTsCompiler("workflows-lint", [
+  "ScriptKind",
+  "ScriptTarget",
+  "SyntaxKind",
+  "createSourceFile",
+  "forEachChild",
+  "getLineAndCharacterOfPosition",
+  "isArrayLiteralExpression",
+  "isCallExpression",
+  "isComputedPropertyName",
+  "isElementAccessExpression",
+  "isIdentifier",
+  "isNewExpression",
+  "isNoSubstitutionTemplateLiteral",
+  "isNumericLiteral",
+  "isObjectBindingPattern",
+  "isObjectLiteralExpression",
+  "isParameter",
+  "isPropertyAccessExpression",
+  "isPropertyAssignment",
+  "isPropertyDeclaration",
+  "isShorthandPropertyAssignment",
+  "isSpreadAssignment",
+  "isStringLiteral",
+  "isVariableDeclaration",
+  "isVariableStatement",
+]);
 
 // TypeScript-only-syntax diagnostic codes — "can only be used in TypeScript files."
 // These codes may be emitted as parseDiagnostics in future TypeScript versions even when
@@ -121,7 +142,20 @@ function parse(filePath, src) {
     return { parseError: `internal parse throw: ${err.message}`, diags: [] };
   }
 
-  const diags = sf.parseDiagnostics ?? [];
+  // The seam (scripts/lib/ts-compiler.mjs) probes at load time that
+  // createSourceFile reports parseDiagnostics for known-malformed input — so
+  // by the time we reach here, sf.parseDiagnostics being anything other than
+  // an array is a contract violation, not a case to silently tolerate.
+  // `?? []` here would recreate the exact silent-pass vulnerability the seam
+  // probe exists to close (security finding: a surface-complete-but-degraded
+  // parser would make the linter parse everything as clean). Fail loud.
+  if (!Array.isArray(sf.parseDiagnostics)) {
+    throw new Error(
+      `internal contract violation: 'typescript-parser'.createSourceFile did not return an array ` +
+        `'parseDiagnostics' (the seam probe should have caught this at load time) — got: ${typeof sf.parseDiagnostics}`,
+    );
+  }
+  const diags = sf.parseDiagnostics;
   if (diags.length > 0) {
     const first = diags[0];
     const msg =
