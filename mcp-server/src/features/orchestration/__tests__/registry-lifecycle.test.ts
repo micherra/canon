@@ -77,6 +77,8 @@ import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { archiveWorkspace } from "@platform/storage/archive/archive-service.ts";
 import { evictDriftDbForScope, getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
 import { loadJanitorConfig } from "@shared/lib/config.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
+import { initGitFixtureRepo } from "../../../tests/git-fixture.ts";
 import { runJanitor } from "../services/janitor.ts";
 import { acquireLock } from "../services/workspace-lock.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
@@ -134,13 +136,15 @@ async function seedCompletedJournal(workspace: string, projectDir: string): Prom
 describe("registry lifecycle — two-session integration", () => {
   it("init registers live -> discover -> chat -> finalize -> simulated reap -> rejected", async () => {
     const projectDir = makeTmpProjectDir("registry-lifecycle-proj-");
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     // Session A: init_workspace registers a live row.
     const initResult = await initWorkspaceFlow(
-      { ...baseInput, session_id: "session-A", job_id: "job-A" },
+      { ...baseInput, base_commit: baseCommit, session_id: "session-A", job_id: "job-A" },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(initResult);
     expect(initResult.created).toBe(true);
     const workspace = initResult.workspace;
 
@@ -210,16 +214,18 @@ describe("registry lifecycle — two-session integration", () => {
 describe("registry lifecycle — fail-open lifecycle writes", () => {
   it("init_workspace succeeds even when the registry register() throws", async () => {
     const projectDir = makeTmpProjectDir("registry-lifecycle-failopen-init-");
+    const baseCommit = initGitFixtureRepo(projectDir);
     mockGetDriftDb.mockImplementationOnce(() => {
       throw new Error("simulated drift.db failure");
     });
     const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     const result = await initWorkspaceFlow(
-      { ...baseInput, session_id: "session-A", job_id: "job-A" },
+      { ...baseInput, base_commit: baseCommit, session_id: "session-A", job_id: "job-A" },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.created).toBe(true);
     expect(result.workspace).toBeTruthy();
@@ -230,12 +236,14 @@ describe("registry lifecycle — fail-open lifecycle writes", () => {
 
   it("finalize_workspace succeeds even when the registry markFinalized() throws", async () => {
     const projectDir = makeTmpProjectDir("registry-lifecycle-failopen-finalize-");
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const initResult = await initWorkspaceFlow(
-      { ...baseInput, session_id: "session-A", job_id: "job-A" },
+      { ...baseInput, base_commit: baseCommit, session_id: "session-A", job_id: "job-A" },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(initResult);
     const workspace = initResult.workspace;
     await seedCompletedJournal(workspace, projectDir);
 

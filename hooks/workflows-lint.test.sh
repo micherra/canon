@@ -261,6 +261,57 @@ run_lint_on_dir 0 "$GOOD_ARGS_TMPDIR" "good-args-parsed.js (defensive parse pres
 rm -rf "$GOOD_ARGS_TMPDIR"
 
 # ---------------------------------------------------------------------------
+# Missing-parser adversarial case (D2 seam, docs/adr/0061-typescript-7-*):
+# renders the pinned typescript-parser alias unresolvable and asserts the
+# linter still exits non-zero — the new failure mode this TS 7 migration
+# introduces (a linter that cannot resolve its parser must fail, not pass).
+#
+# Uses the perturb/observe/revert technique on the REAL installed dependency
+# rather than weakening the seam to make it testable: temporarily move
+# node_modules/typescript-parser out of the way, run the lint helper, assert
+# non-zero exit + the specifier named in the error, then restore. A trap
+# guarantees restoration even if an earlier step in this block fails.
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- Missing-parser adversarial case (D2 seam fail-closed) ---"
+
+PARSER_DIR="$REPO_ROOT/mcp-server/node_modules/typescript-parser"
+PARSER_DIR_MOVED="$REPO_ROOT/mcp-server/node_modules/.typescript-parser-disabled-for-test"
+
+if [[ -d "$PARSER_DIR" ]]; then
+  mv "$PARSER_DIR" "$PARSER_DIR_MOVED"
+  # shellcheck disable=SC2064
+  trap "mv '$PARSER_DIR_MOVED' '$PARSER_DIR' 2>/dev/null || true" EXIT INT TERM
+
+  MISSING_PARSER_TMPDIR="$(mktemp -d)"
+  cp "$FIXTURES_DIR/valid-canon-probe.js" "$MISSING_PARSER_TMPDIR/"
+
+  MISSING_PARSER_EXIT=0
+  MISSING_PARSER_OUTPUT=""
+  MISSING_PARSER_OUTPUT=$(node "$LINT_HELPER" "$MISSING_PARSER_TMPDIR" 2>&1) || MISSING_PARSER_EXIT=$?
+
+  rm -rf "$MISSING_PARSER_TMPDIR"
+
+  # Restore immediately — before assertions — so a failed assertion below
+  # never leaves the repo's real dependency uninstalled.
+  mv "$PARSER_DIR_MOVED" "$PARSER_DIR"
+  trap - EXIT INT TERM
+
+  if [[ "$MISSING_PARSER_EXIT" -ne 0 ]] && echo "$MISSING_PARSER_OUTPUT" | grep -qF "typescript-parser"; then
+    echo "  PASS: missing-parser: linter exits non-zero and names 'typescript-parser'"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL: missing-parser: expected non-zero exit naming 'typescript-parser'"
+    echo "        actual exit=$MISSING_PARSER_EXIT"
+    echo "        actual output: $MISSING_PARSER_OUTPUT"
+    FAIL=$((FAIL + 1))
+  fi
+else
+  echo "  FAIL: missing-parser case — $PARSER_DIR not found; cannot exercise the fail-closed path"
+  FAIL=$((FAIL + 1))
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

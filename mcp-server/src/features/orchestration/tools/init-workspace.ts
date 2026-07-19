@@ -3,7 +3,7 @@
  * Creates a new workspace directory structure or resumes an existing one.
  */
 
-import { existsSync, lstatSync, realpathSync, symlinkSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
@@ -15,11 +15,22 @@ import {
   generateSlug,
   sanitizeBranch,
 } from "@domains/workspaces/workspace.ts";
-import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
+import { gitStatus } from "@platform/adapters/git-adapter.ts";
+import {
+  type CanonToolError,
+  isToolError,
+  type ToolResult,
+  toolOk,
+} from "@shared/lib/tool-result.ts";
 import { registerFromInit } from "../services/active-workspace-registration.ts";
-import { acquireLock } from "../services/workspace-lock.ts";
+import { acquireLock, releaseLock } from "../services/workspace-lock.ts";
+import { createWorktree, type WorktreeInfo } from "../services/worktree-creation.ts";
 import { readJournal, writeJournal } from "./orchestration-journal.ts";
 import { validateSeedPath } from "./seed-workspace.ts";
+
+/** Best-effort node_modules symlink helper — re-exported from the service for
+ * back-compat (sole external importer: init-workspace-symlink.test.ts). */
+export { linkWorktreeNodeModules } from "../services/worktree-creation.ts";
 
 type InitWorkspaceInput = {
   flow_name: string;
@@ -317,69 +328,6 @@ function tryResumeWorkspace(
   return null;
 }
 
-/**
- * Best-effort: symlink the worktree's mcp-server/node_modules to the main checkout's
- * resolved mcp-server/node_modules so the agent LSP tool resolves zod/vitest/.ts imports.
- * Lives in gitignored .canon/** — never enters the package (see ADR-0011). Non-blocking:
- * on any failure the build proceeds (LSP degrades). Skips if main node_modules is absent
- * or a node_modules already exists at the link site.
- *
- * Guard 2 (non-circular): target is realpathSync(main node_modules), which resolves to
- * an absolute path outside the worktree subtree — never circular.
- */
-export function linkWorktreeNodeModules(worktreePath: string, projectDir: string): void {
-  try {
-    const mainNm = join(projectDir, "mcp-server", "node_modules");
-    if (!existsSync(mainNm)) return; // main deps not installed → no-op
-    const target = realpathSync(mainNm); // resolved, outside the worktree → non-circular (Guard 2)
-    const linkSite = join(worktreePath, "mcp-server", "node_modules");
-    try {
-      // lstatSync does not follow symlinks — check if anything already exists at link site
-      lstatSync(linkSite);
-      return; // already present → do not clobber
-    } catch {
-      // ENOENT — link site does not exist, safe to create
-    }
-    symlinkSync(target, linkSite, "dir");
-  } catch (err) {
-    console.warn(
-      "[init-workspace] node_modules symlink skipped:",
-      err instanceof Error ? err.message : err,
-    );
-  }
-}
-
-/** Build a unique session branch name for the build worktree. */
-function buildSessionBranchName(session: Session): string {
-  return `canon/${session.slug}`;
-}
-
-/** Create worktree and persist info. Returns path and branch if successful. */
-function createAndPersistWorktree(
-  store: ReturnType<typeof getExecutionStore>,
-  session: Session,
-  options: { workspace: string; baseCommit: string; projectDir: string },
-): { worktree_path?: string; worktree_branch?: string } {
-  const { workspace, baseCommit, projectDir } = options;
-  const worktreePath = join(workspace, "worktree");
-  const worktreeBranch = session.worktree_branch ?? buildSessionBranchName(session);
-  const wtResult = gitWorktreeAdd(worktreePath, projectDir, {
-    baseCommit,
-    branchName: worktreeBranch,
-  });
-  if (!wtResult.ok) return {};
-  linkWorktreeNodeModules(worktreePath, projectDir); // Guard 2 non-circular by construction
-
-  session.worktree_path = worktreePath;
-  session.worktree_branch = worktreeBranch;
-  try {
-    store.updateExecution({ worktree_branch: worktreeBranch, worktree_path: worktreePath });
-  } catch (err) {
-    console.warn("[init-workspace] Failed to persist worktree info to execution row:", err);
-  }
-  return { worktree_branch: worktreeBranch, worktree_path: worktreePath };
-}
-
 /** Initialize execution store, handling race conditions with concurrent initializers. */
 function initExecutionOrRace(
   store: ReturnType<typeof getExecutionStore>,
@@ -452,25 +400,32 @@ type FinalizeWorkspaceOptions = {
   board: Board;
   session: Session;
   projectDir: string;
+  /** Already-created worktree info (createWorktree succeeded before this was called). */
+  worktreeInfo: WorktreeInfo;
 };
 
-/** Persist execution, set up worktree, and return final result. */
+/** Persist execution, set worktree session fields, and return final result. */
 async function finalizeNewWorkspace(
   store: ReturnType<typeof getExecutionStore>,
   input: InitWorkspaceInput,
   options: FinalizeWorkspaceOptions,
 ): Promise<InitWorkspaceResult> {
-  const { workspace, slug, board, session, projectDir } = options;
+  const { workspace, slug, board, session, worktreeInfo } = options;
   const raceResult = initExecutionOrRace(store, board, session, workspace);
   if (raceResult) return raceResult;
 
   store.appendProgress(`## Progress: ${input.task}`);
 
-  const worktreeInfo = createAndPersistWorktree(store, session, {
-    baseCommit: input.base_commit,
-    projectDir,
-    workspace,
-  });
+  session.worktree_path = worktreeInfo.worktree_path;
+  session.worktree_branch = worktreeInfo.worktree_branch;
+  try {
+    store.updateExecution({
+      worktree_branch: worktreeInfo.worktree_branch,
+      worktree_path: worktreeInfo.worktree_path,
+    });
+  } catch (err) {
+    console.warn("[init-workspace] Failed to persist worktree info to execution row:", err);
+  }
 
   return {
     board,
@@ -535,8 +490,28 @@ async function seedNewWorkspaceArtifacts(
   }
 }
 
+/**
+ * Fail-closed (d2): create the worktree BEFORE committing the session. On
+ * failure, release the just-acquired lock (no session row was ever written —
+ * the husk is inert by construction; tryResumeWorkspace only resumes an
+ * active session — and retry self-heals via checkSlugCollision's slug
+ * suffixing, d3).
+ */
+function createWorktreeOrReleaseLock(
+  opts: { workspace: string; slug: string; baseCommit: string; projectDir: string },
+  sessionId: string | undefined,
+): ToolResult<WorktreeInfo> {
+  const worktreeResult = createWorktree(opts);
+  if (!worktreeResult.ok) {
+    releaseLock(opts.workspace, { session_id: sessionId });
+  }
+  return worktreeResult;
+}
+
 /** Create a brand-new workspace (no collision, no resume). */
-async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<InitWorkspaceResult> {
+async function createNewWorkspace(
+  opts: CreateNewWorkspaceOptions,
+): Promise<InitWorkspaceResult | CanonToolError> {
   const { input, branchDir, sanitized, baseSlug, projectDir } = opts;
   const slug = await checkSlugCollision(branchDir, baseSlug);
   const workspace = join(branchDir, slug);
@@ -579,16 +554,25 @@ async function createNewWorkspace(opts: CreateNewWorkspaceOptions): Promise<Init
     };
   }
 
+  const worktreeResult = createWorktreeOrReleaseLock(
+    { baseCommit: input.base_commit, projectDir, slug, workspace },
+    input.session_id,
+  );
+  if (!worktreeResult.ok) return worktreeResult;
+
   await seedNewWorkspaceArtifacts(workspace, slug, input);
 
-  const result = await finalizeNewWorkspace(store, input, {
+  return finalizeNewWorkspace(store, input, {
     board,
     projectDir,
     session,
     slug,
     workspace,
+    worktreeInfo: {
+      worktree_branch: worktreeResult.worktree_branch,
+      worktree_path: worktreeResult.worktree_path,
+    },
   });
-  return result;
 }
 
 /**
@@ -613,12 +597,12 @@ export async function initWorkspaceFlow(
   input: InitWorkspaceInput,
   projectDir: string,
   _pluginDir: string,
-): Promise<InitWorkspaceResult> {
+): Promise<ToolResult<InitWorkspaceResult>> {
   const sanitized = sanitizeBranch(input.branch);
   const baseSlug = generateSlug(input.task);
 
   const preflightResult = await runPreflightIfNeeded(input, projectDir, sanitized, baseSlug);
-  if (preflightResult) return preflightResult;
+  if (preflightResult) return toolOk(preflightResult);
 
   const branchDir = join(projectDir, ".canon", "workspaces", sanitized);
   const candidateWorkspace = join(branchDir, baseSlug);
@@ -634,7 +618,7 @@ export async function initWorkspaceFlow(
       await refreshJournalSessionId(resumeResult.workspace, input.session_id);
     }
     registerFromInit(projectDir, input, resumeResult, resumeResult.session);
-    return resumeResult;
+    return toolOk(resumeResult);
   }
 
   const result = await createNewWorkspace({
@@ -644,7 +628,12 @@ export async function initWorkspaceFlow(
     projectDir,
     sanitized,
   });
+  // Fail-closed (d2): a worktree-creation error short-circuits before
+  // applyPostCreateSteps/registerFromInit — no session was ever committed,
+  // so there is nothing to seed or register.
+  if (isToolError(result)) return result;
+
   await applyPostCreateSteps(input, result.workspace, result);
   registerFromInit(projectDir, input, result, result.session);
-  return result;
+  return toolOk(result);
 }
