@@ -1,6 +1,6 @@
 # features/evolution/ — Trace-Driven Evolution Bounded Context
 
-<!-- last-updated: 2026-07-11 -->
+<!-- last-updated: 2026-07-19 -->
 
 ## Purpose
 
@@ -29,9 +29,9 @@ features/evolution/
 ├── services/
 │   ├── eval-runner.ts          # parseSummary, decideGate, decideCompositeGate (holistic veto, 2026-07-06), resolveAgentEvalRoot + resolveHolisticEvalRoot (per-agent + holistic suite resolution, 2026-07-06), runSplit (pure + one I/O fn, agentEvalRoot/evalRootOverride options)
 │   ├── candidate-injection.ts  # withInjectedCandidate (ADR-0022) + withInjectedGuardrailCandidate (ADR-0025) + isGuardrailTarget()
-│   ├── mutation-types.ts       # Pure types: MutationTarget, GateIneligibleTarget, SkippedAttribution, SelectMutationTargetsResult, MutationProposal, ArtifactClass; MutationProposalKind ("rewrite"|"retire"|"reinforce"), ScoreProvenance/ScoreProvenanceContribution (Gap 3 L3); budget constants DEFAULT_MAX_TARGETS_PER_PASS, CANDIDATES_PER_TARGET
-│   ├── mutation-selection.ts   # selectMutationTargets() — pure join+rank+filter; PLUGIN_ARTIFACT_ROOTS eligibility check; derivePrincipleId() keys agent-def targets off the violated principle, not the agent name (Codex P2 #2); selectRetirementReinforcementTargets() + RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD (Gap 3 L3, ADR-0052)
-│   ├── mutation-proposal.ts    # shapeMutationProposal() — shapes accepted eval result into MutationProposal; proposalKind-branched (rewrite/retire/reinforce, ADR-0052); evalResult accepts null for the ungated reinforce path
+│   ├── mutation-types.ts       # Pure types: MutationTarget, GateIneligibleTarget, SkippedAttribution, SelectMutationTargetsResult, MutationProposal, ArtifactClass; MutationProposalKind ("rewrite"|"retire"|"reinforce"), ScoreProvenance/ScoreProvenanceContribution (Gap 3 L3); MutationTarget gained optional trust_tier/holdout_exempt (ADR-0063, principle-wording mutation class); budget constants DEFAULT_MAX_TARGETS_PER_PASS, CANDIDATES_PER_TARGET
+│   ├── mutation-selection.ts   # selectMutationTargets() — pure join+rank+filter; PLUGIN_ARTIFACT_ROOTS eligibility check; classifyArtifact() maps .canon/principles/** -> "principle" (overlay tier, data-driven PREFIX_ARTIFACT_CLASS table); isOverlayPrincipleTarget() — pure predicate, overlay .canon/principles/** eligibility, separate from isGateEligible; filterAndPartition narrowly admits attr.confidence:"medium" when join_basis is the inferred principle join (dc-01, ADR-0063 — the review_violation->principle join can never exceed medium); derivePrincipleId() keys agent-def targets off the violated principle, not the agent name (Codex P2 #2); selectRetirementReinforcementTargets() + RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD (Gap 3 L3, ADR-0052)
+│   ├── mutation-proposal.ts    # shapeMutationProposal() — shapes accepted eval result into MutationProposal; proposalKind-branched (rewrite/retire/reinforce, ADR-0052); evalResult accepts null for the ungated reinforce path; buildOverlayImpactSection() — dedicated Impact section for an overlay .canon/principles/** target (trust_tier:"untrusted-project-local"/holdout_exempt:true), documents the never-gated/HITL-is-the-gate posture (ADR-0063)
 │   ├── attribution-types.ts    # Mutator-facing output types: FailureKind, AttributedArtifact, FailureAttribution, AttributeFailureResult
 │   ├── attribution-join.ts     # attributeFailures() — pure join of provenance + failure sources; review_violation attributes via BOTH the rule edge (principle_id==artifact_id) and the code-author agent-def edge (ADR-0032)
 │   ├── attribution-provenance-source.ts  # readProvenance() — reads live workspace or archived RunSummary
@@ -40,7 +40,7 @@ features/evolution/
 │   ├── attribution-weight.ts   # computeTrustWeight() (Gap 3 L1) — pure sign x roleTier x corroboration x decay x computeOutcomeWeight composite; TrustTierSlot ("internal"|"codex", codex reserved/v1-unused per ADR-0052)
 │   ├── outcome-attribution.ts  # aggregateOutcomes() (Gap 3 L2, ADR-0051) — pure two-sided per-principle aggregation over BuildRecord[]; TrustWeightedScore, AggregateOutcomesResult
 │   ├── artifact-path-resolver.ts  # resolveArtifactReadPath() — pure cross-root re-read resolver: project_dir-first, pluginDir-fallback for trusted plugin-tier artifacts (Codex P2 #1)
-│   └── frontmatter-guard.ts    # checkFrontmatterImmutable() — pure runtime frontmatter-immutability guard (ADR-0031 amendment)
+│   └── frontmatter-guard.ts    # checkFrontmatterImmutable() — pure runtime frontmatter-immutability guard (ADR-0031 amendment); checkPrincipleFrontmatterImmutable() — field-level (not raw-block) principle guard, tolerates archived:true ONLY when the caller asserts isRetire (fail-closed default rejects it as a rewrite) — ADR-0063
 └── __tests__/
     ├── decide-gate.test.ts               # decideGate + decideCompositeGate (holistic veto, 2026-07-06)
     ├── parse-summary.test.ts
@@ -51,6 +51,7 @@ features/evolution/
     ├── mutation-proposal.test.ts         # rewrite/retire/reinforce proposal shapes; gated:boolean, nullable holdout fields
     ├── mutation-selection.test.ts
     ├── mutation-selection-principle-id.test.ts  # derivePrincipleId(): agent-def -> violated principle_id, cliff agent-def -> null, rule/cliff-on-rule unchanged
+    ├── mutation-selection-relaxation.test.ts    # classifyArtifact(.canon/principles/**), isOverlayPrincipleTarget(), the narrow medium-confidence relaxation (ADR-0063)
     ├── retirement-selection.test.ts      # selectRetirementReinforcementTargets: threshold, retire/reinforce/neutral-band, artifact_unresolved skip (Gap 3 L3)
     ├── retire-candidate-emission.test.ts # dc-04 end-to-end: selection -> evaluate_candidate (REAL gate) -> shapeMutationProposal -> emission, principles/** never mutated; reinforce bypasses evaluate_candidate entirely
     ├── mutator-gate-integration.test.ts
@@ -82,6 +83,7 @@ Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
   is injected (e.g. `skills/canon/evals/eval-set.json`).
 - `splits` (optional array of `"train"|"val"|"holdout"`) — Defaults to all three.
 - `project_dir` (string) — Absolute path to the project root.
+- `proposal_kind` (optional `"rewrite"|"retire"|"reinforce"`, ADR-0063) — distinguishes a wording-REWRITE candidate from an ADR-0052 RETIRE candidate; only affects the `principles/` frontmatter guard's `archived:true` exception (see below). Omitted/`"rewrite"`/`"reinforce"` all fail-closed-reject an `archived` flip; only `"retire"` tolerates it.
 
 **Output (`EvaluateCandidateResult`):**
 - `baseline_score` / `candidate_score` — Holdout pass counts (convenience fields).
@@ -90,9 +92,16 @@ Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
 - `regressed` — `true` iff candidate regressed holdout.
 - `size_delta` — Candidate length minus baseline file length (chars). Signal only, not a gate.
 - `judge_votes_holdout` — Always `3` (documents AC#7, evaluate-candidate-04).
-- `guard_rejection?` — additive-optional; present ONLY when the frontmatter-reject guard rejected an agent-def candidate before any subprocess ran (ADR-0031 amendment). `{ reason: "frontmatter_modified" | "frontmatter_unverifiable"; fields?: string[] }`. Backward compatible — existing consumers already treat `accepted:false` as "do not propose".
+- `guard_rejection?` — additive-optional; present ONLY when a fail-closed guard rejected the candidate before any subprocess ran. `{ reason: "frontmatter_modified" | "frontmatter_unverifiable" | "overlay_not_sandboxable"; fields?: string[] }` (`"overlay_not_sandboxable"` added ADR-0063). Backward compatible — existing consumers already treat `accepted:false` as "do not propose".
 
-**Runtime frontmatter-reject guard (`checkFrontmatterImmutable`, `services/frontmatter-guard.ts`):** when `target_path`'s first segment is `agents` (`isAgentDefTarget`), the handler compares the RAW frontmatter block (`---\n...\n---`, byte-for-byte) of `candidate_text` against baseline BEFORE `checkScriptReachable`/any subprocess. Differing blocks → `accepted:false` + `guard_rejection:{reason:"frontmatter_modified", fields}` (`fields` = best-effort top-level YAML keys that changed — a diagnostic, never the basis of the comparison). Unparseable frontmatter on either side → fail-closed `guard_rejection:{reason:"frontmatter_unverifiable"}`. Never throws. Body-only candidates proceed to normal scoring unaffected.
+**Overlay fail-closed reject (`isOverlayTarget`, ADR-0027/ADR-0063):** checked FIRST, before any file read or subprocess. When `target_path`'s normalized first segment is `.canon` (case-insensitive), the handler immediately returns `guard_rejection:{reason:"overlay_not_sandboxable"}` — defense-in-depth on top of the guardrail sandbox's own `PLUGIN_ARTIFACT_ROOTS` exclusion of `.canon/` (ADR-0027: untrusted overlay content must never enter the eval sandbox, even in principle).
+
+**Runtime frontmatter-reject guard (`checkTargetFrontmatterImmutable`, `services/frontmatter-guard.ts`):** dispatches per `target_path` (pure, no I/O):
+- `agents/` (`isAgentDefTarget`) → `checkFrontmatterImmutable` — RAW frontmatter block (`---\n...\n---`, byte-for-byte) comparison, unchanged (ADR-0031 amendment).
+- `principles/` (`isPrincipleDefTarget`, built-in only — overlay `.canon/principles/**` is already rejected above) → `checkPrincipleFrontmatterImmutable` — FIELD-LEVEL comparison; every top-level key must stay byte-identical EXCEPT `archived`, which is tolerated only when `proposal_kind === "retire"` (ADR-0063). Fail-closed default (omitted/`"rewrite"`/`"reinforce"`) treats a flipped `archived` as a modification.
+- every other target → `{ ok: true }` (no guard; unchanged).
+
+The dispatcher runs BEFORE `checkScriptReachable`/any subprocess. Differing (non-tolerated) fields → `accepted:false` + `guard_rejection:{reason:"frontmatter_modified", fields}` (`fields` = best-effort top-level YAML keys that changed — a diagnostic, never the basis of the comparison). Unparseable frontmatter on either side → fail-closed `guard_rejection:{reason:"frontmatter_unverifiable"}`. Never throws. Body-only candidates proceed to normal scoring unaffected.
 
 ## Tool: `select_mutation_targets`
 
@@ -120,11 +129,12 @@ Registered via `src/app/register-evolution.ts` → `createCanonServer()`.
 **`principle_id` semantics (`derivePrincipleId`, Codex P2 #2):** for every `target_artifact.kind` EXCEPT `"agent-def"`, `principle_id === target_artifact.id` (rule/ref/primer/template file ids ARE the principle they carry — unchanged). For `kind:"agent-def"`, `target_artifact.id` is the AGENT NAME (e.g. `"engineer"`), not a principle — `principle_id` is instead the VIOLATED principle from `attributed_violations[0].principle_id`, or `null` for a `cliff_event` agent-def attribution (a write-cliff has no principle). This keeps downstream recurrence/learning keyed by principle even when the mutation target is an agent-def.
 
 **Selection policy (deterministic, in order):**
-1. Filter: `hash_verified === true` AND `confidence === "high"`.
-2. Gate-eligibility: `target_path` under a `PLUGIN_ARTIFACT_ROOTS` dir and NOT the eval surface or a harness entrypoint; `tool_description_not_loadable` for TypeScript paths.
+1. Filter: `hash_verified === true` AND (`confidence === "high"` OR the narrow ADR-0063 relaxation — `confidence === "medium"` AND `attribution.join_basis === "principle_id==artifact_id"`; every other `join_basis`/class stays high-only. Motivated by the `review_violation`→principle join structurally capping at `medium` — `deriveConfidence` itself is unchanged, only SELECTION admits the honest medium label.)
+2. Gate-eligibility: `target_path` under a `PLUGIN_ARTIFACT_ROOTS` dir and NOT the eval surface or a harness entrypoint (`isGateEligible`) OR an overlay `.canon/principles/**` target (`isOverlayPrincipleTarget`, ADR-0063 — a dedicated predicate, deliberately not folded into `isGateEligible`); `tool_description_not_loadable` for TypeScript paths.
 3. Rank: by `attributed_violation_count` descending, then `weighted_count` (optional secondary), then deterministic tie-break.
 4. Budget: take up to `maxTargetsPerPass`; overflow → `skipped[reason="budget_exhausted"]`.
 5. Read `baseline_body` from disk (fail-open: empty string on ENOENT).
+6. Stamp `trust_tier`/`holdout_exempt` on each returned `MutationTarget` (`buildMutationTarget`) — `"untrusted-project-local"`/`true` for an overlay `.canon/principles/**` target, `"trusted"`/`false` for every other target (ADR-0063).
 
 **No model calls**: verified by `grep -rniE 'anthropic|claude -p|messages.create|model:' select-mutation-targets.ts` — must return empty.
 
@@ -361,6 +371,57 @@ on `TrailerOpts` appends a `Canon-Evolution: {id}` line after `Canon-Task` (or a
 **Selection threshold**: `RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD = 3` (`services/mutation-selection.ts`) — mirrors the learner's existing `weighted_instance_count >= 3` minimum-evidence convention, applied symmetrically to `net_score` magnitude.
 
 **Routing**: `/canon:review-learnings` (`skills/canon/commands/review-learnings.md`) gained Arm R (retire) and Arm N (reinforce) — both fully inline, explicit invalidate-don't-delete writer-spawn instructions, kept separate from the pre-existing legacy `prune-candidate` Mode: retire path (which still `git rm`s and is intentionally left untouched/unreachable by the new `proposal_kind` track). `skills/canon/skills/evolve-candidate/SKILL.md` gained the matching Step 0.1 retire/reinforce procedure (calls `attribute_outcomes` → `select_mutation_targets` scores mode). `agents/learner.md` was granted `mcp__canon__attribute_outcomes` in its tool allowlist (otherwise the new SKILL.md instruction would be dead-wire from the agent's permission surface).
+
+## Principle-Wording Mutation Class (ADR-0063)
+
+A single-build review violation localized to a `principles/**` (built-in) or `.canon/principles/**`
+(overlay) file can now produce a gated (built-in) or ungated-by-construction (overlay), HITL-reviewable
+wording-rewrite `MutationProposal` (`proposal_kind: "rewrite"`, the pre-existing default — this is not a
+new `proposal_kind` value, it is a new eligible `artifact_class: "principle"` target class).
+
+**Two empirically-probed facts drive the design** (`PROBE-FINDINGS.md`, cited in ADR-0063):
+1. The guardrail sandbox (ADR-0025) copies `principles/**` onto disk but never injects principle bodies
+   into the eval session's context (`PRINCIPLES_IN_CONTEXT=NO`) — a built-in principle-wording candidate
+   therefore produces zero holdout delta on the current eval surface, so `decideGate`'s strict `>` will
+   almost always REJECT it. This mirrors the already-shipped ADR-0052 retirement inertness. The gate
+   still runs — REJECT is expected and proves the path works end-to-end (PRD AC#5) — see ADR-0063 D3.
+2. `.canon/` is never copied into the guardrail sandbox (`PLUGIN_ARTIFACT_ROOTS` excludes it, ADR-0027) —
+   an overlay principle candidate cannot enter the eval sandbox even in principle. See ADR-0063 D2.
+
+**Selection**: `classifyArtifact` now maps a `.canon/principles/` path to `artifact_class: "principle"`
+(same class as a built-in `principles/` path — the two prefixes are checked via a data-driven
+`PREFIX_ARTIFACT_CLASS` table). `isOverlayPrincipleTarget(targetPath)` (`mutation-selection.ts`) is a
+dedicated pure predicate — `true` iff the normalized path is under `.canon/principles/` — kept separate
+from `isGateEligible` (which also backs the retire/reinforce and register-/tool-description paths) so
+widening one doesn't perturb the other. `filterAndPartition` admits `confidence: "medium"` ONLY when
+`attribution.join_basis === "principle_id==artifact_id"` (see Selection policy above) — narrow because
+the `review_violation`→principle join structurally can never reach `"high"` (transcript evidence is
+unpopulated in v1). `buildMutationTarget` stamps `trust_tier`/`holdout_exempt` on every returned target:
+`"untrusted-project-local"`/`true` for an overlay target, `"trusted"`/`false` for everything else.
+
+**Gate (`evaluate_candidate`)**: an overlay `.canon/**` `target_path` is fail-closed-rejected
+(`guard_rejection.reason: "overlay_not_sandboxable"`) BEFORE any file read or subprocess — defense in
+depth on top of the sandbox's own exclusion. A built-in `principles/` target runs the REAL holdout gate
+(mechanically-run, semantically-inert per fact 1 above) through `checkPrincipleFrontmatterImmutable` —
+field-level, tolerates `archived:true` ONLY when the caller passes `proposal_kind: "retire"` (the
+ADR-0052 retire track, narrowed from the prior uniform tolerance to close a gate-vs-apply soundness gap
+where a wording-REWRITE that erroneously flipped `archived` would be scored on an artifact the sandbox
+excludes from loading).
+
+**Emission (`mutation-proposal.ts`)**: an overlay target's proposal renders via `buildOverlayImpactSection`
+instead of the normal Impact section — states `gated: false` by construction, both `holdout_baseline`/
+`holdout_candidate` `null`, and that the HITL Accept in `/canon:review-learnings` IS the trust gate.
+
+**Apply routing**: `/canon:review-learnings`'s Writer arm gained an overlay sub-branch — when
+`target_path` starts with `.canon/`, the apply-provenance hash capture, `record_applied_evolution` call,
+and producer commit (Steps 1/4/5) are ALL skipped (`.canon/` is gitignored: no git provenance is
+possible or meaningful). The writer still runs and edits `.canon/principles/**` in place, project-local.
+Steps 6–7 (move to `applied/`, `append_learning_record`) still run, with an `overlay: true` marker added
+to the appended record. `skills/canon/skills/write-principle/SKILL.md` gained the apply-proposal
+`evolution-candidate` rewrite mapping: full-file body replacement, byte-preserving the existing
+frontmatter — built-in `principles/**` is the tracked branch (unchanged apply-provenance wrapping),
+overlay `.canon/principles/**` is the project-local branch (no git). `agents/writer.md` documents this
+loop-closure mapping.
 
 ## Known Constraints
 
