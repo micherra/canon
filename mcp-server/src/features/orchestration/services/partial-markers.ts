@@ -26,23 +26,63 @@
  * match to start a heading line (`^#{1,6}`, `m` flag) preserves detection of
  * the real stub while no longer matching mid-prose quotation.
  *
- * **Scan scoped to the leading region, not the whole head (W-2/W-3 fix,
- * round 2, 2026-07-19):** line-anchoring alone (W-1) is insufficient —
- * `^` matches the start of EVERY line in the scanned 8192-char head,
- * including a line inside a fenced code block deep in a finalized body
- * (a review quoting Canon's own skeleton machinery in a ```yaml fence), or
- * a later markdown heading that merely quotes the stub string (e.g. a
- * heading titled `### Marker [2]: ... Verdict: IN_PROGRESS` while
- * discussing this very bug). Both false-positive classes defeat
- * `emitWriteReceipt`/WR-02 exactly like W-1 did. Skeleton markers only ever
- * legitimately appear in an artifact's leading diagnostic region — the YAML
- * frontmatter block and/or its opening heading(s) — never in fenced code or
- * body prose. `isSkeletonContent` now extracts that leading region
- * (`extractLeadingRegion`) and scans only it: the frontmatter block (if
- * present) plus every contiguous heading/blank line that follows,
- * stopping at the first substantive (non-blank, non-heading) body line —
- * a fence opener or a prose paragraph both count as substantive and end
- * the region before any marker text inside them is ever scanned.
+ * **Two-class scan, not one uniform region (W-A fix, round 3, 2026-07-19):**
+ * round 2 (below) scoped ALL four markers to a single "leading region"
+ * (frontmatter + contiguous leading headings, stopping at the first
+ * substantive line) to close a fenced/body false-positive class (W-2/W-3).
+ * That over-corrected: it introduced a fail-**open** regression (W-A) — a
+ * genuine architect/security skeleton commonly writes one line of prose
+ * under its title before the `## Status: Partial` footer (`# Design\n\nThis
+ * document is being drafted.\n\n## Status: Partial`), and the leading-region
+ * scan stops at that prose line, never reaching the marker. A missed
+ * skeleton is the dangerous direction: it lets a died-mid-write artifact
+ * pass both `emitWriteReceipt` and the WR-02 disk fallback as "finalized,"
+ * defeating the exact write-cliff detection this module exists for.
+ *
+ * The markers split into two classes with different legitimate ranges:
+ *
+ * - **HEADING markers** (`## Status: Partial` — marker [0]) are section
+ *   headings. A real skeleton's authoring agent may write body content
+ *   (even other section headings) before appending its status footer —
+ *   nothing pins the marker to the very first line. So marker [0] is
+ *   scanned across the **whole** (fence-stripped) head, not just the
+ *   leading region — this is the load-bearing fix for W-A.
+ * - **FRONTMATTER markers** (`verdict: IN_PROGRESS` [1], `status:
+ *   "IN_PROGRESS"` [3]) can only ever be produced by the artifact's own
+ *   real YAML frontmatter, which is always byte-0-anchored. Scanning body
+ *   content for these can only ever find a false positive (a finished doc
+ *   quoting the frontmatter shape in prose or a fence), never a genuine
+ *   skeleton — so they stay scoped to the leading region.
+ * - **Marker [2]** (`## Canon Review — Verdict: IN_PROGRESS`, the reviewer
+ *   stub's heading form) is technically a HEADING marker too, but stays
+ *   leading-region-scoped rather than joining marker [0]'s whole-head scan:
+ *   the reviewer's Early Output Protocol always writes marker [1]
+ *   (frontmatter `verdict: IN_PROGRESS`) in the same step-1 write as the
+ *   heading, so [1] fully backstops genuine reviewer-stub detection —
+ *   there is no scenario where a real reviewer stub carries [2] without
+ *   [1] also present in the leading region. Keeping [2] narrow avoids
+ *   reopening the W-3 body-heading-quote false positive (a later heading
+ *   that merely quotes the stub string, e.g. discussing this very bug)
+ *   for no detection benefit.
+ *
+ * **Fenced code blocks are stripped before either scan (closes W-2):**
+ * `stripFencedBlocks` removes fenced (``` or ~~~) code-block spans from the
+ * scanned head first, so a review that illustrates a skeleton's marker
+ * strings inside a fence — the idiomatic way to document them — never
+ * trips any marker, including the whole-head-scanned marker [0]. Without
+ * this, moving marker [0] to a whole-head scan would reopen exactly the
+ * fenced-example false positive W-2 reported against the sibling markers.
+ *
+ * **Known accepted residual (documented, not fixed here):** an early
+ * body heading — one that is itself part of the leading region, i.e.
+ * appears immediately after frontmatter before any substantive line — that
+ * merely quotes marker [2]'s string (e.g. `### Marker [2]: ... Verdict:
+ * IN_PROGRESS`) can still false-positive, because it is textually
+ * indistinguishable from a real stub heading within that scope. This is
+ * narrow (real reviews open with the canonical `## Canon Review — Verdict:
+ * {verdict}` heading per `templates/review.md`) and asymmetric-risk
+ * favors this rare false-positive nuisance over reopening any fail-open
+ * gap — never widen marker [2] or [1]/[3] to a whole-head scan to close it.
  */
 export const PARTIAL_MARKERS: readonly RegExp[] = [
   /^#{1,6}\s*Status:\s*Partial\b/im,
@@ -51,18 +91,74 @@ export const PARTIAL_MARKERS: readonly RegExp[] = [
   /^status:\s*["']?IN_PROGRESS["']?\b/im,
 ];
 
+/** HEADING-class markers: scanned across the whole fence-stripped head (W-A fix — a real skeleton may place its status footer after body content). */
+const HEADING_SCAN_MARKERS: readonly RegExp[] = [PARTIAL_MARKERS[0]];
+
+/** FRONTMATTER-class markers (plus marker [2], see class doc above): scanned only within the leading region — body/fence content can never legitimately produce these. */
+const LEADING_REGION_MARKERS: readonly RegExp[] = [
+  PARTIAL_MARKERS[1],
+  PARTIAL_MARKERS[2],
+  PARTIAL_MARKERS[3],
+];
+
 /** Matches a complete leading `---\n...\n---` YAML frontmatter fence, if present. */
 const FRONTMATTER_FENCE = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
 
 /** Matches a markdown ATX heading line (`#` through `######`, followed by whitespace). */
 const HEADING_LINE = /^#{1,6}\s/;
 
+/** Matches a fenced-code-block opener line (``` or ~~~, 3+ chars, optional trailing language tag). */
+const FENCE_OPEN_LINE = /^ {0,3}(`{3,}|~{3,})/;
+
+/**
+ * Removes fenced (``` or ~~~) code-block spans from `text`, line-by-line —
+ * a document quoting a skeleton marker string inside a fence (the idiomatic
+ * way to illustrate one) must never trip marker detection (closes W-2).
+ *
+ * Only a CONFIRMED closed fence (a later line of the same fence character,
+ * repeated at least as many times, alone on the line) is stripped. An
+ * unterminated fence within the scanned head is left untouched — favoring
+ * detection over silence is the same asymmetric-risk call this module makes
+ * everywhere else (a missed marker is worse than a rare false positive).
+ */
+function stripFencedBlocks(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const keep = new Array<boolean>(lines.length).fill(true);
+  let i = 0;
+  while (i < lines.length) {
+    const openMatch = FENCE_OPEN_LINE.exec(lines[i]);
+    if (!openMatch) {
+      i += 1;
+      continue;
+    }
+    const fenceChar = openMatch[1][0];
+    const fenceLen = openMatch[1].length;
+    const closeLine = new RegExp(`^ {0,3}${fenceChar}{${fenceLen},}\\s*$`);
+    let closeIdx = -1;
+    for (let j = i + 1; j < lines.length; j += 1) {
+      if (closeLine.test(lines[j])) {
+        closeIdx = j;
+        break;
+      }
+    }
+    if (closeIdx === -1) {
+      // Unterminated within the scanned head — leave as-is (favor detection).
+      i += 1;
+      continue;
+    }
+    for (let k = i; k <= closeIdx; k += 1) keep[k] = false;
+    i = closeIdx + 1;
+  }
+  return lines.filter((_, idx) => keep[idx]).join("\n");
+}
+
 /**
  * Extracts the artifact's leading diagnostic region: the YAML frontmatter
  * block (if present) plus every contiguous heading/blank line that follows
  * it, stopping at the first substantive (non-blank, non-heading) line —
- * a fenced-code opener or a prose paragraph. Skeleton markers only ever
- * legitimately appear here (see the class doc comment above).
+ * a fenced-code opener or a prose paragraph. Used only for the
+ * FRONTMATTER-class markers (see class doc above) — never for marker [0],
+ * which is intentionally scanned across the whole head.
  */
 function extractLeadingRegion(content: string): string {
   const head = content.slice(0, 8192);
@@ -88,16 +184,24 @@ function extractLeadingRegion(content: string): string {
 }
 
 /**
- * True when `content`'s leading diagnostic region matches any
- * `PARTIAL_MARKERS` skeleton marker — i.e. this is a step-1 skeleton, not a
- * finished deliverable. Only the leading region is checked (frontmatter +
- * leading heading lines — see `extractLeadingRegion`), never fenced code or
- * body prose; shared by the write-receipt gate's WR-02 disk fallback
- * (`hasRealCanonicalFile`) and the finalized-only receipt guard
- * (`emitWriteReceipt`) so both consume the identical definition of
- * "skeleton".
+ * True when `content` matches any `PARTIAL_MARKERS` skeleton marker — i.e.
+ * this is a step-1 skeleton, not a finished deliverable. Shared by the
+ * write-receipt gate's WR-02 disk fallback (`hasRealCanonicalFile`) and the
+ * finalized-only receipt guard (`emitWriteReceipt`) so both consume the
+ * identical definition of "skeleton".
+ *
+ * Two-class scan (see the module doc comment for the full rationale):
+ * fenced code blocks are stripped first, then the HEADING-class marker
+ * (`## Status: Partial`) is scanned across the whole fence-stripped head,
+ * while the FRONTMATTER-class markers (plus marker [2]) are scanned only
+ * within the leading region (frontmatter + leading heading lines).
  */
 export function isSkeletonContent(content: string): boolean {
-  const region = extractLeadingRegion(content);
-  return PARTIAL_MARKERS.some((re) => re.test(region));
+  const head = content.slice(0, 8192);
+  const fenceStripped = stripFencedBlocks(head);
+  const leadingRegion = extractLeadingRegion(fenceStripped);
+  return (
+    HEADING_SCAN_MARKERS.some((re) => re.test(fenceStripped)) ||
+    LEADING_REGION_MARKERS.some((re) => re.test(leadingRegion))
+  );
 }

@@ -160,7 +160,17 @@ describe("isSkeletonContent — leading-region scoping (W-2/W-3 round-2 fix)", (
     expect(isSkeletonContent(content)).toBe(false);
   });
 
-  it("a finalized review whose BODY (after substantive prose) contains a '## Status: Partial' heading is NOT a skeleton", () => {
+  it("(W-A, round 3) a BODY '## Status: Partial' heading after substantive prose IS a skeleton — reversed from round 2", () => {
+    // Round 2 scoped ALL markers (including [0]) to the leading region, so this
+    // case returned false. Round 3 (W-A fix) found that scoping fail-OPEN: a
+    // genuine architect/security skeleton commonly writes exactly this shape —
+    // one line of prose under the title before its status footer. Marker [0]
+    // is now scanned across the whole fence-stripped head, so an UNFENCED
+    // '## Status: Partial' heading anywhere is always treated as a skeleton,
+    // even in this adversarial phrasing where a finished review's prose
+    // happens to precede a real heading quoting the marker. This is the
+    // accepted false-positive direction (asymmetric risk: never miss a real
+    // skeleton) — see the module doc comment's "Known accepted residual".
     const content = [
       "---",
       "verdict: CLEAN",
@@ -176,7 +186,7 @@ describe("isSkeletonContent — leading-region scoping (W-2/W-3 round-2 fix)", (
       "",
     ].join("\n");
 
-    expect(isSkeletonContent(content)).toBe(false);
+    expect(isSkeletonContent(content)).toBe(true);
   });
 
   it("(W-3) a body heading that merely quotes 'Verdict: IN_PROGRESS' after substantive prose is NOT a skeleton", () => {
@@ -200,5 +210,121 @@ describe("isSkeletonContent — leading-region scoping (W-2/W-3 round-2 fix)", (
 
   it("still detects the genuine architect '## Status: Partial' stub with a preceding title heading (multi-heading leading region)", () => {
     expect(isSkeletonContent("# Design\n\n## Status: Partial\n\n## Approach\n")).toBe(true);
+  });
+});
+
+describe("isSkeletonContent — two-class scan, W-A fail-open fix (round 3)", () => {
+  // The 8 numbered cases below are the acceptance tests for the round-3 fix:
+  // marker [0] (`## Status: Partial`) now scans the WHOLE fence-stripped head
+  // instead of only the leading region, so a genuine architect/security
+  // skeleton is still caught even when its status footer follows body prose.
+  // Fenced code blocks are stripped first so this whole-head scan cannot
+  // reopen the W-2 fenced-example false positive.
+
+  it("(case 1) reviewer stub — frontmatter + heading, no prose — IS a skeleton", () => {
+    const content = [
+      "---",
+      "verdict: IN_PROGRESS",
+      "---",
+      "",
+      "## Canon Review — Verdict: IN_PROGRESS",
+    ].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+
+  it("(case 2, the W-A regression) architect skeleton with prose BEFORE the '## Status: Partial' marker IS a skeleton", () => {
+    const content = ["# Design", "", "being drafted.", "", "## Status: Partial"].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+
+  it("(case 3, the W-A regression) security skeleton — frontmatter + prose before the marker — IS a skeleton", () => {
+    const content = [
+      "---",
+      "agent: security",
+      "---",
+      "",
+      "### Summary",
+      "",
+      "underway.",
+      "",
+      "## Status: Partial",
+    ].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+
+  it("(case 4) scribe stub — frontmatter only, no trailing heading — IS a skeleton", () => {
+    const content = ["---", 'status: "IN_PROGRESS"', "---"].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+
+  it("(case 5) architect skeleton — marker right after the title, no prose — IS a skeleton", () => {
+    const content = ["# Design", "", "## Status: Partial"].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+
+  it("(case 6) finished review — body prose mentions 'Verdict: IN_PROGRESS' mid-sentence — is NOT a skeleton", () => {
+    const content = [
+      "---",
+      "verdict: CLEAN",
+      "---",
+      "",
+      "## Canon Review — Verdict: CLEAN",
+      "",
+      "The stub reports Verdict: IN_PROGRESS while analysis is underway.",
+      "",
+    ].join("\n");
+    expect(isSkeletonContent(content)).toBe(false);
+  });
+
+  it("(case 7) finished review — a FENCED '## Status: Partial' line in the body — is NOT a skeleton (verifies fence-stripping protects the new whole-head marker-[0] scan)", () => {
+    // This is the exact W-2 regression shape: a finalized review illustrating
+    // the architect's skeleton marker inside a fence. Moving marker [0] to a
+    // whole-head scan (case 2/3 above) would reopen this false positive
+    // without fence-stripping running first.
+    const content = [
+      "---",
+      "verdict: BLOCKING",
+      "---",
+      "",
+      "## Canon Review — Verdict: BLOCKING",
+      "",
+      "The architect's Early Output Protocol writes a skeleton like this:",
+      "",
+      "```",
+      "## Status: Partial",
+      "```",
+      "",
+    ].join("\n");
+    expect(isSkeletonContent(content)).toBe(false);
+  });
+
+  it("(case 8) finished review — real frontmatter verdict + long body — is NOT a skeleton", () => {
+    const content = [
+      "---",
+      "verdict: WARNING",
+      "---",
+      "",
+      "## Canon Review — Verdict: WARNING",
+      "",
+      "#### Violations",
+      "",
+      "| Principle | Severity | Location | Confidence | Description | Fix |",
+      "|-----------|----------|----------|------------|--------------|-----|",
+      "| some-rule | WARNING | src/foo.ts:12 | high | Missing null check | Add a guard clause |",
+      "",
+      "#### Honored",
+      "",
+      "- **agent-artifact-write-before-return**",
+      "",
+      "#### Score",
+      "",
+      "| Layer | Rules | Opinions | Conventions |",
+      "|-------|-------|----------|-------------|",
+      "| overall | 3 / 3 | 2 / 2 | 1 / 1 |",
+      "",
+      "This review covers several files and stages of analysis in detail, none of which resemble a skeleton marker.",
+      "",
+    ].join("\n");
+    expect(isSkeletonContent(content)).toBe(false);
   });
 });
