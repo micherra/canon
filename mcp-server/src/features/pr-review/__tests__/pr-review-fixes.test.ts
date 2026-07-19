@@ -21,8 +21,10 @@ import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { InitExecutionParams } from "@domains/workspaces/execution-store-types.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { initGitFixtureRepo } from "../../../tests/git-fixture.ts";
 
 // Top-level mock for flow-parser — used by Comment 5 tests
 vi.mock("@domains/flows/flow-parser.ts", () => ({
@@ -250,10 +252,11 @@ describe("Comment 5: init-workspace catch — narrow error handling", () => {
   it("proceeds with creation on a fresh workspace (no existing DB)", async () => {
     const { initWorkspaceFlow } = await import("@features/orchestration/tools/init-workspace.ts");
     const projectDir = makeTmpDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const result = await initWorkspaceFlow(
       {
-        base_commit: "abc",
+        base_commit: baseCommit,
         branch: "main",
         flow_name: "fast-path",
         task: "fresh task",
@@ -262,16 +265,18 @@ describe("Comment 5: init-workspace catch — narrow error handling", () => {
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
     expect(result.created).toBe(true);
   });
 
   it("resumes (created:false) on second call for same task and branch", async () => {
     const { initWorkspaceFlow } = await import("@features/orchestration/tools/init-workspace.ts");
     const projectDir = makeTmpDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const first = await initWorkspaceFlow(
       {
-        base_commit: "abc",
+        base_commit: baseCommit,
         branch: "feat/narrow",
         flow_name: "fast-path",
         task: "resume test",
@@ -280,11 +285,12 @@ describe("Comment 5: init-workspace catch — narrow error handling", () => {
       projectDir,
       "/fake/plugin",
     );
+    assertOk(first);
     expect(first.created).toBe(true);
 
     const second = await initWorkspaceFlow(
       {
-        base_commit: "abc",
+        base_commit: baseCommit,
         branch: "feat/narrow",
         flow_name: "fast-path",
         task: "resume test",
@@ -293,6 +299,7 @@ describe("Comment 5: init-workspace catch — narrow error handling", () => {
       projectDir,
       "/fake/plugin",
     );
+    assertOk(second);
     expect(second.created).toBe(false);
   });
 

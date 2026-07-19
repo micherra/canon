@@ -6,8 +6,12 @@
  * - Resume with existing worktree returns the path
  * - Resume with missing worktree returns undefined
  * - Preflight-only calls do NOT create worktrees
- * - Worktree creation failure falls back gracefully (no worktree_path)
- * - Backward compat: existing callers that don't use worktree_path still work
+ * - Worktree creation failure returns a typed WORKTREE_CREATE_FAILED error (fail-closed,
+ *   Approach B — see DESIGN.md). Previously this fell back silently to `created: true`
+ *   with no worktree_path; that was the bug this build fixes, not a contract to preserve.
+ * - Post-failure retry does not resume the failed workspace — it self-heals via slug
+ *   suffixing (dc-04)
+ * - Lock is released after a worktree-creation failure
  */
 
 import { spawnSync } from "node:child_process";
@@ -30,9 +34,12 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
   }),
 }));
 
+import { assertOk } from "@shared/lib/tool-result.ts";
+import { initGitFixtureRepo } from "../../../tests/git-fixture.ts";
+import { readLock } from "../services/workspace-lock.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
-// Scope: Tests worktree creation, resume detection, legacy path fallback, preflight-skips-worktree, and graceful failure when not in a git repo.
+// Scope: Tests worktree creation, resume detection, legacy path fallback, preflight-skips-worktree, and fail-closed error when worktree creation fails.
 
 let tmpDirs: string[] = [];
 
@@ -40,19 +47,6 @@ function makeTmpProjectDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "init-ws-worktree-test-"));
   tmpDirs.push(dir);
   return dir;
-}
-
-function initGitRepo(dir: string): string {
-  spawnSync("git", ["init"], { cwd: dir });
-  spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: dir });
-  spawnSync("git", ["config", "user.name", "Test"], { cwd: dir });
-  writeFileSync(join(dir, "README.md"), "# test");
-  spawnSync("git", ["add", "."], { cwd: dir });
-  spawnSync("git", ["commit", "-m", "init"], { cwd: dir });
-
-  // Get HEAD commit
-  const result = spawnSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf-8" });
-  return result.stdout.trim();
 }
 
 afterEach(() => {
@@ -78,13 +72,14 @@ const baseInput = {
 describe("initWorkspaceFlow — worktree creation on new workspace", () => {
   it("returns worktree_path pointing inside {workspace}/worktree", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const result = await initWorkspaceFlow(
       { ...baseInput, base_commit: baseCommit },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.created).toBe(true);
     expect(result.worktree_path).toBeDefined();
@@ -96,13 +91,14 @@ describe("initWorkspaceFlow — worktree creation on new workspace", () => {
 
   it("returns worktree_branch matching canon/{slug}", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const result = await initWorkspaceFlow(
       { ...baseInput, base_commit: baseCommit },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.created).toBe(true);
     expect(result.worktree_branch).toBe(`canon/${result.slug}`);
@@ -110,13 +106,14 @@ describe("initWorkspaceFlow — worktree creation on new workspace", () => {
 
   it("actually creates the worktree directory on disk", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const result = await initWorkspaceFlow(
       { ...baseInput, base_commit: baseCommit },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.worktree_path).toBeDefined();
     expect(existsSync(result.worktree_path!)).toBe(true);
@@ -124,13 +121,14 @@ describe("initWorkspaceFlow — worktree creation on new workspace", () => {
 
   it("persists worktree_path and worktree_branch in session metadata", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const result = await initWorkspaceFlow(
       { ...baseInput, base_commit: baseCommit },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.session.worktree_path).toBe(result.worktree_path);
     expect(result.session.worktree_branch).toBe(result.worktree_branch);
@@ -142,7 +140,7 @@ describe("initWorkspaceFlow — worktree creation on new workspace", () => {
 describe("initWorkspaceFlow — resume with existing worktree", () => {
   it("returns worktree_path when worktree still exists", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     // Create workspace first
     const first = await initWorkspaceFlow(
@@ -150,6 +148,7 @@ describe("initWorkspaceFlow — resume with existing worktree", () => {
       projectDir,
       "/fake/plugin",
     );
+    assertOk(first);
     expect(first.created).toBe(true);
     expect(first.worktree_path).toBeDefined();
 
@@ -159,6 +158,7 @@ describe("initWorkspaceFlow — resume with existing worktree", () => {
       projectDir,
       "/fake/plugin",
     );
+    assertOk(second);
     expect(second.created).toBe(false);
     expect(second.worktree_path).toBeDefined();
     expect(second.worktree_path).toBe(first.worktree_path);
@@ -166,7 +166,7 @@ describe("initWorkspaceFlow — resume with existing worktree", () => {
 
   it("returns undefined worktree_path when worktree has been deleted", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     // Create workspace first
     const first = await initWorkspaceFlow(
@@ -174,6 +174,7 @@ describe("initWorkspaceFlow — resume with existing worktree", () => {
       projectDir,
       "/fake/plugin",
     );
+    assertOk(first);
     expect(first.created).toBe(true);
 
     // Forcibly remove the worktree directory (simulating manual removal)
@@ -188,6 +189,7 @@ describe("initWorkspaceFlow — resume with existing worktree", () => {
       projectDir,
       "/fake/plugin",
     );
+    assertOk(second);
     expect(second.created).toBe(false);
     expect(second.worktree_path).toBeUndefined();
     expect(second.worktree_branch).toBeUndefined();
@@ -215,6 +217,7 @@ describe("initWorkspaceFlow — preflight skips worktree creation", () => {
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.preflight_issues).toBeDefined();
     expect(result.preflight_issues!.length).toBeGreaterThan(0);
@@ -225,44 +228,134 @@ describe("initWorkspaceFlow — preflight skips worktree creation", () => {
   });
 });
 
-// Graceful fallback when worktree creation fails
+// Fail-closed: worktree creation failure returns a typed error (dc-01, dc-02)
 
-describe("initWorkspaceFlow — worktree creation failure fallback", () => {
-  it("returns result without worktree_path when not in a git repo", async () => {
+describe("initWorkspaceFlow — worktree creation failure (fail-closed)", () => {
+  it("returns WORKTREE_CREATE_FAILED, never created:true, when not in a git repo (PROBE5)", async () => {
     // projectDir has no git repo — worktree add will fail
     const projectDir = makeTmpProjectDir();
 
     const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
 
-    // Workspace should be created normally
-    expect(result.created).toBe(true);
-    expect(result.workspace).toBeTruthy();
-    expect(result.board).toBeDefined();
-    expect(result.session).toBeDefined();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("WORKTREE_CREATE_FAILED");
+      expect(result.message).toContain("git worktree add");
+      expect(result.recoverable).toBe(true);
+    }
+  });
 
-    // Worktree creation silently failed — no worktree_path returned
-    expect(result.worktree_path).toBeUndefined();
-    expect(result.worktree_branch).toBeUndefined();
+  it("returns WORKTREE_CREATE_FAILED on branch collision (PROBE1/2)", async () => {
+    const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
+    // Pre-create the branch canon/{slug} would use, forcing a collision.
+    spawnSync("git", ["branch", "canon/fix-the-bug"], { cwd: projectDir });
+
+    const result = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("WORKTREE_CREATE_FAILED");
+      expect(result.message).toContain("git worktree add");
+    }
+  });
+
+  it("returns WORKTREE_CREATE_FAILED for an invalid base_commit (PROBE4)", async () => {
+    const projectDir = makeTmpProjectDir();
+    initGitFixtureRepo(projectDir);
+
+    const result = await initWorkspaceFlow(
+      { ...baseInput, base_commit: "deadbeef1234" },
+      projectDir,
+      "/fake/plugin",
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("WORKTREE_CREATE_FAILED");
+    }
+  });
+
+  it("does not create a session row on failure — no workspace survives to resume (dc-04)", async () => {
+    const projectDir = makeTmpProjectDir();
+
+    const failed = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+    expect(failed.ok).toBe(false);
+
+    // Retry with the same input does NOT silently resume a worktree-less workspace —
+    // it fails closed again (still no git repo), never returning created:true.
+    const retry = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+    expect(retry.ok).toBe(false);
+    if (!retry.ok) {
+      expect(retry.error_code).toBe("WORKTREE_CREATE_FAILED");
+    }
+  });
+
+  it("self-heals on retry after a branch-collision failure via slug suffixing (dc-04)", async () => {
+    const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
+    spawnSync("git", ["branch", "canon/fix-the-bug"], { cwd: projectDir });
+
+    const failed = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
+    expect(failed.ok).toBe(false);
+
+    // Retry — checkSlugCollision suffixes the dir (fix-the-bug -> fix-the-bug-2),
+    // yielding a fresh branch name that dodges the collision. Succeeds.
+    const retry = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
+    assertOk(retry);
+    expect(retry.created).toBe(true);
+    expect(retry.worktree_path).toBeDefined();
+    expect(existsSync(retry.worktree_path!)).toBe(true);
+  });
+
+  it("releases the workspace lock after a worktree-creation failure", async () => {
+    const projectDir = makeTmpProjectDir();
+
+    const failed = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+    expect(failed.ok).toBe(false);
+    if (!failed.ok) {
+      const failedWorkspace = failed.context?.worktree_path
+        ? String(failed.context.worktree_path).replace(/\/worktree$/, "")
+        : undefined;
+      expect(failedWorkspace).toBeDefined();
+      expect(readLock(failedWorkspace!)).toBeNull();
+    }
   });
 });
 
 // Backward compat: existing behavior preserved
 
 describe("initWorkspaceFlow — backward compat", () => {
-  it("returns all existing fields regardless of worktree presence", async () => {
+  it("returns all existing fields regardless of worktree presence, wrapped with ok:true", async () => {
     const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
 
-    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
 
-    // Original fields still present
+    // Additive ok:true wrapping — success shape is unchanged otherwise (PRD AC#5).
+    expect(result.ok).toBe(true);
+    assertOk(result);
     expect(result.workspace).toBeTruthy();
     expect(result.slug).toBeTruthy();
     expect(result.board).toBeDefined();
     expect(result.session).toBeDefined();
     expect(result.created).toBe(true);
-
-    // worktree_path is optional — callers that ignore it still work
-    // (value may be string or undefined — both acceptable)
     expect(typeof result.worktree_path === "string" || result.worktree_path === undefined).toBe(
       true,
     );
@@ -274,13 +367,14 @@ describe("initWorkspaceFlow — backward compat", () => {
 describe("initWorkspaceFlow — worktree at {workspace}/worktree (new location)", () => {
   it("places worktree inside workspace directory, not .canon/worktrees/", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const result = await initWorkspaceFlow(
       { ...baseInput, base_commit: baseCommit },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.created).toBe(true);
     expect(result.worktree_path).toBeDefined();
@@ -294,13 +388,14 @@ describe("initWorkspaceFlow — worktree at {workspace}/worktree (new location)"
 
   it("actually creates the worktree directory at {workspace}/worktree", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const result = await initWorkspaceFlow(
       { ...baseInput, base_commit: baseCommit },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.worktree_path).toBeDefined();
     expect(existsSync(result.worktree_path!)).toBe(true);
@@ -309,7 +404,7 @@ describe("initWorkspaceFlow — worktree at {workspace}/worktree (new location)"
 
   it("resume finds worktree at {workspace}/worktree (new location)", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     // Create workspace first
     const first = await initWorkspaceFlow(
@@ -317,6 +412,7 @@ describe("initWorkspaceFlow — worktree at {workspace}/worktree (new location)"
       projectDir,
       "/fake/plugin",
     );
+    assertOk(first);
     expect(first.created).toBe(true);
     expect(first.worktree_path).toBe(join(first.workspace, "worktree"));
 
@@ -326,6 +422,7 @@ describe("initWorkspaceFlow — worktree at {workspace}/worktree (new location)"
       projectDir,
       "/fake/plugin",
     );
+    assertOk(second);
     expect(second.created).toBe(false);
     expect(second.worktree_path).toBeDefined();
     expect(second.worktree_path).toBe(join(second.workspace, "worktree"));
@@ -334,7 +431,7 @@ describe("initWorkspaceFlow — worktree at {workspace}/worktree (new location)"
 
   it("resume falls back to .canon/worktrees/{slug} for old workspaces", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     // Create workspace at new location first, then simulate an "old" workspace
     // by creating a worktree at the legacy path and pointing the session there
@@ -343,6 +440,7 @@ describe("initWorkspaceFlow — worktree at {workspace}/worktree (new location)"
       projectDir,
       "/fake/plugin",
     );
+    assertOk(first);
     expect(first.created).toBe(true);
 
     // Simulate old path: move the worktree from new to old location
@@ -370,6 +468,7 @@ describe("initWorkspaceFlow — worktree at {workspace}/worktree (new location)"
       projectDir,
       "/fake/plugin",
     );
+    assertOk(second);
     expect(second.created).toBe(false);
     expect(second.worktree_path).toBeDefined();
     expect(second.worktree_path).toBe(legacyPath);
