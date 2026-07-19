@@ -9,6 +9,7 @@ export type CanonErrorCode =
   | "TRANSCRIPT_NOT_FOUND"
   | "PREFLIGHT_FAILED"
   | "PROPOSAL_NOT_RECORDED"
+  | "WORKTREE_CREATE_FAILED"
   | "UNEXPECTED";
 
 export type CanonToolError = {

@@ -12,7 +12,9 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
+import { initGitFixtureRepo } from "../../../../tests/git-fixture.ts";
 import { initWorkspaceFlow } from "../../tools/init-workspace.ts";
 import { DEFAULT_LOCK_TTL_MS } from "../workspace-lock.ts";
 
@@ -51,11 +53,13 @@ describe("init_workspace lock wiring (S2)", () => {
   // Test 1: single init → .lock present after creation
   it("creates a .lock file in the workspace after a successful init", async () => {
     const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
     const result = await initWorkspaceFlow(
-      { ...baseInput, session_id: "session-001", job_id: "job-001" },
+      { ...baseInput, base_commit: baseCommit, session_id: "session-001", job_id: "job-001" },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.created).toBe(true);
     expect(result.workspace).toBeTruthy();
@@ -67,22 +71,25 @@ describe("init_workspace lock wiring (S2)", () => {
   // Test 2: sequential double-init on one workspace → second returns lock_gated
   it("returns lock_gated with first owner when a second session tries to init on the same workspace", async () => {
     const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     // First init — acquires the lock
     const result1 = await initWorkspaceFlow(
-      { ...baseInput, session_id: "session-001", job_id: "job-001" },
+      { ...baseInput, base_commit: baseCommit, session_id: "session-001", job_id: "job-001" },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result1);
     expect(result1.created).toBe(true);
 
     // Second init — same task, same branch → same slug → same candidate workspace
     // Different session_id → should be gated
     const result2 = await initWorkspaceFlow(
-      { ...baseInput, session_id: "session-002", job_id: "job-002" },
+      { ...baseInput, base_commit: baseCommit, session_id: "session-002", job_id: "job-002" },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result2);
 
     expect(result2.lock_gated).toBe(true);
     expect(result2.lock_owner).toBeDefined();
@@ -94,13 +101,15 @@ describe("init_workspace lock wiring (S2)", () => {
   // Test 3: init over a stale .lock → proceeds normally (reclaimed)
   it("proceeds normally when a stale .lock exists (reclaim)", async () => {
     const projectDir = makeTmpProjectDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     // First init to discover the workspace path
     const result1 = await initWorkspaceFlow(
-      { ...baseInput, session_id: "session-001", job_id: "job-001" },
+      { ...baseInput, base_commit: baseCommit, session_id: "session-001", job_id: "job-001" },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result1);
     expect(result1.created).toBe(true);
 
     // Overwrite the lock with a stale one (started_at > 2h ago)
@@ -115,10 +124,11 @@ describe("init_workspace lock wiring (S2)", () => {
     // Second init from a different session — same task/branch → resumes same workspace
     // The stale lock should be reclaimed and the init should proceed
     const result2 = await initWorkspaceFlow(
-      { ...baseInput, session_id: "session-002", job_id: "job-002" },
+      { ...baseInput, base_commit: baseCommit, session_id: "session-002", job_id: "job-002" },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result2);
 
     // Must NOT be gated — the stale lock was reclaimed
     expect(result2.lock_gated).toBeFalsy();
