@@ -28,7 +28,11 @@ import {
   resolveHolisticEvalRoot,
   runSplit,
 } from "../services/eval-runner.ts";
-import { checkFrontmatterImmutable } from "../services/frontmatter-guard.ts";
+import type { FrontmatterGuardResult } from "../services/frontmatter-guard.ts";
+import {
+  checkFrontmatterImmutable,
+  checkPrincipleFrontmatterImmutable,
+} from "../services/frontmatter-guard.ts";
 
 /** Input schema for evaluate_candidate. */
 export const EvaluateCandidateInputSchema = z.object({
@@ -36,6 +40,16 @@ export const EvaluateCandidateInputSchema = z.object({
   project_dir: z
     .string()
     .describe("Absolute path to the project root (directory containing skills/canon/evals/)"),
+  proposal_kind: z
+    .enum(["rewrite", "retire", "reinforce"])
+    .optional()
+    .describe(
+      "Distinguishes a wording-REWRITE candidate from an ADR-0052 RETIRE candidate. " +
+        "Only affects the principles/ frontmatter guard's archived:true exception — " +
+        "ONLY 'retire' tolerates a candidate that flips archived; omitted/'rewrite'/" +
+        "'reinforce' all reject it (fail-closed default; a reinforce candidate never " +
+        "reaches this gate in practice — it is emitted ungated, see mutation-proposal.ts).",
+    ),
   splits: z
     .array(z.enum(["train", "val", "holdout"]))
     .optional()
@@ -85,7 +99,7 @@ export type EvaluateCandidateResult = {
    * already treat `accepted:false` as "do not propose"; this field adds a typed reason.
    */
   guard_rejection?: {
-    reason: "frontmatter_modified" | "frontmatter_unverifiable";
+    reason: "frontmatter_modified" | "frontmatter_unverifiable" | "overlay_not_sandboxable";
     fields?: string[];
   };
   /**
@@ -244,9 +258,73 @@ function isAgentDefTarget(targetPath: string): boolean {
   return normalized.split(sep)[0] === "agents";
 }
 
+/**
+ * True iff targetPath's first path segment is "principles" (a BUILT-IN principle-wording
+ * target). Overlay `.canon/principles/**` never reaches this check — `isOverlayTarget`
+ * rejects it earlier, before any frontmatter comparison.
+ */
+function isPrincipleDefTarget(targetPath: string): boolean {
+  const normalized = normalize(targetPath);
+  return normalized.split(sep)[0] === "principles";
+}
+
+/**
+ * isOverlayTarget — true iff targetPath's normalized first path segment is `.canon`
+ * (ANY untrusted-project-local overlay path, not just `.canon/principles/**`).
+ *
+ * ADR-0027: overlay content must never enter the eval sandbox. The sandbox already
+ * excludes `.canon/` (PROBE-FINDINGS Probe 2 — `overlayCopied: false`); this is
+ * defense-in-depth so no future caller path can inject overlay text into
+ * `withInjectedGuardrailCandidate`/`withInjectedCandidate`.
+ *
+ * Case-insensitive comparison: the TRUE boundary against overlay content ever
+ * reaching the sandbox is the positive `isGuardrailTarget` allowlist plus the
+ * `PLUGIN_ARTIFACT_ROOTS` copy enumeration (both filesystem-case-immune) — this
+ * denylist is redundant defense-in-depth, made case-insensitive only to remove
+ * the cosmetic ambiguity of a `.CANON`/`.Canon` variant slipping past a strict
+ * string compare (ADR-0027).
+ */
+function isOverlayTarget(targetPath: string): boolean {
+  const normalized = normalize(targetPath);
+  return normalized.split(sep)[0].toLowerCase() === ".canon";
+}
+
+/**
+ * checkTargetFrontmatterImmutable — dispatches to the correct frontmatter-immutability
+ * guard for targetPath. Pure, no I/O. Extracted so `evaluateCandidate` makes a single
+ * call instead of an if/else-if with a nested check per branch (keeps the handler's
+ * cognitive complexity under the lint ceiling).
+ *
+ * - agent-def (`agents/`) → `checkFrontmatterImmutable` (raw byte-for-byte, unchanged).
+ * - built-in principle (`principles/`) → `checkPrincipleFrontmatterImmutable` (field-level,
+ *   tolerates `archived` ONLY when `proposalKind === "retire"` — the ADR-0052 retire
+ *   exception, narrowed to retire-only per the gate-vs-apply soundness fix; fail-closed
+ *   for a missing/`"rewrite"`/`"reinforce"` `proposalKind`).
+ * - every other target → `{ ok: true }` (no guard; unchanged behavior). Overlay
+ *   `.canon/principles/**` targets never reach this — `isOverlayTarget` rejects them earlier.
+ */
+function checkTargetFrontmatterImmutable(
+  targetPath: string,
+  baselineText: string,
+  candidateText: string,
+  proposalKind: "rewrite" | "retire" | "reinforce" | undefined,
+): FrontmatterGuardResult {
+  if (isAgentDefTarget(targetPath)) {
+    return checkFrontmatterImmutable(baselineText, candidateText);
+  }
+  if (isPrincipleDefTarget(targetPath)) {
+    return checkPrincipleFrontmatterImmutable(
+      baselineText,
+      candidateText,
+      proposalKind === "retire",
+    );
+  }
+  return { ok: true };
+}
+
 /** Build the zeroed-out rejection result for a frontmatter-guard reject (dc-08). */
 function buildGuardRejectionResult(
-  reason: "frontmatter_modified" | "frontmatter_unverifiable",
+  reason: "frontmatter_modified" | "frontmatter_unverifiable" | "overlay_not_sandboxable",
   fields: string[] | undefined,
 ): EvaluateCandidateResult {
   const emptySplit: PerSplitResult = { baseline_passed: 0, candidate_passed: 0, total: 0 };
@@ -411,7 +489,13 @@ function buildAcceptedResult(
 export async function evaluateCandidate(
   input: EvaluateCandidateInput,
 ): Promise<ToolResult<EvaluateCandidateResult>> {
-  const { candidate_text, project_dir, splits: requestedSplits, target_path } = input;
+  const {
+    candidate_text,
+    project_dir,
+    proposal_kind,
+    splits: requestedSplits,
+    target_path,
+  } = input;
   const requestedSplitsOrDefault: Array<"train" | "val" | "holdout"> = requestedSplits ?? [
     "train",
     "val",
@@ -421,6 +505,13 @@ export async function evaluateCandidate(
     ? requestedSplitsOrDefault
     : [...requestedSplitsOrDefault, "holdout" as const];
 
+  // Overlay fail-closed reject (dc-02, dc-06, ADR-0027) — checked BEFORE any file read or
+  // subprocess. Model-generated overlay text must never enter the eval sandbox; this is
+  // defense-in-depth on top of the sandbox's own PLUGIN_ARTIFACT_ROOTS exclusion (Probe 2).
+  if (isOverlayTarget(target_path)) {
+    return toolOk(buildGuardRejectionResult("overlay_not_sandboxable", undefined));
+  }
+
   let realContent = "";
   // Baseline-absent is a valid first run — fall back to a fresh baseline eval rather than failing.
   try {
@@ -429,14 +520,18 @@ export async function evaluateCandidate(
     realContent = "";
   }
 
-  // TASK-003 (dc-08): agent-def candidates are rejected BEFORE any subprocess if their
-  // frontmatter block differs from baseline. Fail-closed, never throws. Skipped for
-  // non-agent-def targets (unchanged behavior).
-  if (isAgentDefTarget(target_path)) {
-    const fmResult = checkFrontmatterImmutable(realContent, candidate_text);
-    if (!fmResult.ok) {
-      return toolOk(buildGuardRejectionResult(fmResult.reason, fmResult.fields));
-    }
+  // TASK-003 (dc-08) + principle-wording extension (dc-03): agent-def and built-in
+  // principle candidates are rejected BEFORE any subprocess if their frontmatter differs
+  // from baseline. Fail-closed, never throws. Overlay principle targets never reach here —
+  // isOverlayTarget already rejected them above.
+  const fmResult = checkTargetFrontmatterImmutable(
+    target_path,
+    realContent,
+    candidate_text,
+    proposal_kind,
+  );
+  if (!fmResult.ok) {
+    return toolOk(buildGuardRejectionResult(fmResult.reason, fmResult.fields));
   }
 
   const sanityCheck = await checkScriptReachable(project_dir, candidate_text, target_path);

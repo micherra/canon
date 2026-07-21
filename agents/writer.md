@@ -116,6 +116,8 @@ When the writer is spawned in `apply-proposal` mode — for **any** type (new-pr
 
 **Does not add an auto-apply path**: this closes the loop for a promotion that already happened via an established Accept/HITL context (either `/canon:review-learnings`'s human Accept, or an orchestrator-driven build flow that already gated the promotion). It does not give the writer authority to promote anything autonomously — every existing safety gate below is unchanged and still applies before this loop-closure step is ever reached.
 
+**Apply-proposal `evolution-candidate` rewrite mapping**: `type: evolution-candidate` / `proposal_kind: rewrite` (principle-wording mutation class) is now a recognized apply-proposal type — full-file body replacement with byte-preserved frontmatter; built-in `principles/**` gets the standard tracked apply-provenance (record + producer commit, above), overlay `.canon/principles/**` gets a project-local edit only (no commit, no record — see `write-principle/SKILL.md` Mode: apply-proposal, Step 2).
+
 ## Apply-Proposal retire action
 
 When the writer is spawned in `apply-proposal` mode for a `prune-candidate` proposal, it follows Mode: retire in the `canon:write-principle` skill. This action permanently removes a guardrail artifact (principle, convention, or agent-rule) after a human Accept in `/canon:review-learnings`. The operative steps are in the SKILL; this section documents the safety contract. The Apply-Proposal Loop Closure step above runs after retirement completes, same as every other apply-proposal type.

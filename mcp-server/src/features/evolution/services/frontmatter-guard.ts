@@ -61,6 +61,54 @@ export function checkFrontmatterImmutable(
   };
 }
 
+/**
+ * checkPrincipleFrontmatterImmutable — principle-wording frontmatter guard.
+ *
+ * A principle-wording REWRITE candidate is body-only by contract (mirrors the
+ * agent-def posture above). But ADR-0052's retirement track (`proposal_kind: "retire"`)
+ * legitimately mutates ONE field — `archived: true` — the sole loader-honored retirement
+ * flag (`write-principle`'s `--archive` mode; `shared/matcher.ts` excludes
+ * `archived: true` principles from every review/get_principles/review_code call).
+ *
+ * `isRetire` (RETIRE-ONLY tolerance, fix for the gate-vs-apply soundness gap): the
+ * `archived` exception applies ONLY when the caller asserts `isRetire === true` — the
+ * `evaluate_candidate` handler derives this from the candidate's `proposal_kind` input.
+ * Fail-closed default: `isRetire` omitted/false treats the candidate as a REWRITE —
+ * `archived` is NOT tolerated, so a wording-rewrite that erroneously flips `archived`
+ * is rejected instead of silently passing (a rewrite candidate scored by the holdout
+ * gate would otherwise measure an artifact the sandbox actually excludes from loading,
+ * since an archived principle isn't loaded — the score would not reflect what ships).
+ * Every OTHER top-level field (id/severity/scope/tags/etc.) must stay byte-identical
+ * regardless of `isRetire`.
+ *
+ * Field-level (not raw-block) comparison — unlike `checkFrontmatterImmutable`'s
+ * byte-for-byte block compare — because the one sanctioned mutation must be excludable.
+ * Fail-closed on unparseable YAML, same as `checkFrontmatterImmutable`. Never throws.
+ */
+export function checkPrincipleFrontmatterImmutable(
+  baselineText: string,
+  candidateText: string,
+  isRetire = false,
+): FrontmatterGuardResult {
+  let baselineData: Record<string, unknown>;
+  let candidateData: Record<string, unknown>;
+
+  try {
+    baselineData = splitFrontmatter(baselineText).data;
+    candidateData = splitFrontmatter(candidateText).data;
+  } catch {
+    return { ok: false, reason: "frontmatter_unverifiable" };
+  }
+
+  const allChanged = diffFrontmatterFields(baselineData, candidateData);
+  const changed = isRetire ? allChanged.filter((field) => field !== "archived") : allChanged;
+  if (changed.length === 0) {
+    return { ok: true };
+  }
+
+  return { fields: changed, ok: false, reason: "frontmatter_modified" };
+}
+
 /** Best-effort diagnostic: top-level YAML keys whose value differs. Never the sole basis of the guard. */
 function diffFrontmatterFields(
   baseline: Record<string, unknown>,

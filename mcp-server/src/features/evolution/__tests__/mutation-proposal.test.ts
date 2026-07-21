@@ -443,6 +443,63 @@ describe("shapeMutationProposal — rewrite path unchanged with nullable fields 
 });
 
 // ---------------------------------------------------------------------------
+// 6. Overlay principle-wording ungated shape (dc-02)
+// ---------------------------------------------------------------------------
+
+function makeOverlayPrincipleTarget(): MutationTarget {
+  return {
+    ...makeTarget(".canon/principles/rules/project-local.md", "principle", "project-local-rule"),
+    holdout_exempt: true,
+    trust_tier: "untrusted-project-local",
+  };
+}
+
+describe("shapeMutationProposal — overlay principle target (dc-02)", () => {
+  it("evalResult:null → gated:false, null holdout fields, apply_channel:writer", () => {
+    const target = makeOverlayPrincipleTarget();
+    const result = shapeMutationProposal({
+      candidateText: "# candidate",
+      evalResult: null,
+      index: 1,
+      target,
+      ts: "20260717T000000",
+    });
+
+    expect(result.frontmatter.gated).toBe(false);
+    expect(result.frontmatter.holdout_baseline).toBeNull();
+    expect(result.frontmatter.holdout_candidate).toBeNull();
+    expect(result.frontmatter.apply_channel).toBe("writer");
+    expect(result.frontmatter.proposal_kind).toBe("rewrite");
+  });
+
+  it("Impact section states project-local, ungated, HITL-gated, no producer commit", () => {
+    const target = makeOverlayPrincipleTarget();
+    const result = shapeMutationProposal({
+      candidateText: "# candidate",
+      evalResult: null,
+      index: 1,
+      target,
+      ts: "20260717T000000",
+    });
+
+    expect(result.markdown).toMatch(/project-local/i);
+    expect(result.markdown).toMatch(/ungated|never holdout-gated/i);
+    expect(result.markdown).toMatch(/HITL/);
+    expect(result.markdown).toMatch(/no producer commit/i);
+  });
+
+  it("a built-in principle target + real evalResult → gated:true, real holdout numbers, apply_channel:writer (unchanged)", () => {
+    const target = makeTarget("principles/conventions/x.md", "principle", "x");
+    const result = shape(target, "# candidate", makeEvalResult(true, 2, 5));
+
+    expect(result.frontmatter.gated).toBe(true);
+    expect(result.frontmatter.holdout_baseline).toBe(2);
+    expect(result.frontmatter.holdout_candidate).toBe(5);
+    expect(result.frontmatter.apply_channel).toBe("writer");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 4. Filename slug
 // ---------------------------------------------------------------------------
 

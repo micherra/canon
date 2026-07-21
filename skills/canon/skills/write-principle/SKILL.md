@@ -279,6 +279,27 @@ Determine whether the proposal describes:
 - A **new principle** → follow Mode: new-principle (skip interview, use proposal content)
 - A **new agent-rule** → follow Mode: new-agent-rule (skip interview, use proposal content)
 - An **edit to an existing entry** → follow Mode: edit (skip interview, apply proposed changes)
+- A **principle-wording rewrite** (`type: evolution-candidate`, `proposal_kind: rewrite` or
+  absent, `artifact_class: principle` or `rule`) → follow Mode: edit, with this narrower
+  action instead of the interactive field-by-field flow:
+  1. Extract the candidate body from the proposal's `## Proposed Change` fenced block using
+     the SAME outermost-fence rule Arm M documents in `review-learnings.md` (nested ``` fences
+     may appear inside the candidate body — take the outermost span, do not stop at the first
+     inner closing fence).
+  2. Read the CURRENT on-disk content of `target_path` and split out its frontmatter block
+     (the `---\n...\n---` fence).
+  3. Write the candidate body as a **full-file body replacement**, byte-preserving the
+     EXISTING frontmatter block read in step 2 (id/severity/scope/tags are immutable in a
+     wording rewrite — mirrors `frontmatter-guard.ts`'s posture, which already enforces this
+     at gate-time for built-in targets).
+  4. **Overlay branch**: if `target_path` starts with `.canon/principles/` (the untrusted
+     project-local overlay tier), write the edited file in place at that path — project-local,
+     no git involvement. **NEVER `git add`/`git commit` a `.canon/` path** — `.canon/` is
+     gitignored and the caller (`review-learnings.md`'s Writer arm) skips the apply-provenance
+     steps entirely for this branch (see its Constraints section).
+  5. **Built-in branch** (`principles/**`, tracked): unchanged — the caller wraps this edit
+     with apply-provenance capture (before/after hash, `record_applied_evolution`, producer
+     commit) exactly as for any other `evolution-candidate` apply.
 - A **retirement** (`type: prune-candidate`) → follow Mode: retire (below)
 
 ### Step 3: Skip interview

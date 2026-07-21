@@ -100,19 +100,32 @@ export function isGateEligible(targetPath: string, fileExists: boolean): boolean
 // ---------------------------------------------------------------------------
 
 /**
+ * Prefix → ArtifactClass lookup, checked in order. `.canon/principles/` (the overlay
+ * tier) is listed before `principles/` (the built-in tier) purely for readability —
+ * the two prefixes are disjoint so order between them doesn't affect the match.
+ * Data-driven so `classifyArtifact` below stays a single loop instead of an N-deep
+ * if-return ladder (keeps cognitive complexity under the lint ceiling).
+ */
+const PREFIX_ARTIFACT_CLASS: ReadonlyArray<readonly [string, ArtifactClass]> = [
+  [".canon/principles/", "principle"],
+  ["principles/", "principle"],
+  ["rules/", "rule"],
+  ["primers/", "primer"],
+  ["agents/", "agent"],
+  ["templates/", "template"],
+  ["skills/", "skill"],
+  ["references/", "reference"],
+];
+
+/**
  * classifyArtifact — classify a target path into an ArtifactClass.
  *
  * Priority order:
  *   1. skills/canon/evals/ → "eval-surface"
- *   2. principles/ → "principle"
- *   3. rules/ → "rule"
- *   4. primers/ → "primer"
- *   5. agents/ → "agent"
- *   6. templates/ → "template"
- *   7. skills/ → "skill"
- *   8. references/ → "reference"
- *   9. register-*.ts or .ts → "tool-description"
- *  10. Fall back to mapping ProvenanceArtifactKind
+ *   2. PREFIX_ARTIFACT_CLASS (principles/.canon/principles/rules/primers/agents/
+ *      templates/skills/references) → matching class
+ *   3. register-*.ts or .ts → "tool-description"
+ *   4. Fall back to mapping ProvenanceArtifactKind
  *
  * @param targetPath - Path relative to the project root.
  * @param kind - ProvenanceArtifactKind from the assembled artifact (fallback).
@@ -127,13 +140,10 @@ export function classifyArtifact(
 
   if (posix.startsWith(`${EVAL_SURFACE_POSIX}/`) || posix === EVAL_SURFACE_POSIX)
     return "eval-surface";
-  if (posix.startsWith("principles/")) return "principle";
-  if (posix.startsWith("rules/")) return "rule";
-  if (posix.startsWith("primers/")) return "primer";
-  if (posix.startsWith("agents/")) return "agent";
-  if (posix.startsWith("templates/")) return "template";
-  if (posix.startsWith("skills/")) return "skill";
-  if (posix.startsWith("references/")) return "reference";
+
+  for (const [prefix, artifactClass] of PREFIX_ARTIFACT_CLASS) {
+    if (posix.startsWith(prefix)) return artifactClass;
+  }
 
   // Tool-description: .ts extension or register-* basename
   const ext = extname(base);
@@ -153,6 +163,30 @@ export function classifyArtifact(
   }
 
   return "rule"; // safe fallback for unknown kind values
+}
+
+// ---------------------------------------------------------------------------
+// isOverlayPrincipleTarget — overlay principle-wording eligibility (ADR-0027)
+// ---------------------------------------------------------------------------
+
+/**
+ * isOverlayPrincipleTarget — pure predicate. No I/O.
+ *
+ * Returns true iff targetPath's normalized posix form is a `.canon/principles/`
+ * subtree path — the untrusted-project-local overlay principle tier. Deliberately
+ * NOT folded into `isGateEligible` (which also backs `selectRetirementReinforcementTargets`
+ * and the register- / tool-description exclusions) — widening that shared predicate
+ * would perturb those other call sites. Overlay principle targets are selected via
+ * this dedicated predicate instead; the caller in `evaluate_candidate` fail-closed
+ * rejects them before any subprocess (ADR-0027 — overlay content never enters the
+ * eval sandbox).
+ *
+ * @param targetPath - Path relative to the project root. May be unnormalized.
+ */
+export function isOverlayPrincipleTarget(targetPath: string): boolean {
+  if (!targetPath) return false;
+  const posix = normalize(targetPath).split(sep).join("/");
+  return posix.startsWith(".canon/principles/");
 }
 
 // ---------------------------------------------------------------------------
@@ -232,12 +266,22 @@ function filterAndPartition(
       skipped.push({ reason: "hash_unverified", target_path: path });
       continue;
     }
-    if (attr.confidence !== "high") {
+    // Class-scoped medium-confidence relaxation (dc-01, PROBE-FINDINGS Probe 3): the
+    // review_violation -> principle join can never exceed "medium" (transcript evidence
+    // is unpopulated in v1 — deriveConfidence's hasTranscript is always false), so a
+    // strict high-only filter structurally excludes the entire principle-wording class.
+    // Admit "medium" ONLY when join_basis is the inferred principle join — every other
+    // join_basis/class stays high-only. This is narrow and localized to SELECTION;
+    // deriveConfidence itself is untouched, so no other consumer silently up-ranks the
+    // join's honest MEDIUM label (ADR-0024).
+    const isNarrowMediumRelaxation =
+      attr.confidence === "medium" && attr.join_basis === "principle_id==artifact_id";
+    if (attr.confidence !== "high" && !isNarrowMediumRelaxation) {
       skipped.push({ reason: "confidence_below_high", target_path: path });
       continue;
     }
     const fileExists = existing[path] ?? false;
-    if (!isGateEligible(path, fileExists)) {
+    if (!isGateEligible(path, fileExists) && !isOverlayPrincipleTarget(path)) {
       const artifactClass = classifyArtifact(path, attr.target_artifact.kind);
       const reason = deriveIneligibleReason(path, fileExists);
       gateIneligible.push({ artifact_class: artifactClass, reason, target_path: path });
@@ -334,6 +378,7 @@ function buildMutationTarget(
   bodies: Record<string, string>,
 ): MutationTarget {
   const path = attr.target_artifact.path;
+  const isOverlay = isOverlayPrincipleTarget(path);
   return {
     artifact_class: classifyArtifact(path, attr.target_artifact.kind),
     attributed_violation_count: attr.attributed_violations.length,
@@ -343,8 +388,10 @@ function buildMutationTarget(
     confidence: attr.confidence,
     failure_kind: attr.failure_kind,
     gate_eligible: true,
+    holdout_exempt: isOverlay,
     principle_id: derivePrincipleId(attr),
     target_path: path,
+    trust_tier: isOverlay ? "untrusted-project-local" : "trusted",
   };
 }
 
