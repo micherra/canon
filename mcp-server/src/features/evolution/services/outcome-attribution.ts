@@ -52,6 +52,7 @@ import type {
 } from "./attribution-types.ts";
 import type { SignContribution, TrustTierSlot } from "./attribution-weight.ts";
 import { computeTrustWeight } from "./attribution-weight.ts";
+import type { CorpusArtifactLookup } from "./corpus-artifact-lookup.ts";
 import type { HonoredEntry } from "./positive-attribution.ts";
 import { attributeHonored } from "./positive-attribution.ts";
 
@@ -88,7 +89,7 @@ export type TrustWeightedScore = {
 /** A honored line that could not be scored — pass-through of attributeHonored's typed bucket. */
 export type UnattributedOutcomePositive = {
   archive_id: string;
-  reason: "unparseable_honored" | "no_in_context_artifact";
+  reason: "unparseable_honored" | "no_corpus_artifact";
   honored: HonoredEntry;
 };
 
@@ -138,6 +139,10 @@ export type AggregateOutcomesInput = {
   readCurrentBody: (path: string) => string | null;
   /** Optional seam: get transcript excerpt for (stepId, artifactId). */
   getTranscriptExcerpt?: (stepId: string, artifactId: string) => TranscriptEvidence | null;
+  /** Optional seam: resolve an id against the current corpus (shared resolver,
+   *  corpus-artifact-lookup.ts) — threaded into attributeHonored's corpus-fallback join
+   *  (ADR-0062, Bug-1 part (d)). Omitted -> prior behavior byte-for-byte. */
+  resolveCorpusArtifact?: CorpusArtifactLookup;
 };
 
 // ---------------------------------------------------------------------------
@@ -152,13 +157,20 @@ export type AggregateOutcomesInput = {
  * produces an identical (deep-equal) `scores` array, sorted ascending by principle_id.
  */
 export function aggregateOutcomes(input: AggregateOutcomesInput): AggregateOutcomesResult {
-  const { builds, decisions, now_ms, readCurrentBody, getTranscriptExcerpt } = input;
+  const {
+    builds,
+    decisions,
+    now_ms,
+    readCurrentBody,
+    getTranscriptExcerpt,
+    resolveCorpusArtifact,
+  } = input;
 
   const buckets = newBuckets();
   for (const build of builds) {
     const signalAgeMs = computeSignalAgeMs(build.summary, now_ms);
     processNegativeSignals(build, signalAgeMs, { getTranscriptExcerpt, readCurrentBody }, buckets);
-    processPositiveSignals(build, signalAgeMs, readCurrentBody, buckets);
+    processPositiveSignals(build, signalAgeMs, { readCurrentBody, resolveCorpusArtifact }, buckets);
   }
 
   return {
@@ -255,7 +267,10 @@ function processNegativeSignals(
 function processPositiveSignals(
   build: BuildRecord,
   signalAgeMs: number,
-  readCurrentBody: (path: string) => string | null,
+  seams: {
+    readCurrentBody: (path: string) => string | null;
+    resolveCorpusArtifact?: CorpusArtifactLookup;
+  },
   buckets: Buckets,
 ): void {
   const honoredEntries: HonoredEntry[] = build.summary.review_results.flatMap((r) =>
@@ -264,7 +279,8 @@ function processPositiveSignals(
   const positiveResult = attributeHonored({
     honored: honoredEntries,
     provenance: build.summary.context_provenance ?? [],
-    readCurrentBody,
+    readCurrentBody: seams.readCurrentBody,
+    resolveCorpusArtifact: seams.resolveCorpusArtifact,
   });
   for (const flag of positiveResult.flagged) {
     buckets.flagged.push({ ...flag, archive_id: build.archive_id });

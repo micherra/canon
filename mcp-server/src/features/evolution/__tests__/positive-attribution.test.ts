@@ -85,6 +85,7 @@ describe("attributeHonored", () => {
 
     const attribution = result.attributions[0];
     expect(attribution.presence_in_context).toBe(true);
+    expect(attribution.join_basis).toBe("in_context_provenance");
     expect(attribution.target_artifact.id).toBe("errors-are-values");
     expect(attribution.target_artifact.hash_verified).toBe(true);
     expect(attribution.owning_steps).toEqual([
@@ -104,16 +105,14 @@ describe("attributeHonored", () => {
     expect(result.unattributed).toEqual([{ honored: honored[0], reason: "unparseable_honored" }]);
   });
 
-  it("a parseable honored id with no matching provenance artifact -> no_in_context_artifact", () => {
+  it("a parseable honored id with no matching provenance artifact and no fallback seam -> no_corpus_artifact", () => {
     const provenance = [makeProvenance("review", ["some-other-rule"])];
     const honored = [makeHonored("**errors-are-values**: consistently used typed results")];
 
     const result = attributeHonored({ honored, provenance, readCurrentBody: readsRuleBody });
 
     expect(result.attributions).toHaveLength(0);
-    expect(result.unattributed).toEqual([
-      { honored: honored[0], reason: "no_in_context_artifact" },
-    ]);
+    expect(result.unattributed).toEqual([{ honored: honored[0], reason: "no_corpus_artifact" }]);
   });
 
   it("hash mismatch -> flagged, NOT attributed", () => {
@@ -182,16 +181,14 @@ describe("attributeHonored", () => {
     expect(result.attributions[0].target_artifact.id).toBe("errors-are-values");
   });
 
-  it("a non-id descriptor label with no matching provenance -> no_in_context_artifact, zero attributions (AC#3)", () => {
+  it("a non-id descriptor label with no matching provenance and no fallback seam -> no_corpus_artifact, zero attributions (AC#3)", () => {
     const provenance = [makeProvenance("review", ["errors-are-values"])];
     const honored = [makeHonored("**complete-excision-verified**")];
 
     const result = attributeHonored({ honored, provenance, readCurrentBody: readsRuleBody });
 
     expect(result.attributions).toHaveLength(0);
-    expect(result.unattributed).toEqual([
-      { honored: honored[0], reason: "no_in_context_artifact" },
-    ]);
+    expect(result.unattributed).toEqual([{ honored: honored[0], reason: "no_corpus_artifact" }]);
   });
 
   it("empty inputs -> empty buckets, no throw", () => {
@@ -298,8 +295,147 @@ describe("parseHonoredId — parse is not resolve (ADR-0060)", () => {
     expect(result.unattributed).toEqual([
       {
         honored: { raw: "**thin-handlers**", step_id: "review" },
-        reason: "no_in_context_artifact",
+        reason: "no_corpus_artifact",
       },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Corpus-fallback join (ADR-0062, Bug-1 part (d))
+// ---------------------------------------------------------------------------
+
+describe("attributeHonored — corpus-fallback join (resolveCorpusArtifact seam)", () => {
+  const CORPUS_BODY = "# Some Rule\n\nBody text.";
+  const resolvesSomeRule = (id: string) =>
+    id === "some-rule"
+      ? { artifact_class: "rule" as const, body: CORPUS_BODY, path: "rules/some-rule.md" }
+      : null;
+
+  it("no provenance candidate + resolveCorpusArtifact hit -> corpus_fallback attribution", () => {
+    const provenance = [makeProvenance("review", ["some-other-rule"])];
+    const honored = [makeHonored("**some-rule**: applied throughout")];
+
+    const result = attributeHonored({
+      honored,
+      provenance,
+      readCurrentBody: readsRuleBody,
+      resolveCorpusArtifact: resolvesSomeRule,
+    });
+
+    expect(result.unattributed).toHaveLength(0);
+    expect(result.flagged).toHaveLength(0);
+    expect(result.attributions).toHaveLength(1);
+
+    const attribution = result.attributions[0];
+    expect(attribution.join_basis).toBe("corpus_fallback");
+    expect(attribution.presence_in_context).toBe(false);
+    expect(attribution.owning_steps).toEqual([]);
+    expect(attribution.target_artifact).toEqual({
+      char_span: null,
+      content_hash: "",
+      hash_status: "unrecorded",
+      hash_verified: false,
+      id: "some-rule",
+      kind: "rule",
+      path: "rules/some-rule.md",
+      span_available: false,
+    });
+    // Citation vocabulary only — never "caused"/"causes".
+    expect(attribution.hypothesis).not.toMatch(/\bcaus(e|ed|es)\b/i);
+    expect(attribution.hypothesis).toContain("some-rule");
+  });
+
+  it("provenance hit produces exactly one attribution with join_basis in_context_provenance (no double-credit)", () => {
+    const provenance = [makeProvenance("review", ["errors-are-values"])];
+    const honored = [makeHonored("**errors-are-values**: consistently used typed results")];
+
+    const result = attributeHonored({
+      honored,
+      provenance,
+      readCurrentBody: readsRuleBody,
+      // Seam is present but should never fire — candidates.length > 0.
+      resolveCorpusArtifact: () => ({
+        artifact_class: "rule" as const,
+        body: CORPUS_BODY,
+        path: "rules/should-not-be-used.md",
+      }),
+    });
+
+    expect(result.attributions).toHaveLength(1);
+    expect(result.attributions[0].join_basis).toBe("in_context_provenance");
+    expect(result.attributions[0].presence_in_context).toBe(true);
+  });
+
+  it("recorded-hash mismatch -> flagged, NOT fallback-attributed (mismatch returns before the fallback branch)", () => {
+    const provenance = [
+      {
+        ...makeProvenance("review", []),
+        artifacts: [
+          makeArtifact("errors-are-values", { content_hash: "stale-hash-does-not-match" }),
+        ],
+      },
+    ];
+    const honored = [makeHonored("**errors-are-values**: consistently used typed results")];
+
+    const result = attributeHonored({
+      honored,
+      provenance,
+      readCurrentBody: readsRuleBody,
+      resolveCorpusArtifact: () => ({
+        artifact_class: "rule" as const,
+        body: CORPUS_BODY,
+        path: "rules/should-not-be-used.md",
+      }),
+    });
+
+    expect(result.attributions).toHaveLength(0);
+    expect(result.flagged).toEqual([
+      {
+        artifact_id: "errors-are-values",
+        path: "rules/errors-are-values.md",
+        reason: "hash_mismatch",
+      },
+    ]);
+  });
+
+  it("fallback miss (no provenance candidate, resolveCorpusArtifact returns null) -> no_corpus_artifact", () => {
+    const provenance = [makeProvenance("review", ["some-other-rule"])];
+    const honored = [makeHonored("**errors-are-values**: consistently used typed results")];
+
+    const result = attributeHonored({
+      honored,
+      provenance,
+      readCurrentBody: readsRuleBody,
+      resolveCorpusArtifact: () => null,
+    });
+
+    expect(result.attributions).toHaveLength(0);
+    expect(result.unattributed).toEqual([{ honored: honored[0], reason: "no_corpus_artifact" }]);
+  });
+
+  it("seam absent -> prior behavior byte-for-byte (all misses no_corpus_artifact)", () => {
+    const provenance = [makeProvenance("review", ["some-other-rule"])];
+    const honored = [makeHonored("**errors-are-values**: consistently used typed results")];
+
+    const result = attributeHonored({ honored, provenance, readCurrentBody: readsRuleBody });
+
+    expect(result.attributions).toHaveLength(0);
+    expect(result.unattributed).toEqual([{ honored: honored[0], reason: "no_corpus_artifact" }]);
+  });
+
+  it("unparseable honored line stays unparseable_honored regardless of the fallback seam", () => {
+    const provenance = [makeProvenance("review", ["errors-are-values"])];
+    const honored = [makeHonored("errors-are-values consistently used (no bold prefix)")];
+
+    const result = attributeHonored({
+      honored,
+      provenance,
+      readCurrentBody: readsRuleBody,
+      resolveCorpusArtifact: resolvesSomeRule,
+    });
+
+    expect(result.attributions).toHaveLength(0);
+    expect(result.unattributed).toEqual([{ honored: honored[0], reason: "unparseable_honored" }]);
   });
 });

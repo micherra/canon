@@ -155,7 +155,9 @@ describe("retire candidate emission (offline — no eval tokens, drives the REAL
   it("dc-04 (REAL gate): archived:true candidate that strictly improves the holdout → retirement proposal emitted; principles/** never mutated", async () => {
     // Selection: net_score -6 crosses the -3 threshold → a retire target
     const selection = selectRetirementReinforcementTargets([makeStronglyNegativeScore()], (id) =>
-      id === "some-principle" ? { body: PRINCIPLE_BODY, path: PRINCIPLE_PATH } : null,
+      id === "some-principle"
+        ? { artifact_class: "principle" as const, body: PRINCIPLE_BODY, path: PRINCIPLE_PATH }
+        : null,
     );
     expect(selection.targets).toHaveLength(1);
     expect(selection.targets[0].proposal_kind).toBe("retire");
@@ -214,7 +216,9 @@ describe("retire candidate emission (offline — no eval tokens, drives the REAL
 
   it("AC#6 (REAL gate): archived:true candidate that REGRESSES the holdout → no proposal emission", async () => {
     const selection = selectRetirementReinforcementTargets([makeStronglyNegativeScore()], (id) =>
-      id === "some-principle" ? { body: PRINCIPLE_BODY, path: PRINCIPLE_PATH } : null,
+      id === "some-principle"
+        ? { artifact_class: "principle" as const, body: PRINCIPLE_BODY, path: PRINCIPLE_PATH }
+        : null,
     );
     const target = selection.targets[0];
 
@@ -256,7 +260,9 @@ describe("retire candidate emission (offline — no eval tokens, drives the REAL
   it("reinforce is NEVER run through evaluate_candidate — emitted directly as an ungated confidence signal (Gap 3 L3 fix)", async () => {
     // Selection: net_score +6 crosses the +3 threshold → a reinforce target
     const selection = selectRetirementReinforcementTargets([makeStronglyPositiveScore()], (id) =>
-      id === "some-principle" ? { body: PRINCIPLE_BODY, path: PRINCIPLE_PATH } : null,
+      id === "some-principle"
+        ? { artifact_class: "principle" as const, body: PRINCIPLE_BODY, path: PRINCIPLE_PATH }
+        : null,
     );
     expect(selection.targets).toHaveLength(1);
     expect(selection.targets[0].proposal_kind).toBe("reinforce");

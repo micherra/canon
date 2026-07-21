@@ -317,4 +317,67 @@ describe("selectMutationTargetsHandler — scores mode (Gap 3 L3)", () => {
     if (!result.ok) throw new Error("expected ok");
     expect(result.targets).toHaveLength(0);
   });
+
+  // ADR-0062 Bug-1: resolver widening (rules/*.md ids used to skip artifact_unresolved).
+  it("a scores array containing a rules-class id crossing -3 emits a target (was artifact_unresolved)", async () => {
+    mkdirSync(join(tmpProjectDir, "rules"), { recursive: true });
+    writeFileSync(
+      join(tmpProjectDir, "rules", "some-agent-rule.md"),
+      "---\nid: some-agent-rule\n---\n\nRule body.\n",
+    );
+
+    const result = await selectMutationTargetsHandler({
+      project_dir: tmpProjectDir,
+      scores: [
+        {
+          principle_id: "some-agent-rule",
+          net_score: -5,
+          positive_weight: 0,
+          negative_weight: 5,
+          corroboration: 1,
+          tier_breakdown: { codex: 0, internal: -5 },
+          contributing_builds: [{ archive_id: "archive-001", sign: -1, weight: 5 }],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.targets).toHaveLength(1);
+    expect(result.targets[0].proposal_kind).toBe("retire");
+    expect(result.targets[0].artifact_class).toBe("rule");
+    expect(result.targets[0].target_path).toBe("rules/some-agent-rule.md");
+    expect(result.skipped.some((s) => s.reason === "artifact_unresolved")).toBe(false);
+  });
+
+  // ADR-0062 Bug-1: never-pruneable allowlist guard, exercised at the handler level.
+  it("an allowlisted id never appears in targets, even at a strongly-negative net_score", async () => {
+    mkdirSync(join(tmpProjectDir, "rules"), { recursive: true });
+    writeFileSync(
+      join(tmpProjectDir, "rules", "agent-artifact-write-before-return.md"),
+      "---\nid: agent-artifact-write-before-return\n---\n\nRule body.\n",
+    );
+
+    const result = await selectMutationTargetsHandler({
+      project_dir: tmpProjectDir,
+      scores: [
+        {
+          principle_id: "agent-artifact-write-before-return",
+          net_score: -10,
+          positive_weight: 0,
+          negative_weight: 10,
+          corroboration: 3,
+          tier_breakdown: { codex: 0, internal: -10 },
+          contributing_builds: [{ archive_id: "archive-001", sign: -1, weight: 10 }],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.targets).toHaveLength(0);
+    expect(result.skipped).toEqual([
+      { reason: "never_pruneable", target_path: "agent-artifact-write-before-return" },
+    ]);
+  });
 });
