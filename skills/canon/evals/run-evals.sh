@@ -35,11 +35,8 @@ NO_JUDGE=false
 STRUCTURED_JUDGE=false
 JUDGE_VOTES=1
 EMIT_BASELINE=""
-# Bounded retry count for a transient SUT-invocation failure (see
-# is_transient_eval_failure in lib/eval-core.sh) — 1 initial attempt + up to
-# this many retries, matching root CLAUDE.md's own "retry up to 3 times"
-# convention for transient claude-CLI failures.
-MAX_EVAL_RETRIES=2
+# MAX_EVAL_RETRIES is defined in lib/eval-core.sh (sourced above) — shared
+# with run-agent-evals.sh so both runners' retry loops use the same bound.
 
 # Guardrail injection mode (ADR-0025): when EVAL_PLUGIN_DIR is set (by eval-runner.ts),
 # pass --plugin-dir <dir> --setting-sources project to activating claude -p runs so they
@@ -183,7 +180,7 @@ $file_content
     fi
 
     eval_attempt=$((eval_attempt + 1))
-    if [[ $exit_code -eq 0 ]] || ! is_transient_eval_failure "$output" || (( eval_attempt >= MAX_EVAL_RETRIES )); then
+    if [[ $exit_code -eq 0 ]] || ! is_transient_eval_failure "$output" || (( eval_attempt > MAX_EVAL_RETRIES )); then
       break
     fi
     if $VERBOSE; then

@@ -191,6 +191,10 @@ case "$FAKE_CLAUDE_MODE" in
     echo "Error: Not logged in"
     exit 1
     ;;
+  always-transient-failure)
+    echo "Error: Reached max turns (4)"
+    exit 1
+    ;;
 esac
 STUB
 chmod +x "$STUB_DIR/claude"
@@ -230,6 +234,29 @@ if [[ "$call_count_t15" -ge 1 && "$call_count_t15" -le 3 ]]; then
   pass "T15b: always-nontransient-failure — bounded call count ($call_count_t15), no infinite retry"
 else
   fail "T15b: expected 1-3 stub invocations, got $call_count_t15"
+fi
+
+# T16: always-transient-failure — pins the exact total-attempt bound (1 initial
+# + MAX_EVAL_RETRIES retries = 3 total for MAX_EVAL_RETRIES=2). A failure that
+# is ALWAYS transient (unlike T15's non-transient case, which correctly stops
+# at 1 attempt) is the only way to observe the full retry budget being spent,
+# and is what catches an off-by-one in the loop's break condition.
+COUNTER_T16=$(mktemp -u)
+export FAKE_CLAUDE_COUNTER_FILE="$COUNTER_T16"
+export FAKE_CLAUDE_MODE="always-transient-failure"
+output_t16=$(PATH="$STUB_DIR:$PATH" timeout 60 bash "$RUN_EVALS" --filter trigger-no-canon-project --no-judge 2>&1) || true
+call_count_t16=0
+[[ -f "$COUNTER_T16" ]] && call_count_t16=$(cat "$COUNTER_T16")
+rm -f "$COUNTER_T16"
+if printf '%s\n' "$output_t16" | grep -qE '^\s*ERROR\s+trigger-no-canon-project'; then
+  pass "T16a: always-transient-failure — exhausts retries and reports ERROR (not a false pass)"
+else
+  fail "T16a: expected ERROR result for an always-transient failure, got: $output_t16"
+fi
+if [[ "$call_count_t16" -eq 3 ]]; then
+  pass "T16b: always-transient-failure — invoked exactly 3 times (1 initial + 2 retries)"
+else
+  fail "T16b: expected exactly 3 stub invocations (1 initial + MAX_EVAL_RETRIES=2 retries), got $call_count_t16"
 fi
 
 unset FAKE_CLAUDE_COUNTER_FILE FAKE_CLAUDE_MODE

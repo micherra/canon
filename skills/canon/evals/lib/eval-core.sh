@@ -3,6 +3,15 @@
 # Sourced by skills/canon/evals/run-evals.sh and agents/reviewer/evals/run-agent-evals.sh.
 # No top-level `set -e` here — entry scripts own `set -euo pipefail`.
 
+# Shared bound for is_transient_eval_failure retries, used by both eval
+# runners' SUT-invocation retry loops — 1 initial attempt + up to this many
+# retries, matching root CLAUDE.md's own "retry up to 3 times" convention for
+# transient claude-CLI failures. A single source of truth (rather than each
+# runner declaring its own copy) avoids the two retry loops drifting to
+# different bounds. A sourcing script may override by reassigning after
+# `source`, before the retry loop runs.
+MAX_EVAL_RETRIES=2
+
 # Bash 3.2–compatible: wait for a free parallel slot (pid queue without ${arr[@]:1}).
 wait_parallel_slot() {
   local max="$1"
