@@ -18,10 +18,8 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { relative, sep } from "node:path";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
-import { loadAllPrinciples } from "@shared/matcher.ts";
 import { z } from "zod";
 import { resolveArtifactReadPath } from "../services/artifact-path-resolver.ts";
 import {
@@ -31,8 +29,8 @@ import {
 import { attributeFailures } from "../services/attribution-join.ts";
 import { readProvenance } from "../services/attribution-provenance-source.ts";
 import type { FailureAttribution } from "../services/attribution-types.ts";
+import { buildCorpusArtifactLookup } from "../services/corpus-artifact-lookup.ts";
 import {
-  type PrincipleArtifactLookup,
   selectMutationTargets,
   selectRetirementReinforcementTargets,
 } from "../services/mutation-selection.ts";
@@ -175,49 +173,20 @@ function collectAttributionSources(
   return attributeFailures({ cliffEvents, provenance, readCurrentBody, violations });
 }
 
-/**
- * buildPrincipleArtifactLookup — Gap 3 L3: resolves a principle_id to its on-disk
- * path (relative to project_dir or pluginDir, matching the target_path convention
- * used elsewhere in this file) + current body, for retirement/reinforcement
- * candidate construction.
- *
- * Scope note: covers `principles/{rules,strong-opinions,conventions}/*.md` only
- * (via loadAllPrinciples, the shared kernel's principle loader) — NOT the
- * top-level agent-behavior `rules/*.md` class. An id outside that scope resolves
- * to null and lands in selectRetirementReinforcementTargets's typed `skipped[]`
- * bucket (errors-are-values), never thrown. Widening coverage to agent-behavior
- * rules is a follow-up, not required by Gap 3 L3's stated scope ("which principle
- * earns its keep").
- */
-async function buildPrincipleArtifactLookup(
-  projectDir: string,
-  pluginDir: string,
-): Promise<PrincipleArtifactLookup> {
-  const principles = await loadAllPrinciples(projectDir, pluginDir);
-  const byId = new Map(principles.map((p) => [p.id, p]));
-
-  return (principleId: string) => {
-    const principle = byId.get(principleId);
-    if (!principle) return null;
-    const root = principle.source === "project" ? projectDir : pluginDir;
-    const path = relative(root, principle.filePath).split(sep).join("/");
-    try {
-      return { body: readFileSync(principle.filePath, "utf-8"), path };
-    } catch {
-      return null;
-    }
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
 /**
  * scoresModeHandler — Gap 3 L3: retirement/reinforcement selection from
- * attribute_outcomes scores. Pure query — resolves each nominated principle's
- * on-disk artifact (read-only) and returns MutationTarget[] carrying
- * proposal_kind + score_provenance. Never mutates `principles/**`.
+ * attribute_outcomes scores. Pure query — resolves each nominated principle_id
+ * against the shared corpus-wide resolver (`buildCorpusArtifactLookup`,
+ * ADR-0062 Bug-1 part a) — the domain is principles ∪ rules ∪ references ∪
+ * primers ∪ templates, project-first with a pluginDir fallback. The
+ * never-pruneable allowlist guard and the retire-domain class filter (which
+ * classes may be nominated for RETIRE vs REINFORCE) live inside
+ * `selectRetirementReinforcementTargets`, not here. Never mutates the
+ * resolved artifacts — read-only.
  */
 async function scoresModeHandler(
   scores: TrustWeightedScore[],
@@ -225,7 +194,7 @@ async function scoresModeHandler(
   pluginDir: string | undefined,
   threshold: number | undefined,
 ): Promise<ToolResult<SelectMutationTargetsResult>> {
-  const resolveArtifact = await buildPrincipleArtifactLookup(projectDir, pluginDir ?? projectDir);
+  const resolveArtifact = await buildCorpusArtifactLookup(projectDir, pluginDir ?? projectDir);
   const { targets, skipped } = selectRetirementReinforcementTargets(scores, resolveArtifact, {
     threshold,
   });

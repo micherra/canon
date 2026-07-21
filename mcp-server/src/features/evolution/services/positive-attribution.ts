@@ -2,7 +2,7 @@
  * positive-attribution.ts — Pure honored→artifact attribution join. The positive
  * counterpart to attribution-join.ts's negative (violation) join.
  *
- * PURE: no I/O except through the injected readCurrentBody seam.
+ * PURE: no I/O except through the injected readCurrentBody / resolveCorpusArtifact seams.
  *
  * Join: honoredId == provenance artifact.id — structurally symmetric with the negative
  * path's `violation.principle_id == artifact.id` join (PROBE-FINDINGS Q1). The one real
@@ -22,6 +22,18 @@
  * WITHOUT also producing an attribution (the negative path still attributes at lower
  * confidence). An honored-but-since-drifted artifact should not boost a principle's
  * trust score — see Tests to write in the task plan.
+ *
+ * Two-edge join (ADR-0062, Bug-1 part (d)): most historical honored citations have no
+ * recorded in-context provenance at all — the provenance recorder postdates most of the
+ * corpus (PROBE-FINDINGS). Recording provenance going forward can never retroactively fix
+ * that. Instead, a citation with no provenance candidate falls back to resolving the id
+ * against the CURRENT corpus (the shared resolver, `corpus-artifact-lookup.ts`) via the
+ * optional `resolveCorpusArtifact` seam. The fallback NEVER fabricates a presence claim —
+ * `presence_in_context: false`, `hash_status: "unrecorded"` (no hash was ever recorded to
+ * verify against), `owning_steps: []` (nobody to attribute corroboration to). This is
+ * read-time and retroactive by construction (derive-on-read, ADR-0051/0057) — zero
+ * archive writes, applies uniformly to every already-archived build the moment this code
+ * ships.
  *
  * Canon principles:
  *   - errors-are-values: lossy paths are typed buckets (unattributed, flagged), never thrown
@@ -45,6 +57,7 @@ import type {
   HashStatus,
   OwningStep,
 } from "./attribution-types.ts";
+import type { CorpusArtifactLookup } from "./corpus-artifact-lookup.ts";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -60,26 +73,31 @@ export type HonoredEntry = {
  * A single honored->artifact attribution.
  *
  * Vocabulary invariant: `hypothesis` uses presence/hypothesis vocabulary ONLY.
- * "caused"/"causes"/"honored-because" are NEVER used — `presence_in_context: true`
- * is the only asserted-true claim about the artifact's role.
+ * "caused"/"causes"/"honored-because" are NEVER used. `presence_in_context: true` is
+ * asserted ONLY for the provenance edge — the fallback edge asserts citation +
+ * current-corpus resolution, nothing more (`presence_in_context: false`).
  */
 export type PositiveAttribution = {
   /** Hypothesis statement. NEVER uses "caused"/"causes"/"honored-because". */
   hypothesis: string;
-  /** The artifact that was in context and is the attribution target. */
+  /** The artifact that was in context (or resolved from the corpus) and is the attribution target. */
   target_artifact: AttributedArtifact;
-  /** Steps whose context held the matching artifact. */
+  /** Steps whose context held the matching artifact. Empty for a corpus_fallback edge. */
   owning_steps: OwningStep[];
-  /** The ONLY proven claim: this artifact was present in context during the build. */
-  presence_in_context: true;
+  /** True ONLY for the provenance edge — the artifact was present in context during the
+   *  build. The corpus_fallback edge never fabricates this claim. */
+  presence_in_context: boolean;
+  /** How the join was performed — mirrors the negative path's join_basis convention. */
+  join_basis: "in_context_provenance" | "corpus_fallback";
 };
 
-/** A honored line that could not be attributed to an in-context artifact. */
+/** A honored line that could not be attributed to any in-context OR on-disk artifact. */
 export type UnattributedHonored = {
   honored: HonoredEntry;
   /** "unparseable_honored" — no bolded, id-shaped `**id**` prefix (the colon is optional).
-   *  "no_in_context_artifact" — parsed id has no matching provenance artifact. */
-  reason: "unparseable_honored" | "no_in_context_artifact";
+   *  "no_corpus_artifact" — parsed id has no matching provenance artifact AND is not
+   *  resolvable against the current corpus (or no resolveCorpusArtifact seam was given). */
+  reason: "unparseable_honored" | "no_corpus_artifact";
 };
 
 /** Full result shape for attributeHonored. */
@@ -103,6 +121,11 @@ type AttributeHonoredInput = {
   honored: HonoredEntry[];
   /** Injected seam: read the CURRENT raw artifact body from disk. Return null on missing. */
   readCurrentBody: (path: string) => string | null;
+  /** Optional seam: resolve an id against the current corpus (shared resolver,
+   *  corpus-artifact-lookup.ts). Only consulted when no provenance candidate exists —
+   *  see the module header's "Two-edge join" section. Omitted -> prior behavior
+   *  byte-for-byte (every provenance miss becomes no_corpus_artifact). */
+  resolveCorpusArtifact?: CorpusArtifactLookup;
 };
 
 // ---------------------------------------------------------------------------
@@ -115,7 +138,7 @@ type AttributeHonoredInput = {
  * Never throws. Lossy paths emit typed buckets.
  */
 export function attributeHonored(input: AttributeHonoredInput): AttributeHonoredResult {
-  const { provenance, honored, readCurrentBody } = input;
+  const { provenance, honored, readCurrentBody, resolveCorpusArtifact } = input;
 
   const attributions: PositiveAttribution[] = [];
   const unattributed: UnattributedHonored[] = [];
@@ -131,7 +154,12 @@ export function attributeHonored(input: AttributeHonoredInput): AttributeHonored
 
     const candidates = findArtifactCandidates(provenance, parsedId);
     if (candidates.length === 0) {
-      unattributed.push({ honored: entry, reason: "no_in_context_artifact" });
+      const fallback = resolveCorpusArtifact?.(parsedId) ?? null;
+      if (fallback === null) {
+        unattributed.push({ honored: entry, reason: "no_corpus_artifact" });
+        continue;
+      }
+      attributions.push(buildFallbackAttribution(parsedId, fallback));
       continue;
     }
 
@@ -142,13 +170,18 @@ export function attributeHonored(input: AttributeHonoredInput): AttributeHonored
 
     if (flagEntry !== null) {
       // Hash mismatch/missing -> flagged, NOT attributed (asymmetric with the negative
-      // path by design: a drifted honored artifact should not boost trust).
+      // path by design: a drifted honored artifact should not boost trust). This branch
+      // only runs when a provenance candidate WAS found (candidates.length > 0), so it
+      // is structurally disjoint from the corpus-fallback branch above — a recorded-but-
+      // drifted provenance artifact can never be silently downgraded into a fallback
+      // attribution.
       flagged.push(flagEntry);
       continue;
     }
 
     attributions.push({
       hypothesis: buildHonoredHypothesis(deduplicatedArtifact.id, owningSteps),
+      join_basis: "in_context_provenance",
       owning_steps: owningSteps,
       presence_in_context: true,
       target_artifact: attributedArtifact,
@@ -282,4 +315,42 @@ function buildHonoredHypothesis(artifactId: string, owningSteps: OwningStep[]): 
   const stepPart =
     stepIds.length > 0 ? ` (step${owningSteps.length > 1 ? "s" : ""} ${stepIds})` : "";
   return `Rule '${artifactId}' was present in ${agentNames}'s context${stepPart} when it was marked honored`;
+}
+
+/**
+ * Build a corpus-fallback attribution — no provenance candidate exists, but the id
+ * resolves against the current corpus. NEVER fabricates a presence claim: `hash_status`
+ * is "unrecorded" (nothing was ever recorded to verify against, distinct from a
+ * mismatch/missing check that DID have a recorded hash), `owning_steps` is empty (no
+ * step to attribute corroboration to), `char_span`/`span_available` are the doc-
+ * comment-documented "blanked/no span" shape. `kind: "rule"` is the pre-existing safe
+ * fallback kind (see classifyArtifact) — the positive path never attributes agent-defs
+ * regardless of the resolved artifact_class, so outcome-attribution.ts's Finding-4
+ * comment (positive path can't be agent-def) stays valid.
+ */
+function buildFallbackAttribution(
+  parsedId: string,
+  fallback: { path: string },
+): PositiveAttribution {
+  return {
+    hypothesis: buildFallbackHypothesis(parsedId),
+    join_basis: "corpus_fallback",
+    owning_steps: [],
+    presence_in_context: false,
+    target_artifact: {
+      char_span: null,
+      content_hash: "",
+      hash_status: "unrecorded",
+      hash_verified: false,
+      id: parsedId,
+      kind: "rule",
+      path: fallback.path,
+      span_available: false,
+    },
+  };
+}
+
+/** Build hypothesis string for a corpus-fallback attribution. Citation vocabulary only. */
+function buildFallbackHypothesis(artifactId: string): string {
+  return `Rule '${artifactId}' was cited as honored; no in-context provenance was recorded — resolved against the current corpus`;
 }

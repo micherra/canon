@@ -71,25 +71,28 @@ describe("enforceWriteReceipt via logStep — strong path (receipt present)", ()
     ["architect", "design", "design"],
     ["scribe", "context_sync", "context-sync"],
     ["security", "security_assessment", "security"],
-  ] as const)("%s completed WITH its new-tool receipt -> pass (all-6 coverage)", async (agentType, kind, stepId) => {
-    await logStep({
-      agent_type: agentType,
-      status: "started",
-      step_id: stepId,
-      workspace,
-      projectDir: process.cwd(),
-    });
-    emitReceipt(kind);
-    const result = await logStep({
-      agent_id: `${agentType}-01`,
-      agent_type: agentType,
-      status: "completed",
-      step_id: stepId,
-      workspace,
-      projectDir: process.cwd(),
-    });
-    assertOk(result);
-  });
+  ] as const)(
+    "%s completed WITH its new-tool receipt -> pass (all-6 coverage)",
+    async (agentType, kind, stepId) => {
+      await logStep({
+        agent_type: agentType,
+        status: "started",
+        step_id: stepId,
+        workspace,
+        projectDir: process.cwd(),
+      });
+      emitReceipt(kind);
+      const result = await logStep({
+        agent_id: `${agentType}-01`,
+        agent_type: agentType,
+        status: "completed",
+        step_id: stepId,
+        workspace,
+        projectDir: process.cwd(),
+      });
+      assertOk(result);
+    },
+  );
 });
 
 describe("enforceWriteReceipt via logStep — WR-02 fallback (no receipt, real file on disk)", () => {

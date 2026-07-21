@@ -155,7 +155,9 @@ export type SkippedAttribution = {
     | "confidence_below_high"
     | "budget_exhausted"
     | "artifact_unresolved"
-    | "not_gate_eligible";
+    | "not_gate_eligible"
+    | "never_pruneable"
+    | "non_retirable_artifact_class";
 };
 
 // ---------------------------------------------------------------------------
