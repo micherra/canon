@@ -441,7 +441,7 @@ describe("enforceWriteReceipt via logStep — skeleton write never receipts (Cod
   });
 });
 
-describe("enforceWriteReceipt via logStep — ADR-0063 step-scoped review writes (AC 5 / dc-05)", () => {
+describe("enforceWriteReceipt via logStep — ADR-0064 step-scoped review writes (AC 5 / dc-05)", () => {
   it("reviewer completes via the strong path after a step_id-only writeReview call (receipt kind 'review')", async () => {
     await logStep({
       agent_type: "reviewer",

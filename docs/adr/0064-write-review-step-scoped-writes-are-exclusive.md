@@ -1,12 +1,12 @@
 ---
-adr: "0063"
+adr: "0064"
 title: "write_review step-scoped writes are exclusive; consolidation owns the canonical REVIEW.md"
 status: accepted
 date: "2026-07-16"
 build: "fix-writereviews-two-artifact-contract-defects-1-unconditional-reviewmd"
 ---
 
-# ADR-0063: write_review step-scoped writes are exclusive; consolidation owns the canonical REVIEW.md
+# ADR-0064: write_review step-scoped writes are exclusive; consolidation owns the canonical REVIEW.md
 
 ## Context
 

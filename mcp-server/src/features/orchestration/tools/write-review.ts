@@ -153,7 +153,7 @@ export type WriteReviewInput = {
   };
   files: string[];
   /**
-   * Optional step identifier for multi-reviewer concurrency safety (ADR-0063).
+   * Optional step identifier for multi-reviewer concurrency safety (ADR-0064).
    * When provided, `write_review` writes ONLY the step-scoped pair
    * (`REVIEW-{step_id}.md` + `REVIEW-{step_id}.meta.json`) — the canonical
    * pair (`REVIEW.md` + `REVIEW.meta.json`) is NOT touched. The canonical
@@ -502,7 +502,7 @@ export type ConfidenceAdapter = {
 };
 
 /**
- * Write the review artifact pair(s) to disk (ADR-0063).
+ * Write the review artifact pair(s) to disk (ADR-0064).
  *
  * step_id present -> EXCLUSIVE step-scoped pair (jurors / partition
  * reviewers never touch the canonical pair). Canonical pair is written only

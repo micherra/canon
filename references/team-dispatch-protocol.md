@@ -72,7 +72,7 @@ After all reviewers complete, read all `REVIEW-{N}.md` files and consolidate int
 4. **Union**: Merge honored lists from all reviewers.
 5. **Score**: Sum scores across reviewers, adjusting for deduplicated violations.
 6. **Verdict**: Take worst-case verdict across all reviewers (BLOCKING > WARNING > CLEAN). Minority-verified findings count toward the verdict.
-7. Write using the `write_review` MCP tool **without `step_id`** — the no-`step_id` call is the only writer of the canonical `REVIEW.md` pair (ADR-0063); pass the consolidated six-stage prose (incl. Stage 5 AC Verification) as `body`.
+7. Write using the `write_review` MCP tool **without `step_id`** — the no-`step_id` call is the only writer of the canonical `REVIEW.md` pair (ADR-0064); pass the consolidated six-stage prose (incl. Stage 5 AC Verification) as `body`.
 
 ## Vertical Diverse-Lens Jury
 
@@ -96,7 +96,7 @@ Spawn N `canon:reviewer` (one per lens — currently N=3), each with:
 - `WORKSPACE={workspace_path}` (workspace root, not worktree)
 - An explicit diff base, as in Phase 2
 - The FULL changed-file set (not a partition)
-- A **lens-primacy directive**: "You are the {lens} juror. Run all six review stages, but weight {lens} as PRIMARY for prioritization, depth, and ordering. Write your review via `write_review` with `step_id: "{lens}"` (writes `${WORKSPACE}/reviews/REVIEW-{lens}.md`, exclusively — never the canonical `REVIEW.md`, ADR-0063)."
+- A **lens-primacy directive**: "You are the {lens} juror. Run all six review stages, but weight {lens} as PRIMARY for prioritization, depth, and ordering. Write your review via `write_review` with `step_id: "{lens}"` (writes `${WORKSPACE}/reviews/REVIEW-{lens}.md`, exclusively — never the canonical `REVIEW.md`, ADR-0064)."
 - No stage-scoping — every juror runs the full six-stage `canon:reviewer` (Stages 1–6), keeping the free correctness scan and cross-requirement coverage; only which stages are weighted primary differs by lens.
 
 Use the reviewer's `M0…MV` module contract table (`agents/reviewer.md:842–891`) as the lens→stage map that the directive names:

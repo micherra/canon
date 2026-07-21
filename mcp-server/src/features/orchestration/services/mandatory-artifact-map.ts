@@ -35,7 +35,7 @@ export const MANDATORY_ARTIFACT_MAP: Record<string, MandatoryArtifact> = {
   engineer: { canonical_paths: ["plans/*/*-SUMMARY.md"], kinds: ["implementation_summary"] },
   reviewer: {
     // "reviews/REVIEW-*.md" is a WR-02 fallback for a juror/partition-reviewer
-    // step whose receipt was lost (ADR-0063 step-scoped exclusive writes);
+    // step whose receipt was lost (ADR-0064 step-scoped exclusive writes);
     // the strong receipt path (kind: "review") is unchanged and remains primary.
     canonical_paths: ["reviews/REVIEW.md", "reviews/REVIEW-*.md"],
     kinds: ["review"],

@@ -171,7 +171,7 @@ function registerWriteReviewTool(server: McpServer): void {
     "write_review",
     {
       description:
-        "Write a structured code review. Accepts typed review data with verdict, violations, and scores. Maps ADR-010 verdict vocabulary to DriftStore vocabulary. Produces REVIEW.md + .meta.json sidecar. When step_id is provided, writes ONLY a step-scoped pair (REVIEW-{step_id}.md + REVIEW-{step_id}.meta.json) — the canonical pair is written exclusively by a call without step_id (ADR-0063).",
+        "Write a structured code review. Accepts typed review data with verdict, violations, and scores. Maps ADR-010 verdict vocabulary to DriftStore vocabulary. Produces REVIEW.md + .meta.json sidecar. When step_id is provided, writes ONLY a step-scoped pair (REVIEW-{step_id}.md + REVIEW-{step_id}.meta.json) — the canonical pair is written exclusively by a call without step_id (ADR-0064).",
       inputSchema: WRITE_REVIEW_INPUT_SCHEMA,
     },
     gatedWrapHandler(handleWriteReviewCall),

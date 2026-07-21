@@ -154,7 +154,7 @@ describe("writeReview — file output", () => {
     expect(content).toBeTruthy();
   });
 
-  // Non-jury regression (AC 3, ADR-0063): a no-step_id call is unaffected by
+  // Non-jury regression (AC 3, ADR-0064): a no-step_id call is unaffected by
   // the step-scoped-exclusivity change — it writes only the canonical pair.
   it("non-jury regression: a no-step_id call writes only the canonical pair, no step-scoped files", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));

@@ -1,7 +1,7 @@
 /**
  * TDD tests for step_id support in write_review.
  *
- * ADR-0063: step_id writes are now EXCLUSIVE — the canonical pair is written
+ * ADR-0064: step_id writes are now EXCLUSIVE — the canonical pair is written
  * ONLY by a no-step_id call (solo reviewer, or the orchestrator's
  * consolidation call). Jurors/partition reviewers never touch REVIEW.md.
  *
@@ -77,7 +77,7 @@ describe("write_review step_id support (S4)", () => {
     expect(existsSync(join(reviewsDir, "REVIEW-review-01.meta.json"))).toBe(true);
   });
 
-  // Test 2 (INVERTED, ADR-0063): step_id writes are exclusive — the
+  // Test 2 (INVERTED, ADR-0064): step_id writes are exclusive — the
   // canonical pair is NOT written/refreshed when step_id is provided.
   it("does NOT write/refresh the canonical pair when step_id is provided", async () => {
     const workspace = await makeTmpWorkspace();
@@ -129,7 +129,7 @@ describe("write_review step_id support (S4)", () => {
     expect(c2).toBe("content-2");
   });
 
-  // Test 5 (UPDATED, ADR-0063): sequential step_id calls produce separate
+  // Test 5 (UPDATED, ADR-0064): sequential step_id calls produce separate
   // step-scoped files AND no canonical file; a final no-step_id call then
   // writes the canonical pair.
   it("sequential step_id calls produce separate step-scoped files and no canonical file; a final no-step_id call writes canonical", async () => {
@@ -157,7 +157,7 @@ describe("write_review step_id support (S4)", () => {
     expect(existsSync(join(reviewsDir, "REVIEW-r2.md"))).toBe(true);
   });
 
-  // Test 6 (NEW, ADR-0063 AC 2): jury integration — two step_id jurors +
+  // Test 6 (NEW, ADR-0064 AC 2): jury integration — two step_id jurors +
   // one consolidation call. Consumers must never read a race-winner lens as
   // the consolidated verdict.
   it("jury integration: two step_id jurors + a consolidation call — canonical is BLOCKING with AC-verification body, per-lens pairs untouched", async () => {
