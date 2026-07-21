@@ -53,7 +53,7 @@ describe("triggerT2Recorder", () => {
   });
 
   it("returns false and never calls spawnFn when worktree does not exist", () => {
-    const spawnFn = vi.fn() as unknown as SpawnFn;
+    const spawnFn = vi.fn<SpawnFn>();
     const result = triggerT2Recorder(
       {
         base: "abc123",
@@ -72,7 +72,7 @@ describe("triggerT2Recorder", () => {
     ["base", { base: "", projectDir: "/tmp/project", slug: "test-slug" }],
     ["slug", { base: "abc123", projectDir: "/tmp/project", slug: "" }],
   ])("returns false and never calls spawnFn when %s is empty", (_label, partial) => {
-    const spawnFn = vi.fn() as unknown as SpawnFn;
+    const spawnFn = vi.fn<SpawnFn>();
     const result = triggerT2Recorder({ ...partial, worktree }, spawnFn);
 
     expect(result).toBe(false);
@@ -81,7 +81,7 @@ describe("triggerT2Recorder", () => {
 
   it("dispatches with --root = projectDir, an args array (no shell), and returns true on the happy path", () => {
     const child = fakeChild();
-    const spawnFn = vi.fn().mockReturnValue(child) as unknown as SpawnFn;
+    const spawnFn = vi.fn<SpawnFn>().mockReturnValue(child as never);
 
     const result = triggerT2Recorder(
       { base: "deadbeef", projectDir: "/main/checkout", slug: "my-slug", worktree },
@@ -91,7 +91,7 @@ describe("triggerT2Recorder", () => {
     expect(result).toBe(true);
     expect(spawnFn).toHaveBeenCalledTimes(1);
 
-    const [command, args, options] = (spawnFn as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const [command, args, options] = spawnFn.mock.calls[0];
     expect(command).toBe("npx");
     expect(Array.isArray(args)).toBe(true);
     expect(args).toContain("--root");
@@ -106,7 +106,7 @@ describe("triggerT2Recorder", () => {
     // HEAD itself via `git rev-parse HEAD` in the worktree.
     expect(args).not.toContain("--head");
     expect(options).toMatchObject({ detached: true, stdio: "ignore" });
-    expect((options as { cwd?: string }).cwd).toBe(join("/main/checkout", "mcp-server"));
+    expect(options.cwd).toBe(join("/main/checkout", "mcp-server"));
 
     // The trigger wires an absorbing error listener and unref()s the child —
     // the structural fire-and-forget contract (Probe 3).
@@ -116,7 +116,7 @@ describe("triggerT2Recorder", () => {
 
   it("appends --review-id only when provided", () => {
     const child = fakeChild();
-    const spawnFn = vi.fn().mockReturnValue(child) as unknown as SpawnFn;
+    const spawnFn = vi.fn<SpawnFn>().mockReturnValue(child as never);
 
     triggerT2Recorder(
       {
@@ -129,7 +129,7 @@ describe("triggerT2Recorder", () => {
       spawnFn,
     );
 
-    const [, args] = (spawnFn as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const [, args] = spawnFn.mock.calls[0];
     expect(args).toContain("--review-id");
     expect(args[args.indexOf("--review-id") + 1]).toBe("rev-42");
   });
@@ -143,7 +143,7 @@ describe("triggerT2Recorder", () => {
       }),
       unref: vi.fn(),
     };
-    const spawnFn = vi.fn().mockReturnValue(child) as unknown as SpawnFn;
+    const spawnFn = vi.fn<SpawnFn>().mockReturnValue(child as never);
 
     const result = triggerT2Recorder(
       { base: "abc123", projectDir: "/tmp/project", slug: "test-slug", worktree },
