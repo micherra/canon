@@ -20,13 +20,59 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getDriftDb } from "@platform/storage/drift/drift-db-cache.ts";
+import type { DriftDb } from "@platform/storage/drift/drift-db.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import type { CheckerFinding } from "./checker.ts";
 import type { CheckerRunRecord } from "./record.ts";
 
 const TARGET_PRINCIPLE = "leave-touched-files-better";
 const JOIN_WINDOW_MS = 2 * 60 * 60 * 1000; // +/-2h (decision t2live-01/t2live-03 layer-3 window)
+
+/** Signature of `drift-db-cache.ts`'s `getDriftDb` — named alias so the dynamic-import seam below never needs `unknown`/`any`. */
+type GetDriftDbFn = (projectDir: string) => DriftDb;
+
+export type LoadDriftDbResult = { ok: true; getDriftDb: GetDriftDbFn } | { ok: false; message: string };
+
+async function importDriftDbModule(): Promise<{ getDriftDb: GetDriftDbFn }> {
+  return import("@platform/storage/drift/drift-db-cache.ts");
+}
+
+/**
+ * AC-7: `getDriftDb` transitively requires `better-sqlite3`, a native module
+ * absent from a clean checkout (`mcp-server/node_modules` empty until `npm
+ * install` runs). A top-level static import would die at MODULE LOAD with an
+ * opaque `ERR_MODULE_NOT_FOUND` for a script whose whole job is to read a
+ * JSONL file — this lazy, try/catch-wrapped dynamic import turns that into an
+ * actionable failure instead. `importer` is an injectable seam so tests never
+ * need to actually break module resolution.
+ */
+export async function loadDriftDbOrExplain(importer: () => Promise<{ getDriftDb: GetDriftDbFn }> = importDriftDbModule): Promise<LoadDriftDbResult> {
+  try {
+    const mod = await importer();
+    return { getDriftDb: mod.getDriftDb, ok: true };
+  } catch (err) {
+    return {
+      message:
+        "aggregate.ts: cannot load drift DB (better-sqlite3 not installed). " +
+        "Run `cd mcp-server && npm install` from a clean checkout, then re-run. " +
+        `Underlying: ${String(err)}`,
+      ok: false,
+    };
+  }
+}
+
+/**
+ * A record is latency-eligible only when it was recorded live by `record.ts`
+ * — a `backfilled:true` record's `checker_elapsed_ms` is a synthetic `0`
+ * sentinel (d-t2fix-05), not real checker wall-clock time. No latency
+ * statistic exists yet, but any future one MUST filter through this guard
+ * before aggregating `checker_elapsed_ms`. Backfilled records are NOT
+ * excluded from finding-rate/count statistics or the n>=10 sample-size gate
+ * — see `applyVerdict` (d-t2fix-04, "count but disclose").
+ */
+export function isLatencyEligible(record: CheckerRunRecord): boolean {
+  return record.backfilled !== true;
+}
 
 // ---- Frozen thresholds (dc-05) — mirrors DESIGN.md verbatim. Do not edit
 // here without updating the committed DESIGN.md; the two must stay in sync. ----
@@ -262,7 +308,12 @@ export function scoreRecords(joined: JoinResult[]): ScoreResult {
   };
 }
 
-/** Apply the N-gate, then the frozen PASS/FALSIFY/CONTINUE thresholds. Pure function. */
+/**
+ * Apply the N-gate, then the frozen PASS/FALSIFY/CONTINUE thresholds. Pure function.
+ * d-t2fix-04: backfilled records COUNT toward `scoredRecordCount`/`positive_units` here —
+ * `scoreRecords` never filters on `backfilled`. Only latency stats (`isLatencyEligible`)
+ * exclude them. Do not add a backfilled-exclusion filter to this gate.
+ */
 export function applyVerdict(score: ScoreResult, scoredRecordCount: number): { verdict: Verdict; reason: string } {
   if (scoredRecordCount < MIN_SCORED_RECORDS || score.positive_units < MIN_POSITIVE_UNITS) {
     return { reason: "insufficient_n", verdict: "CONTINUE" };
@@ -329,6 +380,12 @@ export function renderReport(input: {
   lines.push(`**Verdict: ${verdict}** (${reason})`);
   lines.push("");
   lines.push(`- Scored records: ${score.scored_record_count}`);
+  const backfilledCount = joined.filter((j) => j.record.backfilled === true).length;
+  const nativeCount = joined.length - backfilledCount;
+  lines.push(
+    `- Sample: n=${joined.length} (${nativeCount} native + ${backfilledCount} backfilled; ` +
+      "backfilled excluded from latency, included in finding-rate & sample-size)",
+  );
   lines.push(`- Recall: ${score.recall.toFixed(3)} (${score.caught}/${score.positive_units} positive file-units caught)`);
   lines.push(
     `- False-positive rate: ${score.fp_rate.toFixed(3)} (${score.false_positives}/${score.negative_units} negative file-units flagged)`,
@@ -397,7 +454,7 @@ function computeCoverage(records: CheckerRunRecord[], reviews: ReviewEntry[]): n
   }).length;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const get = (flag: string): string | undefined => {
     const idx = args.indexOf(flag);
@@ -418,7 +475,12 @@ function main(): void {
   const { malformed, records } = parseRecords(lines);
   const deduped = dedupeRecords(records);
 
-  const driftDb = getDriftDb(projectDir);
+  const driftDbResult = await loadDriftDbOrExplain();
+  if (!driftDbResult.ok) {
+    process.stderr.write(`${driftDbResult.message}\n`);
+    process.exit(1);
+  }
+  const driftDb = driftDbResult.getDriftDb(projectDir);
   const allReviews = driftDb.getReviews({ includeResolvedViolations: true });
 
   const joined = joinRecordsToReviews(deduped, allReviews);
@@ -437,5 +499,8 @@ function main(): void {
 
 // Only run main() when executed directly (not when imported by tests).
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
+  main().catch((err: unknown) => {
+    process.stderr.write(`aggregate.ts: unexpected failure: ${String(err)}\n`);
+    process.exit(1);
+  });
 }
