@@ -1,6 +1,6 @@
 {
   "name": "@canon/mcp-server",
-  "version": "2.24.0",
+  "version": "2.24.1",
   "description": "MCP server for Canon engineering principles",
   "type": "module",
   "engines": {
