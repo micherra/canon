@@ -181,6 +181,14 @@ export type WriteReviewResult = {
   meta_path: string;
   verdict: "BLOCKING" | "WARNING" | "CLEAN" | "IN_PROGRESS";
   violation_count: number;
+  /**
+   * Whether the T2 live-forward-checker recorder was dispatched as a
+   * side-effect of this write (ADR-0065). Set only by the app-handler layer
+   * (`app/register-artifacts.ts`) for a canonical (step_id-absent) write —
+   * this tool never touches the field itself. Absent on step-scoped
+   * (juror) writes.
+   */
+  t2_recorder_triggered?: boolean;
 };
 
 export const VERDICT_MAP: Record<

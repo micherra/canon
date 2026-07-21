@@ -38,6 +38,12 @@ const stepOutcomeSchema = z
     evaluator_gate: evaluatorGateOutcomeSchema,
     fix_iterations: z.number().optional(),
     review_verdict: z.string().optional(),
+    t2_recorded: z
+      .boolean()
+      .optional()
+      .describe(
+        "Whether the T2 live-forward-checker recorder fired for this review step (ADR-0065)",
+      ),
     test_pass_rate: z.number().optional(),
   })
   .optional()

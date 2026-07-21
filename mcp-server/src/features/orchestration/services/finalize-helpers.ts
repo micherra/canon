@@ -44,6 +44,29 @@ export function computeGateNonEvaluations(steps: readonly JournalStep[]): GateNo
   return results;
 }
 
+/**
+ * Non-firing surfacing for the T2 live-forward-checker recorder (ADR-0065),
+ * the observability sibling of computeGateNonEvaluations above. A COMPLETED
+ * review step whose outcome lacks `t2_recorded: true` either never threaded
+ * the observability annotation (the record may still have been written —
+ * firing never depends on this threading, d-t2fix-06) or genuinely never
+ * fired. Either way it is surfaced to the user as an advisory, never a block.
+ */
+export type T2NonFiring = { step_id: string };
+
+export function computeT2NonFiring(steps: readonly JournalStep[]): T2NonFiring[] {
+  const results: T2NonFiring[] = [];
+  for (const step of steps) {
+    if (step.status !== "completed") continue;
+    const isReviewStep = step.agent_type === "reviewer" || step.step_id === "review";
+    if (!isReviewStep) continue;
+    if (step.outcome?.t2_recorded !== true) {
+      results.push({ step_id: step.step_id });
+    }
+  }
+  return results;
+}
+
 /** Wall clock: max(completed_at) − min(started_at). Null when no timestamps. */
 function computeTotalDurationMs(steps: readonly JournalStep[]): number | null {
   const starts = steps.map((s) => s.started_at).filter((t): t is string => typeof t === "string");
