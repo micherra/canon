@@ -19,8 +19,13 @@
  *
  * Usage (from repo root):
  *   cd mcp-server && npx tsx scripts/t2-probe/record.ts \
- *     --worktree <path> --base <sha> --slug <slug> [--review-id <id>] \
- *     [--head <sha>] [--out <path>] [--timeout <ms>] [--root <dir>]
+ *     --worktree <path> --base <sha> --head <sha> --slug <slug> \
+ *     --root <main_repo_root> [--review-id <id>] [--out <path>] [--timeout <ms>]
+ *
+ * `--root` MUST be the MAIN checkout root, not the build worktree — omitting it
+ * falls back to script-location resolution and silently misroutes the record into
+ * the worktree's own `.canon/` (destroyed on worktree teardown). See root CLAUDE.md
+ * § Post-Step Effects "After reviewer".
  *
  * canon:allow-unwired: T2 live-forward measurement instrument, CLI-invoked (not tool-registered)
  */
@@ -51,6 +56,8 @@ export type CheckerRunRecord = {
   failed_open: boolean;
   checker_elapsed_ms: number;
   rubric_hash: string;
+  /** Set by `backfill.ts` on a reconstructed record; absent on every natively-recorded record. */
+  backfilled?: boolean;
 };
 
 export type RecorderOptions = {
