@@ -40,16 +40,6 @@ export const EvaluateCandidateInputSchema = z.object({
   project_dir: z
     .string()
     .describe("Absolute path to the project root (directory containing skills/canon/evals/)"),
-  splits: z
-    .array(z.enum(["train", "val", "holdout"]))
-    .optional()
-    .describe("Which splits to run (default: all three)"),
-  target_path: z
-    .string()
-    .describe(
-      "Path relative to project_dir where the candidate file should be injected " +
-        "(e.g. 'skills/canon/evals/eval-set.json')",
-    ),
   proposal_kind: z
     .enum(["rewrite", "retire", "reinforce"])
     .optional()
@@ -59,6 +49,16 @@ export const EvaluateCandidateInputSchema = z.object({
         "ONLY 'retire' tolerates a candidate that flips archived; omitted/'rewrite'/" +
         "'reinforce' all reject it (fail-closed default; a reinforce candidate never " +
         "reaches this gate in practice — it is emitted ungated, see mutation-proposal.ts).",
+    ),
+  splits: z
+    .array(z.enum(["train", "val", "holdout"]))
+    .optional()
+    .describe("Which splits to run (default: all three)"),
+  target_path: z
+    .string()
+    .describe(
+      "Path relative to project_dir where the candidate file should be injected " +
+        "(e.g. 'skills/canon/evals/eval-set.json')",
     ),
 });
 
@@ -489,8 +489,13 @@ function buildAcceptedResult(
 export async function evaluateCandidate(
   input: EvaluateCandidateInput,
 ): Promise<ToolResult<EvaluateCandidateResult>> {
-  const { candidate_text, project_dir, proposal_kind, splits: requestedSplits, target_path } =
-    input;
+  const {
+    candidate_text,
+    project_dir,
+    proposal_kind,
+    splits: requestedSplits,
+    target_path,
+  } = input;
   const requestedSplitsOrDefault: Array<"train" | "val" | "holdout"> = requestedSplits ?? [
     "train",
     "val",
