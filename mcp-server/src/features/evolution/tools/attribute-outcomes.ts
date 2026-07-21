@@ -5,7 +5,9 @@
  * the Layer 1 primitives it composes (attribution-join.ts, positive-attribution.ts,
  * attribution-weight.ts). Reuses the archive-read seams established by
  * attribute-failure.ts / select-mutation-targets.ts (resolveArtifactReadPath,
- * getDriftDb archive lookups) — does not re-implement path resolution.
+ * getDriftDb archive lookups) — does not re-implement path resolution. Builds the
+ * shared corpus-artifact lookup (corpus-artifact-lookup.ts) ONCE per call and injects
+ * it as attributeHonored's corpus-fallback join seam (ADR-0062, Bug-1 part (d)).
  *
  * Contract:
  * - project_dir is required -> INVALID_INPUT when absent.
@@ -34,6 +36,7 @@ import { getDriftDb } from "../../../platform/storage/drift/drift-db-cache.ts";
 import type { ToolResult } from "../../../shared/lib/tool-result.ts";
 import { toolError, toolOk } from "../../../shared/lib/tool-result.ts";
 import { resolveArtifactReadPath } from "../services/artifact-path-resolver.ts";
+import { buildCorpusArtifactLookup } from "../services/corpus-artifact-lookup.ts";
 import type { AggregateOutcomesResult, BuildRecord } from "../services/outcome-attribution.ts";
 import { aggregateOutcomes } from "../services/outcome-attribution.ts";
 
@@ -117,11 +120,20 @@ export async function attributeOutcomes(
     }
   };
 
+  // Built once per call (ADR-0062, Bug-1 part (d)) — the corpus-fallback join seam for
+  // attributeHonored's no-provenance edge (shared with select_mutation_targets' scores
+  // mode nomination resolver, corpus-artifact-lookup.ts).
+  const resolveCorpusArtifact = await buildCorpusArtifactLookup(
+    project_dir,
+    pluginDir ?? project_dir,
+  );
+
   const result = aggregateOutcomes({
     builds,
     decisions: decisions ?? [],
     now_ms,
     readCurrentBody,
+    resolveCorpusArtifact,
   });
 
   return toolOk(result);
