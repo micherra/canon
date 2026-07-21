@@ -187,10 +187,27 @@ function stripFencedBlocks(text: string): string {
  * the exact-anchored `FRONTMATTER_FENCE` regex would otherwise silently
  * miss. Only whitespace/BOM is consumed — no non-whitespace content is
  * altered, so a document that never had frontmatter is unaffected.
+ *
+ * **Repeated until stable (Finding 5-A fix, round 5, 2026-07-20):** a single
+ * pass over BOM/blank-lines/spaces misses an INTERLEAVING of that noise —
+ * a doubled BOM (`﻿﻿---`), or a BOM appearing after a leading blank line
+ * (`\n﻿---`) — because each stage only strips its own noise class once. A
+ * genuine skeleton's frontmatter written with that interleaving would
+ * silently escape detection, the same fail-open direction the round-4 fix
+ * closed. Looping each stage until the string stops changing closes the
+ * gap; this remains character-removal-only, so it can only ADD frontmatter
+ * matches, never remove one or alter non-skeleton scoring — a strict
+ * superset of the round-4 behavior.
  */
 function stripLeadingBomAndBlankLines(head: string): string {
-  const withoutBom = head.startsWith("﻿") ? head.slice(1) : head;
-  return withoutBom.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/^[ \t]+(?=---)/, "");
+  let stripped = head;
+  let prev: string;
+  do {
+    prev = stripped;
+    stripped = stripped.startsWith("﻿") ? stripped.slice(1) : stripped;
+    stripped = stripped.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/^[ \t]+(?=---)/, "");
+  } while (stripped !== prev);
+  return stripped;
 }
 
 /**

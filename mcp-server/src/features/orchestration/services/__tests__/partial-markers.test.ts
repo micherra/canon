@@ -379,3 +379,26 @@ describe("isSkeletonContent — frontmatter anchor tolerates BOM/leading-blank/l
     expect(isSkeletonContent(content)).toBe(true);
   });
 });
+
+describe("isSkeletonContent — leading-noise strip is idempotent over interleaved BOM/blank-lines (Finding 5-A, round 5)", () => {
+  // `stripLeadingBomAndBlankLines` previously ran each strip stage exactly
+  // once (BOM, then blank-lines, then leading-spaces) rather than repeating
+  // until stable. A DOUBLED BOM, or a BOM appearing AFTER a leading blank
+  // line, survives that single pass and the exact-anchored
+  // `FRONTMATTER_FENCE` regex never matches — a genuine skeleton's
+  // frontmatter markers ([1]/[3], and [2] via its frontmatter backstop) go
+  // undetected. That is the fail-OPEN direction this module exists to avoid.
+  // This is character-removal-only on the leading region, so the fix can
+  // only ADD frontmatter matches, never remove one or alter non-skeleton
+  // scoring — a strict superset of prior detection.
+
+  it("doubled BOM + scribe frontmatter — IS a skeleton", () => {
+    const content = ["﻿﻿---", 'status: "IN_PROGRESS"', "---", ""].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+
+  it("leading blank line THEN BOM + reviewer verdict frontmatter — IS a skeleton", () => {
+    const content = ["", "﻿---", "verdict: IN_PROGRESS", "---", ""].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+});
