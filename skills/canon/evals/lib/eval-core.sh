@@ -26,18 +26,37 @@ judge_first_token_is_pass() {
   [[ "$token" == PASS ]]
 }
 
+# Strip a markdown code fence (```json ... ``` or bare ``` ... ```) from judge output,
+# discarding any prose before/after the fenced block. The judge fences its JSON verdict
+# by default; an unstripped fence made every fenced-JSON verdict unparseable by jq,
+# silently falling through to judge_first_token_is_pass's first-token check (which sees
+# the fence marker "```json" as the first token, not the verdict) — a false FAIL even
+# when the judge returned "verdict": "PASS". No-op (modulo CRLF normalization) when the
+# text contains no fence, so unfenced verdicts are unaffected.
+strip_markdown_fences() {
+  local text="$1"
+  text="${text//$'\r'/}"
+  if printf '%s\n' "$text" | grep -qE '^[[:space:]]*```'; then
+    printf '%s\n' "$text" | sed -n '/^[[:space:]]*```/,/^[[:space:]]*```/p' | sed '1d;$d'
+  else
+    printf '%s\n' "$text"
+  fi
+}
+
 # Parse a single raw judge response into PASS or FAIL. Reads $STRUCTURED_JUDGE from the
 # caller's environment (a global the entry script sets before sourcing this lib) — promoted
 # here from run-evals.sh's formerly-nested definition; behavior is unchanged.
 # Outputs "PASS" or "FAIL" to stdout.
 parse_single_verdict() {
   local raw="$1"
+  local candidate
+  candidate=$(strip_markdown_fences "$raw")
   if $STRUCTURED_JUDGE; then
     local vt
-    vt=$(printf '%s\n' "$raw" | jq -r '.verdict // empty' 2>/dev/null || true)
+    vt=$(printf '%s\n' "$candidate" | jq -r '.verdict // empty' 2>/dev/null || true)
     if [[ -z "$vt" ]]; then
       local firstline
-      firstline=$(printf '%s\n' "$raw" | head -n 1)
+      firstline=$(printf '%s\n' "$candidate" | head -n 1)
       vt=$(printf '%s\n' "$firstline" | jq -r '.verdict // empty' 2>/dev/null || true)
     fi
     if [[ "$vt" == "PASS" ]]; then
@@ -45,11 +64,26 @@ parse_single_verdict() {
     elif [[ "$vt" == "FAIL" ]]; then
       echo "FAIL"
     else
-      if judge_first_token_is_pass "$raw"; then echo "PASS"; else echo "FAIL"; fi
+      if judge_first_token_is_pass "$candidate"; then echo "PASS"; else echo "FAIL"; fi
     fi
   else
-    if judge_first_token_is_pass "$raw"; then echo "PASS"; else echo "FAIL"; fi
+    if judge_first_token_is_pass "$candidate"; then echo "PASS"; else echo "FAIL"; fi
   fi
+}
+
+# True (0) iff the given claude-CLI error output represents a transient,
+# resource-contention failure worth retrying, rather than a genuine crash,
+# auth failure, or config error. Scoped narrowly to the exact signature
+# empirically reproduced under parallel eval load (see implementation summary):
+# running several `claude -p` invocations concurrently increases the odds any
+# one of them needs more turns than usual to reach the same answer, so it hits
+# --max-turns and exits 1 even though the identical prompt reliably finishes
+# within budget when run without contention. Deliberately does NOT match
+# "Exceeded USD budget" — that failure is deterministic (retrying would fail
+# identically) and retrying it would just burn budget again for nothing.
+is_transient_eval_failure() {
+  local output="$1"
+  [[ "$output" == *"Error: Reached max turns"* ]]
 }
 
 # Collect N judge votes for a prompt and apply majority (tie -> FAIL, fail-closed).
