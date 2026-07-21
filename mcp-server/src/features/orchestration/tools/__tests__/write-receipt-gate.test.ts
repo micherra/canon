@@ -16,6 +16,7 @@ import { seedExecution } from "../../__tests__/seed-execution-test-helper.ts";
 import type { Journal } from "../orchestration-journal.ts";
 import { batchLogSteps, logStep } from "../orchestration-journal.ts";
 import { writeDesign } from "../write-design.ts";
+import { writeReview } from "../write-review.ts";
 
 let workspace: string;
 
@@ -437,6 +438,112 @@ describe("enforceWriteReceipt via logStep — skeleton write never receipts (Cod
     });
 
     assertOk(result);
+  });
+});
+
+describe("enforceWriteReceipt via logStep — ADR-0064 step-scoped review writes (AC 5 / dc-05)", () => {
+  it("reviewer completes via the strong path after a step_id-only writeReview call (receipt kind 'review')", async () => {
+    await logStep({
+      agent_type: "reviewer",
+      status: "started",
+      step_id: "review-lens-x",
+      workspace,
+      projectDir: process.cwd(),
+    });
+
+    const stepResult = await writeReview({
+      files: ["src/foo.ts"],
+      honored: [],
+      score: {
+        conventions: { passed: 1, total: 1 },
+        opinions: { passed: 1, total: 1 },
+        rules: { passed: 1, total: 1 },
+      },
+      slug: "my-slug",
+      step_id: "lens-x",
+      verdict: "approved",
+      violations: [],
+      workspace,
+    });
+    assertOk(stepResult);
+
+    const store = getExecutionStore(workspace);
+    const events = store.getEvents({ type: "write_receipt" });
+    expect(events).toHaveLength(1);
+    expect(events[0].payload.artifact_kind).toBe("review");
+
+    const result = await logStep({
+      agent_id: "rev-lens-x-01",
+      agent_type: "reviewer",
+      status: "completed",
+      step_id: "review-lens-x",
+      workspace,
+      projectDir: process.cwd(),
+    });
+
+    assertOk(result);
+  });
+
+  it("WR-02: with no receipts, a non-skeleton reviews/REVIEW-lens-y.md on disk passes", async () => {
+    await logStep({
+      agent_type: "reviewer",
+      status: "started",
+      step_id: "review-lens-y",
+      workspace,
+      projectDir: process.cwd(),
+    });
+
+    mkdirSync(join(workspace, "reviews"), { recursive: true });
+    writeFileSync(
+      join(workspace, "reviews", "REVIEW-lens-y.md"),
+      "---\nverdict: CLEAN\n---\n\n## Canon Review — Verdict: CLEAN\n",
+    );
+
+    const passResult = await logStep({
+      agent_id: "rev-lens-y-01",
+      agent_type: "reviewer",
+      status: "completed",
+      step_id: "review-lens-y",
+      workspace,
+      projectDir: process.cwd(),
+    });
+    assertOk(passResult);
+
+    const store = getExecutionStore(workspace);
+    const weakPassEvents = store.getEvents({ type: "write_receipt_weak_pass" });
+    expect(weakPassEvents).toHaveLength(1);
+    expect(weakPassEvents[0].payload.step_id).toBe("review-lens-y");
+  });
+
+  // Isolated workspace (fresh per-test via beforeEach) — a stray non-skeleton
+  // REVIEW-*.md from a different step must not leak into this assertion; the
+  // WR-02 glob fallback is not step-scoped, only content-scoped.
+  it("WR-02: a skeleton reviews/REVIEW-lens-z.md on disk does NOT pass", async () => {
+    await logStep({
+      agent_type: "reviewer",
+      status: "started",
+      step_id: "review-lens-z",
+      workspace,
+      projectDir: process.cwd(),
+    });
+    mkdirSync(join(workspace, "reviews"), { recursive: true });
+    writeFileSync(
+      join(workspace, "reviews", "REVIEW-lens-z.md"),
+      "---\nverdict: IN_PROGRESS\n---\n\n## Canon Review — Verdict: IN_PROGRESS\n",
+    );
+
+    const rejectResult = await logStep({
+      agent_id: "rev-lens-z-01",
+      agent_type: "reviewer",
+      status: "completed",
+      step_id: "review-lens-z",
+      workspace,
+      projectDir: process.cwd(),
+    });
+    expect(isToolError(rejectResult)).toBe(true);
+    if (isToolError(rejectResult)) {
+      expect(rejectResult.context?.receipt_missing).toEqual(["review"]);
+    }
   });
 });
 

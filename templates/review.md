@@ -137,3 +137,4 @@ ac-criteria-passed: {N}
 - The reviewer never reads research or plans during Stages 1-2 (cold review) — plan files (DESIGN.md, INDEX.md) are read only in Stage 4 for drift detection, not for cold review context
 - Graph context section only appears when `review_code` returned graph data
 - Keep concise — favor tables over prose
+- Delivery: reviewers produce this document through the `write_review` MCP tool — structured fields carry the frontmatter/violations/honored/score; everything from `### Code Quality (Advisory)` down travels in the `body` param. Never Bash-append to REVIEW.md.

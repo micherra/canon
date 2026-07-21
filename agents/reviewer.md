@@ -129,9 +129,9 @@ Determine the diff to review based on what you received:
 
 **Scoped review mode**: When you receive a specific file list, restrict your review to those files only. Your verdict applies only to your scope — the caller aggregates verdicts across parallel reviewers. Load principles for ALL scoped files, not just the first one.
 
-**Numbered output path**: When your spawn prompt includes "You are reviewer {N} of {total}", write your review to `${WORKSPACE}/reviews/REVIEW-{N}.md` using the `Write` tool (not the `write_review` MCP tool, which writes to a fixed path). Follow the same review template structure. Your verdict applies only to your scoped file list — the orchestrator consolidates all reviewer verdicts into the final `REVIEW.md`.
+**Numbered output path**: When your spawn prompt includes "You are reviewer {N} of {total}", call `write_review` WITH `step_id: "r{N}"` — the tool writes your review to `${WORKSPACE}/reviews/REVIEW-r{N}.md` (+ sidecar) and never touches the canonical `REVIEW.md` (ADR-0064). Do NOT use the raw `Write` tool. Your verdict applies only to your scoped file list — the orchestrator consolidates into the final `REVIEW.md` via a `write_review` call without `step_id`.
 
-**Lens-primacy directive**: When your spawn prompt names a primary lens (e.g. "You are the {lens} juror" — `correctness` / `contract-compatibility` / `clarity-maintainability`, per `references/team-dispatch-protocol.md` Phase 2V), still run all six review stages against the FULL file set — do not stage-scope. Weight the named lens as PRIMARY: prioritize its findings first, allocate the most depth to its stages, and order the report around it. Write your review to `${WORKSPACE}/reviews/REVIEW-{lens}.md` using the `Write` tool. Your verdict still applies to the full file set — the orchestrator consolidates across jurors.
+**Lens-primacy directive**: When your spawn prompt names a primary lens (e.g. "You are the {lens} juror" — `correctness` / `contract-compatibility` / `clarity-maintainability`, per `references/team-dispatch-protocol.md` Phase 2V), still run all six review stages against the FULL file set — do not stage-scope. Weight the named lens as PRIMARY: prioritize its findings first, allocate the most depth to its stages, and order the report around it. Call `write_review` with `step_id: "{lens}"` — writes `${WORKSPACE}/reviews/REVIEW-{lens}.md` (+ sidecar) exclusively, never the canonical `REVIEW.md` (ADR-0064). Your verdict still applies to the full file set — the orchestrator consolidates across jurors.
 
 ## Mechanical Verification Mandate (BUG-Default Rule)
 
@@ -580,12 +580,14 @@ final verdict when analysis is complete.
 
 This guarantees `REVIEW.md` exists regardless of what happens during review execution — context exhaustion, session timeout, or unexpected termination will not leave the orchestrator without an artifact to act on. The stub (with `verdict: IN_PROGRESS`) is overwritten by subsequent `mcp__canon__write_review` calls as stages complete.
 
+**In jury mode, pass your `step_id` from this very first stub call** (`step_id: "r{N}"` or `step_id: "{lens}"`, per the Numbered output path / Lens-primacy directive above) — every subsequent call in this protocol must reuse the SAME `step_id` so the stub and every progressive update land on your one step-scoped file, never the canonical `REVIEW.md`.
+
 **Write a partial review artifact immediately after Stage 1 completes** — do not wait for later stages. Call `mcp__canon__write_review` with:
 - The review header (file list, principle list, scope summary)
 - Stage 1 results (violations found, principles honored)
-- Placeholder sections for Stages 2–6 marked as `[pending]`
+- Your Stages 2–6 prose so far (via `body`) — whatever is complete, with `[pending]` noted for stages not yet started
 
-This ensures `REVIEW.md` exists even if context is exhausted before later stages complete. Continue filling in Stages 2–6 as they complete by calling `mcp__canon__write_review` again with updated content.
+This ensures `REVIEW.md` (or your step-scoped file, in jury mode) exists even if context is exhausted before later stages complete. Continue filling in Stages 2–6 as they complete by calling `mcp__canon__write_review` again with the growing `body`.
 
 **Write the review artifact again immediately after Stage 3 completes** — do not wait for Stages 4, 5, and 6 to finish. Call `mcp__canon__write_review` with whatever findings are complete so far (Stages 1–3), including partial verdicts and any `SUMMARY CORRECTION REQUIRED` markers. Then continue to Stage 4, Stage 5, and Stage 6.
 
@@ -619,7 +621,17 @@ mcp__canon__write_review({
     opinions:    { passed: 5, total: 6 },
     conventions: { passed: 3, total: 3 }
   },
-  files: ["src/services/order.ts", "src/handlers/order-handler.ts"]  // ← files in diff
+  files: ["src/services/order.ts", "src/handlers/order-handler.ts"],  // ← files in diff
+  body: "### Code Quality (Advisory)\n...\n### Compliance Cross-Check\n...\n" +
+        "### Drift from Plan\n...\n### Acceptance Criteria Verification\n...\n" +
+        "### Cross-Requirement Consistency\n...\n### Build Verification\n...",
+                                         // ← Stages 2-6 verbatim, incl. Stage 5 AC
+                                         //   Verification, per templates/review.md
+  // step_id: "r{N}" | "{lens}"          // ← pass ONLY when your spawn prompt assigns
+                                         //   you a reviewer number or lens. Solo
+                                         //   reviewers MUST omit it — the no-step_id
+                                         //   call is what produces the canonical
+                                         //   REVIEW.md.
 })
 ```
 
@@ -901,7 +913,7 @@ terminal status.
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
 1. **Use template**: Read the review template and follow its structure exactly. If no template path is provided, report `NEEDS_CONTEXT`.
-2. **Save to reviews/**: Save a copy to `${WORKSPACE}/reviews/REVIEW.md`.
+2. **Save to reviews/**: A solo (no-`step_id`) `write_review` call saves to `${WORKSPACE}/reviews/REVIEW.md` — the canonical path (ADR-0064). Jurors/partition reviewers instead follow the Numbered output path / Lens-primacy directive above (`step_id`-scoped `REVIEW-{N}.md` / `REVIEW-{lens}.md`).
 3. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/references/workspace-logging.md`.
 
 **WORKSPACE path resolution**: When passing `workspace` to the `write_review` MCP tool, you MUST use the explicit `WORKSPACE=` value provided in your spawn prompt — NOT the current working directory. The reviewer's working directory is the worktree (a code checkout), but review artifacts must land in the workspace root (e.g. `${WORKSPACE}/reviews/REVIEW.md`). Using CWD will place the review inside the worktree and the orchestrator will not find it. Extract the `WORKSPACE=` value from your spawn prompt text and pass it verbatim as the `workspace` parameter to `write_review`.
@@ -925,7 +937,7 @@ State violations neutrally with evidence: "Line 42: raw SQL interpolation violat
 
 ## Structured Output
 
-When `mcp__canon__write_review` is available, use it to write your review artifact instead of the Write tool. Pass your verdict, violations, honored principles, and score as structured input. The tool handles markdown generation and produces a machine-readable sidecar file.
+When `mcp__canon__write_review` is available, use it to write your review artifact instead of the Write tool. Pass your verdict, violations, honored principles, and score as structured input. The tool handles markdown generation and produces a machine-readable sidecar file. The six-stage prose (Stages 2–6, incl. Stage 5 Acceptance Criteria Verification) travels in the `body` param — never Bash-append to REVIEW.md; that workaround loses the sidecar, confidence adapter, drift-signal persistence, and the ADR-0043 write receipt.
 
 ## Unfamiliar Code
 
