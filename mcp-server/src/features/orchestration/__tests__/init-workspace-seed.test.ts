@@ -24,6 +24,8 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
   }),
 }));
 
+import { assertOk } from "@shared/lib/tool-result.ts";
+import { initGitFixtureRepo } from "../../../tests/git-fixture.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 import { validateSeedPath } from "../tools/seed-workspace.ts";
 
@@ -125,8 +127,14 @@ describe("initWorkspaceFlow — seed_from integration", () => {
 
   it("creates workspace normally when seed_from is not provided", async () => {
     const projectDir = makeTmpDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
 
-    const result = await initWorkspaceFlow({ ...baseInput }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
+    assertOk(result);
 
     expect(result.created).toBe(true);
     expect(result.seeded_from).toBeUndefined();
@@ -134,13 +142,15 @@ describe("initWorkspaceFlow — seed_from integration", () => {
 
   it("includes seeded_from in result when seed_from is provided and valid", async () => {
     const projectDir = makeTmpDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
     const priorWs = makePriorWorkspace(projectDir);
 
     const result = await initWorkspaceFlow(
-      { ...baseInput, seed_from: priorWs },
+      { ...baseInput, base_commit: baseCommit, seed_from: priorWs },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     expect(result.created).toBe(true);
     expect(result.seeded_from).toBe(priorWs);
@@ -148,13 +158,15 @@ describe("initWorkspaceFlow — seed_from integration", () => {
 
   it("still creates workspace successfully even when seed_from path is invalid (best-effort)", async () => {
     const projectDir = makeTmpDir();
+    const baseCommit = initGitFixtureRepo(projectDir);
     const nonexistentSource = join(projectDir, ".canon", "workspaces", "main", "ghost-task");
 
     const result = await initWorkspaceFlow(
-      { ...baseInput, seed_from: nonexistentSource },
+      { ...baseInput, base_commit: baseCommit, seed_from: nonexistentSource },
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
 
     // Workspace creation must succeed even if seeding fails
     expect(result.created).toBe(true);

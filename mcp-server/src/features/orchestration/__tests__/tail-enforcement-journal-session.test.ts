@@ -20,8 +20,7 @@
  *    previously-logged `steps`.
  */
 
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -41,6 +40,8 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
   }),
 }));
 
+import { assertOk } from "@shared/lib/tool-result.ts";
+import { initGitFixtureRepo } from "../../../tests/git-fixture.ts";
 import { releaseLock } from "../services/workspace-lock.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 import { logStep, readJournal } from "../tools/orchestration-journal.ts";
@@ -51,17 +52,6 @@ function makeTmpProjectDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "tail-gate-journal-session-test-"));
   tmpDirs.push(dir);
   return dir;
-}
-
-function initGitRepo(dir: string): string {
-  spawnSync("git", ["init"], { cwd: dir });
-  spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: dir });
-  spawnSync("git", ["config", "user.name", "Test"], { cwd: dir });
-  writeFileSync(join(dir, "README.md"), "# test");
-  spawnSync("git", ["add", "."], { cwd: dir });
-  spawnSync("git", ["commit", "-m", "init"], { cwd: dir });
-  const result = spawnSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf-8" });
-  return result.stdout.trim();
 }
 
 function readJournalRaw(workspace: string): Record<string, unknown> {
@@ -82,7 +72,7 @@ afterEach(() => {
 describe("journal.json session_id persistence (tail-gate-codex-fix P1)", { timeout: 20000 }, () => {
   it("seeds session_id into journal.json at create (happy path)", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const result = await initWorkspaceFlow(
       {
@@ -97,6 +87,8 @@ describe("journal.json session_id persistence (tail-gate-codex-fix P1)", { timeo
       "/fake/plugin",
     );
 
+    assertOk(result);
+
     expect(result.created).toBe(true);
     const raw = readJournalRaw(result.workspace);
     expect(raw.session_id).toBe("session-abc-123");
@@ -104,7 +96,7 @@ describe("journal.json session_id persistence (tail-gate-codex-fix P1)", { timeo
 
   it("omits session_id from journal.json when none was provided (never writes 'unknown')", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const result = await initWorkspaceFlow(
       {
@@ -118,6 +110,8 @@ describe("journal.json session_id persistence (tail-gate-codex-fix P1)", { timeo
       "/fake/plugin",
     );
 
+    assertOk(result);
+
     expect(result.created).toBe(true);
     // No session_id was supplied, so init_workspace never seeds journal.json at
     // all (preserves the pre-fix lazy-write-at-first-log_step behavior for this
@@ -130,7 +124,7 @@ describe("journal.json session_id persistence (tail-gate-codex-fix P1)", { timeo
 
   it("preserves top-level session_id across a logStep round-trip", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const result = await initWorkspaceFlow(
       {
@@ -144,6 +138,7 @@ describe("journal.json session_id persistence (tail-gate-codex-fix P1)", { timeo
       projectDir,
       "/fake/plugin",
     );
+    assertOk(result);
     expect(result.created).toBe(true);
 
     // No agent_type — this test exercises session_id persistence only, not
@@ -165,7 +160,7 @@ describe("journal.json session_id persistence (tail-gate-codex-fix P1)", { timeo
 
   it("refreshes session_id on resume while preserving previously-logged steps", async () => {
     const projectDir = makeTmpProjectDir();
-    const baseCommit = initGitRepo(projectDir);
+    const baseCommit = initGitFixtureRepo(projectDir);
 
     const input = {
       base_commit: baseCommit,
@@ -177,6 +172,7 @@ describe("journal.json session_id persistence (tail-gate-codex-fix P1)", { timeo
     };
 
     const first = await initWorkspaceFlow(input, projectDir, "/fake/plugin");
+    assertOk(first);
     expect(first.created).toBe(true);
 
     // No agent_type — same rationale as the round-trip test above.
@@ -203,6 +199,7 @@ describe("journal.json session_id persistence (tail-gate-codex-fix P1)", { timeo
       projectDir,
       "/fake/plugin",
     );
+    assertOk(second);
     expect(second.created).toBe(false);
     expect(second.workspace).toBe(first.workspace);
 
