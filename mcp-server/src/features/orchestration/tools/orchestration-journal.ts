@@ -33,7 +33,11 @@ import { atomicWriteFile } from "@shared/lib/atomic-write.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import { scanArtifactList, scanArtifacts } from "../services/artifact-matching.ts";
 import { backfillContextProvenanceAgentId } from "../services/context-provenance-backfill.ts";
-import { computeFlowOutcome, getStepsMissingSkipReason } from "../services/finalize-helpers.ts";
+import {
+  computeFlowOutcome,
+  computeGateNonEvaluations,
+  getStepsMissingSkipReason,
+} from "../services/finalize-helpers.ts";
 import { tryTranscriptCapture } from "../services/transcript-capture-hook.ts";
 import { archiveWorkspaceOnly, runCompletionSideEffects } from "../services/workspace-cleanup.ts";
 import { releaseLock } from "../services/workspace-lock.ts";
@@ -42,6 +46,20 @@ import { enforceWriteReceipt } from "../services/write-receipt.ts";
 export type JournalStepStatus = "planned" | "started" | "completed" | "skipped";
 
 export type JournalOutcome = {
+  /**
+   * Post-implement/fix evaluator-gate result logged onto a step's outcome
+   * (ADR-0062). skipped/verdict are typed as string, not a literal union —
+   * the MCP-boundary schema (stepOutcomeSchema, register-journal.ts)
+   * deliberately admits any string so a future legitimate value is never
+   * silently stripped at the wire boundary; computeGateNonEvaluations
+   * (finalize-helpers.ts) narrows via plain string equality, the sole
+   * consumer of these fields.
+   */
+  evaluator_gate?: {
+    advisory?: number;
+    skipped?: string;
+    verdict?: string;
+  };
   fix_iterations?: number;
   review_verdict?: string;
   test_pass_rate?: number;
@@ -189,6 +207,19 @@ export type FinalizeWorkspaceResult = {
    * steps and blocks `complete`).
    */
   steps_ghost: string[];
+  /**
+   * Non-evaluations of the post-implement/fix evaluator gate (ADR-0062,
+   * Layer 2): step IDs paired with the reason the gate did not render a real
+   * PASS/FAIL verdict — a skip (`tool_unavailable` | `tool_error`, step 2) or
+   * a parse failure that fell open (`PASS_parse_fallback`, step 7).
+   * Informational only; always an array (empty when none). Does NOT add any
+   * blocking and MUST NOT affect `complete` — a non-empty array still yields
+   * `complete: true` when steps and artifacts are otherwise satisfied. Keys
+   * on the distinct non-evaluation values, never on the mere presence of an
+   * `evaluator_gate` outcome — a real `verdict: "PASS"` (or `"FAIL"`) yields
+   * no entry.
+   */
+  gate_non_evaluations: ReturnType<typeof computeGateNonEvaluations>;
   /** Present only when complete is true. True when archive succeeded. */
   workspace_archived?: boolean;
   /**
@@ -626,6 +657,7 @@ async function analyzeJournalSteps(workspace: string, steps: JournalStep[], proj
     cleanup,
     complete,
     completed,
+    gateNonEvaluations: computeGateNonEvaluations(steps),
     sideEffects,
     stepsGhost,
     stepsMissing,
@@ -658,6 +690,7 @@ export async function finalizeWorkspace(
     cleanup,
     complete,
     completed,
+    gateNonEvaluations,
     sideEffects,
     stepsGhost,
     stepsMissing,
@@ -677,6 +710,7 @@ export async function finalizeWorkspace(
     artifacts_skipped_unresolved: artifacts.skipped_unresolved,
     complete,
     flow_outcome: computeFlowOutcome(steps),
+    gate_non_evaluations: gateNonEvaluations,
     lock_released,
     steps_completed: completed.length,
     steps_ghost: stepsGhost,
