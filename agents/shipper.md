@@ -124,7 +124,7 @@ Before proceeding, verify your own output: if you are reporting `DONE_WITH_CONCE
 
 1. Resolve the session branch from `${worktree_branch}` first, then `${branch}` as fallback.
 2. Push that session branch: `git push -u origin HEAD:${session_branch}`.
-3. Create the PR to `main`: `gh pr create --base main --head ${session_branch} --title "{task description, truncated to 70 chars}" --body "{PR description}"`.
+3. Create the PR to `main`. Write the PR description to a file first, then pass it via `--body-file` — an inline `--body "{PR description}"` breaks when the description contains backticks or other shell-special characters. Write the PR description to `${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md`, then: `gh pr create --base main --head ${session_branch} --title "{task description, truncated to 70 chars}" --body-file "${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md"`.
 4. Report the PR URL.
 5. Do NOT run `git worktree remove` — the worktree must remain for `finalize_workspace` artifact verification. Do NOT delete the build branch — it is needed for the PR.
 
