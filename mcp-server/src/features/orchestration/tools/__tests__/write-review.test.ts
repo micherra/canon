@@ -11,6 +11,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import type { ConfidenceAnnotation } from "@shared/lib/confidence.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { seedExecution } from "../../__tests__/seed-execution-test-helper.ts";
@@ -176,6 +177,108 @@ describe("writeReview — body prose param (dc-03)", () => {
       await readFile(join(workspace2, "reviews", "REVIEW.meta.json"), "utf-8"),
     );
     expect("body" in meta2).toBe(false);
+  });
+
+  it("an explicit empty-string body is treated identically to an absent body (no section rendered)", async () => {
+    const workspace = await makeTmpWorkspace();
+    tmpDirs.push(workspace);
+    await writeReview({ ...baseInput, workspace, body: "" });
+    const markdown = await readFile(join(workspace, "reviews", "REVIEW.md"), "utf-8");
+    expect(markdown).not.toContain("### Code Quality");
+    expect(markdown.endsWith("\n\n")).toBe(false);
+    expect(markdown.endsWith("\n")).toBe(true);
+    const meta = JSON.parse(
+      await readFile(join(workspace, "reviews", "REVIEW.meta.json"), "utf-8"),
+    );
+    // Falsy body ("") takes the same `input.body ? ... : {}` branch as absent.
+    expect("body" in meta).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration: the writeReview -> emitWriteReceipt boundary (agent-integration-boundary-check).
+//
+// partial-markers.test.ts exhaustively covers `isSkeletonContent` in isolation
+// against hand-built strings. None of those tests — nor write-review.test.ts's
+// own body-prose tests above — exercise the boundary this build actually
+// ships: does a REAL `writeReview` call's generated markdown (real
+// frontmatter + heading + violations/honored/score tables + optional body)
+// get correctly classified by the finalized-only receipt guard inside
+// `emitWriteReceipt`? Two real-tool paths are exercised here that no
+// existing test reaches:
+//   1. `verdict: "pending"` is the actual reviewer Early Output Protocol stub
+//      — VERDICT_MAP maps it to "IN_PROGRESS", so a real writeReview call
+//      produces the genuine skeleton frontmatter+heading, not a hand-rolled
+//      fixture string.
+//   2. A finished review's `body` param that quotes skeleton marker strings
+//      (fenced and unfenced) lands well past the frontmatter/first-heading
+//      leading region that generateMarkdown() always produces first — this
+//      is the shape the "quoting the marker inside a real review" scenario
+//      (watch_reviewer_thin_artifact_first_pass's own regression history)
+//      actually takes when driven through the real tool, not a synthetic one.
+// ---------------------------------------------------------------------------
+describe("writeReview -> emitWriteReceipt integration (skeleton detection at the real boundary)", () => {
+  it("verdict: 'pending' (the real reviewer Early Output Protocol stub) does NOT emit a write_receipt", async () => {
+    const workspace = await makeTmpWorkspace();
+    tmpDirs.push(workspace);
+    const result = await writeReview({ ...baseInput, workspace, verdict: "pending" });
+    expect(result.ok).toBe(true);
+
+    const markdown = await readFile(join(workspace, "reviews", "REVIEW.md"), "utf-8");
+    // Sanity: this is genuinely the stub shape, produced by the real tool.
+    expect(markdown).toContain("verdict: IN_PROGRESS");
+    expect(markdown).toContain("## Canon Review — Verdict: IN_PROGRESS");
+
+    const store = getExecutionStore(workspace);
+    expect(store.getEvents({ type: "write_receipt" })).toHaveLength(0);
+  });
+
+  it("a finished review whose body quotes 'Verdict: IN_PROGRESS' mid-prose (unfenced) still emits a write_receipt", async () => {
+    const workspace = await makeTmpWorkspace();
+    tmpDirs.push(workspace);
+    const body =
+      "### Findings\n\nThe reviewer stub prints `## Canon Review — Verdict: IN_PROGRESS` " +
+      "while still researching; that heading is expected mid-run and is not itself a defect.\n";
+    const result = await writeReview({ ...baseInput, workspace, verdict: "approved", body });
+    expect(result.ok).toBe(true);
+
+    const store = getExecutionStore(workspace);
+    const receipts = store.getEvents({ type: "write_receipt" });
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0].payload.artifact_kind).toBe("review");
+  });
+
+  it("a finished review whose body quotes '## Status: Partial' inside a FENCED example still emits a write_receipt", async () => {
+    const workspace = await makeTmpWorkspace();
+    tmpDirs.push(workspace);
+    const body =
+      "### Findings\n\nA genuine skeleton looks like:\n\n```markdown\n## Status: Partial\n```\n\nThis review is not one.\n";
+    const result = await writeReview({ ...baseInput, workspace, verdict: "approved", body });
+    expect(result.ok).toBe(true);
+
+    const store = getExecutionStore(workspace);
+    const receipts = store.getEvents({ type: "write_receipt" });
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0].payload.artifact_kind).toBe("review");
+  });
+
+  it("documents the accepted residual: an UNFENCED '## Status: Partial' heading in the body IS misclassified as a skeleton (no receipt)", async () => {
+    // Per partial-markers.ts's module doc: marker [0] is scanned across the
+    // WHOLE fence-stripped head by design (the W-A fix), so a real review
+    // that quotes this exact heading string unfenced in its body will
+    // false-positive as a skeleton. This is a documented, accepted residual
+    // (asymmetric-risk: a missed genuine skeleton is worse than this rare
+    // false positive) — this test pins that behavior at the real writeReview
+    // boundary so a future change to the scan doesn't silently flip it
+    // without a reviewer noticing the semantics changed.
+    const workspace = await makeTmpWorkspace();
+    tmpDirs.push(workspace);
+    const body = "### Findings\n\n## Status: Partial\n\nThat heading string, unfenced, in prose.\n";
+    const result = await writeReview({ ...baseInput, workspace, verdict: "approved", body });
+    expect(result.ok).toBe(true);
+
+    const store = getExecutionStore(workspace);
+    expect(store.getEvents({ type: "write_receipt" })).toHaveLength(0);
   });
 });
 

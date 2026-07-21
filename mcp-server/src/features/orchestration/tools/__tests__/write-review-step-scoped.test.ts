@@ -21,6 +21,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { atomicWritePair } from "@shared/lib/atomic-write.ts";
+import { isToolError } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { seedExecution } from "../../__tests__/seed-execution-test-helper.ts";
 import { type WriteReviewInput, writeReview } from "../write-review.ts";
@@ -220,5 +221,52 @@ describe("write_review step_id support (S4)", () => {
     );
     expect(jurorAContentAfter).toBe(jurorAContentBefore);
     expect(existsSync(join(reviewsDir, "REVIEW-lens-clarity.md"))).toBe(true);
+  });
+
+  // Sad path: step_id must match SLUG_PATTERN (validateInput). No existing
+  // test exercises this rejection or verifies it fails BEFORE any write.
+  describe("sad path: invalid step_id is rejected before any write occurs", () => {
+    it.each([
+      ["../../etc/passwd", "path traversal via .."],
+      ["lens/../../evil", "embedded traversal segment"],
+      ["lens with spaces", "spaces not allowed"],
+      ["lens/slash", "embedded path separator"],
+    ])("rejects step_id %j (%s)", async (badStepId) => {
+      const workspace = await makeTmpWorkspace();
+      tmpDirs.push(workspace);
+
+      const result = await writeReview(makeInput(workspace, { step_id: badStepId }));
+
+      expect(isToolError(result)).toBe(true);
+      if (isToolError(result)) {
+        expect(result.error_code).toBe("INVALID_INPUT");
+        expect(result.message).toContain("step_id");
+      }
+
+      // Reject-before-write: no reviews/ directory (or any file in it) was
+      // created as a side effect of the rejected call.
+      expect(existsSync(join(workspace, "reviews"))).toBe(false);
+    });
+  });
+
+  // Sad path: a consolidation (no step_id) call is the FIRST call against a
+  // brand-new workspace — zero prior jurors exist yet. Confirms the
+  // canonical-write path doesn't assume any REVIEW-{step_id}.* siblings are
+  // already present (e.g. doesn't glob/merge them) before writing.
+  it("sad path: a no-step_id call with zero prior juror files present writes the canonical pair normally", async () => {
+    const workspace = await makeTmpWorkspace();
+    tmpDirs.push(workspace);
+    const reviewsDir = join(workspace, "reviews");
+
+    expect(existsSync(reviewsDir)).toBe(false);
+
+    const result = await writeReview(makeInput(workspace, { verdict: "approved" }));
+
+    expect(result.ok).toBe(true);
+    expect(existsSync(join(reviewsDir, "REVIEW.md"))).toBe(true);
+    expect(existsSync(join(reviewsDir, "REVIEW.meta.json"))).toBe(true);
+    // No step-scoped files exist or were fabricated.
+    const files = require("node:fs").readdirSync(reviewsDir) as string[];
+    expect(files.filter((f) => /^REVIEW-/.test(f))).toHaveLength(0);
   });
 });
