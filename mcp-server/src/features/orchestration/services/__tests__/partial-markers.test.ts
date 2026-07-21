@@ -328,3 +328,54 @@ describe("isSkeletonContent — two-class scan, W-A fail-open fix (round 3)", ()
     expect(isSkeletonContent(content)).toBe(false);
   });
 });
+
+describe("isSkeletonContent — frontmatter anchor tolerates BOM/leading-blank/leading-space (Finding A, round 4)", () => {
+  // FRONTMATTER_FENCE was `^---\r?\n[\s\S]*?\r?\n---\r?\n?` with no `m` flag —
+  // `^` required the opening `---` at byte 0 of the scanned head. A leading
+  // BOM (U+FEFF, `write_context_sync`/raw-`Write` write `input.content`
+  // verbatim, no byte-0 render guarantee), a leading blank line, or leading
+  // spaces before `---` all defeated the match, so `extractLeadingRegion`
+  // never reached the real frontmatter — a genuine scribe/reviewer skeleton
+  // (markers [1]/[3], and [2] via its frontmatter backstop) went undetected.
+  // That is the dangerous fail-OPEN direction this module exists to avoid.
+
+  it("BOM + scribe frontmatter — IS a skeleton", () => {
+    const content = ["﻿---", 'status: "IN_PROGRESS"', "---", ""].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+
+  it("leading blank line + scribe frontmatter — IS a skeleton", () => {
+    const content = ["", "---", 'status: "IN_PROGRESS"', "---", ""].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+
+  it("leading blank line + reviewer verdict frontmatter + heading — IS a skeleton", () => {
+    const content = [
+      "",
+      "---",
+      "verdict: IN_PROGRESS",
+      "---",
+      "",
+      "## Canon Review — Verdict: IN_PROGRESS",
+      "",
+    ].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+
+  it("BOM + reviewer stub — IS a skeleton", () => {
+    const content = [
+      "﻿---",
+      "verdict: IN_PROGRESS",
+      "---",
+      "",
+      "## Canon Review — Verdict: IN_PROGRESS",
+      "",
+    ].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+
+  it("leading spaces before the opening fence + scribe frontmatter — IS a skeleton", () => {
+    const content = ["   ---", 'status: "IN_PROGRESS"', "---", ""].join("\n");
+    expect(isSkeletonContent(content)).toBe(true);
+  });
+});

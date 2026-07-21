@@ -83,6 +83,33 @@
  * {verdict}` heading per `templates/review.md`) and asymmetric-risk
  * favors this rare false-positive nuisance over reopening any fail-open
  * gap — never widen marker [2] or [1]/[3] to a whole-head scan to close it.
+ *
+ * **A second known accepted residual, of the same shape, applies to marker
+ * [0]:** because it is scanned across the whole fence-stripped head, a
+ * finished document with a real UNFENCED `## Status: Partial` heading
+ * false-positives as a skeleton. This is likewise accepted (rare; the
+ * idiomatic way to document the marker string is inside a fence, which is
+ * already stripped) — see the round-3 fix note above for the fail-open this
+ * trades against.
+ *
+ * **Frontmatter anchor tolerates a leading BOM/blank-line/space prefix
+ * (Finding A fix, round 4, 2026-07-20):** `FRONTMATTER_FENCE` is byte-0
+ * anchored (`^`, no `m` flag) by design — the FRONTMATTER-class markers can
+ * only ever be produced by the artifact's own real YAML frontmatter, which
+ * is always byte-0-anchored in a well-formed document. But "byte 0 of the
+ * artifact's real content" and "byte 0 of the `content` string a write tool
+ * receives" are not the same thing: `write_context_sync` and raw `Write`
+ * calls persist `input.content` verbatim, with no guarantee the caller's
+ * string starts with `---` at index 0 — a leading BOM (U+FEFF), a leading
+ * blank line, or leading spaces on the fence line itself are all
+ * unremarkable ways a real skeleton's frontmatter can arrive slightly
+ * offset. Requiring exact byte-0 previously missed the fence entirely in
+ * those cases — a fail-**open** (the dangerous direction) on a genuine
+ * scribe/reviewer skeleton. `extractLeadingRegion` now runs
+ * `stripLeadingBomAndBlankLines` on the head before testing
+ * `FRONTMATTER_FENCE`, so the anchor tolerates that noise without weakening
+ * it: only whitespace/BOM is consumed, so a document that never had
+ * frontmatter is scored identically to before.
  */
 export const PARTIAL_MARKERS: readonly RegExp[] = [
   /^#{1,6}\s*Status:\s*Partial\b/im,
@@ -153,6 +180,20 @@ function stripFencedBlocks(text: string): string {
 }
 
 /**
+ * Strips a leading BOM, leading blank lines, and leading spaces/tabs
+ * immediately before an opening `---` fence — closes the Finding A fail-open
+ * (see class doc comment above): a write tool's `content` string can carry
+ * this noise ahead of otherwise-real, byte-0-equivalent frontmatter, which
+ * the exact-anchored `FRONTMATTER_FENCE` regex would otherwise silently
+ * miss. Only whitespace/BOM is consumed — no non-whitespace content is
+ * altered, so a document that never had frontmatter is unaffected.
+ */
+function stripLeadingBomAndBlankLines(head: string): string {
+  const withoutBom = head.startsWith("﻿") ? head.slice(1) : head;
+  return withoutBom.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/^[ \t]+(?=---)/, "");
+}
+
+/**
  * Extracts the artifact's leading diagnostic region: the YAML frontmatter
  * block (if present) plus every contiguous heading/blank line that follows
  * it, stopping at the first substantive (non-blank, non-heading) line —
@@ -161,7 +202,7 @@ function stripFencedBlocks(text: string): string {
  * which is intentionally scanned across the whole head.
  */
 function extractLeadingRegion(content: string): string {
-  const head = content.slice(0, 8192);
+  const head = stripLeadingBomAndBlankLines(content.slice(0, 8192));
   const frontmatterMatch = FRONTMATTER_FENCE.exec(head);
   let region = "";
   let rest = head;
