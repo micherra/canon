@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.24.1](https://github.com/micherra/canon/compare/v2.24.0...v2.24.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* **orchestration:** write_review step-scoped writes are exclusive + prose body + skeleton-detection hardening (ADR-0064) ([#525](https://github.com/micherra/canon/issues/525)) ([0a23e52](https://github.com/micherra/canon/commit/0a23e52469f58801f332578714d2241bcdbde7e4))
+
 ## [2.24.0](https://github.com/micherra/canon/compare/v2.23.0...v2.24.0) (2026-07-21)
 
 
