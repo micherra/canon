@@ -10,6 +10,40 @@
 
 import type { JournalStep } from "../tools/orchestration-journal.ts";
 
+/**
+ * The three distinct evaluator-gate outcomes that mean "the gate did not
+ * render a real verdict, and the build proceeded anyway" (ADR-0062).
+ * A real `verdict: "PASS"` or `"FAIL"` is NOT a non-evaluation.
+ */
+export type GateNonEvaluationReason = "tool_unavailable" | "tool_error" | "PASS_parse_fallback";
+
+export type GateNonEvaluation = {
+  reason: GateNonEvaluationReason;
+  step_id: string;
+};
+
+/**
+ * Layer-2 loudness backstop (ADR-0062): scans each step's logged
+ * `outcome.evaluator_gate` for a non-evaluation marker — a skip
+ * (`tool_unavailable` | `tool_error`) or a parse-failure fallback
+ * (`PASS_parse_fallback`). Keys on the DISTINCT non-evaluation values, never
+ * on the mere presence of an `evaluator_gate` outcome — a real
+ * `verdict: "PASS"` (or `"FAIL"`) yields no entry.
+ */
+export function computeGateNonEvaluations(steps: readonly JournalStep[]): GateNonEvaluation[] {
+  const results: GateNonEvaluation[] = [];
+  for (const step of steps) {
+    const gate = step.outcome?.evaluator_gate;
+    if (!gate) continue;
+    if (gate.skipped === "tool_unavailable" || gate.skipped === "tool_error") {
+      results.push({ reason: gate.skipped, step_id: step.step_id });
+    } else if (gate.verdict === "PASS_parse_fallback") {
+      results.push({ reason: "PASS_parse_fallback", step_id: step.step_id });
+    }
+  }
+  return results;
+}
+
 /** Wall clock: max(completed_at) − min(started_at). Null when no timestamps. */
 function computeTotalDurationMs(steps: readonly JournalStep[]): number | null {
   const starts = steps.map((s) => s.started_at).filter((t): t is string => typeof t === "string");
