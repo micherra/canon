@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.24.0](https://github.com/micherra/canon/compare/v2.23.0...v2.24.0) (2026-07-21)
+
+
+### Features
+
+* **evolution:** principle-wording mutation class + apply channel (ADR-0063) ([#520](https://github.com/micherra/canon/issues/520)) ([083c38b](https://github.com/micherra/canon/commit/083c38b643fcddcd7e1a5f1b649d7a21d91ccbdc))
+* **mcp-server:** migrate to TypeScript 7.0.2 via a tooling/compiler parser split ([#514](https://github.com/micherra/canon/issues/514)) ([59d944e](https://github.com/micherra/canon/commit/59d944e53db6b3d22b97b9200cd74cf763ea80af))
+
+
+### Bug Fixes
+
+* **evolution:** ADR-0052 retirement Bug-1 — corpus resolver widening + never-pruneable guard + corpus-fallback join (ADR-0062) ([#521](https://github.com/micherra/canon/issues/521)) ([1d99994](https://github.com/micherra/canon/commit/1d99994353e8f4fdde0cc9aac89025f59d14ac04))
+* **orchestration:** evaluator gate verdict-capture channel + MCP schema fix ([#515](https://github.com/micherra/canon/issues/515)) ([a2a6f97](https://github.com/micherra/canon/commit/a2a6f97f5e786339382b2d23aec02473ad9aa0fb))
+* **orchestration:** fail-closed worktree creation in init_workspace (no more silent created:true without a worktree) ([#517](https://github.com/micherra/canon/issues/517)) ([2a731d6](https://github.com/micherra/canon/commit/2a731d66a8aa08f70bc2cafb5776ec346cb5d434))
+
 ## [2.23.0](https://github.com/micherra/canon/compare/v2.22.0...v2.23.0) (2026-07-17)
 
 
