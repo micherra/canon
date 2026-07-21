@@ -59,7 +59,11 @@ afterEach(() => {
 
 const RULE_ID = "agent-tdd-required";
 const RULE_PATH = `rules/${RULE_ID}.md`;
-const RULE_BODY = "# Agent TDD Required\n\nAlways write tests first.";
+// Frontmatter `id:` is required for buildCorpusArtifactLookup's dir-scan to index this
+// file (corpus-artifact-lookup.ts) — needed by the corpus-fallback join tests below,
+// which resolve RULE_ID against the on-disk rules/ dir with no provenance candidate.
+const RULE_BODY =
+  "---\nid: agent-tdd-required\n---\n\n# Agent TDD Required\n\nAlways write tests first.";
 const RULE_HASH = hashContent(RULE_BODY);
 
 function seedRuleFile(projectDir: string): void {
@@ -104,6 +108,9 @@ function seedArchive(opts: {
   honored?: string[];
   stepId: string;
   agentName: string;
+  /** Omit context_provenance entirely — simulates the 479-of-593 no-provenance builds
+   *  the corpus-fallback join exists to recover (ADR-0062, Bug-1 part (d)). */
+  noProvenance?: boolean;
 }): void {
   const archivePath = join(opts.projectDir, ".canon", "history", opts.slug);
   mkdirSync(archivePath, { recursive: true });
@@ -127,7 +134,7 @@ function seedArchive(opts: {
   const runSummary = {
     archive_id: opts.archiveId,
     artifact_inventory: { directories: [], files: [], total_files: 0 },
-    context_provenance: [provenanceRecord(opts.stepId, opts.agentName)],
+    context_provenance: opts.noProvenance ? [] : [provenanceRecord(opts.stepId, opts.agentName)],
     decision_summaries: [],
     planner_context: null,
     review_results: [
@@ -331,6 +338,60 @@ describe("attribute_outcomes — INVALID_INPUT", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected error");
     expect(result.error_code).toBe("INVALID_INPUT");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (g) Corpus-fallback join — handler injects the shared lookup (ADR-0062, part (d))
+// ---------------------------------------------------------------------------
+
+describe("attribute_outcomes — corpus-fallback join", () => {
+  it("attributes positively end-to-end for a provenance-less archive citing a fixture principle on disk", async () => {
+    seedRuleFile(tmpProjectDir);
+    seedArchive({
+      agentName: "canon:reviewer",
+      archiveId: "archive-no-prov",
+      completedAt: "2026-01-01T00:00:00.000Z",
+      honored: [`**${RULE_ID}**: consistently applied`],
+      noProvenance: true,
+      projectDir: tmpProjectDir,
+      slug: "slug-no-prov",
+      stepId: "review",
+      verdict: "clean",
+    });
+
+    const result = await attributeOutcomes({ project_dir: tmpProjectDir });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.scores).toHaveLength(1);
+    expect(result.scores[0].principle_id).toBe(RULE_ID);
+    expect(result.scores[0].net_score).toBeGreaterThan(0);
+    expect(result.scores[0].positive_weight).toBeGreaterThan(0);
+    expect(result.unattributed_positive).toEqual([]);
+  });
+
+  it("fail-open: a provenance-less citation whose id is not on disk anywhere stays unattributed, no throw", async () => {
+    // No seedRuleFile — the fixture corpus has zero artifacts on disk.
+    seedArchive({
+      agentName: "canon:reviewer",
+      archiveId: "archive-no-artifact",
+      completedAt: "2026-01-01T00:00:00.000Z",
+      honored: [`**${RULE_ID}**: consistently applied`],
+      noProvenance: true,
+      projectDir: tmpProjectDir,
+      slug: "slug-no-artifact",
+      stepId: "review",
+      verdict: "clean",
+    });
+
+    const result = await attributeOutcomes({ project_dir: tmpProjectDir });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.scores).toEqual([]);
+    expect(result.unattributed_positive).toHaveLength(1);
+    expect(result.unattributed_positive[0].reason).toBe("no_corpus_artifact");
   });
 });
 

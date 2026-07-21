@@ -22,6 +22,11 @@ import type { AssembledArtifact } from "@domains/workspaces/context-provenance.t
 import type { AttributionConfidence, FailureAttribution } from "./attribution-types.ts";
 import { isGuardrailTarget } from "./candidate-injection.ts";
 import type {
+  CorpusArtifactClass,
+  CorpusArtifactLookup,
+  ResolvedCorpusArtifact,
+} from "./corpus-artifact-lookup.ts";
+import type {
   ArtifactClass,
   GateIneligibleTarget,
   MutationProposalKind,
@@ -435,19 +440,52 @@ export function selectMutationTargets(
 export const RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD = 3;
 
 /**
- * Resolves a principle_id to its on-disk artifact (path relative to the project
- * root, plus current body). Injected so selectRetirementReinforcementTargets stays
- * I/O-free — the caller (tool handler) does the actual file read, exactly like
- * selectMutationTargets's bodies/existing maps.
+ * Never-pruneable allowlist — a `retire` nomination for one of these ids is
+ * always skipped (`never_pruneable`), regardless of net_score. These are
+ * load-bearing pipeline-integrity rules whose false retirement would be
+ * catastrophic (fail-closed posture, credential/secret handling, trust
+ * boundaries, artifact-write receipts, template completeness).
+ *
+ * Byte-parity with the prose allowlist in
+ * `skills/canon/commands/review-learnings.md` (retire-refusal ~line 96 and
+ * Safety rails ~line 363) — enforced by `never-pruneable-parity.test.ts`.
+ * `reinforce` nominations of these ids are NOT blocked (a confidence signal
+ * on a load-bearing rule is correct, not dangerous).
  */
-export type PrincipleArtifactLookup = (
-  principleId: string,
-) => { path: string; body: string } | null;
+// canon:allow-unwired: used internally at the retire guard (this file) + exported for never-pruneable-parity.test.ts byte-parity assertion
+export const NEVER_PRUNEABLE_PRINCIPLE_IDS: ReadonlySet<string> = new Set([
+  "fail-closed-by-default",
+  "hooks-fail-closed",
+  "least-privilege-access",
+  "secrets-never-in-code",
+  "validate-at-trust-boundaries",
+  "agent-artifact-write-before-return",
+  "agent-template-required",
+]);
+
+/**
+ * Retire-domain class filter: these classes' positive signal is structurally
+ * one-sided (reviewers honored-cite principles/rules, not
+ * references/primers/templates), so their net_score can only fall — the
+ * false-retirement trap, generalized (ADR-0062 Bug-1 Decision 2). A `retire`
+ * nomination resolving to one of these classes is skipped
+ * (`non_retirable_artifact_class`); `reinforce` may emit for any resolved
+ * class.
+ */
+const NON_RETIRABLE_ARTIFACT_CLASSES: ReadonlySet<CorpusArtifactClass> = new Set([
+  "reference",
+  "primer",
+  "template",
+]);
 
 /** A score that could not be turned into a target — typed bucket (errors-are-values). */
 export type RetirementReinforcementSkip = {
   principle_id: string;
-  reason: "artifact_unresolved" | "not_gate_eligible";
+  reason:
+    | "artifact_unresolved"
+    | "not_gate_eligible"
+    | "never_pruneable"
+    | "non_retirable_artifact_class";
 };
 
 export type RetirementReinforcementSelectionResult = {
@@ -473,10 +511,10 @@ function deriveProposalKind(netScore: number, threshold: number): MutationPropos
 function buildRetirementReinforcementTarget(
   score: TrustWeightedScore,
   proposalKind: MutationProposalKind,
-  artifact: { path: string; body: string },
+  artifact: ResolvedCorpusArtifact,
 ): MutationTarget {
   return {
-    artifact_class: classifyArtifact(artifact.path, "rule"),
+    artifact_class: artifact.artifact_class,
     attributed_violation_count: 0,
     attribution: null,
     baseline_body: artifact.body,
@@ -495,15 +533,47 @@ function buildRetirementReinforcementTarget(
 }
 
 /**
+ * resolveRetirementCandidate — steps 3-5 of the retire/reinforce pipeline:
+ * resolve the artifact, apply the retire-only class filter, then the
+ * gate-eligibility check. Extracted to keep
+ * selectRetirementReinforcementTargets's loop body under the cognitive
+ * complexity threshold. Only called AFTER the allowlist guard (step 2) has
+ * already passed for this score — an allowlisted retire nomination never
+ * reaches this function, so resolution never even runs for it (guard beats
+ * resolution).
+ */
+function resolveRetirementCandidate(
+  principleId: string,
+  proposalKind: MutationProposalKind,
+  resolveArtifact: CorpusArtifactLookup,
+): { artifact: ResolvedCorpusArtifact } | { reason: RetirementReinforcementSkip["reason"] } {
+  const artifact = resolveArtifact(principleId);
+  if (artifact === null) return { reason: "artifact_unresolved" };
+  if (proposalKind === "retire" && NON_RETIRABLE_ARTIFACT_CLASSES.has(artifact.artifact_class)) {
+    return { reason: "non_retirable_artifact_class" };
+  }
+  if (!isGateEligible(artifact.path, true)) return { reason: "not_gate_eligible" };
+  return { artifact };
+}
+
+/**
  * selectRetirementReinforcementTargets — deterministic, PURE (no I/O).
  *
  * Consumes attribute_outcomes's TrustWeightedScore[] (Gap 3 Layer 2): a net_score
  * at or beyond +/- threshold nominates a reinforce/retire MutationTarget carrying
  * score_provenance (the auditable trace, invalidate-don't-delete posture). Scores
  * inside the neutral band are silently not nominated — most principles sit there;
- * that is the expected, non-error case. Unresolvable or gate-ineligible
- * principle_ids land in the typed `skipped[]` bucket instead of being thrown or
- * silently dropped (errors-are-values).
+ * that is the expected, non-error case.
+ *
+ * Retire-only guard order (ADR-0062 Bug-1 part a):
+ *   1. Never-pruneable allowlist check — BEFORE resolution (guard beats
+ *      resolution, mirrors the ADR-0044 floor-beats-override posture).
+ *   2. Resolve via the injected lookup — null -> artifact_unresolved.
+ *   3. Class filter (retire only): reference/primer/template -> skipped
+ *      non_retirable_artifact_class.
+ *   4. Gate eligibility (unchanged) -> not_gate_eligible.
+ * `reinforce` nominations skip steps 1 and 3 (never blocked by the allowlist
+ * or the class filter) but still resolve + gate-check.
  *
  * Every returned target has `attribution: null` and `failure_kind: null` — a
  * corpus-wide trust-weighted score has no single violation to join to, unlike the
@@ -511,7 +581,7 @@ function buildRetirementReinforcementTarget(
  */
 export function selectRetirementReinforcementTargets(
   scores: TrustWeightedScore[],
-  resolveArtifact: PrincipleArtifactLookup,
+  resolveArtifact: CorpusArtifactLookup,
   opts: { threshold?: number } = {},
 ): RetirementReinforcementSelectionResult {
   const threshold = opts.threshold ?? RETIREMENT_REINFORCEMENT_NET_SCORE_THRESHOLD;
@@ -522,17 +592,18 @@ export function selectRetirementReinforcementTargets(
     const proposalKind = deriveProposalKind(score.net_score, threshold);
     if (proposalKind === null) continue;
 
-    const artifact = resolveArtifact(score.principle_id);
-    if (artifact === null) {
-      skipped.push({ principle_id: score.principle_id, reason: "artifact_unresolved" });
-      continue;
-    }
-    if (!isGateEligible(artifact.path, true)) {
-      skipped.push({ principle_id: score.principle_id, reason: "not_gate_eligible" });
+    if (proposalKind === "retire" && NEVER_PRUNEABLE_PRINCIPLE_IDS.has(score.principle_id)) {
+      skipped.push({ principle_id: score.principle_id, reason: "never_pruneable" });
       continue;
     }
 
-    targets.push(buildRetirementReinforcementTarget(score, proposalKind, artifact));
+    const resolved = resolveRetirementCandidate(score.principle_id, proposalKind, resolveArtifact);
+    if ("reason" in resolved) {
+      skipped.push({ principle_id: score.principle_id, reason: resolved.reason });
+      continue;
+    }
+
+    targets.push(buildRetirementReinforcementTarget(score, proposalKind, resolved.artifact));
   }
 
   return { skipped, targets };

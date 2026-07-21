@@ -46,7 +46,11 @@ export type FailureKind = (typeof FAILURE_KINDS)[number];
 // ---------------------------------------------------------------------------
 
 export type AttributionConfidence = "high" | "medium" | "low";
-export type HashStatus = "verified" | "mismatch" | "artifact_missing";
+// "unrecorded" is additive (ADR-0062): the positive path's corpus-fallback edge has no
+// recorded in-context hash to verify against at all — distinct from "mismatch" (a hash
+// WAS recorded and disagreed) and "artifact_missing" (a hash was recorded but the file
+// is gone). Never produced by the negative join (attribution-join.ts, unchanged).
+export type HashStatus = "verified" | "mismatch" | "artifact_missing" | "unrecorded";
 // canon:allow-unwired: part of mutator-facing AttributeFailureResult contract; consumed by deliverable 5 (the mutator), not yet built
 export type ApplicationDisposition = "applied" | "ignored" | "indeterminate";
 
