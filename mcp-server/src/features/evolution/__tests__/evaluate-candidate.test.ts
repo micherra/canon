@@ -485,8 +485,14 @@ describe("resolveAgentEvalRoot", () => {
 
 describe("EvaluateCandidateInputSchema — schema stability (Codex F1)", () => {
   it("shape keys are exactly the base set — no new fields added for suite resolution", () => {
+    // `proposal_kind` (additive-optional) was added by the frontmatter-guard
+    // gate-vs-apply soundness fix — the retire-only `archived:true` tolerance needs
+    // a caller-asserted signal distinguishing a retire candidate from a rewrite.
+    // Unrelated to per-agent eval suite resolution (still derived from target_path
+    // alone, per the original Codex F1 intent) — locked here so a future unrelated
+    // field addition is still caught.
     expect(Object.keys(EvaluateCandidateInputSchema.shape).sort()).toEqual(
-      ["candidate_text", "project_dir", "splits", "target_path"].sort(),
+      ["candidate_text", "project_dir", "proposal_kind", "splits", "target_path"].sort(),
     );
   });
 });

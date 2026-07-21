@@ -14,7 +14,11 @@
 
 import { describe, expect, it } from "vitest";
 import type { FailureAttribution } from "../services/attribution-types.ts";
-import { selectMutationTargets } from "../services/mutation-selection.ts";
+import {
+  classifyArtifact,
+  isOverlayPrincipleTarget,
+  selectMutationTargets,
+} from "../services/mutation-selection.ts";
 
 /** Build an agent-def attribution where target_artifact.id is the AGENT NAME. */
 function makeAgentDefAttribution(
@@ -175,5 +179,102 @@ describe("selectMutationTargets — principle_id for agent-def targets", () => {
 
     expect(result.targets).toHaveLength(1);
     expect(result.targets[0].principle_id).toBe("errors-are-values");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Overlay .canon/principles/** classification + selection + trust stamping (dc-02)
+// ---------------------------------------------------------------------------
+
+describe("classifyArtifact — overlay principle paths", () => {
+  it(".canon/principles/rules/x.md → 'principle'", () => {
+    expect(classifyArtifact(".canon/principles/rules/x.md", "rule")).toBe("principle");
+  });
+
+  it(".canon/principles/conventions/y.md → 'principle'", () => {
+    expect(classifyArtifact(".canon/principles/conventions/y.md", "rule")).toBe("principle");
+  });
+});
+
+describe("isOverlayPrincipleTarget", () => {
+  it(".canon/principles/rules/x.md → true", () => {
+    expect(isOverlayPrincipleTarget(".canon/principles/rules/x.md")).toBe(true);
+  });
+
+  it("principles/rules/x.md (built-in, not overlay) → false", () => {
+    expect(isOverlayPrincipleTarget("principles/rules/x.md")).toBe(false);
+  });
+
+  it(".canon/kg-languages/x.json (overlay, not principles) → false", () => {
+    expect(isOverlayPrincipleTarget(".canon/kg-languages/x.json")).toBe(false);
+  });
+
+  it("mcp-server/src/features/evolution/services/mutation-selection.ts → false", () => {
+    expect(
+      isOverlayPrincipleTarget("mcp-server/src/features/evolution/services/mutation-selection.ts"),
+    ).toBe(false);
+  });
+});
+
+/** Build an overlay-principle attribution — medium confidence, the inferred principle join. */
+function makeOverlayPrincipleAttribution(path: string): FailureAttribution {
+  return {
+    failure_kind: "review_violation",
+    hypothesis: `Artifact at ${path} was present in context during a build that produced violations.`,
+    target_artifact: {
+      id: "project-local-principle",
+      kind: "rule",
+      path,
+      content_hash: "abc123",
+      char_span: null,
+      span_available: false,
+      hash_verified: true,
+      hash_status: "verified",
+    },
+    attributed_violations: [
+      {
+        principle_id: "project-local-principle",
+        severity: "BLOCKING" as const,
+        file_path: "src/file0.ts",
+        message: "Violation 0",
+      },
+    ],
+    owning_steps: [{ step_id: "implement", agent_id: "agent-001", agent_name: "canon:engineer" }],
+    ambiguous: false,
+    join_basis: "principle_id==artifact_id",
+    transcript_evidence: [],
+    confidence: "medium",
+    presence_in_context: true,
+  };
+}
+
+describe("selectMutationTargets — overlay principle target trust stamping", () => {
+  it("an overlay principle attribution → target stamped trust_tier:untrusted-project-local, holdout_exempt:true", () => {
+    const path = ".canon/principles/rules/project-local.md";
+    const attr = makeOverlayPrincipleAttribution(path);
+    const result = selectMutationTargets([attr], { [path]: "# body" }, { [path]: true });
+
+    expect(result.targets).toHaveLength(1);
+    const target = result.targets[0];
+    expect(target.artifact_class).toBe("principle");
+    expect(target.trust_tier).toBe("untrusted-project-local");
+    expect(target.holdout_exempt).toBe(true);
+  });
+
+  it("a built-in principle attribution → target stamped trust_tier:trusted, holdout_exempt:false", () => {
+    const path = "principles/conventions/x.md";
+    const attr = makeRuleAttribution({ principleId: "x" });
+    // makeRuleAttribution builds target_artifact.path as rules/{id}.md — override with a
+    // principles/ path via a fresh literal to keep this test's intent explicit.
+    const principleAttr: FailureAttribution = {
+      ...attr,
+      target_artifact: { ...attr.target_artifact, path },
+    };
+    const result = selectMutationTargets([principleAttr], { [path]: "# body" }, { [path]: true });
+
+    expect(result.targets).toHaveLength(1);
+    const target = result.targets[0];
+    expect(target.trust_tier).toBe("trusted");
+    expect(target.holdout_exempt).toBe(false);
   });
 });

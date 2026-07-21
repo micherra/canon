@@ -5,7 +5,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { checkFrontmatterImmutable } from "../services/frontmatter-guard.ts";
+import {
+  checkFrontmatterImmutable,
+  checkPrincipleFrontmatterImmutable,
+} from "../services/frontmatter-guard.ts";
 
 const BASELINE =
   "---\nname: engineer\ntools: [Read, Write]\nmodel: sonnet\n---\n\n# Role\n\nWrite code.\n";
@@ -99,5 +102,61 @@ describe("checkFrontmatterImmutable", () => {
   it("never throws on empty strings", () => {
     expect(() => checkFrontmatterImmutable("", "")).not.toThrow();
     expect(checkFrontmatterImmutable("", "")).toEqual({ ok: true });
+  });
+});
+
+const PRINCIPLE_BASELINE =
+  "---\nid: some-principle\nseverity: convention\n---\n\n# Some Principle\n\nOriginal body.\n";
+
+describe("checkPrincipleFrontmatterImmutable (retire-only archived tolerance)", () => {
+  it("REWRITE (isRetire omitted): a candidate that flips archived:true is rejected — the archived exception is retire-only", () => {
+    const candidate =
+      "---\nid: some-principle\nseverity: convention\narchived: true\n---\n\n# Some Principle\n\nOriginal body.\n";
+    const result = checkPrincipleFrontmatterImmutable(PRINCIPLE_BASELINE, candidate);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.reason).toBe("frontmatter_modified");
+    expect(result.fields).toContain("archived");
+  });
+
+  it("REWRITE (isRetire: false, explicit): same reject as omitted", () => {
+    const candidate =
+      "---\nid: some-principle\nseverity: convention\narchived: true\n---\n\n# Some Principle\n\nOriginal body.\n";
+    const result = checkPrincipleFrontmatterImmutable(PRINCIPLE_BASELINE, candidate, false);
+    expect(result.ok).toBe(false);
+  });
+
+  it("RETIRE (isRetire: true): a candidate that flips archived:true is tolerated", () => {
+    const candidate =
+      "---\nid: some-principle\nseverity: convention\narchived: true\n---\n\n# Some Principle\n\nOriginal body.\n";
+    expect(checkPrincipleFrontmatterImmutable(PRINCIPLE_BASELINE, candidate, true)).toEqual({
+      ok: true,
+    });
+  });
+
+  it("RETIRE (isRetire: true): every OTHER field must still stay byte-identical", () => {
+    const candidate =
+      "---\nid: some-principle\nseverity: rule\narchived: true\n---\n\n# Some Principle\n\nOriginal body.\n";
+    const result = checkPrincipleFrontmatterImmutable(PRINCIPLE_BASELINE, candidate, true);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.fields).toContain("severity");
+    expect(result.fields).not.toContain("archived");
+  });
+
+  it("body-only diff (isRetire omitted) -> ok:true, unaffected by the retire-only change", () => {
+    const candidate =
+      "---\nid: some-principle\nseverity: convention\n---\n\n# Some Principle\n\nBETTER body.\n";
+    expect(checkPrincipleFrontmatterImmutable(PRINCIPLE_BASELINE, candidate)).toEqual({
+      ok: true,
+    });
+  });
+
+  it("malformed candidate YAML -> frontmatter_unverifiable regardless of isRetire", () => {
+    const candidate = "---\n[unclosed: [nested\n---\n\n# Some Principle\n\nOriginal body.\n";
+    const result = checkPrincipleFrontmatterImmutable(PRINCIPLE_BASELINE, candidate, true);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.reason).toBe("frontmatter_unverifiable");
   });
 });

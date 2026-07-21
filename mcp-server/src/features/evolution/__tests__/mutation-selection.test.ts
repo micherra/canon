@@ -34,6 +34,7 @@ function makeAttribution(
     kind: "rule" | "ref" | "primer" | "template" | "agent-def";
     principle_id: string | null;
     char_span: [number, number] | null;
+    join_basis: FailureAttribution["join_basis"];
   }> = {},
 ): FailureAttribution {
   const {
@@ -43,6 +44,7 @@ function makeAttribution(
     kind = "rule",
     principle_id = "agent-tdd-required",
     char_span = null,
+    join_basis = "principle_id==artifact_id",
   } = overrides;
 
   return {
@@ -66,7 +68,7 @@ function makeAttribution(
     })),
     owning_steps: [{ step_id: "implement", agent_id: "agent-001", agent_name: "canon:engineer" }],
     ambiguous: false,
-    join_basis: "principle_id==artifact_id",
+    join_basis,
     transcript_evidence: [],
     confidence,
     presence_in_context: true,
@@ -209,8 +211,11 @@ describe("selectMutationTargets — filter", () => {
   });
 
   it("confidence below high lands in skipped with reason confidence_below_high", () => {
+    // join_basis explicitly "cliff_step_id" here — NOT the relaxed "principle_id==artifact_id"
+    // basis (see the "class-scoped confidence relaxation" describe block below) — this test
+    // is scoped to the unrelaxed filter behavior.
     const attributions = [
-      makeAttribution("rules/foo.md", { confidence: "medium" }),
+      makeAttribution("rules/foo.md", { confidence: "medium", join_basis: "cliff_step_id" }),
       makeAttribution("rules/bar.md", { confidence: "low" }),
     ];
     const result = selectMutationTargets(
@@ -235,6 +240,9 @@ describe("selectMutationTargets — filter", () => {
     expect(result.skipped[0].reason).toBe("hash_unverified");
   });
 });
+
+// Class-scoped medium-confidence relaxation (dc-01) tests moved to
+// mutation-selection-relaxation.test.ts (file-length split, noExcessiveLinesPerFile).
 
 // ---------------------------------------------------------------------------
 // 4. Gate-ineligible partition with correct reason
@@ -478,9 +486,11 @@ describe("selectMutationTargets — MutationTarget shape", () => {
   });
 
   it("meta tracks attributions_seen, selected, budget", () => {
+    // join_basis explicitly "cliff_step_id" — NOT the relaxed "principle_id==artifact_id"
+    // basis — so rules/b.md's medium confidence is still filtered (unrelated to this test).
     const attributions = [
       makeAttribution("rules/a.md"),
-      makeAttribution("rules/b.md", { confidence: "medium" }),
+      makeAttribution("rules/b.md", { confidence: "medium", join_basis: "cliff_step_id" }),
     ];
     const result = selectMutationTargets(
       attributions,
