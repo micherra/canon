@@ -448,7 +448,14 @@ Workspace-path-as-channel; poll-not-push; advisory only, never a substitute for 
 
 **Isolation model — Canon-managed worktrees:** `init_workspace` creates a git worktree at `{workspace}/worktree` on a `canon/{slug}` branch. All code-writing agents receive this path via `worktree_path` in their spawn prompt. Do NOT pass `isolation: "worktree"` — it auto-merges to the calling branch on completion, bypassing Canon's controlled merge lifecycle. Omit `isolation` entirely; Canon owns the worktree lifecycle.
 
-**Spawn pattern**: Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`. Agent `name` MUST be session-unique: use `{agent-type}-{step_id}-{job_suffix}` where `job_suffix` is the first 8 chars of `basename($CLAUDE_JOB_DIR)` — e.g. `reviewer-review-72f2b372` not `reviewer-1`. `SendMessage` routes by bare name; concurrent sessions sharing it cross mailboxes (watch_OOOOOOOOOO2).
+**Spawn pattern**: Include `Working directory: {worktree_path}` near the top of the prompt. Include `turn_budget: {maxTurns}` so the agent can pace its work per `agent-budget-checkpoint`.
+
+**Single-shot verdict/judge spawns default to unnamed + synchronous.** When spawning a single (non-team-dispatched) agent whose sole deliverable to the orchestrator is a terminal verdict/status — `canon:evaluator`, a standalone `canon:reviewer` or `canon:security` pass, or any ad-hoc dry-run/adversarial judge agent — omit `name:` and set `run_in_background: false` so the verdict returns directly in the Agent tool result. Do NOT rely on the named/mailbox return channel for these agents, even when they also write a durable artifact (`REVIEW.md`, `SECURITY.md`) — named spawns of read-only/verdict agents have shown unreliable terminal-result delivery across every build examined to date (idle_notification-only returns), independent of whether the agent has `SendMessage`.
+
+- **Exception — team-dispatched (horizontal/vertical fan-out) reviewer/security spawns**: these remain named, as required for jury consolidation (`references/team-dispatch-protocol.md`). Treat each juror's durable per-lens sidecar (`REVIEW-{lens}.meta.json`) as authoritative over its mailbox report — consolidation must not block on a lagging named-agent return (observed on PR #515's jury: juror mailbox reports lagged minutes behind their durable files).
+- **Exception — agents doing extended multi-turn work** (architect, engineer, scribe, shipper): remain named per the existing pattern below — this convention is scoped to single-shot judge/verdict agents only, not to work-producing agents whose artifact IS the primary deliverable across a longer session.
+
+Otherwise, agent `name` MUST be session-unique: use `{agent-type}-{step_id}-{job_suffix}` where `job_suffix` is the first 8 chars of `basename($CLAUDE_JOB_DIR)` — e.g. `reviewer-review-72f2b372` not `reviewer-1`. `SendMessage` routes by bare name; concurrent sessions sharing it cross mailboxes (watch_OOOOOOOOOO2).
 
 **Exceptions (no worktree needed):**
 - Agents writing exclusively to `.canon/` (gitignored). Currently: learner.
