@@ -190,15 +190,35 @@ $fixture_diff
   local eval_model="$MODEL"
   local max_turns="6"
 
-  output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
-    --model "$eval_model" \
-    --output-format text \
-    --no-session-persistence \
-    --allowedTools "Read Grep Glob" \
-    --max-turns "$max_turns" \
-    --max-budget-usd "$eval_budget" \
-    "${PLUGIN_FLAGS[@]+"${PLUGIN_FLAGS[@]}"}" \
-    2>&1) || exit_code=$?
+  # Bounded retry for the SUT invocation only (not the judge — collect_judge_votes
+  # already tolerates a bad vote via majority/fail-closed). Sibling of
+  # run-evals.sh's run_eval_case retry loop (see is_transient_eval_failure and
+  # MAX_EVAL_RETRIES in lib/eval-core.sh) — same empirically-reproduced root
+  # cause: concurrent `claude -p` invocations make any one of them more likely
+  # to need more turns than usual for the identical prompt, hitting --max-turns
+  # and exiting 1 even though the same prompt reliably finishes within budget
+  # serially. A genuine crash/auth/config/budget error is not retried.
+  local eval_attempt=0
+  while :; do
+    output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
+      --model "$eval_model" \
+      --output-format text \
+      --no-session-persistence \
+      --allowedTools "Read Grep Glob" \
+      --max-turns "$max_turns" \
+      --max-budget-usd "$eval_budget" \
+      "${PLUGIN_FLAGS[@]+"${PLUGIN_FLAGS[@]}"}" \
+      2>&1) && exit_code=0 || exit_code=$?
+
+    eval_attempt=$((eval_attempt + 1))
+    if [[ $exit_code -eq 0 ]] || ! is_transient_eval_failure "$output" || (( eval_attempt > MAX_EVAL_RETRIES )); then
+      break
+    fi
+    if $VERBOSE; then
+      echo "  RETRY ($id): attempt $eval_attempt hit a transient failure, retrying: ${output: -200}" >&2
+    fi
+    sleep 2
+  done
 
   if [[ $exit_code -ne 0 ]]; then
     echo "ERROR  $id  (exit code $exit_code)" > "$result_file"

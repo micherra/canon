@@ -35,6 +35,8 @@ NO_JUDGE=false
 STRUCTURED_JUDGE=false
 JUDGE_VOTES=1
 EMIT_BASELINE=""
+# MAX_EVAL_RETRIES is defined in lib/eval-core.sh (sourced above) — shared
+# with run-agent-evals.sh so both runners' retry loops use the same bound.
 
 # Guardrail injection mode (ADR-0025): when EVAL_PLUGIN_DIR is set (by eval-runner.ts),
 # pass --plugin-dir <dir> --setting-sources project to activating claude -p runs so they
@@ -134,17 +136,37 @@ $file_content
   local eval_model="$MODEL"
   local max_turns="6"
 
-  if [[ "$type" == "trigger" ]]; then
-    max_turns="4"
-    if [[ "$should_trigger" == "false" ]]; then
-      output=$(cd /tmp && claude -p "$full_prompt" \
-        --model "$eval_model" \
-        --output-format text \
-        --no-session-persistence \
-        --allowedTools "Read Grep Glob" \
-        --max-turns "$max_turns" \
-        --max-budget-usd "$eval_budget" \
-        2>&1) || exit_code=$?
+  # Bounded retry for the SUT invocation only (not the judge — collect_judge_votes
+  # already tolerates a bad vote via majority/fail-closed). Empirically reproduced:
+  # running several `claude -p` invocations concurrently makes any one of them more
+  # likely to need more turns than usual for the identical prompt, hitting
+  # --max-turns and exiting 1 even though the same prompt reliably finishes within
+  # budget serially. is_transient_eval_failure (lib/eval-core.sh) scopes retry to
+  # exactly that signature — a genuine crash/auth/config/budget error is not retried.
+  local eval_attempt=0
+  while :; do
+    if [[ "$type" == "trigger" ]]; then
+      max_turns="4"
+      if [[ "$should_trigger" == "false" ]]; then
+        output=$(cd /tmp && claude -p "$full_prompt" \
+          --model "$eval_model" \
+          --output-format text \
+          --no-session-persistence \
+          --allowedTools "Read Grep Glob" \
+          --max-turns "$max_turns" \
+          --max-budget-usd "$eval_budget" \
+          2>&1) && exit_code=0 || exit_code=$?
+      else
+        output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
+          --model "$eval_model" \
+          --output-format text \
+          --no-session-persistence \
+          --allowedTools "Read Grep Glob" \
+          --max-turns "$max_turns" \
+          --max-budget-usd "$eval_budget" \
+          "${PLUGIN_FLAGS[@]+"${PLUGIN_FLAGS[@]}"}" \
+          2>&1) && exit_code=0 || exit_code=$?
+      fi
     else
       output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
         --model "$eval_model" \
@@ -154,19 +176,18 @@ $file_content
         --max-turns "$max_turns" \
         --max-budget-usd "$eval_budget" \
         "${PLUGIN_FLAGS[@]+"${PLUGIN_FLAGS[@]}"}" \
-        2>&1) || exit_code=$?
+        2>&1) && exit_code=0 || exit_code=$?
     fi
-  else
-    output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
-      --model "$eval_model" \
-      --output-format text \
-      --no-session-persistence \
-      --allowedTools "Read Grep Glob" \
-      --max-turns "$max_turns" \
-      --max-budget-usd "$eval_budget" \
-      "${PLUGIN_FLAGS[@]+"${PLUGIN_FLAGS[@]}"}" \
-      2>&1) || exit_code=$?
-  fi
+
+    eval_attempt=$((eval_attempt + 1))
+    if [[ $exit_code -eq 0 ]] || ! is_transient_eval_failure "$output" || (( eval_attempt > MAX_EVAL_RETRIES )); then
+      break
+    fi
+    if $VERBOSE; then
+      echo "  RETRY ($id): attempt $eval_attempt hit a transient failure, retrying: ${output: -200}" >&2
+    fi
+    sleep 2
+  done
 
   if [[ $exit_code -ne 0 ]]; then
     echo "ERROR  $id  (exit code $exit_code)" > "$result_file"
