@@ -1,4 +1,5 @@
-import { execFile, spawnSync } from "node:child_process";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import type { ProcessResult } from "@shared/lib/tool-result.ts";
 
@@ -64,3 +65,25 @@ export function runShell(command: string, cwd: string, timeout = DEFAULT_TIMEOUT
       result.signal === "SIGTERM",
   };
 }
+
+/** Function shape of `node:child_process`'s `spawn` — the injectable seam callers use. */
+export type SpawnFn = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
+
+/**
+ * Raw passthrough to `node:child_process`'s `spawn` — the sole non-shell,
+ * non-git subprocess launch primitive besides `runShell`/`execFile`/`spawnSync`
+ * above. Exists so callers elsewhere in the codebase (e.g. the T2
+ * live-forward-checker recorder trigger, `services/t2-recorder-trigger.ts`)
+ * can compose a detached, fire-and-forget process launch without importing
+ * `node:child_process` directly — ADR-002 confines `child_process` imports to
+ * this directory. The caller owns all spawn-option semantics (detached,
+ * stdio, error handling, unref); this function performs zero bookkeeping
+ * of its own.
+ *
+ * Deliberately a wrapper function, not `= spawn` directly — reading `spawn`
+ * eagerly at module-eval time throws in any test that mocks
+ * `node:child_process` without providing every export this module imports
+ * (`execFile`/`spawnSync`); a lazy call site only touches the real binding
+ * when `spawnProcess` is actually invoked.
+ */
+export const spawnProcess: SpawnFn = (command, args, options) => spawn(command, args, options);

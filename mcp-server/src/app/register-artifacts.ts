@@ -1,5 +1,8 @@
+import { join } from "node:path";
+import { getExecutionStore } from "@domains/workspaces/execution-store-cache.ts";
 import { reconcilePredictions } from "@features/diagnostics/services/prediction-tracker.ts";
 import { computeViolationConfidence } from "@features/orchestration/services/review-confidence-adapter.ts";
+import { triggerT2Recorder } from "@features/orchestration/services/t2-recorder-trigger.ts";
 import { writeContextSync } from "@features/orchestration/tools/write-context-sync.ts";
 import { writeDesign } from "@features/orchestration/tools/write-design.ts";
 import { writeImplementationSummary } from "@features/orchestration/tools/write-implementation-summary.ts";
@@ -141,7 +144,27 @@ const WRITE_REVIEW_INPUT_SCHEMA = {
   workspace: z.string(),
 };
 
-async function handleWriteReviewCall(
+/**
+ * Fire the T2 live-forward-checker recorder as a side effect of a
+ * successful CANONICAL (step_id-absent) write_review call (ADR-0065).
+ * Never throws — a resolution failure (no scope, no base_commit on the
+ * board) or a dispatch failure inside `triggerT2Recorder` itself both
+ * degrade to `false`; the caller's ToolResult is never affected. Juror /
+ * step-scoped writes never trigger.
+ */
+function maybeTriggerT2Recorder(input: WriteReviewInput, dir: string | undefined): boolean {
+  if (input.step_id !== undefined || !dir) return false;
+  try {
+    const base = getExecutionStore(input.workspace).getBoard()?.base_commit;
+    if (!base) return false;
+    const worktree = join(input.workspace, "worktree");
+    return triggerT2Recorder({ base, projectDir: dir, slug: input.slug, worktree });
+  } catch {
+    return false;
+  }
+}
+
+export async function handleWriteReviewCall(
   input: WriteReviewInput,
   extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
 ) {
@@ -163,7 +186,11 @@ async function handleWriteReviewCall(
   if (result.ok && signals) {
     reconcilePredictions({ reviewedFiles: input.files, violations: input.violations }, signals);
   }
-  return result;
+  if (!result.ok) return result;
+  // T2 live-forward-checker trigger (ADR-0065) — post-write side-effect,
+  // sits alongside reconcilePredictions above. See maybeTriggerT2Recorder.
+  const t2_recorder_triggered = maybeTriggerT2Recorder(input, dir);
+  return { ...result, t2_recorder_triggered };
 }
 
 function registerWriteReviewTool(server: McpServer): void {
