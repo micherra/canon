@@ -20,9 +20,9 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
-    "@modelcontextprotocol/ext-apps": "^1.7.4",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "better-sqlite3": "^12.11.1",
+    "@modelcontextprotocol/ext-apps": "^1.7.5",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "better-sqlite3": "^13.0.2",
     "graphology": "^0.26",
     "graphology-communities-louvain": "^2.0.2",
     "remark-frontmatter": "^5.0.0",
@@ -37,9 +37,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.4",
+    "@biomejs/biome": "2.5.6",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "dependency-cruiser": "^18.1.0",
     "typescript": "7.0.2",
     "typescript-parser": "npm:typescript@6.0.3",
