@@ -45,7 +45,7 @@
     "typescript-parser": "npm:typescript@6.0.3",
     "vite": "^8.1.4",
     "vite-plugin-singlefile": "^2.3.3",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.0"
   },
   "overrides": {
     "esbuild": "0.28.1",
