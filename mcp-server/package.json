@@ -21,7 +21,7 @@
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "@modelcontextprotocol/ext-apps": "^1.7.4",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "better-sqlite3": "^12.11.1",
     "graphology": "^0.26",
     "graphology-communities-louvain": "^2.0.2",
